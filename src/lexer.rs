@@ -1,20 +1,17 @@
 use nom::{
     IResult,
     bytes::complete::{tag, take_while, take_while1, take, escaped},
-    character::complete::{alpha1, alphanumeric1, char, digit1, one_of, u64},
-    combinator::{cut, map, map_res, recognize},
+    character::{
+        is_digit,
+        complete::{alpha1, alphanumeric1, char, digit0, digit1, one_of, u64}
+    },
+    combinator::{cut, map, map_parser, map_res, not, recognize},
     branch::{alt},
-    error::{context},
-    multi::{fold_many0, many0},
-    number::complete::{double},
+    error::{context, ParseError, ErrorKind},
+    multi::{fold_many0, many0, many1},
+    number::complete::{double, float},
     sequence::{delimited, pair, preceded, terminated, tuple}
 };
-
-#[derive(Debug)]
-pub enum ParseError {
-    Invalid
-}
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok {
@@ -116,7 +113,10 @@ fn lex_identifier_or_reserved(i: &str) -> IResult<&str, Tok> {
                 "yield" => Yield,
                 "true" => True,
                 "false" => False,
-                _ => Ident(s.to_string())
+                _ => {
+
+                    Ident(s.to_string())
+                }
             }
         })(i)
 }
@@ -129,12 +129,23 @@ fn lex_invalid(i: &str) -> IResult<&str, Tok> {
     map(take(1usize), |v: &str| Tok::Invalid(v.to_string()))(i)
 }
 
+fn lex_double(i: &str) -> IResult<&str, Tok> {
+    map(map_parser(alt((
+            recognize(tuple((tag("."), digit1))),
+            recognize(tuple((digit1, tag("."), digit0))),
+            recognize(tuple((digit1, tag("e"), digit1))),
+            )), double), |f:f64| Tok::Float(f))(i)
+}
+
+fn lex_integer(i: &str) -> IResult<&str, Tok> {
+    map(map_parser(alt((
+            recognize(tuple((digit1, tag("u32")))),
+            recognize(digit1),
+            )), u64), |v:u64| Tok::Integer(v))(i)
+}
+
 fn lex_number(i: &str) -> IResult<&str, Tok> {
-    alt((
-            map(u64, |v| Tok::Integer(v)),
-            map(double, |v| Tok::Float(v)),
-            //map(hex_u32, Tok::Integer),
-            ))(i)
+    alt((lex_double, lex_integer))(i)
 }
 
 fn lex_token(i: &str) -> IResult<&str, Tok> {
@@ -203,14 +214,8 @@ fn lex_op(i: &str) -> IResult<&str, Tok> {
         ))(i)
 }
 
-pub fn lex(s: String) -> Result<Vec<Tok>, ParseError> {
-    match lex_tokens(s.as_str()) {
-        Ok((_, v)) => Ok(v),
-        Err(e) => {
-            println!("Error: {:?}", e);
-            Err(ParseError::Invalid)
-        }
-    }
+pub fn lex<'a>(s: &'a str) -> IResult<&'a str, Vec<Tok>> {
+    lex_tokens(s)
 }
 
 #[cfg(test)]
@@ -225,36 +230,43 @@ mod tests {
         assert_eq!(Tok::Spaces(1), lex_whitespace(" ").unwrap().1);
         assert_eq!(Tok::Tabs(1), lex_whitespace("\t").unwrap().1);
         let s = "\t  [] ";
-        let r = lex(s.into()).unwrap();
+        let (_, r) = lex(s.into()).unwrap();
         assert_eq!(vec![Tabs(1), Spaces(2), LBracket, RBracket, Spaces(1)], r);
     }
 
     #[test]
     fn test_maptag() {
         let s = " [ ] ";
-        let r = lex(s.into()).unwrap();
+        let (_, r) = lex(s.into()).unwrap();
         assert_eq!(vec![Spaces(1), LBracket, Spaces(1), RBracket, Spaces(1)], r);
     }
 
     #[test]
     fn test_string() {
         let s = " \"asdf\\nfdsa\" ";
-        let r = lex(s.into()).unwrap();
+        let (_, r) = lex(s.into()).unwrap();
         assert_eq!(vec![Spaces(1), String("asdf\\nfdsa".into()), Spaces(1)], r);
     }
 
     #[test]
-    fn test_integer() {
-        let s = "1234";
-        let r = lex(s.into()).unwrap();
-        assert_eq!(vec![Integer(1234)], r);
+    fn test_number() {
+        let r = vec![
+            (".1234", vec![Float(0.1234)]),
+            ("0.1234", vec![Float(0.1234)]),
+            ("00.1234", vec![Float(0.1234)]),
+            ("1.1234", vec![Float(1.1234)]),
+            ("+1.1234", vec![Plus,Float(1.1234)]),
+            ("-1.1234", vec![Minus,Float(1.1234)]),
+            ("1e1", vec![Float(10.)]),
+            ("10.", vec![Float(10.)]),
+            ("1", vec![Integer(1)]),
+            ("0", vec![Integer(0)]),
+            ("-0", vec![Minus, Integer(0)]),
+            ("1+1", vec![Integer(1), Plus, Integer(1)]),
+        ];
+        r.iter().for_each(|(q, a)| {
+            let (_, r) = lex(q).unwrap();
+            assert_eq!(*a, r);
+        });
     }
-
-    #[test]
-    fn test_float() {
-        let s = ".1234";
-        let r = lex(s.into()).unwrap();
-        assert_eq!(vec![Float(0.1234)], r);
-    }
-
 }
