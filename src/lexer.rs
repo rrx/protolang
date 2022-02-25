@@ -1,5 +1,5 @@
 use nom::{
-    IResult,
+    IResult, InputIter,
     bytes::complete::{tag, take_while, take_while1, take, escaped},
     character::{
         is_digit,
@@ -7,7 +7,7 @@ use nom::{
     },
     combinator::{cut, map, map_parser, map_res, not, opt, recognize},
     branch::{alt},
-    error::{context, ParseError, ErrorKind},
+    error::{context, ErrorKind},
     multi::{fold_many0, many0, many1},
     number::complete::{double, float},
     sequence::{delimited, pair, preceded, terminated, tuple}
@@ -33,7 +33,7 @@ fn string(
 fn lex_string(i: Span) -> IResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, s) = string(i)?;
-    Ok((i, token(Tok::String(s.fragment().to_string()), pos)))
+    Ok((i, token(Tok::StringLiteral(s.fragment().to_string()), pos)))
 }
 
 
@@ -107,7 +107,7 @@ fn lex_integer(i: Span) -> IResult<Span, Token> {
             recognize(tuple((digit1, tag("u32")))),
             recognize(digit1),
             )), u64)(i)?;
-    Ok((i, token(Tok::Integer(v), pos)))
+    Ok((i, token(Tok::IntLiteral(v), pos)))
 }
 
 fn lex_number(i: Span) -> IResult<Span, Token> {
@@ -127,11 +127,11 @@ fn lex_token<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
 
 fn lex_token_with_whitespace(i: Span) -> IResult<Span, Vec<Token>> {
     alt((
-            map(tuple((ws0, lex_token, ws0)), |(mut a, b, mut c)| {
+            map(tuple((ws0, lex_token, ws0)), |(mut a, mut b, mut c)| {
                 let mut v = vec![];
-                v.append(&mut a);
+                b.pre.append(&mut a);
+                b.post.append(&mut c);
                 v.push(b);
-                v.append(&mut c);
                 v
             }),
             ws1,
@@ -201,13 +201,17 @@ mod tests {
     use super::*;
     use Tok::*;
 
+    fn just_toks(r: &Vec<Token>) -> Vec<Tok> {
+        r.iter().map(|v| v.tok.clone()).collect::<Vec<_>>()
+    }
+
     #[test]
     fn test_ws() {
         assert_eq!("\t".len(), 1);
         assert!(lex_whitespace(span("")).is_err());
 
         let r = vec![
-            ("\t  [] ", vec![Tabs(1), Spaces(2), LBracket, RBracket, Spaces(1)]),
+            ("\t  [] ", vec![LBracket, RBracket]),
             ("\t\t", vec![Tabs(2)]),
             ("\t", vec![Tabs(1)]),
             ("", vec![]),
@@ -215,8 +219,7 @@ mod tests {
         ];
         r.iter().for_each(|(q, a)| {
             let (_, result) = lex(q).unwrap();
-            let tokens = result.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
-            assert_eq!(tokens, *a);
+            assert_eq!(just_toks(&result), *a);
         });
     }
 
@@ -225,15 +228,18 @@ mod tests {
         let s = " [ ] ";
         let (_, r) = lex(s.into()).unwrap();
         let tokens = r.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
-        assert_eq!(vec![Spaces(1), LBracket, Spaces(1), RBracket, Spaces(1)], tokens);
+        assert_eq!(vec![LBracket, RBracket], tokens);
+        //assert_eq!(vec![Spaces(1), LBracket, Spaces(1), RBracket, Spaces(1)], tokens);
     }
 
     #[test]
     fn test_string() {
         let s = " \"asdf\\nfdsa\" ";
         let (_, r) = lex(s.into()).unwrap();
-        let tokens = r.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
-        assert_eq!(vec![Spaces(1), String("asdf\\nfdsa".into()), Spaces(1)], tokens);
+        let tokens = Tokens::new(&r[..]);
+        assert_eq!(just_toks(&tokens.tok[0].pre), vec![Spaces(1)]);
+        assert_eq!(just_toks(&tokens.tok[0].post), vec![Spaces(1)]);
+        assert_eq!(vec![StringLiteral("asdf\\nfdsa".into())], just_toks(&r));
     }
 
     #[test]
@@ -247,10 +253,10 @@ mod tests {
             ("-1.1234", vec![Minus,Float(1.1234)]),
             ("1e1", vec![Float(10.)]),
             ("10.", vec![Float(10.)]),
-            ("1", vec![Integer(1)]),
-            ("0", vec![Integer(0)]),
-            ("-0", vec![Minus, Integer(0)]),
-            ("1+1", vec![Integer(1), Plus, Integer(1)]),
+            ("1", vec![IntLiteral(1)]),
+            ("0", vec![IntLiteral(0)]),
+            ("-0", vec![Minus, IntLiteral(0)]),
+            ("1+1", vec![IntLiteral(1), Plus, IntLiteral(1)]),
         ];
         r.iter().for_each(|(q, a)| {
             let (_, result) = lex(q).unwrap();
