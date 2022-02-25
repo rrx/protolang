@@ -13,6 +13,10 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple}
 };
 
+use nom_locate::{position, LocatedSpan};
+
+type Span<'a> = LocatedSpan<&'a str>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok {
     Spaces(usize),
@@ -58,97 +62,109 @@ pub enum Tok {
 }
 
 #[derive(Debug)]
-pub struct Token {
+pub struct Token<'a> {
     pub tok: Tok,
-    pub start: usize,
-    pub end: usize
+    pub pos: Span<'a>
+}
+
+fn token(tok: Tok, pos: Span) -> Token {
+    Token { tok, pos }
 }
 
 // Strings
-fn parse_str(i: &str) -> IResult<&str, &str> {
+fn parse_str(i: Span) -> IResult<Span, Span> {
   escaped(alphanumeric1, '\\', one_of("\"n\\"))(i)
 }
 
 fn string(
-  i: &str,
-) -> IResult<&str, &str> {
+  i: Span,
+) -> IResult<Span, Span> {
   context(
     "string",
     preceded(char('\"'), cut(terminated(parse_str, char('\"')))),
   )(i)
 }
 
-fn lex_string(i: &str) -> IResult<&str, Tok> {
-    map(string, |s| Tok::String(s.into()))(i)
+fn lex_string(i: Span) -> IResult<Span, Token> {
+    let (i, pos) = position(i)?;
+    let (i, s) = string(i)?;
+    Ok((i, token(Tok::String(s.fragment().to_string()), pos)))
 }
 
 
-fn ws0(i: &str) -> IResult<&str, Vec<Tok>> {
+fn ws0(i: Span) -> IResult<Span, Vec<Token>> {
     many0(lex_whitespace)(i)
 }
 
-fn lex_whitespace<'a>(i: &'a str) -> IResult<&'a str, Tok> {
+fn lex_whitespace<'a>(i: Span) -> IResult<Span, Token> {
     use Tok::*;
-
-    alt((
-            map(recognize(take_while1(|c| c == ' ')),  |s: &str| Spaces(s.len())),
-            map(recognize(take_while1(|c| c == '\t')), |s: &str| Tabs(s.len())),
-            map(recognize(take_while1(|c| c == '\n')), |s: &str| NL(s.len())),
-            map(recognize(take_while1(|c| c == '\r')), |s: &str| LF(s.len()))
-        ))(i)
+    let (i, pos) = position(i)?;
+    let (i, t) = alt((
+            map(recognize(take_while1(|c| c == ' ')),  |s: Span| Spaces(s.len())),
+            map(recognize(take_while1(|c| c == '\t')), |s: Span| Tabs(s.len())),
+            map(recognize(take_while1(|c| c == '\n')), |s: Span| NL(s.len())),
+            map(recognize(take_while1(|c| c == '\r')), |s: Span| LF(s.len()))
+        ))(i)?;
+    Ok((i, token(t, pos)))
 }
 
-fn lex_identifier_or_reserved(i: &str) -> IResult<&str, Tok> {
+fn lex_identifier_or_reserved(i: Span) -> IResult<Span, Token> {
     use Tok::*;
-    map(recognize(
+    let (i, pos) = position(i)?;
+    let (i, s) = recognize(
             pair(
                 alt((alpha1, tag("_"))),
                 many0(alt((alphanumeric1, tag("_"))))
-                )), 
-        |s: &str| {
-            match s {
-                "if" => If,
-                "else" => Else,
-                "return" => Return,
-                "yield" => Yield,
-                "true" => True,
-                "false" => False,
-                _ => {
+                ))(i)?;
+    let t =  match *s.fragment() {
+        "if" => If,
+        "else" => Else,
+        "return" => Return,
+        "yield" => Yield,
+        "true" => True,
+        "false" => False,
+        _ => {
 
-                    Ident(s.to_string())
-                }
-            }
-        })(i)
+            Ident(s.to_string())
+        }
+    };
+    Ok((i, token(t, pos)))
 }
 
-fn maptag<'a>(s: &'a str, t: Tok) -> impl FnMut(&'a str) -> IResult<&'a str, Tok> {
+fn maptag<'a>(s: &'a str, t: Tok) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Tok> {
     map(tag(s), move |_| t.clone())
 }
 
-fn lex_invalid(i: &str) -> IResult<&str, Tok> {
-    map(take(1usize), |v: &str| Tok::Invalid(v.to_string()))(i)
+fn lex_invalid(i: Span) -> IResult<Span, Token> {
+    let (i, pos) = position(i)?;
+    let (i, v) = take(1usize)(i)?;
+    Ok((i, token(Tok::Invalid(v.to_string()), pos)))
 }
 
-fn lex_double(i: &str) -> IResult<&str, Tok> {
-    map(map_parser(alt((
+fn lex_double(i: Span) -> IResult<Span, Token> {
+    let (i, pos) = position(i)?;
+    let (i, v) = map_parser(alt((
             recognize(tuple((tag("."), digit1))),
             recognize(tuple((digit1, tag("."), digit0))),
             recognize(tuple((digit1, tag("e"), digit1))),
-            )), double), |f:f64| Tok::Float(f))(i)
+            )), double)(i)?;
+    Ok((i, token(Tok::Float(v), pos)))
 }
 
-fn lex_integer(i: &str) -> IResult<&str, Tok> {
-    map(map_parser(alt((
+fn lex_integer(i: Span) -> IResult<Span, Token> {
+    let (i, pos) = position(i)?;
+    let (i, v) = map_parser(alt((
             recognize(tuple((digit1, tag("u32")))),
             recognize(digit1),
-            )), u64), |v:u64| Tok::Integer(v))(i)
+            )), u64)(i)?;
+    Ok((i, token(Tok::Integer(v), pos)))
 }
 
-fn lex_number(i: &str) -> IResult<&str, Tok> {
+fn lex_number(i: Span) -> IResult<Span, Token> {
     alt((lex_double, lex_integer))(i)
 }
 
-fn lex_token(i: &str) -> IResult<&str, Tok> {
+fn lex_token(i: Span) -> IResult<Span, Token> {
     alt((
             lex_op,
             lex_punc,
@@ -159,7 +175,7 @@ fn lex_token(i: &str) -> IResult<&str, Tok> {
             ))(i)
 }
 
-fn lex_token_with_whitespace(i: &str) -> IResult<&str, Vec<Tok>> {
+fn lex_token_with_whitespace(i: Span) -> IResult<Span, Vec<Token>> {
     map(tuple((ws0, lex_token, ws0)), |(mut a,b,mut c)| {
         let mut v = vec![];
         v.append(&mut a);
@@ -169,9 +185,10 @@ fn lex_token_with_whitespace(i: &str) -> IResult<&str, Vec<Tok>> {
     })(i)
 }
 
-fn lex_punc(i: &str) -> IResult<&str, Tok> {
+fn lex_punc(i: Span) -> IResult<Span, Token> {
     use Tok::*;
-    alt((
+    let (i, pos) = position(i)?;
+    let (i, t) = alt((
             maptag("(", LParen),
             maptag(")", RParen),
             maptag("[", LBracket),
@@ -181,19 +198,21 @@ fn lex_punc(i: &str) -> IResult<&str, Tok> {
             maptag(":", Colon),
             maptag(";", SemiColon),
             maptag(",", Comma),
-        ))(i)
+        ))(i)?;
+    Ok((i, token(t, pos)))
 }
 
-fn lex_tokens(i: &str) -> IResult<&str, Vec<Tok>> {
+fn lex_tokens(i: Span) -> IResult<Span, Vec<Token>> {
     fold_many0(lex_token_with_whitespace, Vec::new, |mut acc: Vec<_>, mut item| {
         acc.append(&mut item);
         acc
     })(i)
 }
 
-fn lex_op(i: &str) -> IResult<&str, Tok> {
+fn lex_op(i: Span) -> IResult<Span, Token> {
     use Tok::*;
-    alt((
+    let (i, pos) = position(i)?;
+    let (i, t) = alt((
             maptag("=", Assign),
             maptag("==", Equals),
             maptag("!=", NotEquals),
@@ -211,11 +230,17 @@ fn lex_op(i: &str) -> IResult<&str, Tok> {
             maptag("||", Or),
             maptag("in", In),
             maptag("is", Is),
-        ))(i)
+        ))(i)?;
+
+    Ok((i, token(t, pos)))
 }
 
-pub fn lex<'a>(s: &'a str) -> IResult<&'a str, Vec<Tok>> {
-    lex_tokens(s)
+pub fn lex<'a>(i: &str) -> IResult<Span, Vec<Token>> {
+    lex_tokens(span(i))
+}
+
+fn span(s: &str) -> Span {
+    Span::new(s)
 }
 
 #[cfg(test)]
@@ -226,9 +251,9 @@ mod tests {
     #[test]
     fn test_ws() {
         assert_eq!("\t".len(), 1);
-        assert!(lex_whitespace("").is_err());
-        assert_eq!(Tok::Spaces(1), lex_whitespace(" ").unwrap().1);
-        assert_eq!(Tok::Tabs(1), lex_whitespace("\t").unwrap().1);
+        assert!(lex_whitespace(span("")).is_err());
+        assert_eq!(Tok::Spaces(1), lex_whitespace(Span::new(" ")).unwrap().1);
+        assert_eq!(Tok::Tabs(1), lex_whitespace(Span::new("\t")).unwrap().1);
         let s = "\t  [] ";
         let (_, r) = lex(s.into()).unwrap();
         assert_eq!(vec![Tabs(1), Spaces(2), LBracket, RBracket, Spaces(1)], r);
