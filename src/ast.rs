@@ -1,6 +1,13 @@
-use crate::tokens::Tok;
+use crate::tokens::{Tok, Token};
 
-pub type Program = Vec<Expr>;
+#[derive(PartialEq, Debug, Clone)]
+pub struct Program(pub Vec<Expr>);
+
+impl Program {
+    fn unparse<'a>(&self) -> Vec<Token<'a>> {
+        vec![]
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expr {

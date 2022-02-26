@@ -16,7 +16,8 @@ fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> IResult<Tokens<'a>, Tokens
 }
 
 fn parse_program(i: Tokens) -> IResult<Tokens, Program> {
-    terminated(many0(parse_expr), tag_token(Tok::EOF))(i)
+    let (i, r) = terminated(many0(parse_expr), tag_token(Tok::EOF))(i)?;
+    Ok((i, Program(r)))
 }
 
 fn parse_expr(input: Tokens) -> IResult<Tokens, Expr> {
@@ -165,7 +166,7 @@ mod tests {
             let (rest, result) = parse_program(tokens).unwrap();
             println!("{:?}", (&rest, &result));
             assert_eq!(rest.input_len(), 0);
-            assert_eq!(result, *a);
+            assert_eq!(result.0, *a);
         });
 
     }
