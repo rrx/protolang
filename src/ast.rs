@@ -20,6 +20,7 @@ impl Value {
     }
 }
 
+#[derive(PartialEq, Debug, Clone)]
 pub struct Node {
     pub pre: Vec<Tok>,
     pub post: Vec<Tok>,
@@ -31,16 +32,16 @@ impl Node {
     pub fn unparse(&mut self) -> Vec<Tok> {
         let mut out = vec![];
         out.append(&mut self.pre);
-        out.append(&mut self.tokens);
-        out.append(&mut self.post);
+        //out.append(&mut self.tokens);
         out.append(&mut self.value.unparse());
+        out.append(&mut self.post);
         out
     }
 }
 
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Program(pub Vec<Value>);
+pub struct Program(pub Vec<Node>);
 
 impl Program {
     pub fn unparse(&mut self) -> Vec<Tok> {
@@ -157,6 +158,7 @@ pub enum Literal {
     FloatLiteral(f64),
     BoolLiteral(bool),
     StringLiteral(String),
+    Invalid(String)
 }
 impl Literal {
     pub fn unparse(&mut self) -> Vec<Tok> {
@@ -166,6 +168,7 @@ impl Literal {
             FloatLiteral(x) => Tok::FloatLiteral(*x),
             BoolLiteral(x) => Tok::BoolLiteral(*x),
             StringLiteral(x) => Tok::StringLiteral(x.clone()),
+            Invalid(x) => Tok::Invalid(x.clone()),
         };
         vec![token]
     }

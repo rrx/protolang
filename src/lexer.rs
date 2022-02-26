@@ -177,7 +177,9 @@ fn lex_op<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
             maptag("-=", MinusEq),
             maptag("*=", MulEq),
             maptag("/=", DivEq),
-            maptag("?", Percent),
+            maptag("?", Question),
+            maptag("^", Caret),
+            maptag("%", Percent),
             maptag("!", Not),
             maptag("&&", And),
             maptag("||", Or),
@@ -223,6 +225,18 @@ mod tests {
             ("\t", vec![Tabs(1)]),
             ("", vec![]),
             (" ", vec![Spaces(1)]),
+        ];
+        r.iter().for_each(|(q, a)| {
+            let (_, result) = lex(q).unwrap();
+            assert_eq!(just_toks(&result), *a);
+        });
+    }
+
+    #[test]
+    fn test_invalid() {
+        let r = vec![
+            ("$", vec![Invalid("$".into())]),
+            (" $\t", vec![Invalid("$".into())]),
         ];
         r.iter().for_each(|(q, a)| {
             let (_, result) = lex(q).unwrap();

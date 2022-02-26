@@ -17,7 +17,8 @@ fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> IResult<Tokens<'a>, Tokens
 
 fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
     let (i, r) = terminated(many0(parse_expr_node), tag_token(Tok::EOF))(i)?;
-    let value = Value::Program(Program(r.iter().map(|v| v.value.clone()).collect()));
+    //let values = r.iter().map(|v| v.value.clone()).collect();
+    let value = Value::Program(Program(r));
     let node = Node { 
         pre: vec![],
         post: vec![],
@@ -28,10 +29,11 @@ fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
     Ok((i, node))
 }
 
-fn parse_program(i: Tokens) -> IResult<Tokens, Value> {
-    let (i, r) = terminated(many0(parse_expr_node), tag_token(Tok::EOF))(i)?;
-    Ok((i, Value::Program(Program(r.iter().map(|v| v.value.clone()).collect()))))
-}
+//fn parse_program(i: Tokens) -> IResult<Tokens, Value> {
+    //let (i, r) = terminated(many0(parse_expr_node), tag_token(Tok::EOF))(i)?;
+    //let values = r.iter().map(|v| v.value.clone()).collect();
+    //Ok((i, Value::Program(Program(values))))
+//}
 
 fn parse_expr_node(input: Tokens) -> IResult<Tokens, Node> {
     parse_pratt_node(input, Precedence::PLowest)
@@ -142,6 +144,7 @@ fn parse_literal_node(input: Tokens) -> IResult<Tokens, Node> {
             Tok::FloatLiteral(u) => Some(Literal::FloatLiteral(*u)),
             Tok::StringLiteral(s) => Some(Literal::StringLiteral(s.clone())),
             Tok::BoolLiteral(b) => Some(Literal::BoolLiteral(*b)),
+            Tok::Invalid(s) => Some(Literal::Invalid(s.clone())),
             _ => None
         };
         
@@ -309,31 +312,29 @@ mod tests {
     fn literal() {
         let r = vec![
             ("123 - 0", 
-                vec![
                     Value::Expr(InfixExpr(
                             Infix::Minus, 
                             Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
                             Box::new(Value::Expr(LitExpr(IntLiteral(0))))
-                    ))]),
+                    ))),
             ("+123 / 1", 
-                vec![
                     Value::Expr(InfixExpr(
                         Infix::Divide,
                         Box::new(Value::Expr(PrefixExpr(Prefix::PrefixPlus, Box::new(Value::Expr(LitExpr(IntLiteral(123))))))),
                         Box::new(Value::Expr(LitExpr(IntLiteral(1))))
-                    ))]),
-            ("123", vec![Value::Expr(LitExpr(Literal::IntLiteral(123)))]),
-            ("123", vec![Value::Expr(LitExpr(Literal::IntLiteral(123)))]),
+                    ))),
+            ("123", Value::Expr(LitExpr(Literal::IntLiteral(123)))),
+            ("123", Value::Expr(LitExpr(Literal::IntLiteral(123)))),
         ];
         r.iter().for_each(|(q, a)| {
             let (rest, result) = lex_eof(q).unwrap();
             assert_eq!(rest.len(), 0);
             let tokens = Tokens::new(&result[..]);
-            let (rest, result) = parse_program(tokens).unwrap();
-            println!("{:?}", (&rest, &result));
+            let (rest, node) = parse_program_node(tokens).unwrap();
+            println!("{:?}", (&rest, &node));
             assert_eq!(rest.input_len(), 0);
-            match result {
-                Value::Program(Program(prog)) => assert_eq!(prog, *a),
+            match node.value {
+                Value::Program(Program(prog)) => assert_eq!(prog.get(0).unwrap().value, *a),
                 _ => unreachable!()
             }
         });
@@ -346,16 +347,23 @@ mod tests {
         let r = vec![
             "123",
             "321 ",
+            "$",
+            "$\n", "$\r\n", "$\t", "$\r",
+            "\n$\n", "\r\n$\r\n", "\t$\t", "\r$\r",
         ];
         r.iter().for_each(|v| {
             let (rest, toks) = lex_eof(v).unwrap();
             let tokens = Tokens::new(&toks[..]);
+            println!("{:?}", (&tokens));
+            println!("{:?}", (&toks));
+
             let (prog_rest, mut prog) = parse_program_node(tokens).unwrap();
             let mut restored = prog.unparse();
             restored.push(Tok::EOF);
             let ts = toks.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
-            println!("{:?}", (&ts, &restored));
-            assert_eq!(&ts, &restored);
+            println!("{:?}", (&prog));
+            println!("restored {:?}", (&ts, &restored));
+            //assert_eq!(&ts, &restored);
             let s = tokens.unlex();
             println!("{:?}", (&v, &s));
             assert_eq!(v, &s);

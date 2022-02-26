@@ -46,6 +46,8 @@ pub enum Tok {
     DivEq,
     MulEq,
     Percent,
+    Question,
+    Caret,
     GT,GTE,LT,LTE,
     And, Or,
     In, Is,
@@ -57,8 +59,17 @@ impl Tok {
     pub fn unlex(&self) -> String {
         use Tok::*;
         String::from(match self {
+            Spaces(n) => " ".repeat(*n).into(),
+            Tabs(n) => "\t".repeat(*n).into(),
+            CRLF(n) => "\r\n".repeat(*n).into(),
+            NL(n) => "\n".repeat(*n).into(),
+            LF(n) => "\r".repeat(*n).into(),
+            Invalid(s) => s.into(),
             Mul => "*".into(),
             IntLiteral(x) => x.to_string(),
+            FloatLiteral(x) => x.to_string(),
+            BoolLiteral(x) => x.to_string(),
+            StringLiteral(x) => x.to_string(),
             _ => "".into()
         })
     }
