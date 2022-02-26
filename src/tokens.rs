@@ -53,12 +53,37 @@ pub enum Tok {
     EOF
 }
 
+impl Tok {
+    pub fn unlex(&self) -> String {
+        use Tok::*;
+        String::from(match self {
+            Mul => "*".into(),
+            IntLiteral(x) => x.to_string(),
+            _ => "".into()
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     pub pre: Vec<Token<'a>>,
     pub post: Vec<Token<'a>>,
     pub tok: Tok,
     pub pos: Span<'a>
+}
+
+impl<'a> Token<'a> {
+    pub fn unlex(&self) -> String {
+        let mut s = String::new();
+        for frag in self.pre.iter().map(|v| v.tok.clone()) {
+            s.push_str(frag.unlex().as_str());
+        }
+        s.push_str(self.tok.unlex().as_str());
+        for frag in self.post.iter().map(|v| v.tok.clone()) {
+            s.push_str(frag.unlex().as_str());
+        }
+        s
+    }
 }
 
 pub fn token(tok: Tok, pos: Span) -> Token {
@@ -80,6 +105,18 @@ impl<'a> Tokens<'a> {
             start: 0,
             end: vec.len(),
         }
+    }
+
+    pub fn toks(&self) -> Vec<Tok> {
+        self.iter_elements().map(|v| v.tok.clone()).collect::<Vec<_>>()
+    }
+
+    pub fn unlex(&self) -> String {
+        let mut s = String::new();
+        for frag in self.tok {
+            s.push_str(frag.unlex().as_str());
+        }
+        s
     }
 }
 
