@@ -98,7 +98,7 @@ fn lex_double(i: Span) -> IResult<Span, Token> {
             recognize(tuple((digit1, tag("."), digit0))),
             recognize(tuple((digit1, tag("e"), digit1))),
             )), double)(i)?;
-    Ok((i, token(Tok::Float(v), pos)))
+    Ok((i, token(Tok::FloatLiteral(v), pos)))
 }
 
 fn lex_integer(i: Span) -> IResult<Span, Token> {
@@ -188,6 +188,13 @@ fn lex_op<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
     Ok((i, token(t, pos)))
 }
 
+pub fn lex_eof<'a>(i: &str) -> IResult<Span, Vec<Token>> {
+    let (i, pos) = position(span(i))?;
+    let (i, mut r) = lex_tokens(i)?;
+    r.push(token(Tok::EOF, pos));
+    Ok((i, r))
+}
+
 pub fn lex<'a>(i: &str) -> IResult<Span, Vec<Token>> {
     lex_tokens(span(i))
 }
@@ -245,14 +252,14 @@ mod tests {
     #[test]
     fn test_number() {
         let r = vec![
-            (".1234", vec![Float(0.1234)]),
-            ("0.1234", vec![Float(0.1234)]),
-            ("00.1234", vec![Float(0.1234)]),
-            ("1.1234", vec![Float(1.1234)]),
-            ("+1.1234", vec![Plus,Float(1.1234)]),
-            ("-1.1234", vec![Minus,Float(1.1234)]),
-            ("1e1", vec![Float(10.)]),
-            ("10.", vec![Float(10.)]),
+            (".1234", vec![FloatLiteral(0.1234)]),
+            ("0.1234", vec![FloatLiteral(0.1234)]),
+            ("00.1234", vec![FloatLiteral(0.1234)]),
+            ("1.1234", vec![FloatLiteral(1.1234)]),
+            ("+1.1234", vec![Plus,FloatLiteral(1.1234)]),
+            ("-1.1234", vec![Minus,FloatLiteral(1.1234)]),
+            ("1e1", vec![FloatLiteral(10.)]),
+            ("10.", vec![FloatLiteral(10.)]),
             ("1", vec![IntLiteral(1)]),
             ("0", vec![IntLiteral(0)]),
             ("-0", vec![Minus, IntLiteral(0)]),

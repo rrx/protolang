@@ -14,7 +14,7 @@ pub enum Tok {
     CRLF(usize),
     Invalid(String),
     StringLiteral(String),
-    Float(f64),
+    FloatLiteral(f64),
     IntLiteral(u64),
     BoolLiteral(bool),
     LParen,
@@ -48,7 +48,9 @@ pub enum Tok {
     Percent,
     GT,GTE,LT,LTE,
     And, Or,
-    In, Is
+    In, Is,
+
+    EOF
 }
 
 #[derive(Debug, Clone, PartialEq)]
