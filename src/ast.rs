@@ -1,6 +1,11 @@
 use crate::tokens::{Tok, Token};
 use crate::sexpr::*;
 
+pub trait Unparse {
+    fn unparse(&self) -> Vec<Tok>;
+}
+
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Value {
     Program(Program),
@@ -15,16 +20,15 @@ pub enum Stmt {
     Lit(Literal),
 }
 
-impl Stmt {
-    pub fn unparse(&mut self) -> Vec<Tok> {
-        let mut out = vec![];
-        out.append(&mut match self {
+impl Unparse for Stmt {
+    fn unparse(&self) -> Vec<Tok> {
+        match self {
             Stmt::Expr(expr) => expr.unparse(),
             Stmt::Lit(lit) => lit.unparse(),
-        });
-        out
+        }
     }
 }
+
 impl SExpr for Stmt {
     fn sexpr(&self) -> SResult<S> {
         match self {
@@ -34,16 +38,14 @@ impl SExpr for Stmt {
     }
 }
 
-impl Value {
-    pub fn unparse(&mut self) -> Vec<Tok> {
-        let mut out = vec![];
-        out.append(&mut match self {
+impl Unparse for Value {
+    fn unparse(&self) -> Vec<Tok> {
+        match self {
             Value::Program(prog) => prog.unparse(),
             Value::Expr(expr) => expr.unparse(),
             Value::Lit(lit) => lit.unparse(),
             Value::Stmt(stmt) => stmt.unparse(),
-        });
-        out
+        }
     }
 }
 
@@ -66,16 +68,14 @@ pub struct Node {
     pub value: Value
 }
 
-impl Node {
-    pub fn unparse(&mut self) -> Vec<Tok> {
-        let mut out = vec![];
-        out.append(&mut self.pre);
-        out.append(&mut self.value.unparse());
-        out.append(&mut self.post);
-        out
+impl Unparse for Node {
+    fn unparse(&self) -> Vec<Tok> {
+        vec![self.pre.clone(), self.value.unparse(), self.post.clone()].into_iter().flatten().collect()
     }
+}
 
-    pub fn sexpr(&self) -> SResult<S> {
+impl SExpr for Node {
+    fn sexpr(&self) -> SResult<S> {
         self.value.sexpr()
     }
 }
@@ -84,15 +84,13 @@ impl Node {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Program(pub Vec<Stmt>);
 
-impl Program {
-    pub fn unparse(&mut self) -> Vec<Tok> {
-        let mut out = vec![];
-        for expr in self.0.iter_mut() {
-            out.append(&mut expr.unparse());
-        }
-        out
+impl Unparse for Program {
+    fn unparse(&self) -> Vec<Tok> {
+        self.0.iter().map(|expr| expr.unparse()).flatten().collect()
     }
+}
 
+impl Program {
     pub fn sexpr(&self) -> SResult<SProgram> {
         let results = self.0.iter().filter_map(|v| v.sexpr().ok()).collect();
         Ok(results)
@@ -106,8 +104,8 @@ pub enum Expr {
     PrefixExpr(Prefix, Box<Value>),
     InfixExpr(Infix, Box<Value>, Box<Value>)
 }
-impl Expr {
-    pub fn unparse(&mut self) -> Vec<Tok> {
+impl Unparse for Expr {
+    fn unparse(&self) -> Vec<Tok> {
         use Literal::*;
         use Expr::*;
         let mut out = vec![];
@@ -131,7 +129,9 @@ impl Expr {
         };
         out
     }
-    pub fn sexpr(&self) -> SResult<S> {
+}
+impl SExpr for Expr {
+    fn sexpr(&self) -> SResult<S> {
         use Literal::*;
         use Expr::*;
         match self {
@@ -169,8 +169,10 @@ impl Prefix {
             Prefix::PrefixNot => Tok::Not,
         }
     }
+}
 
-    pub fn unparse(&mut self) -> Vec<Tok> {
+impl Unparse for Prefix {
+    fn unparse(&self) -> Vec<Tok> {
         vec![self.to_token()]
     }
 }
@@ -204,7 +206,10 @@ impl Infix {
         }
     }
 
-    pub fn unparse(&mut self) -> Vec<Tok> {
+}
+
+impl Unparse for Infix {
+    fn unparse(&self) -> Vec<Tok> {
         vec![self.to_token()]
     }
 
@@ -237,8 +242,8 @@ pub enum Literal {
     StringLiteral(String),
     Invalid(String)
 }
-impl Literal {
-    pub fn unparse(&mut self) -> Vec<Tok> {
+impl Unparse for Literal {
+    fn unparse(&self) -> Vec<Tok> {
         use Literal::*;
         let token = match self {
             IntLiteral(x) => Tok::IntLiteral(*x),
@@ -267,8 +272,8 @@ impl SExpr for Literal {
 
 #[derive(PartialEq, Debug, Eq, Clone)]
 pub struct Ident(pub String);
-impl Ident {
-    pub fn unparse(&self) -> Vec<Tok> {
+impl Unparse for Ident {
+    fn unparse(&self) -> Vec<Tok> {
         vec![Tok::Ident(self.0.clone())]
     }
 }

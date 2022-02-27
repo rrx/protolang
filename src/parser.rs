@@ -10,6 +10,7 @@ use nom::multi::{many0, many1};
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
+use crate::ast::Unparse;
 
 fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> IResult<Tokens<'a>, Tokens<'a>> {
     verify(take(1usize), move |tokens: &Tokens<'a>| tokens.tok[0].tok == t)
@@ -26,7 +27,6 @@ fn parse_newline_or_eof(i: Tokens) -> IResult<Tokens, Tokens> {
         let tok = &tokens.tok[0].tok;
         tok.is_newline() || tok == &Tok::EOF
     })(i)
-    //recognize(many0(alt((parse_newline, tag_token(Tok::EOF)))))(i)
 }
 
 pub fn parse_statement(i: Tokens) -> IResult<Tokens, Stmt> {
@@ -38,23 +38,15 @@ pub fn parse_statement(i: Tokens) -> IResult<Tokens, Stmt> {
 
     };
 
-    //let node = Node { 
-        //pre: vec![],
-        //post: nl.toks(),
-        //tokens: vec![],
-        //value: Value::Stmt(value),
-    //};
-
     Ok((i, value))
 }
 
 pub fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
-    //let (i, r) = terminated(many0(parse_expr_node), tag_token(Tok::EOF))(i)?;
-    let (i, r) = many0(parse_statement)(i)?;
-    //let values = r.iter().map(|v| v.value.clone()).collect();
+    let (i, (pre, r)) = pair(many0(parse_newline), many0(parse_statement))(i)?;
     let value = Value::Program(Program(r));
+    println!("ws: {:?}", pre);
     let node = Node { 
-        pre: vec![],
+        pre: pre.iter().map(|v| v.tok[0].tok.clone()).collect(),
         post: vec![],
         //tokens: vec![],
         value
@@ -64,7 +56,8 @@ pub fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
 }
 
 fn parse_program(i: Tokens) -> IResult<Tokens, Vec<Stmt>> {
-    many0(parse_statement)(i)
+    let (i, (pre, stmts)) = pair(many0(parse_newline), many0(parse_statement))(i)?;
+    Ok((i, stmts))
 }
 
 //fn parse_program(i: Tokens) -> IResult<Tokens, Value> {
@@ -328,7 +321,7 @@ mod tests {
     use crate::lexer::*;
     use Expr::*;
     use Literal::*;
-    //use Value::*;
+    use crate::sexpr::SExpr;
 
     #[test]
     fn literal() {
@@ -381,13 +374,14 @@ mod tests {
             println!("{:?}", (&tokens));
             println!("{:?}", (&toks));
 
-            let (prog_rest, mut prog) = parse_program_node(tokens).unwrap();
-            let mut restored = prog.unparse();
+            let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
+            println!("{:?}", (&stmts));
+            let stmt = stmts.get(0).unwrap();
+            println!("{:?}", (&stmt));
+            let mut restored = stmt.unparse();
             restored.push(Tok::EOF);
             let ts = toks.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
-            println!("{:?}", (&prog));
             println!("restored {:?}", (&ts, &restored));
-            //assert_eq!(&ts, &restored);
             let s = tokens.unlex();
             println!("{:?}", (&v, &s));
             assert_eq!(v, &s);
@@ -408,21 +402,15 @@ mod tests {
             println!("{:?}", (&tokens));
             println!("{:?}", (&toks));
 
-            let (prog_rest, mut node) = parse_program_node(tokens).unwrap();
-            println!("{:?}", (&node));
-            match node.value {
-                Value::Program(prog) => {
-                    let sexpr = prog.sexpr().unwrap();
-                    sexpr.iter().for_each(|v| {
-                        println!("sexpr {}", &v);
-                    });
-                    let rendered = sexpr.iter().map(|v| format!("{}", &v)).collect::<Vec<_>>();
-                    println!("sexpr {:?}", (&sexpr, a));
-                    assert_eq!(rendered, vec![a.to_string()]);
-                }
-                _ => unreachable!()
-            };
-
+            let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
+            println!("{:?}", (&stmts));
+            let stmt = stmts.get(0).unwrap();
+            println!("{:?}", (&stmt));
+            let sexpr = stmt.sexpr().unwrap();
+            println!("sexpr {}", &sexpr);
+            let rendered = format!("{}", &sexpr);
+            println!("sexpr {:?}", (&sexpr, a));
+            assert_eq!(rendered, a.to_string());
         });
     }
 
