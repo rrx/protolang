@@ -56,15 +56,12 @@ pub fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
 }
 
 fn parse_program(i: Tokens) -> IResult<Tokens, Vec<Stmt>> {
-    let (i, (pre, stmts)) = pair(many0(parse_newline), many0(parse_statement))(i)?;
-    Ok((i, stmts))
+    let (i, node) = parse_program_node(i)?;
+    match node.value {
+        Value::Program(prog) => Ok((i, prog.0)),
+        _ => unreachable!()
+    }
 }
-
-//fn parse_program(i: Tokens) -> IResult<Tokens, Value> {
-    //let (i, r) = terminated(many0(parse_expr_node), tag_token(Tok::EOF))(i)?;
-    //let values = r.iter().map(|v| v.value.clone()).collect();
-    //Ok((i, Value::Program(Program(values))))
-//}
 
 fn parse_expr_node(input: Tokens) -> IResult<Tokens, Node> {
     parse_pratt_node(input, Precedence::PLowest)
@@ -74,8 +71,17 @@ fn parse_expr(input: Tokens) -> IResult<Tokens, Value> {
     parse_pratt_expr(input, Precedence::PLowest)
 }
 
+fn parse_atom_or_caret_node(i: Tokens) -> IResult<Tokens, Node> {
+    alt((parse_caret_node, parse_atom_node))(i)
+}
+
+fn parse_atom_or_caret_expr(i: Tokens) -> IResult<Tokens, Value> {
+    alt((parse_caret_expr, parse_atom_expr))(i)
+}
+
 fn parse_pratt_node(input: Tokens, precedence: Precedence) -> IResult<Tokens, Node> {
-    let (i1, left) = parse_atom_node(input)?;
+    //let (i1, left) = parse_atom_node(input)?;
+    let (i1, left) = parse_atom_or_caret_node(input)?;
     go_parse_pratt_node(i1, precedence, left)
 }
 
@@ -161,7 +167,7 @@ fn parse_ident_node(input: Tokens) -> IResult<Tokens, Node> {
 
 fn parse_ident_expr(i: Tokens) -> IResult<Tokens, Value> {
     let (i, ident) = parse_ident_node(i)?;
-    Ok((i, ident.value))//Value::Expr(Expr::IdentExpr(ident))))
+    Ok((i, ident.value))
 }
 
 fn parse_literal_node(input: Tokens) -> IResult<Tokens, Node> {
@@ -200,12 +206,12 @@ fn parse_lit_expr(i: Tokens) -> IResult<Tokens, Value> {
     Ok((i, lit.value))
 }
 
-fn parse_atom_node(input: Tokens) -> IResult<Tokens, Node> {
+fn parse_atom_noprefix_node(input: Tokens) -> IResult<Tokens, Node> {
     alt((
         parse_literal_node,
         parse_ident_node,
-        parse_prefix_node,
         parse_paren_node,
+        //parse_caret_node,
         //parse_array_expr,
         //parse_hash_expr,
         //parse_if_expr,
@@ -213,17 +219,44 @@ fn parse_atom_node(input: Tokens) -> IResult<Tokens, Node> {
     ))(input)
 }
 
-fn parse_atom_expr(input: Tokens) -> IResult<Tokens, Value> {
+fn parse_atom_noprefix_expr(i: Tokens) -> IResult<Tokens, Value> {
+    let (i, node) = parse_atom_noprefix_node(i)?;
+    Ok((i, node.value))
+}
+
+fn parse_atom_node(input: Tokens) -> IResult<Tokens, Node> {
     alt((
-        parse_lit_expr,
-        parse_ident_expr,
-        parse_prefix_expr,
-        parse_paren_expr,
+        parse_literal_node,
+        parse_ident_node,
+        parse_paren_node,
+        parse_prefix_node,
         //parse_array_expr,
         //parse_hash_expr,
         //parse_if_expr,
         //parse_fn_expr,
     ))(input)
+}
+
+fn parse_atom_expr(i: Tokens) -> IResult<Tokens, Value> {
+    let (i, node) = parse_atom_node(i)?;
+    Ok((i, node.value))
+}
+
+fn parse_caret_node(i: Tokens) -> IResult<Tokens, Node> {
+    let (i, (left, expr, right)) = tuple((parse_atom_noprefix_expr, tag_token(Tok::Caret), parse_atom_noprefix_expr))(i)?;
+    let value = Value::Expr(Expr::InfixExpr(Infix::Exp, Box::new(left), Box::new(right)));
+    let node = Node { 
+        pre: vec![],//token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
+        post: vec![],//token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
+        //tokens: vec![token.tok.clone()],
+        value
+    };
+    Ok((i, node))
+}
+
+fn parse_caret_expr(i: Tokens) -> IResult<Tokens, Value> {
+    let (i, (left, expr, right)) = tuple((parse_atom_expr, tag_token(Tok::Caret), parse_atom_expr))(i)?;
+    Ok((i, Value::Expr(Expr::InfixExpr(Infix::Exp, Box::new(left), Box::new(right)))))
 }
 
 fn parse_paren_node(i: Tokens) -> IResult<Tokens, Node> {
@@ -329,7 +362,7 @@ mod tests {
             ("123 - 0", 
                     Stmt::Expr(InfixExpr(
                             Infix::Minus, 
-                            Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
+                            Box::new(Value::Expr(LitExpr(IntLiteral(124)))),
                             Box::new(Value::Expr(LitExpr(IntLiteral(0))))
                     ))),
             ("+123 / 1", 
@@ -390,11 +423,28 @@ mod tests {
 
     #[test]
     fn sexpr() {
-        use crate::sexpr::S;
         let r = vec![
             ("123", "123"),
             ("-123", "(- 123)"),
+            ("- 1 / (2 - 5)", "(/ (- 1) (- 2 5))"),
             ("+ 1 / (2 - 5)", "(/ (+ 1) (- 2 5))"),
+            
+            // handle ambiguous div correctly
+            ("1/2/3", "(/ (/ 1 2) 3)"),
+            // multiply should have higher priority than div
+            ("8/2*(2+2)", "(/ 8 (* 2 (+ 2 2)))"),
+
+            ("5^2", "(^ 5 2)"),
+            ("1-5^2", "(- 1 (^ 5 2))"),
+            ("-1-5^2", "(- (- 1) (^ 5 2))"),
+            ("-5^2", "(- (^ 5 2))"),
+            ("0+−2^2", "(+ 0 (- (^ 2 2)))"),
+            // there are two ways to handle multiple-carets
+            // https://en.wikipedia.org/wiki/Order_of_operations#Serial_exponentiation
+            ("2^3^4", "(^ 2 (^ 3 4))"),
+            // this one is consistent with how we handle div
+            ("2^3^4", "(^ (^ 2 3) 4)"),
+
         ];
         r.iter().for_each(|(q, a)| {
             let (rest, toks) = lex_eof(q).unwrap();
@@ -409,11 +459,9 @@ mod tests {
             let sexpr = stmt.sexpr().unwrap();
             println!("sexpr {}", &sexpr);
             let rendered = format!("{}", &sexpr);
-            println!("sexpr {:?}", (&sexpr, a));
+            println!("sexpr {:?}", (&q, &sexpr, &rendered, a));
             assert_eq!(rendered, a.to_string());
         });
     }
-
-
 }
 

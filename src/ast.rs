@@ -183,6 +183,7 @@ pub enum Infix {
     Minus,
     Divide,
     Multiply,
+    Exp,
     Equal,
     NotEqual,
     GreaterThanEqual,
@@ -202,6 +203,7 @@ impl Infix {
             Infix::Minus => Tok::Minus,
             Infix::Multiply => Tok::Mul,
             Infix::Divide => Tok::Div,
+            Infix::Exp => Tok::Caret,
             _ => Tok::Not,
         }
     }
@@ -215,6 +217,17 @@ impl Unparse for Infix {
 
 }
 
+#[derive(PartialEq, PartialOrd, Debug, Clone)]
+pub enum Precedence {
+    PLowest,
+    PEquals,
+    PLessGreater,
+    PSum,
+    PProduct,
+    PExp,
+    PCall,
+    PIndex,
+}
 
 pub fn infix_op(t: &Tok) -> (Precedence, Option<Infix>) {
     match *t {
@@ -228,6 +241,7 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Infix>) {
         Tok::Minus => (Precedence::PSum, Some(Infix::Minus)),
         Tok::Mul => (Precedence::PProduct, Some(Infix::Multiply)),
         Tok::Div => (Precedence::PProduct, Some(Infix::Divide)),
+        Tok::Caret => (Precedence::PExp, Some(Infix::Exp)),
         Tok::LParen => (Precedence::PCall, None),
         Tok::LBracket => (Precedence::PIndex, None),
         _ => (Precedence::PLowest, None),
@@ -282,17 +296,6 @@ impl SExpr for Ident {
     fn sexpr(&self) -> SResult<S> {
         Ok(S::Atom(self.0.clone()))
     }
-}
-
-#[derive(PartialEq, PartialOrd, Debug, Clone)]
-pub enum Precedence {
-    PLowest,
-    PEquals,
-    PLessGreater,
-    PSum,
-    PProduct,
-    PCall,
-    PIndex,
 }
 
 #[cfg(test)]
