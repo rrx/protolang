@@ -65,12 +65,23 @@ impl Tok {
             NL(n) => "\n".repeat(*n).into(),
             LF(n) => "\r".repeat(*n).into(),
             Invalid(s) => s.into(),
+            Ident(s) => s.into(),
             Mul => "*".into(),
+            Div => "/".into(),
+            Plus => "+".into(),
+            Minus => "-".into(),
+            LParen => "(".into(),
+            RParen => ")".into(),
+            LBracket => "[".into(),
+            RBracket => "]".into(),
+            LBrace => "{".into(),
+            RBrace => "}".into(),
             IntLiteral(x) => x.to_string(),
             FloatLiteral(x) => x.to_string(),
             BoolLiteral(x) => x.to_string(),
             StringLiteral(x) => x.to_string(),
-            _ => "".into()
+            EOF => "".into(),
+            _ => "[UNKNOWN]".into()
         })
     }
 }

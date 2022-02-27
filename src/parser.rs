@@ -218,9 +218,6 @@ fn parse_prefix_node(input: Tokens) -> IResult<Tokens, Node> {
             Tok::Minus => Some(Prefix::PrefixMinus),
             Tok::Not => Some(Prefix::PrefixNot),
             _ => None
-            //Tok::Plus => Ok((i2, Value::Expr(PrefixExpr(Prefix::PrefixPlus, Box::new(e))))),
-            //Tok::Minus => Ok((i2, Value::Expr(PrefixExpr(Prefix::PrefixMinus, Box::new(e))))),
-            //Tok::Not => Ok((i2, Value::Expr(PrefixExpr(Prefix::PrefixNot, Box::new(e))))),
         };
         match maybe_prefix {
             Some(prefix) => {
@@ -240,19 +237,6 @@ fn parse_prefix_node(input: Tokens) -> IResult<Tokens, Node> {
 
 fn parse_prefix_expr(i: Tokens) -> IResult<Tokens, Value> {
     map(parse_prefix_node, |n| n.value)(i)
-    //use Expr::PrefixExpr;
-    //let (i1, t1) = alt((tag_token(Tok::Plus), tag_token(Tok::Minus), tag_token(Tok::Not)))(input)?;
-    //if t1.tok.is_empty() {
-        //Err(Err::Error(error_position!(input, ErrorKind::Tag)))
-    //} else {
-        //let (i2, e) = parse_atom_expr(i1)?;
-        //match &t1.tok[0].tok {
-            //Tok::Plus => Ok((i2, Value::Expr(PrefixExpr(Prefix::PrefixPlus, Box::new(e))))),
-            //Tok::Minus => Ok((i2, Value::Expr(PrefixExpr(Prefix::PrefixMinus, Box::new(e))))),
-            //Tok::Not => Ok((i2, Value::Expr(PrefixExpr(Prefix::PrefixNot, Box::new(e))))),
-            //_ => Err(Err::Error(error_position!(input, ErrorKind::Tag))),
-        //}
-    //}
 }
 
 fn parse_infix_expr(i: Tokens, left: Value) -> IResult<Tokens, Value> {
@@ -350,6 +334,10 @@ mod tests {
             "$",
             "$\n", "$\r\n", "$\t", "$\r",
             "\n$\n", "\r\n$\r\n", "\t$\t", "\r$\r",
+            "1+2",
+            "+ 1 / 2",
+            "+ 1 / (2 - 5)",
+            "x+1",
         ];
         r.iter().for_each(|v| {
             let (rest, toks) = lex_eof(v).unwrap();
@@ -367,6 +355,38 @@ mod tests {
             let s = tokens.unlex();
             println!("{:?}", (&v, &s));
             assert_eq!(v, &s);
+        });
+    }
+
+    #[test]
+    fn sexpr() {
+        use crate::sexpr::S;
+        let r = vec![
+            ("123", "123"),
+            ("-123", "(- 123)"),
+            ("+ 1 / (2 - 5)", "(/ (+ 1) (- 2 5))"),
+        ];
+        r.iter().for_each(|(q, a)| {
+            let (rest, toks) = lex_eof(q).unwrap();
+            let tokens = Tokens::new(&toks[..]);
+            println!("{:?}", (&tokens));
+            println!("{:?}", (&toks));
+
+            let (prog_rest, mut node) = parse_program_node(tokens).unwrap();
+            println!("{:?}", (&node));
+            match node.value {
+                Value::Program(prog) => {
+                    let sexpr = prog.sexpr().unwrap();
+                    sexpr.iter().for_each(|v| {
+                        println!("sexpr {}", &v);
+                    });
+                    let rendered = sexpr.iter().map(|v| format!("{}", &v)).collect::<Vec<_>>();
+                    println!("sexpr {:?}", (&sexpr, a));
+                    assert_eq!(rendered, vec![a.to_string()]);
+                }
+                _ => unreachable!()
+            };
+
         });
     }
 

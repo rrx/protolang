@@ -215,6 +215,14 @@ mod tests {
     }
 
     #[test]
+    fn tokens() {
+        let p = Tok::Minus;
+        assert_eq!(p.unlex(), "-");
+        let p = Tok::Plus;
+        assert_eq!(p.unlex(), "+");
+    }
+
+    #[test]
     fn test_ws() {
         assert_eq!("\t".len(), 1);
         assert!(lex_whitespace(span("")).is_err());

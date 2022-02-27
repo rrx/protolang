@@ -1,4 +1,5 @@
 use crate::tokens::{Tok, Token};
+use crate::sexpr::*;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Value {
@@ -17,6 +18,28 @@ impl Value {
             Lit(lit) => lit.unparse(),
         });
         out
+    }
+
+    pub fn sexpr(&self) -> SResult<S> {
+        use Value::*;
+        match self {
+            Expr(expr) => expr.sexpr(),
+            Lit(lit) => lit.sexpr(),
+            _ => Err(SError::Invalid)
+        }
+
+        //let mut out = vec![];
+        //out.append(&mut match self {
+            //Program(prog) => prog.sexpr(),
+            //Expr(expr) => expr.sexpr(),
+            //Lit(lit) => lit.sexpr(),
+        //});
+        //if out.len() == 0 {
+            //Ok((S::Null))
+        //} else if out.len() == 1 {
+            //Ok((S::Atom(
+        //out
+        //Ok(S::Null)
     }
 }
 
@@ -37,6 +60,10 @@ impl Node {
         out.append(&mut self.post);
         out
     }
+
+    pub fn sexpr(&self) -> SResult<S> {
+        self.value.sexpr()
+    }
 }
 
 
@@ -50,6 +77,11 @@ impl Program {
             out.append(&mut expr.unparse());
         }
         out
+    }
+
+    pub fn sexpr(&self) -> SResult<SProgram> {
+        let results = self.0.iter().filter_map(|v| v.sexpr().ok()).collect();
+        Ok(results)
     }
 }
 
@@ -85,6 +117,24 @@ impl Expr {
         };
         out
     }
+    pub fn sexpr(&self) -> SResult<S> {
+        use Literal::*;
+        use Expr::*;
+        match self {
+            LitExpr(x) => x.sexpr(),
+            IdentExpr(x) => x.sexpr(),
+            InfixExpr(op, left, right) => {
+                let sleft = left.sexpr()?;
+                let sright = right.sexpr()?;
+                Ok(S::Cons(op.to_string(), vec![sleft, sright]))
+            }
+            PrefixExpr(prefix, expr) => {
+                let s = expr.sexpr()?;
+                Ok(S::Cons(prefix.to_string(), vec![s]))
+            }
+            _ => Err(SError::Invalid)
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -94,14 +144,20 @@ pub enum Prefix {
     PrefixNot
 }
 impl Prefix {
+    pub fn to_string(&self) -> String {
+        self.to_token().unlex()
+    }
+
+    pub fn to_token(&self) -> Tok {
+        match self {
+            Prefix::PrefixPlus => Tok::Plus,
+            Prefix::PrefixMinus => Tok::Minus,
+            Prefix::PrefixNot => Tok::Not,
+        }
+    }
+
     pub fn unparse(&mut self) -> Vec<Tok> {
-        use Prefix::*;
-        let token = match self {
-            PrefixPlus => Tok::Plus,
-            PrefixMinus => Tok::Minus,
-            PrefixNot => Tok::Not,
-        };
-        vec![token]
+        vec![self.to_token()]
     }
 }
 
@@ -120,17 +176,24 @@ pub enum Infix {
 }
 
 impl Infix {
-    pub fn unparse(&mut self) -> Vec<Tok> {
-        use Prefix::*;
-        let token = match self {
-            Plus => Tok::Plus,
-            Minus => Tok::Minus,
-            Multiply => Tok::Mul,
-            Divide => Tok::Div,
-            _ => Tok::Not,
-        };
-        vec![token]
+    pub fn to_string(&self) -> String {
+        self.to_token().unlex()
     }
+
+    pub fn to_token(&self) -> Tok {
+        match self {
+            Infix::Plus => Tok::Plus,
+            Infix::Minus => Tok::Minus,
+            Infix::Multiply => Tok::Mul,
+            Infix::Divide => Tok::Div,
+            _ => Tok::Not,
+        }
+    }
+
+    pub fn unparse(&mut self) -> Vec<Tok> {
+        vec![self.to_token()]
+    }
+
 }
 
 
@@ -172,6 +235,17 @@ impl Literal {
         };
         vec![token]
     }
+
+    pub fn sexpr(&self) -> SResult<S> {
+        use Literal::*;
+        match self {
+            IntLiteral(x) => Ok(S::Atom(x.to_string())),
+            FloatLiteral(x) => Ok(S::Atom(x.to_string())),
+            BoolLiteral(x) => Ok(S::Atom(x.to_string())),
+            StringLiteral(x) => Ok(S::Atom(x.to_string())),
+            _ => Err(SError::Invalid)
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Eq, Clone)]
@@ -179,6 +253,9 @@ pub struct Ident(pub String);
 impl Ident {
     pub fn unparse(&self) -> Vec<Tok> {
         vec![Tok::Ident(self.0.clone())]
+    }
+    pub fn sexpr(&self) -> SResult<S> {
+        Ok(S::Atom(self.0.clone()))
     }
 }
 
@@ -192,3 +269,25 @@ pub enum Precedence {
     PCall,
     PIndex,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tokens::*;
+    use crate::lexer::*;
+
+    #[test]
+    fn prefix() {
+        let p = Prefix::PrefixMinus;
+        assert_eq!(p.to_string(), "-");
+    }
+
+    #[test]
+    fn infix() {
+        let p = Infix::Minus;
+        println!("{:?}", (&p, &p.to_token(), &p.to_string()));
+        assert_eq!(p.to_string(), "-");
+    }
+}
+
+
