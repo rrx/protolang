@@ -81,7 +81,7 @@ fn parse_atom_or_caret_expr(i: Tokens) -> IResult<Tokens, Value> {
 
 fn parse_pratt_node(input: Tokens, precedence: Precedence) -> IResult<Tokens, Node> {
     //let (i1, left) = parse_atom_node(input)?;
-    let (i1, left) = parse_atom_or_caret_node(input)?;
+    let (i1, left) = parse_atom_node(input)?;
     go_parse_pratt_node(i1, precedence, left)
 }
 
@@ -125,6 +125,10 @@ fn go_parse_pratt_expr(input: Tokens, precedence: Precedence, left: Value) -> IR
         let preview = &t1.tok[0];
         let p = infix_op(&preview.tok);
         match p {
+            //(Precedence::PExp, _) if precedence < Precedence::PExp => {
+                //let (i2, left2) = parse_caret_expr(input, left)?;
+                //go_parse_pratt_expr(i2, precedence, left2)
+            //}
             //(Precedence::PCall, _) if precedence < Precedence::PCall => {
                 //let (i2, left2) = parse_call_expr(input, left)?;
                 //go_parse_pratt_expr(i2, precedence, left2)
@@ -226,10 +230,11 @@ fn parse_atom_noprefix_expr(i: Tokens) -> IResult<Tokens, Value> {
 
 fn parse_atom_node(input: Tokens) -> IResult<Tokens, Node> {
     alt((
+        parse_caret_node,
         parse_literal_node,
         parse_ident_node,
-        parse_paren_node,
         parse_prefix_node,
+        parse_paren_node,
         //parse_array_expr,
         //parse_hash_expr,
         //parse_if_expr,
@@ -243,7 +248,7 @@ fn parse_atom_expr(i: Tokens) -> IResult<Tokens, Value> {
 }
 
 fn parse_caret_node(i: Tokens) -> IResult<Tokens, Node> {
-    let (i, (left, expr, right)) = tuple((parse_atom_noprefix_expr, tag_token(Tok::Caret), parse_atom_noprefix_expr))(i)?;
+    let (i, (left, expr, right)) = tuple((parse_lit_expr, tag_token(Tok::Caret), parse_lit_expr))(i)?;
     let value = Value::Expr(Expr::InfixExpr(Infix::Exp, Box::new(left), Box::new(right)));
     let node = Node { 
         pre: vec![],//token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
@@ -362,7 +367,7 @@ mod tests {
             ("123 - 0", 
                     Stmt::Expr(InfixExpr(
                             Infix::Minus, 
-                            Box::new(Value::Expr(LitExpr(IntLiteral(124)))),
+                            Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
                             Box::new(Value::Expr(LitExpr(IntLiteral(0))))
                     ))),
             ("+123 / 1", 
@@ -400,6 +405,7 @@ mod tests {
             "+ 1 / 2",
             "+ 1 / (2 - 5)",
             "x+1",
+            "(((((0)))))",
         ];
         r.iter().for_each(|v| {
             let (rest, toks) = lex_eof(v).unwrap();
@@ -431,25 +437,41 @@ mod tests {
             
             // handle ambiguous div correctly
             ("1/2/3", "(/ (/ 1 2) 3)"),
-            // multiply should have higher priority than div
-            ("8/2*(2+2)", "(/ 8 (* 2 (+ 2 2)))"),
 
             ("5^2", "(^ 5 2)"),
             ("1-5^2", "(- 1 (^ 5 2))"),
             ("-1-5^2", "(- (- 1) (^ 5 2))"),
             ("-5^2", "(- (^ 5 2))"),
-            ("0+−2^2", "(+ 0 (- (^ 2 2)))"),
+            ("(x+y)^(y+x)", "(^ (+ x y) (+ y x))"),
             // there are two ways to handle multiple-carets
             // https://en.wikipedia.org/wiki/Order_of_operations#Serial_exponentiation
-            ("2^3^4", "(^ 2 (^ 3 4))"),
-            // this one is consistent with how we handle div
+            // this one is consistent with how we handle div, eval from left to right
             ("2^3^4", "(^ (^ 2 3) 4)"),
+            // this one is not, eval is from right to left, which is more math convention
+            //("2^3^4", "(^ 2 (^ 3 4))"),
 
+            // multiply should have higher priority than div, but if you evaluate from left to
+            // right, that breaks down
+            ("8/2*(2+2)", "(* (/ 8 2) (+ 2 2))"),
+
+            // with proper precedence, this should be the answer
+            //("8/2*(2+2)", "(/ 8 (* 2 (+ 2 2)))"),
+            
+            // tricky, what should it do?  The plus sort of implies that -2 is the base
+            // ("0+−2^2", "(+ 0 (^ (- 2) 2))"),
+            // +- could also be interpreted as just -
+            // ("0+−2^2", "(- 0 (^ 2 2))"),
+            // or the plus could be the infix op, and - the prefix
+            ("0+-2^2", "(+ 0 (- (^ 2 2)))"),
+
+            // this one has a unicode minus sign, which is invalid
+            //("0+−2^2", "(+ 0 (- (^ 2 2)))"),
         ];
+
         r.iter().for_each(|(q, a)| {
+            println!("q {:?}", (&q));
             let (rest, toks) = lex_eof(q).unwrap();
             let tokens = Tokens::new(&toks[..]);
-            println!("{:?}", (&tokens));
             println!("{:?}", (&toks));
 
             let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
