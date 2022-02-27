@@ -51,6 +51,17 @@ fn lex_whitespace<'a>(i: Span) -> IResult<Span, Token> {
     let (i, t) = alt((
             map(recognize(take_while1(|c| c == ' ')),  |s: Span| Spaces(s.len())),
             map(recognize(take_while1(|c| c == '\t')), |s: Span| Tabs(s.len())),
+            //map(recognize(take_while1(|c| c == '\n')), |s: Span| NL(s.len())),
+            //map(recognize(take_while1(|c| c == '\r')), |s: Span| LF(s.len())),
+            //map(recognize(crlf), |s: Span| CRLF(s.len()))
+        ))(i)?;
+    Ok((i, token(t, pos)))
+}
+
+fn lex_newline(i: Span) -> IResult<Span, Token> {
+    use Tok::*;
+    let (i, pos) = position(i)?;
+    let (i, t) = alt((
             map(recognize(take_while1(|c| c == '\n')), |s: Span| NL(s.len())),
             map(recognize(take_while1(|c| c == '\r')), |s: Span| LF(s.len())),
             map(recognize(crlf), |s: Span| CRLF(s.len()))
@@ -121,6 +132,7 @@ fn lex_token<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
             lex_string,
             lex_number,
             lex_identifier_or_reserved,
+            lex_newline,
             lex_invalid,
             ))(i)
 }

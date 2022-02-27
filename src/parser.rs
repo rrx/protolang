@@ -4,9 +4,9 @@ use crate::tokens::*;
 use crate::ast::*;
 use nom::branch::*;
 use nom::bytes::complete::{take, take_while};
-use nom::combinator::{map, opt, verify};
+use nom::combinator::{map, opt, recognize, verify};
 use nom::error::{Error, ErrorKind};
-use nom::multi::many0;
+use nom::multi::{many0, many1};
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
@@ -15,18 +15,56 @@ fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> IResult<Tokens<'a>, Tokens
     verify(take(1usize), move |tokens: &Tokens<'a>| tokens.tok[0].tok == t)
 }
 
-fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
-    let (i, r) = terminated(many0(parse_expr_node), tag_token(Tok::EOF))(i)?;
+fn parse_newline<'a>(i: Tokens<'a>) -> IResult<Tokens<'a>, Tokens<'a>> {
+    verify(take(1usize), move |tokens: &Tokens<'a>| {
+        tokens.tok[0].tok.is_newline()
+    })(i)
+}
+
+fn parse_newline_or_eof(i: Tokens) -> IResult<Tokens, Tokens> {
+    verify(take(1usize), move |tokens: &Tokens| {
+        let tok = &tokens.tok[0].tok;
+        tok.is_newline() || tok == &Tok::EOF
+    })(i)
+    //recognize(many0(alt((parse_newline, tag_token(Tok::EOF)))))(i)
+}
+
+pub fn parse_statement(i: Tokens) -> IResult<Tokens, Stmt> {
+    let (i, (r, nl)) = pair(parse_expr_node, parse_newline_or_eof)(i)?;
+    let value = match r.value {
+        Value::Lit(x) => Stmt::Lit(x),
+        Value::Expr(x) => Stmt::Expr(x),
+        _ => unreachable!()
+
+    };
+
+    //let node = Node { 
+        //pre: vec![],
+        //post: nl.toks(),
+        //tokens: vec![],
+        //value: Value::Stmt(value),
+    //};
+
+    Ok((i, value))
+}
+
+pub fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
+    //let (i, r) = terminated(many0(parse_expr_node), tag_token(Tok::EOF))(i)?;
+    let (i, r) = many0(parse_statement)(i)?;
     //let values = r.iter().map(|v| v.value.clone()).collect();
     let value = Value::Program(Program(r));
     let node = Node { 
         pre: vec![],
         post: vec![],
-        tokens: vec![],
+        //tokens: vec![],
         value
     };
 
     Ok((i, node))
+}
+
+fn parse_program(i: Tokens) -> IResult<Tokens, Vec<Stmt>> {
+    many0(parse_statement)(i)
 }
 
 //fn parse_program(i: Tokens) -> IResult<Tokens, Value> {
@@ -117,7 +155,7 @@ fn parse_ident_node(input: Tokens) -> IResult<Tokens, Node> {
                 let node = Node { 
                     pre: token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
                     post: token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
-                    tokens: vec![token.tok.clone()],
+                    //tokens: vec![token.tok.clone()],
                     value
                 };
 
@@ -154,7 +192,7 @@ fn parse_literal_node(input: Tokens) -> IResult<Tokens, Node> {
                 let node = Node { 
                     pre: token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
                     post: token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
-                    tokens: vec![token.tok.clone()],
+                    //tokens: vec![token.tok.clone()],
                     value
                 };
                 Ok((i1, node))
@@ -225,7 +263,7 @@ fn parse_prefix_node(input: Tokens) -> IResult<Tokens, Node> {
                 let node = Node { 
                     pre: token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
                     post: token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
-                    tokens: vec![token.tok.clone()],
+                    //tokens: vec![token.tok.clone()],
                     value
                 };
                 Ok((i2, node))
@@ -273,7 +311,7 @@ fn parse_infix_node(input: Tokens, left: Node) -> IResult<Tokens, Node> {
                 let node = Node { 
                     pre: token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
                     post: token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
-                    tokens: vec![token.tok.clone()],
+                    //tokens: vec![token.tok.clone()],
                     value
                 };
                 Ok((i2, node))
@@ -296,31 +334,29 @@ mod tests {
     fn literal() {
         let r = vec![
             ("123 - 0", 
-                    Value::Expr(InfixExpr(
+                    Stmt::Expr(InfixExpr(
                             Infix::Minus, 
                             Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
                             Box::new(Value::Expr(LitExpr(IntLiteral(0))))
                     ))),
             ("+123 / 1", 
-                    Value::Expr(InfixExpr(
+                    Stmt::Expr(InfixExpr(
                         Infix::Divide,
                         Box::new(Value::Expr(PrefixExpr(Prefix::PrefixPlus, Box::new(Value::Expr(LitExpr(IntLiteral(123))))))),
                         Box::new(Value::Expr(LitExpr(IntLiteral(1))))
                     ))),
-            ("123", Value::Expr(LitExpr(Literal::IntLiteral(123)))),
-            ("123", Value::Expr(LitExpr(Literal::IntLiteral(123)))),
+            ("123", Stmt::Expr(LitExpr(Literal::IntLiteral(123)))),
+            ("123", Stmt::Expr(LitExpr(Literal::IntLiteral(123)))),
         ];
         r.iter().for_each(|(q, a)| {
             let (rest, result) = lex_eof(q).unwrap();
             assert_eq!(rest.len(), 0);
             let tokens = Tokens::new(&result[..]);
-            let (rest, node) = parse_program_node(tokens).unwrap();
-            println!("{:?}", (&rest, &node));
+            let (rest, stmts) = parse_program(tokens).unwrap();
+            println!("{:?}", (&rest, &stmts));
             assert_eq!(rest.input_len(), 0);
-            match node.value {
-                Value::Program(Program(prog)) => assert_eq!(prog.get(0).unwrap().value, *a),
-                _ => unreachable!()
-            }
+            let stmt = stmts.get(0).unwrap();
+            assert_eq!(stmt, a);
         });
 
     }

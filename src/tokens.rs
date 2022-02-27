@@ -84,6 +84,15 @@ impl Tok {
             _ => "[UNKNOWN]".into()
         })
     }
+
+    pub fn is_newline(&self) -> bool {
+        match self {
+            Tok::NL(_) => true,
+            Tok::CRLF(_) => true,
+            Tok::LF(_) => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

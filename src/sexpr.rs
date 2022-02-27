@@ -7,7 +7,8 @@ pub enum S {
     Cons(String, Vec<S>),
 }
 
-pub type SProgram = Vec<S>;
+pub type SStmt = S;
+pub type SProgram = Vec<SStmt>;
 
 #[derive(PartialEq, Debug, Eq, Clone)]
 pub enum SError {
@@ -15,6 +16,10 @@ pub enum SError {
 }
 
 pub type SResult<A> = Result<A, SError>;
+
+pub trait SExpr {
+    fn sexpr(&self) -> SResult<S>;
+}
 
 impl fmt::Display for S {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
