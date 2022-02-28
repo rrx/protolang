@@ -1,7 +1,7 @@
 use nom::*;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
-use nom_locate::{position, LocatedSpan};
+use nom_locate::{LocatedSpan};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
@@ -66,6 +66,9 @@ impl Tok {
             LF(n) => "\r".repeat(*n).into(),
             Invalid(s) => s.into(),
             Ident(s) => s.into(),
+            Equals => "==".into(),
+            NotEquals => "!=".into(),
+            Assign => "=".into(),
             Mul => "*".into(),
             Div => "/".into(),
             Plus => "+".into(),
@@ -86,7 +89,7 @@ impl Tok {
             IntLiteral(x) => x.to_string(),
             FloatLiteral(x) => x.to_string(),
             BoolLiteral(x) => x.to_string(),
-            StringLiteral(x) => x.to_string(),
+            StringLiteral(x) => format!("\"{}\"", x.to_string().escape_debug()),
             EOF => "".into(),
             _ => "[UNKNOWN]".into()
         })

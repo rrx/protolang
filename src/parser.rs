@@ -3,14 +3,13 @@ use nom::*;
 use crate::tokens::*;
 use crate::ast::*;
 use nom::branch::*;
-use nom::bytes::complete::{take, take_while};
-use nom::combinator::{map, opt, recognize, verify};
+use nom::bytes::complete::{take};
+use nom::combinator::{map, verify};
 use nom::error::{Error, ErrorKind};
-use nom::multi::{many0, many1};
+use nom::multi::{many0};
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
-use crate::ast::Unparse;
 
 fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> IResult<Tokens<'a>, Tokens<'a>> {
     verify(take(1usize), move |tokens: &Tokens<'a>| tokens.tok[0].tok == t)
@@ -30,7 +29,27 @@ fn parse_newline_or_eof(i: Tokens) -> IResult<Tokens, Tokens> {
 }
 
 pub fn parse_statement(i: Tokens) -> IResult<Tokens, Stmt> {
+    alt((
+            parse_assignment_stmt,
+            parse_expr_stmt,
+            ))(i)
+}
+
+pub fn parse_assignment_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
+    //println!("asdf: {:?}", i.toks());
+    //let (i1, (ident, _, _, _)) = tuple((parse_ident, tag_token(Tok::Equals), parse_lit_expr, tag_token(Tok::EOF)))(i)?;
+    //println!("X: {:?}", (i1, ident));
+
+    let (i, (ident, _, value, nl)) = tuple((parse_ident, tag_token(Tok::Assign), parse_expr, parse_newline_or_eof))(i)?;
+    match value {
+        Value::Expr(expr) => Ok((i, Stmt::Assign(ident, expr))),
+        _ => unreachable!()
+    }
+}
+
+pub fn parse_expr_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
     let (i, (r, nl)) = pair(parse_expr_node, parse_newline_or_eof)(i)?;
+    println!("Y: {:?}", (&i, &r));
     let value = match r.value {
         Value::Lit(x) => Stmt::Lit(x),
         Value::Expr(x) => Stmt::Expr(x),
@@ -146,6 +165,22 @@ fn go_parse_pratt_expr(input: Tokens, precedence: Precedence, left: Value) -> IR
     }
 }
 
+fn parse_ident(i: Tokens) -> IResult<Tokens, Ident> {
+    let (i1, t1) = take(1usize)(i)?;
+    if t1.tok.is_empty() {
+        Err(Err::Error(Error::new(i, ErrorKind::Tag)))
+    } else {
+        let token = &t1.tok[0]; 
+        match &token.tok {
+            Tok::Ident(name) => {
+                //println!("ident: {}", &name);
+                Ok((i1, Ident(name.clone())))
+            }
+            _ => Err(Err::Error(Error::new(i, ErrorKind::Tag))),
+        }
+    }
+}
+
 fn parse_ident_node(input: Tokens) -> IResult<Tokens, Node> {
     let (i1, t1) = take(1usize)(input)?;
     if t1.tok.is_empty() {
@@ -162,7 +197,7 @@ fn parse_ident_node(input: Tokens) -> IResult<Tokens, Node> {
                     value
                 };
 
-                Ok((i1, node))//Value::Expr(Expr::IdentExpr(Ident(name.clone())))))
+                Ok((i1, node))
             }
             _ => Err(Err::Error(Error::new(input, ErrorKind::Tag))),
         }
@@ -355,11 +390,26 @@ fn parse_infix_node(input: Tokens, left: Node) -> IResult<Tokens, Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tokens::*;
     use crate::lexer::*;
     use Expr::*;
     use Literal::*;
     use crate::sexpr::SExpr;
+
+    #[test]
+    fn token() {
+        let r = vec![
+            ("=", vec![Tok::Assign]),
+            ("==", vec![Tok::Equals]),
+            ("-", vec![Tok::Minus]),
+        ];
+        r.iter().for_each(|(q, a)| {
+            let (rest, result) = lex(q).unwrap();
+            assert_eq!(rest.len(), 0);
+            let tokens = Tokens::new(&result[..]);
+            println!("{:?}", (&tokens.toks()));
+            assert_eq!(&tokens.toks(), a);
+        });
+    }
 
     #[test]
     fn literal() {
@@ -378,6 +428,9 @@ mod tests {
                     ))),
             ("123", Stmt::Expr(LitExpr(Literal::IntLiteral(123)))),
             ("123", Stmt::Expr(LitExpr(Literal::IntLiteral(123)))),
+            ("\"asdf\"", Stmt::Expr(LitExpr(Literal::StringLiteral("asdf".into())))),
+            //utf-8 test
+            ("\"🎁\"", Stmt::Expr(LitExpr(Literal::StringLiteral("🎁".into())))),
         ];
         r.iter().for_each(|(q, a)| {
             let (rest, result) = lex_eof(q).unwrap();
@@ -392,6 +445,57 @@ mod tests {
 
     }
 
+    #[test]
+    fn ident() {
+        let r = vec![
+            "x",
+            " x "
+        ];
+        r.iter().for_each(|v| {
+            let (rest, toks) = lex_eof(v).unwrap();
+            let tokens = Tokens::new(&toks[..]);
+            //println!("{:?}", (&tokens));
+            println!("{:?}", (&tokens.toks()));
+            let result = parse_ident_node(tokens);
+            println!("ident {:?}", (&result));
+            result.unwrap();
+
+            let result = parse_ident(tokens);
+            println!("ident {:?}", (&result));
+            result.unwrap();
+        });
+    }
+
+    #[test]
+    fn assign() {
+        let r = vec![
+            "x=1",
+            "x = 1\n",
+            "x = y * 2\n",
+            "x = 1\ny=2"
+        ];
+        r.iter().for_each(|v| {
+            let (rest, toks) = lex_eof(v).unwrap();
+            let tokens = Tokens::new(&toks[..]);
+            //println!("{:?}", (&tokens));
+            println!("{:?}", (&tokens.toks()));
+
+            let result = parse_statement(tokens);
+            println!("p {:?}", (&result));
+
+            let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
+            println!("{:?}", (&stmts, prog_rest.toks()));
+            let stmt = stmts.get(0).unwrap();
+            println!("{:?}", (&stmt));
+            let mut restored = stmt.unparse();
+            restored.push(Tok::EOF);
+            let ts = toks.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
+            println!("restored {:?}", (&ts, &restored));
+            let s = tokens.unlex();
+            println!("{:?}", (&v, &s));
+            assert_eq!(v, &s);
+        });
+    }
 
     #[test]
     fn unparse() {
@@ -473,6 +577,8 @@ mod tests {
             let (rest, toks) = lex_eof(q).unwrap();
             let tokens = Tokens::new(&toks[..]);
             println!("{:?}", (&toks));
+
+            let (prog_rest, mut expr) = parse_expr(tokens).unwrap();
 
             let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
             println!("{:?}", (&stmts));

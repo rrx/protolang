@@ -1,4 +1,4 @@
-use crate::tokens::{Tok, Token};
+use crate::tokens::{Tok};
 use crate::sexpr::*;
 
 pub trait Unparse {
@@ -16,6 +16,8 @@ pub enum Value {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Stmt {
+    Assign(Ident, Expr),
+    Block(Vec<Stmt>),
     Expr(Expr),
     Lit(Literal),
 }
@@ -25,6 +27,12 @@ impl Unparse for Stmt {
         match self {
             Stmt::Expr(expr) => expr.unparse(),
             Stmt::Lit(lit) => lit.unparse(),
+            Stmt::Assign(ident, expr) => {
+                vec![ident.unparse(), vec![Tok::Equals], expr.unparse()].into_iter().flatten().collect()
+            }
+            Stmt::Block(stmts) => {
+                stmts.iter().map(|s| s.unparse()).flatten().collect()
+            }
         }
     }
 }
@@ -34,6 +42,14 @@ impl SExpr for Stmt {
         match self {
             Stmt::Lit(x) => x.sexpr(),
             Stmt::Expr(x) => x.sexpr(),
+            Stmt::Assign(ident, expr) => {
+                let sident = ident.sexpr()?;
+                let sexpr = expr.sexpr()?;
+                Ok(S::Cons("def".into(), vec![sident, sexpr]))
+            }
+            Stmt::Block(stmts) => {
+                Ok(S::Cons("block".into(), stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect()))
+            }
         }
     }
 }
@@ -106,7 +122,6 @@ pub enum Expr {
 }
 impl Unparse for Expr {
     fn unparse(&self) -> Vec<Tok> {
-        use Literal::*;
         use Expr::*;
         let mut out = vec![];
         match self {
@@ -132,7 +147,6 @@ impl Unparse for Expr {
 }
 impl SExpr for Expr {
     fn sexpr(&self) -> SResult<S> {
-        use Literal::*;
         use Expr::*;
         match self {
             LitExpr(x) => x.sexpr(),
@@ -301,8 +315,6 @@ impl SExpr for Ident {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tokens::*;
-    use crate::lexer::*;
 
     #[test]
     fn prefix() {
