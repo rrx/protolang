@@ -161,6 +161,11 @@ impl<'a> Tokens<'a> {
         }
     }
 
+    //fn from_string(i: &'a str) -> IResult<Span<'a>, Tokens<'a>> {
+        //let (i, toks) = crate::lexer::lex_eof(i)?;
+        //Ok((i, Tokens::new(&toks[..])))
+    //}
+
     pub fn toks(&self) -> Vec<Tok> {
         self.iter_elements()
             .map(|v| v.tok.clone())

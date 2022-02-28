@@ -26,7 +26,7 @@ impl Unparse for Stmt {
         match self {
             Stmt::Expr(expr) => expr.unparse(),
             Stmt::Lit(lit) => lit.unparse(),
-            Stmt::Assign(ident, expr) => vec![ident.unparse(), vec![Tok::Equals], expr.unparse()]
+            Stmt::Assign(ident, expr) => vec![ident.unparse(), vec![Tok::Assign], expr.unparse()]
                 .into_iter()
                 .flatten()
                 .collect(),
@@ -83,6 +83,20 @@ pub struct Node {
     pub value: Value,
 }
 
+impl Node {
+    pub fn prepend(&mut self, toks: Vec<Tok>) {
+        if toks.len() > 0 {
+            let mut v = toks;
+            v.append(&mut self.pre);
+            self.pre = v;
+        }
+    }
+
+    pub fn append(&mut self, toks: &mut Vec<Tok>) {
+        self.post.append(toks);
+    }
+}
+
 impl Unparse for Node {
     fn unparse(&self) -> Vec<Tok> {
         vec![self.pre.clone(), self.value.unparse(), self.post.clone()]
@@ -99,7 +113,7 @@ impl SExpr for Node {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Program(pub Vec<Stmt>);
+pub struct Program(pub Vec<Node>);
 
 impl Unparse for Program {
     fn unparse(&self) -> Vec<Tok> {

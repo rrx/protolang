@@ -30,15 +30,47 @@ fn parse_newline_or_eof(i: Tokens) -> IResult<Tokens, Tokens> {
     })(i)
 }
 
+pub fn parse_statement_node(i: Tokens) -> IResult<Tokens, Node> {
+    alt((
+            parse_expr_node,
+            parse_assignment_node,
+            ))(i)
+}
+
 pub fn parse_statement(i: Tokens) -> IResult<Tokens, Stmt> {
-    alt((parse_assignment_stmt, parse_expr_stmt))(i)
+    alt((
+            parse_expr_stmt,
+            parse_assignment_stmt,
+            ))(i)
+}
+
+pub fn parse_assignment_node(i: Tokens) -> IResult<Tokens, Node> {
+    let (i, (ident, _, value, mut nl)) = tuple((
+        parse_ident,
+        tag_token(Tok::Assign),
+        parse_expr,
+        parse_newline_or_eof,
+    ))(i)?;
+
+    match value {
+        Value::Expr(expr) => {
+            let value = Value::Stmt(Stmt::Assign(ident, expr));
+            let mut node = Node {
+                pre: vec![],
+                post: nl.toks(),
+                value,
+            };
+            Ok((i, node))
+        }
+        _ => unreachable!(),
+    }
+    //match value {
+        //Value::Expr(expr) => Ok((i, Stmt::Assign(ident, expr))),
+        //_ => unreachable!(),
+    //}
 }
 
 pub fn parse_assignment_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
-    //println!("asdf: {:?}", i.toks());
-    //let (i1, (ident, _, _, _)) = tuple((parse_ident, tag_token(Tok::Equals), parse_lit_expr, tag_token(Tok::EOF)))(i)?;
-    //println!("X: {:?}", (i1, ident));
-
     let (i, (ident, _, value, nl)) = tuple((
         parse_ident,
         tag_token(Tok::Assign),
@@ -53,7 +85,6 @@ pub fn parse_assignment_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
 
 pub fn parse_expr_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
     let (i, (r, nl)) = pair(parse_expr_node, parse_newline_or_eof)(i)?;
-    println!("Y: {:?}", (&i, &r));
     let value = match r.value {
         Value::Lit(x) => Stmt::Lit(x),
         Value::Expr(x) => Stmt::Expr(x),
@@ -64,25 +95,14 @@ pub fn parse_expr_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
 }
 
 pub fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
-    let (i, (pre, r)) = pair(many0(parse_newline), many0(parse_statement))(i)?;
-    let value = Value::Program(Program(r));
-    println!("ws: {:?}", pre);
+    let (i, (pre, mut stmts)) = pair(many0(parse_newline), many0(parse_statement_node))(i)?;
+    let value = Value::Program(Program(stmts));
     let node = Node {
         pre: pre.iter().map(|v| v.tok[0].tok.clone()).collect(),
         post: vec![],
-        //tokens: vec![],
         value,
     };
-
     Ok((i, node))
-}
-
-fn parse_program(i: Tokens) -> IResult<Tokens, Vec<Stmt>> {
-    let (i, node) = parse_program_node(i)?;
-    match node.value {
-        Value::Program(prog) => Ok((i, prog.0)),
-        _ => unreachable!(),
-    }
 }
 
 fn parse_expr_node(input: Tokens) -> IResult<Tokens, Node> {
@@ -252,7 +272,7 @@ fn parse_lit_expr(i: Tokens) -> IResult<Tokens, Value> {
     Ok((i, lit.value))
 }
 
-fn parse_atom_noprefix_node(input: Tokens) -> IResult<Tokens, Node> {
+fn _parse_atom_noprefix_node(input: Tokens) -> IResult<Tokens, Node> {
     alt((
         parse_literal_node,
         parse_ident_node,
@@ -265,8 +285,8 @@ fn parse_atom_noprefix_node(input: Tokens) -> IResult<Tokens, Node> {
     ))(input)
 }
 
-fn parse_atom_noprefix_expr(i: Tokens) -> IResult<Tokens, Value> {
-    let (i, node) = parse_atom_noprefix_node(i)?;
+fn _parse_atom_noprefix_expr(i: Tokens) -> IResult<Tokens, Value> {
+    let (i, node) = _parse_atom_noprefix_node(i)?;
     Ok((i, node.value))
 }
 
@@ -419,20 +439,20 @@ mod tests {
     use Expr::*;
     use Literal::*;
 
-    #[test]
-    fn token() {
-        let r = vec![
-            ("=", vec![Tok::Assign]),
-            ("==", vec![Tok::Equals]),
-            ("-", vec![Tok::Minus]),
-        ];
-        r.iter().for_each(|(q, a)| {
-            let (rest, result) = lex(q).unwrap();
-            assert_eq!(rest.len(), 0);
-            let tokens = Tokens::new(&result[..]);
-            println!("{:?}", (&tokens.toks()));
-            assert_eq!(&tokens.toks(), a);
-        });
+    fn parser_losslessness(s: &str) -> bool {
+        println!("{:?}", &s);
+        let (_, toks) = lex_eof(s).unwrap();
+        let tokens = Tokens::new(&toks[..]);
+        println!("toks {:?}", tokens.toks());
+        let (prog_rest, node) = parse_program_node(tokens).unwrap();
+        println!("node {:?}", (&prog_rest.toks(), &node));
+        let s2 = node.unparse().iter()
+            .map(|tok| tok.unlex())
+            .collect::<Vec<_>>()
+            .join("")
+            ;
+        println!("test {:?}", (s, &s2));
+        s == s2
     }
 
     #[test]
@@ -473,11 +493,13 @@ mod tests {
             let (rest, result) = lex_eof(q).unwrap();
             assert_eq!(rest.len(), 0);
             let tokens = Tokens::new(&result[..]);
-            let (rest, stmts) = parse_program(tokens).unwrap();
-            println!("{:?}", (&rest, &stmts));
+            let (rest, node) = parse_program_node(tokens).unwrap();
+            println!("{:?}", (&rest, &node));
             assert_eq!(rest.input_len(), 0);
-            let stmt = stmts.get(0).unwrap();
-            assert_eq!(stmt, a);
+            match node.value {
+                Value::Stmt(stmt) => assert_eq!(&stmt, a),
+                _ => unreachable!()
+            };
         });
     }
 
@@ -485,7 +507,7 @@ mod tests {
     fn ident() {
         let r = vec!["x", " x "];
         r.iter().for_each(|v| {
-            let (rest, toks) = lex_eof(v).unwrap();
+            let (_, toks) = lex_eof(v).unwrap();
             let tokens = Tokens::new(&toks[..]);
             //println!("{:?}", (&tokens));
             println!("{:?}", (&tokens.toks()));
@@ -511,11 +533,11 @@ mod tests {
             let result = parse_statement(tokens);
             println!("p {:?}", (&result));
 
-            let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
-            println!("{:?}", (&stmts, prog_rest.toks()));
-            let stmt = stmts.get(0).unwrap();
-            println!("{:?}", (&stmt));
-            let mut restored = stmt.unparse();
+            let (prog_rest, mut node) = parse_program_node(tokens).unwrap();
+            println!("{:?}", (&node, prog_rest.toks()));
+            //let stmt = stmts.get(0).unwrap();
+            //println!("{:?}", (&stmt));
+            let mut restored = node.unparse();
             restored.push(Tok::EOF);
             let ts = toks.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
             println!("restored {:?}", (&ts, &restored));
@@ -528,6 +550,7 @@ mod tests {
     #[test]
     fn unparse() {
         let r = vec![
+            "\n123",
             "123",
             "321 ",
             "$",
@@ -546,22 +569,7 @@ mod tests {
             "(((((0)))))",
         ];
         r.iter().for_each(|v| {
-            let (rest, toks) = lex_eof(v).unwrap();
-            let tokens = Tokens::new(&toks[..]);
-            println!("{:?}", (&tokens));
-            println!("{:?}", (&toks));
-
-            let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
-            println!("{:?}", (&stmts));
-            let stmt = stmts.get(0).unwrap();
-            println!("{:?}", (&stmt));
-            let mut restored = stmt.unparse();
-            restored.push(Tok::EOF);
-            let ts = toks.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
-            println!("restored {:?}", (&ts, &restored));
-            let s = tokens.unlex();
-            println!("{:?}", (&v, &s));
-            assert_eq!(v, &s);
+            assert!(parser_losslessness(v));
         });
     }
 
@@ -604,17 +612,17 @@ mod tests {
 
         r.iter().for_each(|(q, a)| {
             println!("q {:?}", (&q));
-            let (rest, toks) = lex_eof(q).unwrap();
+            let (_, toks) = lex_eof(q).unwrap();
             let tokens = Tokens::new(&toks[..]);
             println!("{:?}", (&toks));
 
-            let (prog_rest, mut expr) = parse_expr(tokens).unwrap();
+            //let (prog_rest, mut expr) = parse_expr(tokens).unwrap();
 
-            let (prog_rest, mut stmts) = parse_program(tokens).unwrap();
-            println!("{:?}", (&stmts));
-            let stmt = stmts.get(0).unwrap();
-            println!("{:?}", (&stmt));
-            let sexpr = stmt.sexpr().unwrap();
+            let (_, mut node) = parse_program_node(tokens).unwrap();
+            println!("{:?}", (&node));
+            //let stmt = stmts.get(0).unwrap();
+            //println!("{:?}", (&stmt));
+            let sexpr = node.sexpr().unwrap();
             println!("sexpr {}", &sexpr);
             let rendered = format!("{}", &sexpr);
             println!("sexpr {:?}", (&q, &sexpr, &rendered, a));

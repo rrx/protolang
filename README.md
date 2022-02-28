@@ -8,7 +8,7 @@ This is a toy compiler used for experiments in programming language design.  It 
 A lossless compiler preserves whitespace and structure, allowing you to parse the code to an AST, and then covert it back to it's original form.
 
 The goal is to create a simple compiler that can also be used for:
-- syntax highlighting
+- syntax highlighting, linting, test runner
 - code refactoring, and evaluation
 - live coding
 - self-hosting embedded language similar to Emacs Lisp 
@@ -59,3 +59,4 @@ References
 
 - full-moon: Lossless Lua Parser: https://github.com/Kampfkarren/full-moon
 - minipratt: https://github.com/matklad/minipratt/blob/master/src/bin/pratt.rs
+- RSLint: https://github.com/rslint/rslint/blob/master/crates/rslint_lexer/src/highlight.rs

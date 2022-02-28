@@ -331,7 +331,7 @@ fn lex_op<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
     Ok((i, token(t, pos)))
 }
 
-pub fn lex_eof<'a>(i: &str) -> IResult<Span, Vec<Token>> {
+pub fn lex_eof<'a>(i: &'a str) -> IResult<Span<'a>, Vec<Token>> {
     let (i, pos) = position(span(i))?;
     let (i, mut r) = lex_tokens(i)?;
     r.push(token(Tok::EOF, pos));
@@ -402,18 +402,60 @@ mod tests {
         //assert_eq!(vec![Spaces(1), LBracket, Spaces(1), RBracket, Spaces(1)], tokens);
     }
 
+    fn lexer_losslessness(s: &str) -> bool {
+        println!("{:?}", &s);
+        let (_, toks) = lex(s).unwrap();
+        let tokens = Tokens::new(&toks[..]);
+        println!("{:?}", tokens.toks());
+        let restored = tokens.unlex();
+        restored == tokens.unlex()
+    }
+
     #[test]
-    fn test_string() {
-        let r = vec!["\"\"", " \"asdf\\nfdsa\" ", "\"🎁\"", "\"\u{2764}\""];
-        r.iter().for_each(|q| {
-            println!("{:?}", &q);
-            let (_, toks) = lex(q).unwrap();
-            let tokens = Tokens::new(&toks[..]);
-            println!("{:?}", tokens.toks());
-            //let token = toks.get(0).unwrap();
-            //
+    fn token() {
+        let r = vec![
+            ("=", vec![Tok::Assign]),
+            ("==", vec![Tok::Equals]),
+            ("-", vec![Tok::Minus]),
+        ];
+        r.iter().for_each(|(q, a)| {
+            let (rest, result) = lex(q).unwrap();
+            assert_eq!(rest.len(), 0);
+            let tokens = Tokens::new(&result[..]);
+            println!("{:?}", (&tokens.toks()));
+            assert_eq!(&tokens.toks(), a);
             let restored = tokens.unlex();
             assert_eq!(&restored, q);
+        });
+    }
+
+    #[test]
+    fn lossless() {
+        let r = vec![
+            "\"\"",
+            " \"asdf\\nfdsa\" ",
+            "\"🎁\"",
+            "\"\u{2764}\"",
+            "x = 123",
+            "321 ",
+            "$",
+            "$\n",
+            "$\r\n",
+            "$\t",
+            "$\r",
+            "\n$\n",
+            "\r\n$\r\n",
+            "\t$\t",
+            "\r$\r",
+            "1+2",
+            "+ 1 / 2",
+            "+ 1 / (2 - 5)",
+            "x+1",
+            "(((((0)))))",
+            ];
+
+        r.iter().for_each(|q| {
+            assert!(lexer_losslessness(q))
         });
     }
 
