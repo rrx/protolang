@@ -19,14 +19,23 @@ fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> IResult<Tokens<'a>, Tokens
 
 fn parse_newline<'a>(i: Tokens<'a>) -> IResult<Tokens<'a>, Tokens<'a>> {
     verify(take(1usize), move |tokens: &Tokens<'a>| {
-        tokens.tok[0].tok.is_newline()
+        let tok = &tokens.tok[0].tok;
+        if let Tok::Invalid(_) = tok {
+            true 
+        } else {
+            tok.is_newline()
+        }
     })(i)
 }
 
 fn parse_newline_or_eof(i: Tokens) -> IResult<Tokens, Tokens> {
     verify(take(1usize), move |tokens: &Tokens| {
         let tok = &tokens.tok[0].tok;
-        tok.is_newline() || tok == &Tok::EOF
+        if let Tok::Invalid(_) = tok {
+            true 
+        } else {
+            tok.is_newline() || tok == &Tok::EOF
+        }
     })(i)
 }
 
@@ -45,7 +54,7 @@ pub fn parse_statement(i: Tokens) -> IResult<Tokens, Stmt> {
 }
 
 pub fn parse_assignment_node(i: Tokens) -> IResult<Tokens, Node> {
-    let (i, (ident, _, value, mut nl)) = tuple((
+    let (i, (ident, _, value, nl)) = tuple((
         parse_ident,
         tag_token(Tok::Assign),
         parse_expr,
@@ -55,7 +64,7 @@ pub fn parse_assignment_node(i: Tokens) -> IResult<Tokens, Node> {
     match value {
         Value::Expr(expr) => {
             let value = Value::Stmt(Stmt::Assign(ident, expr));
-            let mut node = Node {
+            let node = Node {
                 pre: vec![],
                 post: nl.toks(),
                 value,
@@ -64,14 +73,10 @@ pub fn parse_assignment_node(i: Tokens) -> IResult<Tokens, Node> {
         }
         _ => unreachable!(),
     }
-    //match value {
-        //Value::Expr(expr) => Ok((i, Stmt::Assign(ident, expr))),
-        //_ => unreachable!(),
-    //}
 }
 
 pub fn parse_assignment_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
-    let (i, (ident, _, value, nl)) = tuple((
+    let (i, (ident, _, value, _)) = tuple((
         parse_ident,
         tag_token(Tok::Assign),
         parse_expr,
@@ -84,7 +89,7 @@ pub fn parse_assignment_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
 }
 
 pub fn parse_expr_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
-    let (i, (r, nl)) = pair(parse_expr_node, parse_newline_or_eof)(i)?;
+    let (i, (r, _)) = pair(parse_expr_node, parse_newline_or_eof)(i)?;
     let value = match r.value {
         Value::Lit(x) => Stmt::Lit(x),
         Value::Expr(x) => Stmt::Expr(x),
@@ -98,7 +103,9 @@ pub fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
     let (i, (pre, mut stmts)) = pair(many0(parse_newline), many0(parse_statement_node))(i)?;
     let value = Value::Program(Program(stmts));
     let node = Node {
-        pre: pre.iter().map(|v| v.tok[0].tok.clone()).collect(),
+        pre: pre.iter().map(|v| {
+            v.toks()
+        }).flatten().collect(),
         post: vec![],
         value,
     };
@@ -247,7 +254,7 @@ fn parse_literal_node(input: Tokens) -> IResult<Tokens, Node> {
             Tok::FloatLiteral(u) => Some(Literal::FloatLiteral(*u)),
             Tok::StringLiteral(s) => Some(Literal::StringLiteral(s.clone())),
             Tok::BoolLiteral(b) => Some(Literal::BoolLiteral(*b)),
-            Tok::Invalid(s) => Some(Literal::Invalid(s.clone())),
+            //Tok::Invalid(s) => Some(Literal::Invalid(s.clone())),
             _ => None,
         };
 
@@ -346,38 +353,39 @@ fn parse_paren_expr(i: Tokens) -> IResult<Tokens, Value> {
     Ok((i, expr))
 }
 
-fn parse_prefix_node(input: Tokens) -> IResult<Tokens, Node> {
-    use Expr::PrefixExpr;
-    let (i1, t1) = alt((
+fn parse_prefix(i: Tokens) -> IResult<Tokens, PrefixNode> {
+    let (i, tokens) = alt((
         tag_token(Tok::Plus),
         tag_token(Tok::Minus),
         tag_token(Tok::Not),
-    ))(input)?;
-    if t1.tok.is_empty() {
-        Err(Err::Error(error_position!(input, ErrorKind::Tag)))
-    } else {
-        let (i2, e) = parse_atom_expr(i1)?;
-        let token = &t1.tok[0];
-        let maybe_prefix = match &token.tok {
-            Tok::Plus => Some(Prefix::PrefixPlus),
-            Tok::Minus => Some(Prefix::PrefixMinus),
-            Tok::Not => Some(Prefix::PrefixNot),
-            _ => None,
-        };
-        match maybe_prefix {
-            Some(prefix) => {
+    ))(i)?;
+
+    Ok((i, PrefixNode::from_token(tokens.tok[0].clone()).unwrap()))
+}
+
+fn parse_prefix_node(input: Tokens) -> IResult<Tokens, Node> {
+    use Expr::PrefixExpr;
+    let (i1, prefix) = parse_prefix(input)?;
+    //if pre.tok.is_empty() {
+        //Err(Err::Error(error_position!(input, ErrorKind::Tag)))
+    //} else {
+        let (i2, e) = parse_atom_node(i1)?;
+        //let token = &t1.tok[0];
+        //let maybe_prefix = PrefixNode::from_token(token);
+        //match maybe_prefix {
+            //Some(prefix) => {
                 let value = Value::Expr(PrefixExpr(prefix, Box::new(e)));
                 let node = Node {
-                    pre: token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
-                    post: token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
+                    pre: vec![],//token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
+                    post: vec![],//token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
                     //tokens: vec![token.tok.clone()],
                     value,
                 };
                 Ok((i2, node))
-            }
-            None => Err(Err::Error(error_position!(input, ErrorKind::Tag))),
-        }
-    }
+            //}
+            //None => Err(Err::Error(error_position!(input, ErrorKind::Tag))),
+        //}
+    //}
 }
 
 fn parse_prefix_expr(i: Tokens) -> IResult<Tokens, Value> {
@@ -442,6 +450,7 @@ mod tests {
     fn parser_losslessness(s: &str) -> bool {
         println!("{:?}", &s);
         let (_, toks) = lex_eof(s).unwrap();
+        println!("toks {:?}", toks);
         let tokens = Tokens::new(&toks[..]);
         println!("toks {:?}", tokens.toks());
         let (prog_rest, node) = parse_program_node(tokens).unwrap();
@@ -466,17 +475,18 @@ mod tests {
                     Box::new(Value::Expr(LitExpr(IntLiteral(0)))),
                 )),
             ),
-            (
-                "+123 / 1",
-                Stmt::Expr(InfixExpr(
-                    Infix::Divide,
-                    Box::new(Value::Expr(PrefixExpr(
-                        Prefix::PrefixPlus,
-                        Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
-                    ))),
-                    Box::new(Value::Expr(LitExpr(IntLiteral(1)))),
-                )),
-            ),
+            //(
+                //"+123 / 1",
+                //Stmt::Expr(InfixExpr(
+                    //Infix::Divide,
+                    //Box::new(Value::Expr(PrefixExpr(
+                        //Prefix::PrefixPlus,
+                        //Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
+                        //Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
+                    //))),
+                    //Box::new(Value::Expr(LitExpr(IntLiteral(1)))),
+                //)),
+            //),
             ("123", Stmt::Expr(LitExpr(Literal::IntLiteral(123)))),
             ("123", Stmt::Expr(LitExpr(Literal::IntLiteral(123)))),
             (
@@ -525,7 +535,7 @@ mod tests {
     fn assign() {
         let r = vec!["x=1", "x = 1\n", "x = y * 2\n", "x = 1\ny=2"];
         r.iter().for_each(|v| {
-            let (rest, toks) = lex_eof(v).unwrap();
+            let (_, toks) = lex_eof(v).unwrap();
             let tokens = Tokens::new(&toks[..]);
             //println!("{:?}", (&tokens));
             println!("{:?}", (&tokens.toks()));
@@ -533,7 +543,7 @@ mod tests {
             let result = parse_statement(tokens);
             println!("p {:?}", (&result));
 
-            let (prog_rest, mut node) = parse_program_node(tokens).unwrap();
+            let (prog_rest, node) = parse_program_node(tokens).unwrap();
             println!("{:?}", (&node, prog_rest.toks()));
             //let stmt = stmts.get(0).unwrap();
             //println!("{:?}", (&stmt));
@@ -550,10 +560,12 @@ mod tests {
     #[test]
     fn unparse() {
         let r = vec![
+            "",
             "\n123",
             "123",
             "321 ",
             "$",
+            "$$",
             "$\n",
             "$\r\n",
             "$\t",
@@ -563,6 +575,7 @@ mod tests {
             "\t$\t",
             "\r$\r",
             "1+2",
+            "+ 1",
             "+ 1 / 2",
             "+ 1 / (2 - 5)",
             "x+1",
@@ -618,7 +631,7 @@ mod tests {
 
             //let (prog_rest, mut expr) = parse_expr(tokens).unwrap();
 
-            let (_, mut node) = parse_program_node(tokens).unwrap();
+            let (_, node) = parse_program_node(tokens).unwrap();
             println!("{:?}", (&node));
             //let stmt = stmts.get(0).unwrap();
             //println!("{:?}", (&stmt));

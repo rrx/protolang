@@ -1,8 +1,11 @@
 use crate::sexpr::*;
-use crate::tokens::Tok;
+use crate::tokens::{Token, Tok};
 
 pub trait Unparse {
     fn unparse(&self) -> Vec<Tok>;
+    fn unlex(&self) -> String {
+        self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -132,7 +135,7 @@ impl Program {
 pub enum Expr {
     IdentExpr(Ident),
     LitExpr(Literal),
-    PrefixExpr(Prefix, Box<Value>),
+    PrefixExpr(PrefixNode, Box<Node>),
     InfixExpr(Infix, Box<Value>, Box<Value>),
 }
 impl Unparse for Expr {
@@ -151,11 +154,10 @@ impl Unparse for Expr {
                 out.append(&mut expr.unparse());
             }
             InfixExpr(op, left, right) => {
-                out.append(&mut op.unparse());
                 out.append(&mut left.unparse());
+                out.append(&mut op.unparse());
                 out.append(&mut right.unparse());
             }
-            _ => (),
         };
         out
     }
@@ -173,9 +175,8 @@ impl SExpr for Expr {
             }
             PrefixExpr(prefix, expr) => {
                 let s = expr.sexpr()?;
-                Ok(S::Cons(prefix.to_string(), vec![s]))
+                Ok(S::Cons(prefix.unlex(), vec![s]))
             }
-            _ => Err(SError::Invalid),
         }
     }
 }
@@ -186,23 +187,47 @@ pub enum Prefix {
     PrefixMinus,
     PrefixNot,
 }
-impl Prefix {
-    pub fn to_string(&self) -> String {
-        self.to_token().unlex()
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct PrefixNode {
+    pre: Vec<Tok>,
+    post: Vec<Tok>,
+    value: Prefix
+}
+
+impl PrefixNode {
+    pub fn from_token(token: Token) -> Option<Self> {
+        let maybe_prefix = match token.tok {
+            Tok::Plus => Some(Prefix::PrefixPlus),
+            Tok::Minus => Some(Prefix::PrefixMinus),
+            Tok::Not => Some(Prefix::PrefixNot),
+            _ => None
+        };
+        match maybe_prefix {
+            Some(prefix) => Some(Self {
+                pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
+                post: token.post.iter().map(|t| t.toks()).flatten().collect(),
+                value: prefix }),
+            None => None
+        }
     }
 
-    pub fn to_token(&self) -> Tok {
-        match self {
-            Prefix::PrefixPlus => Tok::Plus,
-            Prefix::PrefixMinus => Tok::Minus,
-            Prefix::PrefixNot => Tok::Not,
-        }
+    pub fn from_tokens(prefix: Prefix, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
+        Self { pre, post, value: prefix }
+    }
+
+    pub fn new(prefix: Prefix) -> Self {
+        Self { pre: vec![], post: vec![], value: prefix }
     }
 }
 
-impl Unparse for Prefix {
+impl Unparse for PrefixNode {
     fn unparse(&self) -> Vec<Tok> {
-        vec![self.to_token()]
+        vec![match self.value {
+            Prefix::PrefixPlus => Tok::Plus,
+            Prefix::PrefixMinus => Tok::Minus,
+            Prefix::PrefixNot => Tok::Not,
+        }]
     }
 }
 
@@ -330,8 +355,8 @@ mod tests {
 
     #[test]
     fn prefix() {
-        let p = Prefix::PrefixMinus;
-        assert_eq!(p.to_string(), "-");
+        let p = PrefixNode::new(Prefix::PrefixMinus);
+        assert_eq!(p.unlex(), "-");
     }
 
     #[test]

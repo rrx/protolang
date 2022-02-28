@@ -262,9 +262,13 @@ fn lex_token<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
     ))(i)
 }
 
+fn parse_token_space(i: Span) -> IResult<Span, Vec<Token>> {
+    alt((ws0, many1(lex_invalid)))(i)
+}
+
 fn lex_token_with_whitespace(i: Span) -> IResult<Span, Vec<Token>> {
     alt((
-        map(tuple((ws0, lex_token, ws0)), |(mut a, mut b, mut c)| {
+        map(tuple((parse_token_space, lex_token, parse_token_space)), |(mut a, mut b, mut c)| {
             let mut v = vec![];
             b.pre.append(&mut a);
             b.post.append(&mut c);

@@ -122,6 +122,16 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
+    pub fn toks(&self) -> Vec<Tok> {
+        vec![
+            self.pre.iter().map(|t| t.toks()).flatten().collect(),
+            vec![self.tok.clone()],
+            self.post.iter().map(|t| t.toks()).flatten().collect(),
+        ].into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+    }
+
     pub fn unlex(&self) -> String {
         let mut s = String::new();
         for frag in self.pre.iter().map(|v| v.tok.clone()) {
@@ -168,7 +178,8 @@ impl<'a> Tokens<'a> {
 
     pub fn toks(&self) -> Vec<Tok> {
         self.iter_elements()
-            .map(|v| v.tok.clone())
+            .map(|v| v.toks())
+            .flatten()
             .collect::<Vec<_>>()
     }
 
