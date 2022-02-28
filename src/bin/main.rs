@@ -1,8 +1,8 @@
-use std::error::Error;
-use protolang::lexer;
-use protolang::tokens::Tokens;
 use protolang::ast::Value;
+use protolang::lexer;
 use protolang::parser::parse_program_node;
+use protolang::tokens::Tokens;
+use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     for filename in std::env::args().skip(1) {
@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             println!("sexpr {}", &v);
                         });
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
             }
             Err(e) => {

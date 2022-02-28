@@ -1,7 +1,7 @@
 use nom::*;
+use nom_locate::LocatedSpan;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
-use nom_locate::{LocatedSpan};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
@@ -31,7 +31,10 @@ pub enum Tok {
     SemiColon,
 
     // Keywords
-    If, Else, Return, Yield,
+    If,
+    Else,
+    Return,
+    Yield,
     // Operators
     Assign,
     Equals,
@@ -48,11 +51,16 @@ pub enum Tok {
     Percent,
     Question,
     Caret,
-    GT,GTE,LT,LTE,
-    And, Or,
-    In, Is,
+    GT,
+    GTE,
+    LT,
+    LTE,
+    And,
+    Or,
+    In,
+    Is,
 
-    EOF
+    EOF,
 }
 
 impl Tok {
@@ -91,7 +99,7 @@ impl Tok {
             BoolLiteral(x) => x.to_string(),
             StringLiteral(x) => format!("\"{}\"", x.to_string().escape_debug()),
             EOF => "".into(),
-            _ => "[UNKNOWN]".into()
+            _ => "[UNKNOWN]".into(),
         })
     }
 
@@ -100,7 +108,7 @@ impl Tok {
             Tok::NL(_) => true,
             Tok::CRLF(_) => true,
             Tok::LF(_) => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -110,7 +118,7 @@ pub struct Token<'a> {
     pub pre: Vec<Token<'a>>,
     pub post: Vec<Token<'a>>,
     pub tok: Tok,
-    pub pos: Span<'a>
+    pub pos: Span<'a>,
 }
 
 impl<'a> Token<'a> {
@@ -128,7 +136,12 @@ impl<'a> Token<'a> {
 }
 
 pub fn token(tok: Tok, pos: Span) -> Token {
-    Token { tok, pos, pre: vec![], post: vec![] }
+    Token {
+        tok,
+        pos,
+        pre: vec![],
+        post: vec![],
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -149,7 +162,9 @@ impl<'a> Tokens<'a> {
     }
 
     pub fn toks(&self) -> Vec<Tok> {
-        self.iter_elements().map(|v| v.tok.clone()).collect::<Vec<_>>()
+        self.iter_elements()
+            .map(|v| v.tok.clone())
+            .collect::<Vec<_>>()
     }
 
     pub fn unlex(&self) -> String {

@@ -1,10 +1,9 @@
-use crate::tokens::{Tok};
 use crate::sexpr::*;
+use crate::tokens::Tok;
 
 pub trait Unparse {
     fn unparse(&self) -> Vec<Tok>;
 }
-
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Value {
@@ -27,12 +26,11 @@ impl Unparse for Stmt {
         match self {
             Stmt::Expr(expr) => expr.unparse(),
             Stmt::Lit(lit) => lit.unparse(),
-            Stmt::Assign(ident, expr) => {
-                vec![ident.unparse(), vec![Tok::Equals], expr.unparse()].into_iter().flatten().collect()
-            }
-            Stmt::Block(stmts) => {
-                stmts.iter().map(|s| s.unparse()).flatten().collect()
-            }
+            Stmt::Assign(ident, expr) => vec![ident.unparse(), vec![Tok::Equals], expr.unparse()]
+                .into_iter()
+                .flatten()
+                .collect(),
+            Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
         }
     }
 }
@@ -47,9 +45,10 @@ impl SExpr for Stmt {
                 let sexpr = expr.sexpr()?;
                 Ok(S::Cons("def".into(), vec![sident, sexpr]))
             }
-            Stmt::Block(stmts) => {
-                Ok(S::Cons("block".into(), stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect()))
-            }
+            Stmt::Block(stmts) => Ok(S::Cons(
+                "block".into(),
+                stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
+            )),
         }
     }
 }
@@ -71,7 +70,7 @@ impl SExpr for Value {
         match self {
             Expr(expr) => expr.sexpr(),
             Lit(lit) => lit.sexpr(),
-            _ => Err(SError::Invalid)
+            _ => Err(SError::Invalid),
         }
     }
 }
@@ -81,12 +80,15 @@ pub struct Node {
     pub pre: Vec<Tok>,
     pub post: Vec<Tok>,
     //pub tokens: Vec<Tok>,
-    pub value: Value
+    pub value: Value,
 }
 
 impl Unparse for Node {
     fn unparse(&self) -> Vec<Tok> {
-        vec![self.pre.clone(), self.value.unparse(), self.post.clone()].into_iter().flatten().collect()
+        vec![self.pre.clone(), self.value.unparse(), self.post.clone()]
+            .into_iter()
+            .flatten()
+            .collect()
     }
 }
 
@@ -95,7 +97,6 @@ impl SExpr for Node {
         self.value.sexpr()
     }
 }
-
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Program(pub Vec<Stmt>);
@@ -118,7 +119,7 @@ pub enum Expr {
     IdentExpr(Ident),
     LitExpr(Literal),
     PrefixExpr(Prefix, Box<Value>),
-    InfixExpr(Infix, Box<Value>, Box<Value>)
+    InfixExpr(Infix, Box<Value>, Box<Value>),
 }
 impl Unparse for Expr {
     fn unparse(&self) -> Vec<Tok> {
@@ -140,7 +141,7 @@ impl Unparse for Expr {
                 out.append(&mut left.unparse());
                 out.append(&mut right.unparse());
             }
-            _ => ()
+            _ => (),
         };
         out
     }
@@ -160,7 +161,7 @@ impl SExpr for Expr {
                 let s = expr.sexpr()?;
                 Ok(S::Cons(prefix.to_string(), vec![s]))
             }
-            _ => Err(SError::Invalid)
+            _ => Err(SError::Invalid),
         }
     }
 }
@@ -169,7 +170,7 @@ impl SExpr for Expr {
 pub enum Prefix {
     PrefixPlus,
     PrefixMinus,
-    PrefixNot
+    PrefixNot,
 }
 impl Prefix {
     pub fn to_string(&self) -> String {
@@ -221,14 +222,12 @@ impl Infix {
             _ => Tok::Not,
         }
     }
-
 }
 
 impl Unparse for Infix {
     fn unparse(&self) -> Vec<Tok> {
         vec![self.to_token()]
     }
-
 }
 
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
@@ -268,7 +267,7 @@ pub enum Literal {
     FloatLiteral(f64),
     BoolLiteral(bool),
     StringLiteral(String),
-    Invalid(String)
+    Invalid(String),
 }
 impl Unparse for Literal {
     fn unparse(&self) -> Vec<Tok> {
@@ -282,7 +281,6 @@ impl Unparse for Literal {
         };
         vec![token]
     }
-
 }
 
 impl SExpr for Literal {
@@ -293,7 +291,7 @@ impl SExpr for Literal {
             FloatLiteral(x) => Ok(S::Atom(x.to_string())),
             BoolLiteral(x) => Ok(S::Atom(x.to_string())),
             StringLiteral(x) => Ok(S::Atom(x.to_string())),
-            _ => Err(SError::Invalid)
+            _ => Err(SError::Invalid),
         }
     }
 }
@@ -329,5 +327,3 @@ mod tests {
         assert_eq!(p.to_string(), "-");
     }
 }
-
-

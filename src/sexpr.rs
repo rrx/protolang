@@ -12,7 +12,7 @@ pub type SProgram = Vec<SStmt>;
 
 #[derive(PartialEq, Debug, Eq, Clone)]
 pub enum SError {
-    Invalid
+    Invalid,
 }
 
 pub type SResult<A> = Result<A, SError>;
