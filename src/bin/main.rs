@@ -1,8 +1,9 @@
 use protolang::ast::Value;
 use protolang::lexer;
-use protolang::parser::parse_program_node;
+use protolang::parser::parse_program;
 use protolang::tokens::Tokens;
 use std::error::Error;
+use protolang::sexpr::SExpr;
 
 fn main() -> Result<(), Box<dyn Error>> {
     for filename in std::env::args().skip(1) {
@@ -15,21 +16,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let tokens = Tokens::new(&toks[..]);
                 println!("{:?}", (&tokens));
 
-                let (prog_rest, node) = parse_program_node(tokens).unwrap();
+                let (prog_rest, prog) = parse_program(tokens).unwrap();
                 if prog_rest.tok.len() > 0 {
                     println!("Unparsed Tokens: {:?}", prog_rest);
                 }
 
-                println!("{:?}", (&node));
-                match node.value {
-                    Value::Program(prog) => {
-                        let sexpr = prog.sexpr().unwrap();
-                        sexpr.iter().for_each(|v| {
-                            println!("sexpr {}", &v);
-                        });
-                    }
-                    _ => unreachable!(),
-                };
+                println!("{:?}", (&prog));
+                let sexpr = prog.sexpr().unwrap();
+                println!("sexpr {}", &sexpr);
             }
             Err(e) => {
                 println!("[{}] {:?}", filename, e);

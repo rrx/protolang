@@ -11,22 +11,32 @@ pub trait Unparse {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Value {
     Program(Program),
-    Stmt(Stmt),
-    Expr(Expr),
+    Stmt(StmtNode),
+    Expr(ExprNode),
     Lit(Literal),
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Stmt {
-    Assign(Ident, Expr),
-    Block(Vec<Stmt>),
-    Expr(Expr),
+    Assign(Ident, ExprNode),
+    Block(Vec<StmtNode>),
+    Expr(ExprNode),
     Lit(Literal),
 }
-
-impl Unparse for Stmt {
+#[derive(PartialEq, Debug, Clone)]
+pub struct StmtNode {
+    pre: Vec<Tok>,
+    post: Vec<Tok>,
+    value: Stmt
+}
+impl StmtNode {
+    pub fn new(value: Stmt) -> Self {
+        Self { pre: vec![], post: vec![], value }
+    }
+}
+impl Unparse for StmtNode {
     fn unparse(&self) -> Vec<Tok> {
-        match self {
+        match &self.value {
             Stmt::Expr(expr) => expr.unparse(),
             Stmt::Lit(lit) => lit.unparse(),
             Stmt::Assign(ident, expr) => vec![ident.unparse(), vec![Tok::Assign], expr.unparse()]
@@ -38,9 +48,9 @@ impl Unparse for Stmt {
     }
 }
 
-impl SExpr for Stmt {
+impl SExpr for StmtNode {
     fn sexpr(&self) -> SResult<S> {
-        match self {
+        match &self.value {
             Stmt::Lit(x) => x.sexpr(),
             Stmt::Expr(x) => x.sexpr(),
             Stmt::Assign(ident, expr) => {
@@ -116,18 +126,33 @@ impl SExpr for Node {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Program(pub Vec<Node>);
-
-impl Unparse for Program {
-    fn unparse(&self) -> Vec<Tok> {
-        self.0.iter().map(|expr| expr.unparse()).flatten().collect()
+pub struct Program {
+    value: Vec<Node>,
+    pre: Vec<Tok>,
+    post: Vec<Tok>
+}
+impl Program {
+    pub fn new(value: Vec<Node>, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
+        Self { pre, post, value }
     }
 }
 
-impl Program {
-    pub fn sexpr(&self) -> SResult<SProgram> {
-        let results = self.0.iter().filter_map(|v| v.sexpr().ok()).collect();
-        Ok(results)
+impl Unparse for Program {
+    fn unparse(&self) -> Vec<Tok> {
+        vec![
+            self.pre.clone(),
+            self.value.clone().into_iter().map(|expr| expr.unparse()).flatten().collect(),
+            self.post.clone()
+        ].into_iter()
+            .flatten()
+            .collect()
+    }
+}
+
+impl SExpr for Program {
+    fn sexpr(&self) -> SResult<S> {
+        let results = self.value.iter().filter_map(|v| v.sexpr().ok()).collect();
+        Ok(S::Cons("program".into(), results))
     }
 }
 
@@ -138,11 +163,24 @@ pub enum Expr {
     PrefixExpr(PrefixNode, Box<Node>),
     InfixExpr(InfixNode, Box<Value>, Box<Value>),
 }
-impl Unparse for Expr {
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ExprNode {
+    pre: Vec<Tok>,
+    post: Vec<Tok>,
+    value: Expr
+}
+impl ExprNode {
+    pub fn new(value: Expr) -> Self {
+        Self { pre: vec![], post: vec![], value }
+    }
+}
+
+impl Unparse for ExprNode {
     fn unparse(&self) -> Vec<Tok> {
         use Expr::*;
         let mut out = vec![];
-        match self {
+        match &self.value {
             IdentExpr(x) => {
                 out.append(&mut x.unparse());
             }
@@ -162,10 +200,10 @@ impl Unparse for Expr {
         out
     }
 }
-impl SExpr for Expr {
+impl SExpr for ExprNode {
     fn sexpr(&self) -> SResult<S> {
         use Expr::*;
-        match self {
+        match &self.value {
             LitExpr(x) => x.sexpr(),
             IdentExpr(x) => x.sexpr(),
             InfixExpr(op, left, right) => {
@@ -388,17 +426,38 @@ impl SExpr for Literal {
     }
 }
 
-#[derive(PartialEq, Debug, Eq, Clone)]
-pub struct Ident(pub String);
+#[derive(PartialEq, Debug, Clone)]
+pub struct Ident {
+    value: String,
+    pre: Vec<Tok>,
+    post: Vec<Tok>
+}
+impl Ident {
+    pub fn from_token(token: Token) -> Option<Self> {
+        let maybe_ident = match token.tok {
+            Tok::Ident(s) => Some(s),
+            _ => None
+        };
+        match maybe_ident {
+            Some(ident) => Some(Self {
+                pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
+                post: token.post.iter().map(|t| t.toks()).flatten().collect(),
+                value: ident
+            }),
+            None => None
+        }
+    }
+}
+
 impl Unparse for Ident {
     fn unparse(&self) -> Vec<Tok> {
-        vec![Tok::Ident(self.0.clone())]
+        vec![Tok::Ident(self.value.clone())]
     }
 }
 
 impl SExpr for Ident {
     fn sexpr(&self) -> SResult<S> {
-        Ok(S::Atom(self.0.clone()))
+        Ok(S::Atom(self.value.clone()))
     }
 }
 
