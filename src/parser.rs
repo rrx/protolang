@@ -100,7 +100,7 @@ pub fn parse_expr_stmt(i: Tokens) -> IResult<Tokens, Stmt> {
 }
 
 pub fn parse_program_node(i: Tokens) -> IResult<Tokens, Node> {
-    let (i, (pre, mut stmts)) = pair(many0(parse_newline), many0(parse_statement_node))(i)?;
+    let (i, (pre, stmts)) = pair(many0(parse_newline), many0(parse_statement_node))(i)?;
     let value = Value::Program(Program(stmts));
     let node = Node {
         pre: pre.iter().map(|v| {
@@ -124,9 +124,9 @@ fn parse_atom_or_caret_node(i: Tokens) -> IResult<Tokens, Node> {
     alt((parse_caret_node, parse_atom_node))(i)
 }
 
-fn parse_atom_or_caret_expr(i: Tokens) -> IResult<Tokens, Value> {
-    alt((parse_caret_expr, parse_atom_expr))(i)
-}
+//fn parse_atom_or_caret_expr(i: Tokens) -> IResult<Tokens, Value> {
+    //alt((parse_caret_expr, parse_atom_expr))(i)
+//}
 
 fn parse_pratt_node(input: Tokens, precedence: Precedence) -> IResult<Tokens, Node> {
     //let (i1, left) = parse_atom_node(input)?;
@@ -238,10 +238,10 @@ fn parse_ident_node(input: Tokens) -> IResult<Tokens, Node> {
     }
 }
 
-fn parse_ident_expr(i: Tokens) -> IResult<Tokens, Value> {
-    let (i, ident) = parse_ident_node(i)?;
-    Ok((i, ident.value))
-}
+//fn parse_ident_expr(i: Tokens) -> IResult<Tokens, Value> {
+    //let (i, ident) = parse_ident_node(i)?;
+    //Ok((i, ident.value))
+//}
 
 fn parse_literal_node(input: Tokens) -> IResult<Tokens, Node> {
     let (i1, t1) = take(1usize)(input)?;
@@ -317,9 +317,9 @@ fn parse_atom_expr(i: Tokens) -> IResult<Tokens, Value> {
 }
 
 fn parse_caret_node(i: Tokens) -> IResult<Tokens, Node> {
-    let (i, (left, expr, right)) =
+    let (i, (left, op, right)) =
         tuple((parse_lit_expr, tag_token(Tok::Caret), parse_lit_expr))(i)?;
-    let value = Value::Expr(Expr::InfixExpr(Infix::Exp, Box::new(left), Box::new(right)));
+    let value = Value::Expr(Expr::InfixExpr(InfixNode::from_token(op.tok[0].clone()).unwrap(), Box::new(left), Box::new(right)));
     let node = Node {
         pre: vec![],  //token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
         post: vec![], //token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
@@ -329,14 +329,14 @@ fn parse_caret_node(i: Tokens) -> IResult<Tokens, Node> {
     Ok((i, node))
 }
 
-fn parse_caret_expr(i: Tokens) -> IResult<Tokens, Value> {
-    let (i, (left, expr, right)) =
-        tuple((parse_atom_expr, tag_token(Tok::Caret), parse_atom_expr))(i)?;
-    Ok((
-        i,
-        Value::Expr(Expr::InfixExpr(Infix::Exp, Box::new(left), Box::new(right))),
-    ))
-}
+//fn parse_caret_expr(i: Tokens) -> IResult<Tokens, Value> {
+    //let (i, (left, op, right)) =
+        //tuple((parse_atom_expr, tag_token(Tok::Caret), parse_atom_expr))(i)?;
+    //Ok((
+        //i,
+        //Value::Expr(Expr::InfixExpr(InfixNode::from_token(op.tok[0].clone()).unwrap(), Box::new(left), Box::new(right))),
+    //))
+//}
 
 fn parse_paren_node(i: Tokens) -> IResult<Tokens, Node> {
     let (i, (left, expr, right)) = tuple((
@@ -347,11 +347,11 @@ fn parse_paren_node(i: Tokens) -> IResult<Tokens, Node> {
     Ok((i, expr))
 }
 
-fn parse_paren_expr(i: Tokens) -> IResult<Tokens, Value> {
-    let (i, (left, expr, right)) =
-        tuple((tag_token(Tok::LParen), parse_expr, tag_token(Tok::RParen)))(i)?;
-    Ok((i, expr))
-}
+//fn parse_paren_expr(i: Tokens) -> IResult<Tokens, Value> {
+    //let (i, (left, expr, right)) =
+        //tuple((tag_token(Tok::LParen), parse_expr, tag_token(Tok::RParen)))(i)?;
+    //Ok((i, expr))
+//}
 
 fn parse_prefix(i: Tokens) -> IResult<Tokens, PrefixNode> {
     let (i, tokens) = alt((
@@ -366,51 +366,62 @@ fn parse_prefix(i: Tokens) -> IResult<Tokens, PrefixNode> {
 fn parse_prefix_node(input: Tokens) -> IResult<Tokens, Node> {
     use Expr::PrefixExpr;
     let (i1, prefix) = parse_prefix(input)?;
-    //if pre.tok.is_empty() {
-        //Err(Err::Error(error_position!(input, ErrorKind::Tag)))
-    //} else {
-        let (i2, e) = parse_atom_node(i1)?;
-        //let token = &t1.tok[0];
-        //let maybe_prefix = PrefixNode::from_token(token);
-        //match maybe_prefix {
-            //Some(prefix) => {
-                let value = Value::Expr(PrefixExpr(prefix, Box::new(e)));
-                let node = Node {
-                    pre: vec![],//token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
-                    post: vec![],//token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
-                    //tokens: vec![token.tok.clone()],
-                    value,
-                };
-                Ok((i2, node))
-            //}
-            //None => Err(Err::Error(error_position!(input, ErrorKind::Tag))),
-        //}
-    //}
+    let (i2, e) = parse_atom_node(i1)?;
+    let value = Value::Expr(PrefixExpr(prefix, Box::new(e)));
+    let node = Node {
+        pre: vec![],
+        post: vec![],
+        value,
+    };
+    Ok((i2, node))
 }
 
-fn parse_prefix_expr(i: Tokens) -> IResult<Tokens, Value> {
-    map(parse_prefix_node, |n| n.value)(i)
-}
+//fn parse_prefix_expr(i: Tokens) -> IResult<Tokens, Value> {
+    //map(parse_prefix_node, |n| n.value)(i)
+//}
 
-fn parse_infix_expr(i: Tokens, left: Value) -> IResult<Tokens, Value> {
-    use Expr::InfixExpr;
+fn parse_infix(i: Tokens) -> IResult<Tokens, InfixNode> {
+    //use Expr::InfixExpr;
     let (i1, t1) = take(1usize)(i)?;
     if t1.tok.is_empty() {
         Err(Err::Error(error_position!(i, ErrorKind::Tag)))
     } else {
         let next = &t1.tok[0];
-        let (precedence, maybe_op) = infix_op(&next.tok);
+        let (_, maybe_op) = infix_op(&next.tok);
         match maybe_op {
             None => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
-            Some(op) => {
-                let (i2, right) = parse_pratt_expr(i1, precedence)?;
-                Ok((
-                    i2,
-                    Value::Expr(InfixExpr(op, Box::new(left), Box::new(right))),
-                ))
+            Some(_) => {
+                Ok((i1, InfixNode::from_token(next.clone()).unwrap()))
             }
         }
     }
+}
+
+fn parse_infix_expr(i: Tokens, left: Value) -> IResult<Tokens, Value> {
+    let (i, infix) = parse_infix(i)?;
+    let (i2, right) = parse_pratt_expr(i, infix.precedence.clone())?;
+    Ok((i2,
+        Value::Expr(Expr::InfixExpr(infix, Box::new(left), Box::new(right))),
+        ))
+
+    //use Expr::InfixExpr;
+    //let (i1, t1) = take(1usize)(i)?;
+    //if t1.tok.is_empty() {
+        //Err(Err::Error(error_position!(i, ErrorKind::Tag)))
+    //} else {
+        //let next = &t1.tok[0];
+        //let (precedence, maybe_op) = infix_op(&next.tok);
+        //match maybe_op {
+            //None => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
+            //Some(_) => {
+                //let (i2, right) = parse_pratt_expr(i1, precedence)?;
+                //Ok((
+                    //i2,
+                    //Value::Expr(InfixExpr(InfixNode::from_token(next.clone()).unwrap(), Box::new(left), Box::new(right))),
+                //))
+            //}
+        //}
+    //}
 }
 
 fn parse_infix_node(input: Tokens, left: Node) -> IResult<Tokens, Node> {
@@ -420,12 +431,10 @@ fn parse_infix_node(input: Tokens, left: Node) -> IResult<Tokens, Node> {
         Err(Err::Error(error_position!(input, ErrorKind::Tag)))
     } else {
         let token = &t1.tok[0];
-        let (precedence, maybe_op) = infix_op(&token.tok);
-        match maybe_op {
-            None => Err(Err::Error(error_position!(input, ErrorKind::Tag))),
+        match InfixNode::from_token(token.clone()) {
             Some(op) => {
-                let (i2, right) = parse_pratt_node(i1, precedence)?;
-                let value = Value::Expr(InfixExpr(op, Box::new(left.value), Box::new(right.value)));
+                let (i2, right) = parse_pratt_node(i1, op.precedence)?;
+                let value = Value::Expr(InfixExpr(InfixNode::from_token(token.clone()).unwrap(), Box::new(left.value), Box::new(right.value)));
                 let node = Node {
                     pre: token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
                     post: token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
@@ -433,10 +442,27 @@ fn parse_infix_node(input: Tokens, left: Node) -> IResult<Tokens, Node> {
                     value,
                 };
                 Ok((i2, node))
-                //Ok((i2, Value::Expr(InfixExpr(op, Box::new(left), Box::new(right)))))
             }
+            None => Err(Err::Error(error_position!(input, ErrorKind::Tag))),
         }
     }
+        //let (precedence, maybe_op) = infix_op(&token.tok);
+        //match maybe_op {
+            //None => Err(Err::Error(error_position!(input, ErrorKind::Tag))),
+            //Some(op) => {
+                //let (i2, right) = parse_pratt_node(i1, precedence)?;
+                //let value = Value::Expr(InfixExpr(InfixNode::from_token(*token).unwrap(), Box::new(left.value), Box::new(right.value)));
+                //let node = Node {
+                    //pre: token.pre.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
+                    //post: token.post.iter().map(|v| v.tok.clone()).collect::<Vec<_>>(),
+                    //tokens: vec![token.tok.clone()],
+                    //value,
+                //};
+                //Ok((i2, node))
+                //Ok((i2, Value::Expr(InfixExpr(op, Box::new(left), Box::new(right)))))
+            //}
+        //}
+    //}
 }
 
 #[cfg(test)]
@@ -470,7 +496,7 @@ mod tests {
             (
                 "123 - 0",
                 Stmt::Expr(InfixExpr(
-                    Infix::Minus,
+                    InfixNode::new(Infix::Minus, Precedence::PLowest),
                     Box::new(Value::Expr(LitExpr(IntLiteral(123)))),
                     Box::new(Value::Expr(LitExpr(IntLiteral(0)))),
                 )),

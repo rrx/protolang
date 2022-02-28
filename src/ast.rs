@@ -136,7 +136,7 @@ pub enum Expr {
     IdentExpr(Ident),
     LitExpr(Literal),
     PrefixExpr(PrefixNode, Box<Node>),
-    InfixExpr(Infix, Box<Value>, Box<Value>),
+    InfixExpr(InfixNode, Box<Value>, Box<Value>),
 }
 impl Unparse for Expr {
     fn unparse(&self) -> Vec<Tok> {
@@ -171,7 +171,7 @@ impl SExpr for Expr {
             InfixExpr(op, left, right) => {
                 let sleft = left.sexpr()?;
                 let sright = right.sexpr()?;
-                Ok(S::Cons(op.to_string(), vec![sleft, sright]))
+                Ok(S::Cons(op.unlex(), vec![sleft, sright]))
             }
             PrefixExpr(prefix, expr) => {
                 let s = expr.sexpr()?;
@@ -219,15 +219,19 @@ impl PrefixNode {
     pub fn new(prefix: Prefix) -> Self {
         Self { pre: vec![], post: vec![], value: prefix }
     }
+
+    pub fn token(&self) -> Tok {
+        match self.value {
+            Prefix::PrefixPlus => Tok::Plus,
+            Prefix::PrefixMinus => Tok::Minus,
+            Prefix::PrefixNot => Tok::Not,
+        }
+    }
 }
 
 impl Unparse for PrefixNode {
     fn unparse(&self) -> Vec<Tok> {
-        vec![match self.value {
-            Prefix::PrefixPlus => Tok::Plus,
-            Prefix::PrefixMinus => Tok::Minus,
-            Prefix::PrefixNot => Tok::Not,
-        }]
+        vec![self.pre.clone(), vec![self.token()], self.post.clone()].into_iter().flatten().collect()
     }
 }
 
@@ -246,26 +250,58 @@ pub enum Infix {
     LessThan,
 }
 
-impl Infix {
-    pub fn to_string(&self) -> String {
-        self.to_token().unlex()
+#[derive(PartialEq, Debug, Clone)]
+pub struct InfixNode {
+    pre: Vec<Tok>,
+    post: Vec<Tok>,
+    value: Infix,
+    pub precedence: Precedence
+}
+
+impl InfixNode {
+    pub fn new(infix: Infix, precedence: Precedence) -> Self {
+        Self { pre: vec![], post: vec![], value: infix, precedence }
     }
 
-    pub fn to_token(&self) -> Tok {
-        match self {
-            Infix::Plus => Tok::Plus,
-            Infix::Minus => Tok::Minus,
-            Infix::Multiply => Tok::Mul,
-            Infix::Divide => Tok::Div,
-            Infix::Exp => Tok::Caret,
-            _ => Tok::Not,
+    pub fn from_token(token: Token) -> Option<Self> {
+        let (precedence, maybe_prefix) = infix_op(&token.tok);
+        match maybe_prefix {
+            Some(prefix) => Some(Self {
+                pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
+                post: token.post.iter().map(|t| t.toks()).flatten().collect(),
+                value: prefix,
+                precedence
+            }),
+            None => None
+        }
+    }
+
+    pub fn from_tokens(infix: Infix, precedence: Precedence, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
+        Self { pre, post, value: infix, precedence }
+    }
+
+    pub fn unlex(&self) -> String {
+        match self.token() {
+            Some(token) => token.unlex(),
+            None => "".into()
+        }
+    }
+
+    pub fn token(&self) -> Option<Tok> {
+        match self.value {
+            Infix::Plus => Some(Tok::Plus),
+            Infix::Minus => Some(Tok::Minus),
+            Infix::Multiply => Some(Tok::Mul),
+            Infix::Divide => Some(Tok::Div),
+            Infix::Exp => Some(Tok::Caret),
+            _ => None
         }
     }
 }
 
-impl Unparse for Infix {
+impl Unparse for InfixNode {
     fn unparse(&self) -> Vec<Tok> {
-        vec![self.to_token()]
+        vec![self.pre.clone(), vec![self.token().unwrap()], self.post.clone()].into_iter().flatten().collect()
     }
 }
 
@@ -279,6 +315,23 @@ pub enum Precedence {
     PExp,
     PCall,
     PIndex,
+}
+
+pub fn infix_precedence(op: Infix) -> Precedence {
+    use Infix::*;
+    match op {
+        Equal => Precedence::PEquals,
+        NotEqual => Precedence::PEquals,
+        LessThanEqual => Precedence::PLessGreater,
+        GTE => Precedence::PLessGreater,
+        LessThan => Precedence::PLessGreater,
+        GreaterThan => Precedence::PLessGreater,
+        Plus => Precedence::PSum,
+        Minus => Precedence::PSum,
+        Multiply => Precedence::PProduct,
+        Divide => Precedence::PProduct,
+        Exp => Precedence::PExp,
+    }
 }
 
 pub fn infix_op(t: &Tok) -> (Precedence, Option<Infix>) {
@@ -361,8 +414,8 @@ mod tests {
 
     #[test]
     fn infix() {
-        let p = Infix::Minus;
-        println!("{:?}", (&p, &p.to_token(), &p.to_string()));
-        assert_eq!(p.to_string(), "-");
+        let p = InfixNode::new(Infix::Minus, Precedence::PLowest);
+        println!("{:?}", (&p, &p.token(), &p.unlex()));
+        assert_eq!(p.unlex(), "-");
     }
 }
