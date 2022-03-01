@@ -6,6 +6,9 @@ pub trait Unparse {
     fn unlex(&self) -> String {
         self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
     }
+    fn to_string(&self) -> String;
+        //self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
+    //}
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -14,6 +17,14 @@ pub enum Value {
     Stmt(StmtNode),
     Expr(ExprNode),
     Lit(Literal),
+}
+impl Value {
+    pub fn expr(&self) -> Option<ExprNode> {
+        match self {
+            Value::Expr(expr) => Some(expr.clone()),
+            _ => None
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -46,6 +57,14 @@ impl Unparse for StmtNode {
             Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
         }
     }
+    fn to_string(&self) -> String {
+        match &self.value {
+            Stmt::Expr(expr) => expr.to_string(),
+            Stmt::Lit(lit) => lit.to_string(),
+            Stmt::Assign(ident, expr) => vec![ident.to_string(), (Tok::Assign).unlex(), expr.to_string()].join(""),
+            Stmt::Block(stmts) => stmts.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(""),
+        }
+    }
 }
 
 impl SExpr for StmtNode {
@@ -74,6 +93,9 @@ impl Unparse for Value {
             Value::Lit(lit) => lit.unparse(),
             Value::Stmt(stmt) => stmt.unparse(),
         }
+    }
+    fn to_string(&self) -> String {
+        "".into()
     }
 }
 
@@ -117,6 +139,9 @@ impl Unparse for Node {
             .flatten()
             .collect()
     }
+    fn to_string(&self) -> String {
+        "".into()
+    }
 }
 
 impl SExpr for Node {
@@ -127,7 +152,7 @@ impl SExpr for Node {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Program {
-    value: Vec<Node>,
+    pub value: Vec<Node>,
     pre: Vec<Tok>,
     post: Vec<Tok>
 }
@@ -146,6 +171,9 @@ impl Unparse for Program {
         ].into_iter()
             .flatten()
             .collect()
+    }
+    fn to_string(&self) -> String {
+        "".into()
     }
 }
 
@@ -199,6 +227,31 @@ impl Unparse for ExprNode {
         };
         out
     }
+
+    fn to_string(&self) -> String {
+        use Expr::*;
+        let mut out = vec![];
+        match &self.value {
+            IdentExpr(x) => {
+                out.push(x.to_string());
+            }
+            LitExpr(x) => {
+                out.push(x.to_string());
+            }
+            PrefixExpr(prefix, expr) => {
+                out.push(prefix.to_string());
+                out.push(expr.to_string());
+            }
+            InfixExpr(op, left, right) => {
+                out.push(left.to_string());
+                out.push(op.to_string());
+                out.push(right.to_string());
+            }
+        };
+        out.join("")
+    }
+
+
 }
 impl SExpr for ExprNode {
     fn sexpr(&self) -> SResult<S> {
@@ -213,7 +266,7 @@ impl SExpr for ExprNode {
             }
             PrefixExpr(prefix, expr) => {
                 let s = expr.sexpr()?;
-                Ok(S::Cons(prefix.unlex(), vec![s]))
+                Ok(S::Cons(prefix.to_string(), vec![s]))
             }
         }
     }
@@ -270,6 +323,10 @@ impl PrefixNode {
 impl Unparse for PrefixNode {
     fn unparse(&self) -> Vec<Tok> {
         vec![self.pre.clone(), vec![self.token()], self.post.clone()].into_iter().flatten().collect()
+    }
+
+    fn to_string(&self) -> String {
+        self.token().unlex()
     }
 }
 
@@ -341,6 +398,9 @@ impl Unparse for InfixNode {
     fn unparse(&self) -> Vec<Tok> {
         vec![self.pre.clone(), vec![self.token().unwrap()], self.post.clone()].into_iter().flatten().collect()
     }
+    fn to_string(&self) -> String {
+        self.token().unwrap().unlex()
+    }
 }
 
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
@@ -399,17 +459,24 @@ pub enum Literal {
     StringLiteral(String),
     Invalid(String),
 }
-impl Unparse for Literal {
-    fn unparse(&self) -> Vec<Tok> {
+impl Literal {
+    pub fn token(&self) -> Tok {
         use Literal::*;
-        let token = match self {
+        match self {
             IntLiteral(x) => Tok::IntLiteral(*x),
             FloatLiteral(x) => Tok::FloatLiteral(*x),
             BoolLiteral(x) => Tok::BoolLiteral(*x),
             StringLiteral(x) => Tok::StringLiteral(x.clone()),
             Invalid(x) => Tok::Invalid(x.clone()),
-        };
-        vec![token]
+        }
+    }
+}
+impl Unparse for Literal {
+    fn unparse(&self) -> Vec<Tok> {
+        vec![self.token()]
+    }
+    fn to_string(&self) -> String {
+        self.token().unlex()
     }
 }
 
@@ -452,6 +519,9 @@ impl Ident {
 impl Unparse for Ident {
     fn unparse(&self) -> Vec<Tok> {
         vec![Tok::Ident(self.value.clone())]
+    }
+    fn to_string(&self) -> String {
+        self.value.clone()
     }
 }
 

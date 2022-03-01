@@ -132,6 +132,10 @@ impl<'a> Token<'a> {
             .collect::<Vec<_>>()
     }
 
+    pub fn to_string(&self) -> String {
+        self.tok.unlex()
+    }
+
     pub fn unlex(&self) -> String {
         let mut s = String::new();
         for frag in self.pre.iter().map(|v| v.tok.clone()) {
@@ -181,6 +185,14 @@ impl<'a> Tokens<'a> {
             .map(|v| v.toks())
             .flatten()
             .collect::<Vec<_>>()
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = String::new();
+        for frag in self.tok {
+            s.push_str(frag.to_string().as_str());
+        }
+        s
     }
 
     pub fn unlex(&self) -> String {
