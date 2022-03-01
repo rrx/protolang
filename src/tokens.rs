@@ -111,6 +111,14 @@ impl Tok {
             _ => false,
         }
     }
+
+    pub fn is_whitespace(&self) -> bool {
+        match self {
+            Tok::NL(_) | Tok::CRLF(_) | Tok::LF(_) | Tok::Tabs(_) | Tok::Spaces(_) => true,
+            _ => false
+        }
+    }
+
 }
 
 #[derive(Debug, Clone, PartialEq)]
