@@ -1,4 +1,3 @@
-use protolang::ast::Value;
 use protolang::lexer;
 use protolang::parser::parse_program;
 use protolang::tokens::Tokens;

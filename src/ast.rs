@@ -40,24 +40,6 @@ pub trait Unparse {
         self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
     }
     fn to_string(&self) -> String;
-        //self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
-    //}
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum Value {
-    Program(Program),
-    Stmt(StmtNode),
-    Expr(ExprNode),
-    Lit(LiteralNode),
-}
-impl Value {
-    pub fn expr(&self) -> Option<ExprNode> {
-        match self {
-            Value::Expr(expr) => Some(expr.clone()),
-            _ => None
-        }
-    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -114,71 +96,6 @@ impl SExpr for StmtNode {
                 stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
             )),
         }
-    }
-}
-
-impl Unparse for Value {
-    fn unparse(&self) -> Vec<Tok> {
-        match self {
-            Value::Program(prog) => prog.unparse(),
-            Value::Expr(expr) => expr.unparse(),
-            Value::Lit(lit) => lit.unparse(),
-            Value::Stmt(stmt) => stmt.unparse(),
-        }
-    }
-    fn to_string(&self) -> String {
-        "".into()
-    }
-}
-
-impl SExpr for Value {
-    fn sexpr(&self) -> SResult<S> {
-        use Value::*;
-        match self {
-            Expr(expr) => expr.sexpr(),
-            Lit(lit) => lit.sexpr(),
-            _ => Err(SError::Invalid),
-        }
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct Node {
-    pub pre: Vec<Tok>,
-    pub post: Vec<Tok>,
-    //pub tokens: Vec<Tok>,
-    pub value: Value,
-}
-
-impl Node {
-    pub fn prepend(&mut self, toks: Vec<Tok>) {
-        if toks.len() > 0 {
-            let mut v = toks;
-            v.append(&mut self.pre);
-            self.pre = v;
-        }
-    }
-
-    pub fn append(&mut self, toks: &mut Vec<Tok>) {
-        self.post.append(toks);
-    }
-}
-
-impl Unparse for Node {
-    fn unparse(&self) -> Vec<Tok> {
-        vec![self.pre.clone(), self.value.unparse(), self.post.clone()]
-            .into_iter()
-            .flatten()
-            .collect()
-    }
-    fn to_string(&self) -> String {
-        "".into()
-    }
-}
-
-impl SExpr for Node {
-    fn sexpr(&self) -> SResult<S> {
-        self.value.sexpr()
     }
 }
 
