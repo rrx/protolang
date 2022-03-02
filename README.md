@@ -22,6 +22,10 @@ The goal is to create a simple compiler that can also be used for:
 - experiments in multi-paradigm programming (functional, logic, mathematical, reactive, declarative, symbolic)
 - numerical calculation performance comparable to C++/Rust
 
+Ideas
+- null pointer exceptions should be impossible, unless the option is explicit (like Rust unwrap)
+
+
 TODO
 
 - [x] Lossless Basic Lexer
@@ -38,8 +42,9 @@ TODO
 - [ ] basic polymorphism
 - [ ] compile to machine code using LLVM
 - [ ] basic build and test tooling
-- [ ] parser combinator library for self-hosting
-- [ ] self-hosting language compiler
+- [ ] parser combinator library
+- [ ] self-hosting language parser
+- [ ] self-hosting language interpreter
 - [ ] embed in an editor
 - [ ] syntax highlighting for the editor
 - [ ] autoformat for the editor

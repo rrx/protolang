@@ -1,5 +1,6 @@
 use protolang::lexer;
 use protolang::parser::parse_program;
+use protolang::interpreter::Interpreter;
 use protolang::tokens::Tokens;
 use std::error::Error;
 use protolang::sexpr::SExpr;
@@ -19,10 +20,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if prog_rest.tok.len() > 0 {
                     println!("Unparsed Tokens: {:?}", prog_rest);
                 }
-
                 println!("{:?}", (&prog));
                 let sexpr = prog.sexpr().unwrap();
                 println!("sexpr {}", &sexpr);
+
+                let mut interp = Interpreter::default();
+                interp.interpret(prog);
             }
             Err(e) => {
                 println!("[{}] {:?}", filename, e);

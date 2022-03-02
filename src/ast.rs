@@ -52,7 +52,7 @@ pub enum Stmt {
 #[derive(PartialEq, Debug, Clone)]
 pub struct StmtNode {
     pub s: Surround,
-    value: Stmt
+    pub value: Stmt
 }
 impl StmtNode {
     pub fn new(value: Stmt) -> Self {
@@ -137,7 +137,7 @@ pub enum Expr {
 #[derive(PartialEq, Debug, Clone)]
 pub struct ExprNode {
     pub s: Surround,
-    value: Expr
+    pub value: Expr
 }
 impl ExprNode {
     pub fn new(value: Expr, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
@@ -223,7 +223,7 @@ pub enum Prefix {
 #[derive(PartialEq, Debug, Clone)]
 pub struct PrefixNode {
     pub s: Surround,
-    value: Prefix
+    pub value: Prefix
 }
 
 impl PrefixNode {
@@ -291,7 +291,7 @@ pub enum Infix {
 #[derive(PartialEq, Debug, Clone)]
 pub struct InfixNode {
     pub s: Surround,
-    value: Infix,
+    pub value: Infix,
     pub precedence: Precedence
 }
 
@@ -419,8 +419,8 @@ impl Literal {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct LiteralNode {
-    value: Literal,
-    s: Surround
+    pub value: Literal,
+    pub s: Surround
 }
 impl LiteralNode {
     pub fn new(value: Literal, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
@@ -462,7 +462,7 @@ impl SExpr for LiteralNode {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Ident {
-    value: String,
+    pub value: String,
     pub s: Surround,
 }
 impl Ident {
