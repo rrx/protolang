@@ -110,6 +110,7 @@ fn go_parse_pratt_expr(input: Tokens, precedence: Precedence, left: ExprNode) ->
     } else {
         let preview = &t1.tok[0];
         let p = infix_op(&preview.tok);
+        println!("infix: {:?}", (&preview, &p));
         match p {
             //(Precedence::PExp, _) if precedence < Precedence::PExp => {
             //let (i2, left2) = parse_caret_expr(input, left)?;
@@ -203,9 +204,16 @@ fn parse_atom_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
     ))(i)
 }
 
+fn parse_caret_side(i: Tokens) -> IResult<Tokens, ExprNode> {
+    alt((
+        parse_literal_expr,
+        parse_ident_expr,
+        ))(i)
+}
+
 fn parse_caret_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
     let (i, (left, op, right)) =
-        tuple((parse_literal_expr, tag_token(Tok::Caret), parse_literal_expr))(i)?;
+        tuple((parse_caret_side, tag_token(Tok::Caret), parse_caret_side))(i)?;
     let expr = ExprNode::new(Expr::InfixExpr(InfixNode::from_token(op.tok[0].clone()).unwrap(), Box::new(left), Box::new(right)), vec![], vec![]);
     Ok((i, expr))
 }
@@ -235,8 +243,7 @@ fn parse_prefix_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
     use Expr::PrefixExpr;
     let (i1, prefix) = parse_prefix(i)?;
     let (i2, expr1) = parse_atom_expr(i1)?;
-    let expr2 = ExprNode::new(PrefixExpr(prefix, Box::new(expr1)), vec![], vec![]);
-    Ok((i2, expr2))
+    Ok((i2, ExprNode::new(PrefixExpr(prefix, Box::new(expr1)), vec![], vec![])))
 }
 
 fn parse_infix(i: Tokens) -> IResult<Tokens, InfixNode> {
@@ -400,6 +407,8 @@ mod tests {
             //utf-8 test
             "\"🎁\"",
             "3 - 0",
+            "-x^(y+1)",
+            "  y  <  y ",
         ];
         r.iter().for_each(|v| {
             assert!(parser_losslessness(v));
@@ -421,6 +430,7 @@ mod tests {
             ("1-5^2", "(- 1 (^ 5 2))"),
             ("-1-5^2", "(- (- 1) (^ 5 2))"),
             ("-5^2", "(- (^ 5 2))"),
+            ("-x^y", "(- (^ x y))"),
             ("(x+y)^(y+x)", "(^ (+ x y) (+ y x))"),
             // there are two ways to handle multiple-carets
             // https://en.wikipedia.org/wiki/Order_of_operations#Serial_exponentiation
@@ -443,6 +453,8 @@ mod tests {
             ("0+-2^2", "(+ 0 (- (^ 2 2)))"),
             // this one has a unicode minus sign, which is invalid
             //("0+−2^2", "(+ 0 (- (^ 2 2)))"),
+
+            ("y > y", "(> y y)"),
         ];
 
         r.iter().for_each(|(q, a)| {

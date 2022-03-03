@@ -1,6 +1,7 @@
 use crate::ast::*;
 use std::result::Result;
 use std::collections::HashMap;
+use crate::sexpr::SExpr;
 
 #[derive(Debug)]
 pub struct Environment {
@@ -59,6 +60,7 @@ impl InterpretValue {
             _ => false
         }
     }
+
     fn check_number(&self) -> Result<f64, InterpretError> {
         match self {
             Self::Literal(Literal::IntLiteral(u)) => Ok(*u as f64),
@@ -75,6 +77,63 @@ impl InterpretValue {
         let right = other.check_number()?;
         let eval = left + right;
         Ok(Self::Literal(Literal::FloatLiteral(eval)))
+    }
+
+    pub fn minus(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left - right;
+        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+    }
+
+    pub fn exp(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left.powf(right);
+        println!("{:?}", (&left, &right, &eval));
+        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+    }
+
+    pub fn multiply(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left * right;
+        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+    }
+
+    pub fn divide(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left / right;
+        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+    }
+
+    pub fn lte(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left <= right;
+        Ok(Self::Literal(Literal::BoolLiteral(eval)))
+    }
+
+    pub fn lt(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left < right;
+        Ok(Self::Literal(Literal::BoolLiteral(eval)))
+    }
+
+    pub fn gte(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left >= right;
+        Ok(Self::Literal(Literal::BoolLiteral(eval)))
+    }
+
+    pub fn gt(&self, other: &Self) -> Result<Self, InterpretError> {
+        let left = self.check_number()?;
+        let right = other.check_number()?;
+        let eval = left > right;
+        Ok(Self::Literal(Literal::BoolLiteral(eval)))
     }
 
     pub fn prefix(&self, prefix: &Prefix) -> Result<Self, InterpretError> {
@@ -109,6 +168,14 @@ impl Interpreter {
                 let eval_right = self.evaluate(&right)?;
                 match op.value {
                     Infix::Plus => eval_left.plus(&eval_right),
+                    Infix::Minus => eval_left.minus(&eval_right),
+                    Infix::Exp => eval_left.exp(&eval_right),
+                    Infix::Multiply => eval_left.multiply(&eval_right),
+                    Infix::Divide => eval_left.divide(&eval_right),
+                    Infix::GreaterThanEqual => eval_left.gte(&eval_right),
+                    Infix::LessThanEqual => eval_left.lte(&eval_right),
+                    Infix::GreaterThan => eval_left.gt(&eval_right),
+                    Infix::LessThan => eval_left.lt(&eval_right),
                     _ => unimplemented!()
                 }
             }
@@ -120,7 +187,8 @@ impl Interpreter {
         match stmt.value {
             Stmt::Expr(expr) => {
                 let value = self.evaluate(&expr)?;
-                println!("Evaluate Expr: {:?}", value);
+                println!("sexpr Expr: {}", expr.sexpr().unwrap());
+                println!("Evaluate Expr: {} -> {:?}", expr.unlex(), value);
             }
             Stmt::Lit(lit) => {
                 println!("Evaluate Literal: {:?}", lit.value);

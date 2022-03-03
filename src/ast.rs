@@ -319,31 +319,34 @@ impl InfixNode {
         Self { s: Surround {pre, post}, value: infix, precedence }
     }
 
-    pub fn unlex(&self) -> String {
-        match self.token() {
-            Some(token) => token.unlex(),
-            None => "".into()
-        }
-    }
-
-    pub fn token(&self) -> Option<Tok> {
+    pub fn token(&self) -> Tok {
         match self.value {
-            Infix::Plus => Some(Tok::Plus),
-            Infix::Minus => Some(Tok::Minus),
-            Infix::Multiply => Some(Tok::Mul),
-            Infix::Divide => Some(Tok::Div),
-            Infix::Exp => Some(Tok::Caret),
-            _ => None
+            Infix::Plus => Tok::Plus,
+            Infix::Minus => Tok::Minus,
+            Infix::Multiply => Tok::Mul,
+            Infix::Divide => Tok::Div,
+            Infix::Exp => Tok::Caret,
+            Infix::Equal => Tok::Equals,
+            Infix::NotEqual => Tok::NotEquals,
+            Infix::LessThanEqual => Tok::LTE,
+            Infix::GreaterThanEqual => Tok::GTE,
+            Infix::LessThan => Tok::LT,
+            Infix::GreaterThan => Tok::GT,
         }
     }
 }
 
 impl Unparse for InfixNode {
     fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(vec![self.token().unwrap()])
+        self.s.unparse(vec![self.token()])
     }
+
+    fn unlex(&self) -> String {
+        self.token().unlex()
+    }
+
     fn to_string(&self) -> String {
-        self.token().unwrap().unlex()
+        self.token().unlex()
     }
 }
 

@@ -311,10 +311,7 @@ fn lex_op<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
     use Tok::*;
     let (i, pos) = position(i)?;
     let (i, t) = alt((
-        maptag("==", Equals),
-        maptag("!=", NotEquals),
-        maptag("&&", And),
-        maptag("||", Or),
+        lex_op_bool,
         maptag("+=", PlusEq),
         maptag("-=", MinusEq),
         maptag("*=", MulEq),
@@ -333,6 +330,19 @@ fn lex_op<'a>(i: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
     ))(i)?;
 
     Ok((i, token(t, pos)))
+}
+
+fn lex_op_bool(i: Span) -> IResult<Span, Tok> {
+    alt((
+        maptag("==", Tok::Equals),
+        maptag("!=", Tok::NotEquals),
+        maptag("&&", Tok::And),
+        maptag("||", Tok::Or),
+        maptag(">=", Tok::GTE),
+        maptag("<=", Tok::LTE),
+        maptag(">", Tok::GT),
+        maptag("<", Tok::LT),
+        ))(i)
 }
 
 pub fn lex_eof<'a>(i: &'a str) -> IResult<Span<'a>, Vec<Token>> {
