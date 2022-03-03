@@ -2,6 +2,7 @@ use nom::*;
 use nom_locate::LocatedSpan;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
+use crate::results::Results;
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
@@ -166,12 +167,13 @@ pub fn token(tok: Tok, pos: Span) -> Token {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 #[repr(C)]
 pub struct Tokens<'a> {
     pub tok: &'a [Token<'a>],
     pub start: usize,
     pub end: usize,
+    pub results: Vec<Results>
 }
 
 impl<'a> Tokens<'a> {
@@ -180,6 +182,7 @@ impl<'a> Tokens<'a> {
             tok: vec,
             start: 0,
             end: vec.len(),
+            results: vec![]
         }
     }
 
@@ -187,6 +190,10 @@ impl<'a> Tokens<'a> {
         //let (i, toks) = crate::lexer::lex_eof(i)?;
         //Ok((i, Tokens::new(&toks[..])))
     //}
+
+    pub fn result(&mut self, result: Results) {
+        self.results.push(result);
+    }
 
     pub fn toks(&self) -> Vec<Tok> {
         self.iter_elements()
@@ -226,6 +233,7 @@ impl<'a> InputTake for Tokens<'a> {
             tok: &self.tok[0..count],
             start: 0,
             end: count,
+            results: vec![]
         }
     }
 
@@ -236,11 +244,13 @@ impl<'a> InputTake for Tokens<'a> {
             tok: prefix,
             start: 0,
             end: prefix.len(),
+            results: vec![]
         };
         let second = Tokens {
             tok: suffix,
             start: 0,
             end: suffix.len(),
+            results: vec![]
         };
         (second, first)
     }
@@ -260,6 +270,7 @@ impl<'a> Slice<Range<usize>> for Tokens<'a> {
             tok: self.tok.slice(range.clone()),
             start: self.start + range.start,
             end: self.start + range.end,
+            results: vec![]
         }
     }
 }
@@ -285,6 +296,7 @@ impl<'a> Slice<RangeFull> for Tokens<'a> {
             tok: self.tok,
             start: self.start,
             end: self.end,
+            results: vec![]
         }
     }
 }

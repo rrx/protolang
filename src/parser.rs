@@ -2,11 +2,12 @@ use nom::*;
 
 use crate::ast::*;
 use crate::tokens::*;
+use crate::results::*;
 use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::{map, verify};
 use nom::error::{Error, ErrorKind};
-use nom::multi::many0;
+use nom::multi::{many0, many1};
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
@@ -25,7 +26,7 @@ fn parse_whitespace<'a>(i: Tokens<'a>) -> IResult<Tokens<'a>, Tokens<'a>> {
 }
 
 fn parse_newline<'a>(i: Tokens<'a>) -> IResult<Tokens<'a>, Tokens<'a>> {
-    verify(take(1usize), move |tokens: &Tokens<'a>| {
+    verify(take_one_valid, |tokens: &Tokens<'a>| {
         let tok = &tokens.tok[0].tok;
         if let Tok::Invalid(_) = tok {
             true 
@@ -35,10 +36,23 @@ fn parse_newline<'a>(i: Tokens<'a>) -> IResult<Tokens<'a>, Tokens<'a>> {
     })(i)
 }
 
+fn take_one_any(i: Tokens) -> IResult<Tokens, Tokens>{
+    take(1usize)(i)
+}
+
+fn take_one_valid(i: Tokens) -> IResult<Tokens, Tokens>{
+    let (i, mut tokens) = take(1usize)(i)?;
+    let tok = &tokens.tok[0].tok;
+    if let Tok::Invalid(c) = tok {
+        tokens.result(Results::Error(format!("Invalid Char: {:?}", c), 0));
+    }
+    Ok((i, tokens))
+}
+
 fn parse_newline_or_eof(i: Tokens) -> IResult<Tokens, Tokens> {
-    verify(take(1usize), move |tokens: &Tokens| {
+    verify(take_one_valid, |tokens: &Tokens| {
         let tok = &tokens.tok[0].tok;
-        if let Tok::Invalid(_) = tok {
+        if let Tok::Invalid(c) = tok {
             true 
         } else {
             tok.is_newline() || tok == &Tok::EOF
@@ -50,6 +64,7 @@ pub fn parse_statement(i: Tokens) -> IResult<Tokens, StmtNode> {
     alt((
             parse_expr_stmt,
             parse_assignment_stmt,
+            parse_invalid_stmt,
             //parse_literal_stmt,
             ))(i)
 }
@@ -73,12 +88,35 @@ pub fn parse_assignment_stmt(i: Tokens) -> IResult<Tokens, StmtNode> {
     Ok((i, stmt))
 }
 
+pub fn parse_invalid_stmt(i: Tokens) -> IResult<Tokens, StmtNode> {
+    let (mut i, (invalid, nl)) = pair(many1(take_one_valid), parse_newline_or_eof)(i)?;
+    let s = invalid.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
+    i.result(Results::Error(format!("Invalid Statement: {}", s), 0));
+    let mut stmt = StmtNode::new(Stmt::Invalid(s));
+    // handle trailing newline
+    stmt.s.append(nl.toks());
+    Ok((i, stmt))
+}
+
 pub fn parse_expr_stmt(i: Tokens) -> IResult<Tokens, StmtNode> {
     let (i, (expr, nl)) = pair(parse_expr, parse_newline_or_eof)(i)?;
     let mut stmt = StmtNode::new(Stmt::Expr(expr));
     stmt.s.append(nl.toks());
-    println!("X: {:?}", (&stmt));
+    //println!("X: {:?}", (&stmt));
     Ok((i, stmt))
+}
+
+pub fn parse_program_with_results(i: Tokens) -> (Option<Program>, Vec<Results>) {
+    match parse_program(i) {
+        Ok((prog_rest, prog)) =>  {
+            let mut results = vec![];
+            if prog_rest.tok.len() > 0 {
+                results.push(Results::Warning(format!("Not all tokens parsed: {:?}", prog_rest.toks()), 0));
+            }
+            (Some(prog), results)
+        }
+        Err(e) => (None, vec![Results::Error(format!("Unable to parse: {:?}", e), 0)])
+    }
 }
 
 pub fn parse_program(i: Tokens) -> IResult<Tokens, Program> {
@@ -103,14 +141,14 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> IResult<Tokens, Ex
 }
 
 fn go_parse_pratt_expr(input: Tokens, precedence: Precedence, left: ExprNode) -> IResult<Tokens, ExprNode> {
-    let (i1, t1) = take(1usize)(input)?;
+    let (i1, t1) = take(1usize)(input.clone())?;
 
     if t1.tok.is_empty() {
         Ok((i1, left))
     } else {
         let preview = &t1.tok[0];
         let p = infix_op(&preview.tok);
-        println!("infix: {:?}", (&preview, &p));
+        //println!("infix: {:?}", (&preview, &p));
         match p {
             //(Precedence::PExp, _) if precedence < Precedence::PExp => {
             //let (i2, left2) = parse_caret_expr(input, left)?;
@@ -134,7 +172,7 @@ fn go_parse_pratt_expr(input: Tokens, precedence: Precedence, left: ExprNode) ->
 }
 
 fn parse_ident(i: Tokens) -> IResult<Tokens, Ident> {
-    let (i1, t1) = take(1usize)(i)?;
+    let (i1, t1) = take(1usize)(i.clone())?;
     if t1.tok.is_empty() {
         Err(Err::Error(Error::new(i, ErrorKind::Tag)))
     } else {
@@ -159,7 +197,7 @@ fn parse_literal_stmt(i: Tokens) -> IResult<Tokens, StmtNode> {
 }
 
 fn parse_literal(i: Tokens) -> IResult<Tokens, LiteralNode> {
-    let (i1, t1) = take(1usize)(i)?;
+    let (i1, t1) = take(1usize)(i.clone())?;
     if t1.tok.is_empty() {
         Err(Err::Error(Error::new(i, ErrorKind::Tag)))
     } else {
@@ -176,7 +214,7 @@ fn parse_literal(i: Tokens) -> IResult<Tokens, LiteralNode> {
             let pre = token.pre.iter().map(|t| t.toks()).flatten().collect();
             let post = token.post.iter().map(|t| t.toks()).flatten().collect();
             let litnode = LiteralNode::new(lit, pre, post);
-            println!("LIT: {:?}", litnode);
+            //println!("LIT: {:?}", litnode);
             Ok((i1, litnode))
         } else {
             Err(Err::Error(Error::new(i, ErrorKind::Tag)))
@@ -247,7 +285,7 @@ fn parse_prefix_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
 }
 
 fn parse_infix(i: Tokens) -> IResult<Tokens, InfixNode> {
-    let (i1, t1) = take(1usize)(i)?;
+    let (i1, t1) = take(1usize)(i.clone())?;
     if t1.tok.is_empty() {
         Err(Err::Error(error_position!(i, ErrorKind::Tag)))
     } else {
@@ -264,7 +302,7 @@ fn parse_infix(i: Tokens) -> IResult<Tokens, InfixNode> {
 
 fn parse_infix_expr(i: Tokens, left: ExprNode) -> IResult<Tokens, ExprNode> {
     let (i, infix) = parse_infix(i)?;
-    println!("INFIX: {:?}", infix);
+    //println!("INFIX: {:?}", infix);
     let (i2, right) = parse_pratt_expr(i, infix.precedence.clone())?;
     Ok((i2,
         ExprNode::new(Expr::InfixExpr(infix, Box::new(left), Box::new(right)), vec![], vec![])
@@ -343,13 +381,13 @@ mod tests {
 
             let (_, result) = parse_expr_stmt(tokens).unwrap();
             println!("p {:?}", (&result));
-            let mut restored = result.unparse();
-            restored.push(Tok::EOF);
-            let ts = toks.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
-            println!("restored {:?}", (&ts, &restored));
-            let s = tokens.unlex();
-            println!("{:?}", (&v, &s));
-            assert_eq!(v, &s);
+            let restored = result.unlex();
+            //restored.push(Tok::EOF);
+            //let ts = toks.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
+            //println!("restored {:?}", (&ts, &restored));
+            //let s = tokens.unlex();
+            println!("{:?}", (&v, &restored));
+            assert_eq!(v, &restored);
         });
     }
 

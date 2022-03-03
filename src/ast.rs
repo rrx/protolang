@@ -48,6 +48,7 @@ pub enum Stmt {
     Block(Vec<StmtNode>),
     Expr(ExprNode),
     Lit(LiteralNode),
+    Invalid(String),
 }
 #[derive(PartialEq, Debug, Clone)]
 pub struct StmtNode {
@@ -69,6 +70,7 @@ impl Unparse for StmtNode {
                 .flatten()
                 .collect(),
             Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
+            Stmt::Invalid(s) => vec![Tok::Invalid(s.clone())],
         })
     }
     fn to_string(&self) -> String {
@@ -77,6 +79,7 @@ impl Unparse for StmtNode {
             Stmt::Lit(lit) => lit.to_string(),
             Stmt::Assign(ident, expr) => vec![ident.to_string(), (Tok::Assign).unlex(), expr.to_string()].join(""),
             Stmt::Block(stmts) => stmts.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(""),
+            Stmt::Invalid(s) => s.clone(),
         }
     }
 }
@@ -95,6 +98,7 @@ impl SExpr for StmtNode {
                 "block".into(),
                 stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
             )),
+            Stmt::Invalid(s) => Err(SError::Invalid(s.clone())),
         }
     }
 }
@@ -458,7 +462,7 @@ impl SExpr for LiteralNode {
             FloatLiteral(x) => Ok(S::Atom(x.to_string())),
             BoolLiteral(x) => Ok(S::Atom(x.to_string())),
             StringLiteral(x) => Ok(S::Atom(x.to_string())),
-            _ => Err(SError::Invalid),
+            Invalid(s) => Err(SError::Invalid(s.clone())),
         }
     }
 }
@@ -515,7 +519,7 @@ mod tests {
     #[test]
     fn infix() {
         let p = InfixNode::new(Infix::Minus, Precedence::PLowest);
-        println!("{:?}", (&p, &p.token(), &p.unlex()));
+        //println!("{:?}", (&p, &p.token(), &p.unlex()));
         assert_eq!(p.unlex(), "-");
     }
 }
