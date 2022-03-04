@@ -253,6 +253,7 @@ fn parse_atom_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
         parse_ident_expr,
         parse_prefix_expr,
         parse_paren_expr,
+        parse_lambda_expr,
         //parse_array_expr,
         //parse_hash_expr,
         //parse_if_expr,
@@ -262,6 +263,14 @@ fn parse_atom_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
 
 fn parse_caret_side(i: Tokens) -> IResult<Tokens, ExprNode> {
     alt((parse_literal_expr, parse_ident_expr))(i)
+}
+
+fn parse_lambda_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
+    let (i, (slash, idents, arrow, body)) =
+        tuple((tag_token(Tok::Backslash), many0(parse_ident), tag_token(Tok::LeftArrow), parse_atom_expr))(i)?;
+    let params = Params::new(idents.iter().map(|ident| ident.unlex()).collect());
+    let lambda = ExprNode::new(Expr::Lambda(Lambda::new(params, body)), vec![], vec![]);
+    Ok((i, lambda))
 }
 
 fn parse_caret_expr(i: Tokens) -> IResult<Tokens, ExprNode> {

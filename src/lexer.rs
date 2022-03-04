@@ -295,6 +295,7 @@ fn lex_punc(i: Span) -> IResult<Span, Token> {
         maptag(":", Colon),
         maptag(";", SemiColon),
         maptag(",", Comma),
+        maptag("\\", Tok::Backslash),
     ))(i)?;
     Ok((i, token(t, pos)))
 }
@@ -341,6 +342,8 @@ fn lex_op_bool(i: Span) -> IResult<Span, Tok> {
         maptag("!=", Tok::NotEquals),
         maptag("&&", Tok::And),
         maptag("||", Tok::Or),
+        maptag("->", Tok::LeftArrow),
+        maptag("<-", Tok::RightArrow),
         maptag(">=", Tok::GTE),
         maptag("<=", Tok::LTE),
         maptag(">", Tok::GT),

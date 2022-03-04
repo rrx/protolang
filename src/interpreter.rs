@@ -53,9 +53,18 @@ pub enum InterpretError {
 #[derive(Debug, Clone)]
 pub enum InterpretValue {
     Literal(Literal),
+    Lambda(Lambda),
 }
 
 impl InterpretValue {
+
+    pub fn unlex(&self) -> String {
+        match self {
+            InterpretValue::Literal(x) => x.token().to_string(),
+            InterpretValue::Lambda(x) => x.unlex(),
+        }
+    }
+
     pub fn is_number(&self) -> bool {
         match self {
             Self::Literal(Literal::IntLiteral(_)) => true,
@@ -177,10 +186,20 @@ impl Interpreter {
                     Infix::LessThanEqual => eval_left.lte(&eval_right),
                     Infix::GreaterThan => eval_left.gt(&eval_right),
                     Infix::LessThan => eval_left.lt(&eval_right),
-                    _ => unimplemented!(),
+                    //Infix::Map => {
+                        //Ok(InterpretValue::Lambda(e.clone()))
+                    //}
+                    _ => {
+                        Err(InterpretError::Runtime {
+                            message: format!("Unimplemented expression op: Infix::{:?}", op.value),
+                            line: 0
+                        })
+                    }
                 }
             }
-            _ => unimplemented!(),
+            Expr::Lambda(e) => {
+                Ok(InterpretValue::Lambda(e.clone()))
+            }
         }
     }
 
@@ -189,7 +208,7 @@ impl Interpreter {
             Stmt::Expr(expr) => {
                 let value = self.evaluate(&expr)?;
                 println!("sexpr Expr: {}", expr.sexpr().unwrap());
-                println!("Evaluate Expr: {} -> {:?}", expr.unlex(), value);
+                println!("Evaluate Expr: {} -> {}", expr.unlex(), value.unlex());
             }
             Stmt::Lit(lit) => {
                 println!("Evaluate Literal: {:?}", lit.value);
@@ -200,7 +219,9 @@ impl Interpreter {
                 // assign value to ident
                 println!("Save {:?} to {}", value, ident.value);
             }
-            _ => unimplemented!(),
+            _ => {
+                return Err(InterpretError::Runtime { message: format!("Unimplemented {:?}", stmt.value), line: 0 });
+            }
         }
         Ok(())
     }
@@ -208,7 +229,7 @@ impl Interpreter {
     pub fn interpret(&mut self, program: Program) {
         for stmt in program.value {
             if let Err(error) = self.execute(stmt) {
-                println!("{:?}", error);
+                println!("ERROR: {:?}", error);
                 return;
             }
         }

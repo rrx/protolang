@@ -30,6 +30,12 @@ pub enum Tok {
     Colon,
     Comma,
     SemiColon,
+    Backslash,   // \\
+
+    DoubleSlash, // //
+    TripleQuote, // """
+    RightArrow,  // ->
+    LeftArrow,   // <-
 
     // Keywords
     If,
@@ -65,6 +71,10 @@ pub enum Tok {
 }
 
 impl Tok {
+    pub fn to_string(&self) -> String {
+        self.unlex()
+    }
+
     pub fn unlex(&self) -> String {
         use Tok::*;
         String::from(match self {
@@ -99,6 +109,10 @@ impl Tok {
             FloatLiteral(x) => x.to_string(),
             BoolLiteral(x) => x.to_string(),
             StringLiteral(x) => format!("\"{}\"", x.to_string().escape_debug()),
+            LeftArrow => "->".into(),
+            RightArrow => "<-".into(),
+            Backslash => "\\".into(),
+
             EOF => "".into(),
             _ => "[UNKNOWN]".into(),
         })

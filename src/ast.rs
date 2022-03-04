@@ -160,11 +160,71 @@ impl SExpr for Program {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Params {
+    pub s: Surround,
+    pub value: Vec<String>,
+}
+impl Params {
+    pub fn new(value: Vec<String>) -> Self {
+        Self {
+            s: Surround::default(),
+            value,
+        }
+    }
+}
+impl Unparse for Params {
+    fn unparse(&self) -> Vec<Tok> {
+        self.value.iter().map(|s| Tok::Ident(s.clone())).collect::<Vec<_>>()
+    }
+
+    fn to_string(&self) -> String {
+        self.unparse().iter().map(|t| t.to_string()).collect::<Vec<_>>().join("")
+    }
+}
+impl SExpr for Params {
+    fn sexpr(&self) -> SResult<S> {
+        Ok(S::Cons("params".into(), self.value.iter().map(|v| S::Atom(v.clone())).collect()))
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Lambda {
+    pub s: Surround,
+    pub params: Params,
+    pub expr: Box<ExprNode>
+}
+impl Lambda {
+    pub fn new(params: Params, expr: ExprNode) -> Self {
+        Self {
+            s: Surround::default(),
+            params, expr: Box::new(expr)
+        }
+    }
+}
+impl Unparse for Lambda  {
+    fn unparse(&self) -> Vec<Tok> {
+        vec![self.params.unparse(), vec![Tok::LeftArrow], self.expr.unparse()].into_iter().flatten().collect()
+    }
+
+    fn to_string(&self) -> String {
+        vec![self.params.to_string(), Tok::LeftArrow.to_string(), self.expr.to_string()].join("")
+    }
+}
+impl SExpr for Lambda {
+    fn sexpr(&self) -> SResult<S> {
+        Ok(S::Cons("lambda".into(), vec![self.params.sexpr()?, self.expr.sexpr()?]))
+    }
+}
+
+
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
     IdentExpr(Ident),
     LitExpr(LiteralNode),
     PrefixExpr(PrefixNode, Box<ExprNode>),
     InfixExpr(InfixNode, Box<ExprNode>, Box<ExprNode>),
+    Lambda(Lambda),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -201,6 +261,9 @@ impl Unparse for ExprNode {
                 out.append(&mut op.unparse());
                 out.append(&mut right.unparse());
             }
+            Lambda(e) => {
+                out.append(&mut e.unparse());
+            }
         };
         self.s.unparse(out)
     }
@@ -224,6 +287,9 @@ impl Unparse for ExprNode {
                 out.push(op.to_string());
                 out.push(right.to_string());
             }
+            Lambda(e) => {
+                out.push(e.to_string());
+            }
         };
         out.join("")
     }
@@ -243,6 +309,7 @@ impl SExpr for ExprNode {
                 let s = expr.sexpr()?;
                 Ok(S::Cons(prefix.to_string(), vec![s]))
             }
+            Lambda(e) => e.sexpr()
         }
     }
 }
@@ -326,6 +393,7 @@ pub enum Infix {
     LessThanEqual,
     GreaterThan,
     LessThan,
+    //Map,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -385,6 +453,7 @@ impl InfixNode {
             Infix::GreaterThanEqual => Tok::GTE,
             Infix::LessThan => Tok::LT,
             Infix::GreaterThan => Tok::GT,
+            //Infix::Map => Tok::LeftArrow,
         }
     }
 }
@@ -406,6 +475,7 @@ impl Unparse for InfixNode {
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Precedence {
     PLowest,
+    //PMap,
     PEquals,
     PLessGreater,
     PSum,
@@ -428,6 +498,7 @@ pub fn infix_precedence(op: Infix) -> Precedence {
         Infix::Multiply => Precedence::PProduct,
         Infix::Divide => Precedence::PProduct,
         Infix::Exp => Precedence::PExp,
+        //Infix::Map => Precedence::PMap,
     }
 }
 
@@ -435,6 +506,7 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Infix>) {
     match *t {
         Tok::Equals => (Precedence::PEquals, Some(Infix::Equal)),
         Tok::NotEquals => (Precedence::PEquals, Some(Infix::NotEqual)),
+        //Tok::LeftArrow => (Precedence::PMap, Some(Infix::Map)),
         Tok::LTE => (Precedence::PLessGreater, Some(Infix::LessThanEqual)),
         Tok::GTE => (Precedence::PLessGreater, Some(Infix::GreaterThanEqual)),
         Tok::LT => (Precedence::PLessGreater, Some(Infix::LessThan)),
@@ -470,6 +542,16 @@ impl Literal {
             _ => None,
         }
     }
+    pub fn token(&self) -> Tok {
+        use Literal::*;
+        match &self {
+            IntLiteral(x) => Tok::IntLiteral(*x),
+            FloatLiteral(x) => Tok::FloatLiteral(*x),
+            BoolLiteral(x) => Tok::BoolLiteral(*x),
+            StringLiteral(x) => Tok::StringLiteral(x.clone()),
+            Invalid(x) => Tok::Invalid(x.clone()),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -485,23 +567,13 @@ impl LiteralNode {
         }
     }
 
-    pub fn token(&self) -> Tok {
-        use Literal::*;
-        match &self.value {
-            IntLiteral(x) => Tok::IntLiteral(*x),
-            FloatLiteral(x) => Tok::FloatLiteral(*x),
-            BoolLiteral(x) => Tok::BoolLiteral(*x),
-            StringLiteral(x) => Tok::StringLiteral(x.clone()),
-            Invalid(x) => Tok::Invalid(x.clone()),
-        }
-    }
 }
 impl Unparse for LiteralNode {
     fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(vec![self.token()])
+        self.s.unparse(vec![self.value.token()])
     }
     fn to_string(&self) -> String {
-        self.token().unlex()
+        self.value.token().unlex()
     }
 }
 
