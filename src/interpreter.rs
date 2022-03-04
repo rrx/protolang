@@ -1,15 +1,17 @@
 use crate::ast::*;
-use std::result::Result;
-use std::collections::HashMap;
 use crate::sexpr::SExpr;
+use std::collections::HashMap;
+use std::result::Result;
 
 #[derive(Debug)]
 pub struct Environment {
-    values: HashMap<String, InterpretValue>
+    values: HashMap<String, InterpretValue>,
 }
 impl Default for Environment {
     fn default() -> Self {
-        Self { values: HashMap::new() }
+        Self {
+            values: HashMap::new(),
+        }
     }
 }
 impl Environment {
@@ -22,7 +24,7 @@ impl Environment {
         }
         Err(InterpretError::Runtime {
             message: format!("Undefined variable '{}'.", name),
-            line: 0//name.line(),
+            line: 0, //name.line(),
         })
     }
 }
@@ -34,22 +36,23 @@ pub struct Interpreter {
 
 impl Default for Interpreter {
     fn default() -> Self {
-        Self { globals: Environment::default() }
+        Self {
+            globals: Environment::default(),
+        }
     }
 }
 
-impl Interpreter {
-}
+impl Interpreter {}
 
 #[derive(Debug)]
 pub enum InterpretError {
     Invalid,
-    Runtime { message: String, line: usize }
+    Runtime { message: String, line: usize },
 }
 
 #[derive(Debug, Clone)]
 pub enum InterpretValue {
-    Literal(Literal)
+    Literal(Literal),
 }
 
 impl InterpretValue {
@@ -57,7 +60,7 @@ impl InterpretValue {
         match self {
             Self::Literal(Literal::IntLiteral(_)) => true,
             Self::Literal(Literal::FloatLiteral(_)) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -67,8 +70,8 @@ impl InterpretValue {
             Self::Literal(Literal::FloatLiteral(f)) => Ok(*f),
             _ => Err(InterpretError::Runtime {
                 message: "Expecting a number".into(),
-                line: 0
-            })
+                line: 0,
+            }),
         }
     }
 
@@ -138,7 +141,7 @@ impl InterpretValue {
 
     pub fn prefix(&self, prefix: &Prefix) -> Result<Self, InterpretError> {
         match prefix {
-            Prefix::PrefixPlus =>  {
+            Prefix::PrefixPlus => {
                 let right = self.check_number()?;
                 Ok(Self::Literal(Literal::FloatLiteral(right)))
             }
@@ -146,7 +149,7 @@ impl InterpretValue {
                 let right = self.check_number()?;
                 Ok(Self::Literal(Literal::FloatLiteral(-right)))
             }
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -155,9 +158,7 @@ impl Interpreter {
     pub fn evaluate(&mut self, expr: &ExprNode) -> Result<InterpretValue, InterpretError> {
         match &expr.value {
             Expr::LitExpr(lit) => Ok(InterpretValue::Literal(lit.value.clone())),
-            Expr::IdentExpr(ident) => {
-                self.globals.get(ident.value.as_str())
-            }
+            Expr::IdentExpr(ident) => self.globals.get(ident.value.as_str()),
             Expr::PrefixExpr(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
                 let eval = eval.prefix(&prefix.value)?;
@@ -176,10 +177,10 @@ impl Interpreter {
                     Infix::LessThanEqual => eval_left.lte(&eval_right),
                     Infix::GreaterThan => eval_left.gt(&eval_right),
                     Infix::LessThan => eval_left.lt(&eval_right),
-                    _ => unimplemented!()
+                    _ => unimplemented!(),
                 }
             }
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -199,7 +200,7 @@ impl Interpreter {
                 // assign value to ident
                 println!("Save {:?} to {}", value, ident.value);
             }
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
         Ok(())
     }

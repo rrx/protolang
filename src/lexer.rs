@@ -268,13 +268,16 @@ fn parse_token_space(i: Span) -> IResult<Span, Vec<Token>> {
 
 fn lex_token_with_whitespace(i: Span) -> IResult<Span, Vec<Token>> {
     alt((
-        map(tuple((parse_token_space, lex_token, parse_token_space)), |(mut a, mut b, mut c)| {
-            let mut v = vec![];
-            b.pre.append(&mut a);
-            b.post.append(&mut c);
-            v.push(b);
-            v
-        }),
+        map(
+            tuple((parse_token_space, lex_token, parse_token_space)),
+            |(mut a, mut b, mut c)| {
+                let mut v = vec![];
+                b.pre.append(&mut a);
+                b.post.append(&mut c);
+                v.push(b);
+                v
+            },
+        ),
         ws1,
     ))(i)
 }
@@ -342,7 +345,7 @@ fn lex_op_bool(i: Span) -> IResult<Span, Tok> {
         maptag("<=", Tok::LTE),
         maptag(">", Tok::GT),
         maptag("<", Tok::LT),
-        ))(i)
+    ))(i)
 }
 
 pub fn lex_eof<'a>(i: &'a str) -> IResult<Span<'a>, Vec<Token>> {
@@ -466,11 +469,9 @@ mod tests {
             "+ 1 / (2 - 5)",
             "x+1",
             "(((((0)))))",
-            ];
+        ];
 
-        r.iter().for_each(|q| {
-            assert!(lexer_losslessness(q))
-        });
+        r.iter().for_each(|q| assert!(lexer_losslessness(q)));
     }
 
     #[test]

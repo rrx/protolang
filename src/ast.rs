@@ -1,14 +1,17 @@
 use crate::sexpr::*;
-use crate::tokens::{Token, Tok};
+use crate::tokens::{Tok, Token};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Surround {
     pre: Vec<Tok>,
-    post: Vec<Tok>
+    post: Vec<Tok>,
 }
 impl Default for Surround {
     fn default() -> Self {
-        Self { pre: vec![], post: vec![] }
+        Self {
+            pre: vec![],
+            post: vec![],
+        }
     }
 }
 
@@ -30,14 +33,21 @@ impl Surround {
     }
 
     pub fn unparse(&self, tokens: Vec<Tok>) -> Vec<Tok> {
-        vec![self.pre.clone(), tokens, self.post.clone()].into_iter().flatten().collect()
+        vec![self.pre.clone(), tokens, self.post.clone()]
+            .into_iter()
+            .flatten()
+            .collect()
     }
 }
 
 pub trait Unparse {
     fn unparse(&self) -> Vec<Tok>;
     fn unlex(&self) -> String {
-        self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
+        self.unparse()
+            .iter()
+            .map(|t| t.unlex())
+            .collect::<Vec<_>>()
+            .join("")
     }
     fn to_string(&self) -> String;
 }
@@ -53,11 +63,14 @@ pub enum Stmt {
 #[derive(PartialEq, Debug, Clone)]
 pub struct StmtNode {
     pub s: Surround,
-    pub value: Stmt
+    pub value: Stmt,
 }
 impl StmtNode {
     pub fn new(value: Stmt) -> Self {
-        Self { s: Surround::default(), value }
+        Self {
+            s: Surround::default(),
+            value,
+        }
     }
 }
 impl Unparse for StmtNode {
@@ -77,8 +90,14 @@ impl Unparse for StmtNode {
         match &self.value {
             Stmt::Expr(expr) => expr.to_string(),
             Stmt::Lit(lit) => lit.to_string(),
-            Stmt::Assign(ident, expr) => vec![ident.to_string(), (Tok::Assign).unlex(), expr.to_string()].join(""),
-            Stmt::Block(stmts) => stmts.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(""),
+            Stmt::Assign(ident, expr) => {
+                vec![ident.to_string(), (Tok::Assign).unlex(), expr.to_string()].join("")
+            }
+            Stmt::Block(stmts) => stmts
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+                .join(""),
             Stmt::Invalid(s) => s.clone(),
         }
     }
@@ -110,13 +129,23 @@ pub struct Program {
 }
 impl Program {
     pub fn new(value: Vec<StmtNode>, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        Self { s: Surround {pre, post}, value }
+        Self {
+            s: Surround { pre, post },
+            value,
+        }
     }
 }
 
 impl Unparse for Program {
     fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(self.value.clone().into_iter().map(|expr| expr.unparse()).flatten().collect())
+        self.s.unparse(
+            self.value
+                .clone()
+                .into_iter()
+                .map(|expr| expr.unparse())
+                .flatten()
+                .collect(),
+        )
     }
     fn to_string(&self) -> String {
         "".into()
@@ -141,11 +170,14 @@ pub enum Expr {
 #[derive(PartialEq, Debug, Clone)]
 pub struct ExprNode {
     pub s: Surround,
-    pub value: Expr
+    pub value: Expr,
 }
 impl ExprNode {
     pub fn new(value: Expr, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        Self { s: Surround {pre, post}, value }
+        Self {
+            s: Surround { pre, post },
+            value,
+        }
     }
 }
 
@@ -195,8 +227,6 @@ impl Unparse for ExprNode {
         };
         out.join("")
     }
-
-
 }
 impl SExpr for ExprNode {
     fn sexpr(&self) -> SResult<S> {
@@ -227,7 +257,7 @@ pub enum Prefix {
 #[derive(PartialEq, Debug, Clone)]
 pub struct PrefixNode {
     pub s: Surround,
-    pub value: Prefix
+    pub value: Prefix,
 }
 
 impl PrefixNode {
@@ -236,7 +266,7 @@ impl PrefixNode {
             Tok::Plus => Some(Prefix::PrefixPlus),
             Tok::Minus => Some(Prefix::PrefixMinus),
             Tok::Not => Some(Prefix::PrefixNot),
-            _ => None
+            _ => None,
         };
         match maybe_prefix {
             Some(prefix) => Some(Self {
@@ -244,17 +274,24 @@ impl PrefixNode {
                     pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
                     post: token.post.iter().map(|t| t.toks()).flatten().collect(),
                 },
-                value: prefix }),
-            None => None
+                value: prefix,
+            }),
+            None => None,
         }
     }
 
     pub fn from_tokens(prefix: Prefix, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        Self { s: Surround {pre, post}, value: prefix }
+        Self {
+            s: Surround { pre, post },
+            value: prefix,
+        }
     }
 
     pub fn new(prefix: Prefix) -> Self {
-        Self { s: Surround::default(), value: prefix }
+        Self {
+            s: Surround::default(),
+            value: prefix,
+        }
     }
 
     pub fn token(&self) -> Tok {
@@ -269,7 +306,6 @@ impl PrefixNode {
 impl Unparse for PrefixNode {
     fn unparse(&self) -> Vec<Tok> {
         self.s.unparse(vec![self.token()])
-        //vec![self.pre.clone(), vec![self.token()], self.post.clone()].into_iter().flatten().collect()
     }
 
     fn to_string(&self) -> String {
@@ -296,12 +332,16 @@ pub enum Infix {
 pub struct InfixNode {
     pub s: Surround,
     pub value: Infix,
-    pub precedence: Precedence
+    pub precedence: Precedence,
 }
 
 impl InfixNode {
     pub fn new(infix: Infix, precedence: Precedence) -> Self {
-        Self { s: Surround::default(), value: infix, precedence }
+        Self {
+            s: Surround::default(),
+            value: infix,
+            precedence,
+        }
     }
 
     pub fn from_token(token: Token) -> Option<Self> {
@@ -313,14 +353,23 @@ impl InfixNode {
                     post: token.post.iter().map(|t| t.toks()).flatten().collect(),
                 },
                 value: prefix,
-                precedence
+                precedence,
             }),
-            None => None
+            None => None,
         }
     }
 
-    pub fn from_tokens(infix: Infix, precedence: Precedence, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        Self { s: Surround {pre, post}, value: infix, precedence }
+    pub fn from_tokens(
+        infix: Infix,
+        precedence: Precedence,
+        pre: Vec<Tok>,
+        post: Vec<Tok>,
+    ) -> Self {
+        Self {
+            s: Surround { pre, post },
+            value: infix,
+            precedence,
+        }
     }
 
     pub fn token(&self) -> Tok {
@@ -367,19 +416,18 @@ pub enum Precedence {
 }
 
 pub fn infix_precedence(op: Infix) -> Precedence {
-    use Infix::*;
     match op {
-        Equal => Precedence::PEquals,
-        NotEqual => Precedence::PEquals,
-        LessThanEqual => Precedence::PLessGreater,
-        GTE => Precedence::PLessGreater,
-        LessThan => Precedence::PLessGreater,
-        GreaterThan => Precedence::PLessGreater,
-        Plus => Precedence::PSum,
-        Minus => Precedence::PSum,
-        Multiply => Precedence::PProduct,
-        Divide => Precedence::PProduct,
-        Exp => Precedence::PExp,
+        Infix::Equal => Precedence::PEquals,
+        Infix::NotEqual => Precedence::PEquals,
+        Infix::LessThanEqual => Precedence::PLessGreater,
+        Infix::GreaterThanEqual => Precedence::PLessGreater,
+        Infix::LessThan => Precedence::PLessGreater,
+        Infix::GreaterThan => Precedence::PLessGreater,
+        Infix::Plus => Precedence::PSum,
+        Infix::Minus => Precedence::PSum,
+        Infix::Multiply => Precedence::PProduct,
+        Infix::Divide => Precedence::PProduct,
+        Infix::Exp => Precedence::PExp,
     }
 }
 
@@ -427,11 +475,14 @@ impl Literal {
 #[derive(PartialEq, Debug, Clone)]
 pub struct LiteralNode {
     pub value: Literal,
-    pub s: Surround
+    pub s: Surround,
 }
 impl LiteralNode {
     pub fn new(value: Literal, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        Self { value, s: Surround { pre, post } }
+        Self {
+            value,
+            s: Surround { pre, post },
+        }
     }
 
     pub fn token(&self) -> Tok {
@@ -476,7 +527,7 @@ impl Ident {
     pub fn from_token(token: Token) -> Option<Self> {
         let maybe_ident = match token.tok {
             Tok::Ident(s) => Some(s),
-            _ => None
+            _ => None,
         };
         match maybe_ident {
             Some(ident) => Some(Self {
@@ -484,9 +535,9 @@ impl Ident {
                     pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
                     post: token.post.iter().map(|t| t.toks()).flatten().collect(),
                 },
-                value: ident
+                value: ident,
             }),
-            None => None
+            None => None,
         }
     }
 }

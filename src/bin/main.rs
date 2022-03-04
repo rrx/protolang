@@ -1,9 +1,9 @@
 use protolang::{
-    results::*,
-    lexer,
-    parser::{parse_program_with_results},
     //sexpr::SExpr,
     interpreter::Interpreter,
+    lexer,
+    parser::parse_program_with_results,
+    results::*,
     tokens::Tokens,
 };
 use std::error::Error;
@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         match lexer::lex(contents.as_str()) {
             Ok((_, toks)) => {
                 //toks.iter().for_each(|x| {
-                    //println!("[{}] {:?}", filename, x);
+                //println!("[{}] {:?}", filename, x);
                 //});
                 let tokens = Tokens::new(&toks[..]);
                 //println!("{:?}", (&tokens));
@@ -34,7 +34,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let mut interp = Interpreter::default();
                     interp.interpret(prog);
                 }
-
             }
             Err(e) => {
                 println!("[{}] {:?}", filename, e);
