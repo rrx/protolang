@@ -128,9 +128,9 @@ pub struct Program {
     pub s: Surround,
 }
 impl Program {
-    pub fn new(value: Vec<StmtNode>, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
+    pub fn new(value: Vec<StmtNode>) -> Self {
         Self {
-            s: Surround { pre, post },
+            s: Surround::default(),
             value,
         }
     }
@@ -148,7 +148,10 @@ impl Unparse for Program {
         )
     }
     fn to_string(&self) -> String {
-        "".into()
+        self.unparse().iter()
+            .map(|t| t.unlex())
+            .collect::<Vec<_>>()
+            .join("")
     }
 }
 
@@ -240,9 +243,9 @@ pub struct ExprNode {
     pub value: Expr,
 }
 impl ExprNode {
-    pub fn new(value: Expr, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
+    pub fn new(value: Expr) -> Self {
         Self {
-            s: Surround { pre, post },
+            s: Surround::default(),
             value,
         }
     }
@@ -598,10 +601,10 @@ pub struct LiteralNode {
     pub loc: Location,
 }
 impl LiteralNode {
-    pub fn new(value: Literal, pre: Vec<Tok>, post: Vec<Tok>, loc: Location) -> Self {
+    pub fn new(value: Literal, loc: Location) -> Self {
         Self {
             value,
-            s: Surround { pre, post },
+            s: Surround::default(),
             loc
         }
     }

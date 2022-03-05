@@ -207,8 +207,8 @@ fn lex_identifier_or_reserved(i: Span) -> IResult<Span, Token> {
         "else" => Else,
         "return" => Return,
         "yield" => Yield,
-        "true" => True,
-        "false" => False,
+        "true" => BoolLiteral(true),
+        "false" => BoolLiteral(false),
         _ => Ident(s.to_string()),
     };
     Ok((i, token(t, pos)))

@@ -1,5 +1,5 @@
 use protolang::{
-    //sexpr::SExpr,
+    sexpr::SExpr,
     interpreter::Interpreter,
     lexer,
     parser::parse_program_with_results,
@@ -29,8 +29,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 if let Some(prog) = maybe_prog {
                     //println!("{:?}", (&prog));
-                    //let sexpr = prog.sexpr().unwrap();
-                    //println!("sexpr {}", &sexpr);
+                    let sexpr = prog.sexpr().unwrap();
+                    println!("XXXsexpr {}", &sexpr);
                     let mut interp = Interpreter::default();
                     interp.interpret(prog);
                 }
