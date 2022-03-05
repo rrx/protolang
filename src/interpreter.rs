@@ -212,6 +212,9 @@ impl Interpreter {
                 //env.define(
                 Ok(InterpretValue::Literal(Literal::IntLiteral(0)))
             }
+            Expr::Block(stmts) => {
+                Ok(InterpretValue::Literal(Literal::IntLiteral(0)))
+            }
         }
     }
 

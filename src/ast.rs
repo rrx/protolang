@@ -82,7 +82,9 @@ impl Unparse for StmtNode {
                 .into_iter()
                 .flatten()
                 .collect(),
-            Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
+            Stmt::Block(stmts) => {
+                stmts.iter().map(|s| s.unparse()).flatten().collect()
+            }
             Stmt::Invalid(s) => vec![Tok::Invalid(s.clone())],
         })
     }
@@ -93,11 +95,9 @@ impl Unparse for StmtNode {
             Stmt::Assign(ident, expr) => {
                 vec![ident.to_string(), (Tok::Assign).unlex(), expr.to_string()].join("")
             }
-            Stmt::Block(stmts) => stmts
-                .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>()
-                .join(""),
+            Stmt::Block(_) => {
+                self.unparse().iter().map(|s| s.to_string()).collect::<Vec<_>>().join("")
+            }
             Stmt::Invalid(s) => s.clone(),
         }
     }
@@ -198,11 +198,11 @@ impl SExpr for Params {
 pub struct Lambda {
     pub s: Surround,
     pub params: Params,
-    pub expr: Box<ExprNode>,
+    pub expr: Box<StmtNode>,
     pub loc: Location,
 }
 impl Lambda {
-    pub fn new(params: Params, expr: ExprNode, loc: Location) -> Self {
+    pub fn new(params: Params, expr: StmtNode, loc: Location) -> Self {
         Self {
             s: Surround::default(),
             params, expr: Box::new(expr),
@@ -235,6 +235,7 @@ pub enum Expr {
     InfixExpr(InfixNode, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
     Apply(Ident, Vec<ExprNode>),
+    Block(Vec<StmtNode>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -280,6 +281,9 @@ impl Unparse for ExprNode {
                     out.append(&mut arg.unparse());
                 }
             }
+            Block(stmts) => {
+                out.append(&mut stmts.into_iter().map(|s| s.unparse()).flatten().collect());
+            }
         };
         self.s.unparse(out)
     }
@@ -312,6 +316,9 @@ impl Unparse for ExprNode {
                     out.push(arg.to_string());
                 }
             }
+            Block(_) => {
+                out.append(&mut self.unparse().into_iter().map(|s| s.to_string()).collect::<Vec<_>>());
+            }
         };
         out.join("")
     }
@@ -336,6 +343,10 @@ impl SExpr for ExprNode {
                 let s_args = args.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
                 Ok(S::Cons(ident.to_string(), s_args))
             }
+            Block(stmts) => Ok(S::Cons(
+                "block".into(),
+                stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
+            )),
         }
     }
 }
