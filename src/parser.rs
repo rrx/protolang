@@ -5,7 +5,7 @@ use crate::results::*;
 use crate::tokens::*;
 use nom::branch::*;
 use nom::bytes::complete::take;
-use nom::combinator::{map, verify};
+use nom::combinator::{verify};
 use nom::error::{Error, ErrorKind};
 use nom::multi::{many0, many1};
 use nom::sequence::*;
@@ -232,7 +232,7 @@ fn parse_literal(i: Tokens) -> IResult<Tokens, LiteralNode> {
     if let Some(lit) = maybe_lit {
         let pre = token.pre.iter().map(|t| t.toks()).flatten().collect();
         let post = token.post.iter().map(|t| t.toks()).flatten().collect();
-        let litnode = LiteralNode::new(lit, pre, post);
+        let litnode = LiteralNode::new(lit, pre, post, token.to_location());
         //println!("LIT: {:?}", litnode);
         Ok((i1, litnode))
     } else {
@@ -254,6 +254,7 @@ fn parse_atom_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
         parse_prefix_expr,
         parse_paren_expr,
         parse_lambda_expr,
+        parse_apply_expr,
         //parse_array_expr,
         //parse_hash_expr,
         //parse_if_expr,
@@ -261,16 +262,35 @@ fn parse_atom_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
     ))(i)
 }
 
-fn parse_caret_side(i: Tokens) -> IResult<Tokens, ExprNode> {
-    alt((parse_literal_expr, parse_ident_expr))(i)
+fn parse_apply_end(i: Tokens) -> IResult<Tokens, Tokens> {
+    alt((tag_token(Tok::SemiColon), parse_newline_or_eof))(i)
+}
+
+fn parse_apply_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
+    let (i, (ident, args, end)) =
+        tuple((parse_ident, many0(parse_expr), parse_atom_expr))(i)?;
+    let lambda = ExprNode::new(Expr::Apply(ident, args), vec![], vec![]);
+    Ok((i, lambda))
 }
 
 fn parse_lambda_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
-    let (i, (slash, idents, arrow, body)) =
+    let (i, (slash, idents, arrow, mut body)) =
         tuple((tag_token(Tok::Backslash), many0(parse_ident), tag_token(Tok::LeftArrow), parse_atom_expr))(i)?;
-    let params = Params::new(idents.iter().map(|ident| ident.unlex()).collect());
-    let lambda = ExprNode::new(Expr::Lambda(Lambda::new(params, body)), vec![], vec![]);
+    println!("slash: {:?}", &slash);
+    println!("idents: {:?}", &idents);
+    let mut params = Params::new(idents);
+    params.s.prepend(slash.tok[0].toks_post());
+    params.s.append(arrow.tok[0].toks_pre());
+    body.s.prepend(arrow.tok[0].toks_post());
+    //params.s.append(arrow.pre);
+    let mut lambda = ExprNode::new(Expr::Lambda(Lambda::new(params, body, i.tok[0].to_location())), vec![], vec![]);
+    lambda.s.prepend(slash.tok[0].toks_pre());
+
     Ok((i, lambda))
+}
+
+fn parse_caret_side(i: Tokens) -> IResult<Tokens, ExprNode> {
+    alt((parse_literal_expr, parse_ident_expr))(i)
 }
 
 fn parse_caret_expr(i: Tokens) -> IResult<Tokens, ExprNode> {
@@ -471,6 +491,9 @@ mod tests {
             "3 - 0",
             "-x^(y+1)",
             "  y  <  y ",
+            "\\x -> x^2",
+            "\\ x y -> x^2 + y",
+            " \\ x  y z-> x ^ 2 + y",
         ];
         r.iter().for_each(|v| {
             assert!(parser_losslessness(v));
@@ -516,6 +539,8 @@ mod tests {
             // this one has a unicode minus sign, which is invalid
             //("0+−2^2", "(+ 0 (- (^ 2 2)))"),
             ("y > y", "(> y y)"),
+            ("\\x -> x^2", "(lambda (params x) (^ x 2))"),
+            ("\\ x y -> x^2", "(lambda (params x y) (^ x 2))"),
         ];
 
         r.iter().for_each(|(q, a)| {

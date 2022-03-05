@@ -3,6 +3,7 @@ use nom::*;
 use nom_locate::LocatedSpan;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
+use crate::ast::Location;
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
@@ -144,15 +145,28 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
+
+    pub fn toks_pre(&self) -> Vec<Tok> {
+        self.pre.iter().map(|t| t.toks()).flatten().collect()
+    }
+
+    pub fn toks_post(&self) -> Vec<Tok> {
+        self.post.iter().map(|t| t.toks()).flatten().collect()
+    }
+
     pub fn toks(&self) -> Vec<Tok> {
         vec![
-            self.pre.iter().map(|t| t.toks()).flatten().collect(),
+            self.toks_pre(),
             vec![self.tok.clone()],
-            self.post.iter().map(|t| t.toks()).flatten().collect(),
+            self.toks_post(),
         ]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
+    }
+
+    pub fn to_location(&self) -> Location {
+        Location::new(self.pos.location_offset(), self.pos.location_line() as usize, self.pos.get_utf8_column(), self.pos.fragment().to_string())
     }
 
     pub fn to_string(&self) -> String {

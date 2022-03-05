@@ -162,10 +162,10 @@ impl SExpr for Program {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Params {
     pub s: Surround,
-    pub value: Vec<String>,
+    pub value: Vec<Ident>,
 }
 impl Params {
-    pub fn new(value: Vec<String>) -> Self {
+    pub fn new(value: Vec<Ident>) -> Self {
         Self {
             s: Surround::default(),
             value,
@@ -174,7 +174,7 @@ impl Params {
 }
 impl Unparse for Params {
     fn unparse(&self) -> Vec<Tok> {
-        self.value.iter().map(|s| Tok::Ident(s.clone())).collect::<Vec<_>>()
+        self.s.unparse(self.value.iter().map(|s| s.unparse()).flatten().collect::<Vec<_>>())
     }
 
     fn to_string(&self) -> String {
@@ -183,7 +183,11 @@ impl Unparse for Params {
 }
 impl SExpr for Params {
     fn sexpr(&self) -> SResult<S> {
-        Ok(S::Cons("params".into(), self.value.iter().map(|v| S::Atom(v.clone())).collect()))
+        let params = self.value.iter().map_while(|v| v.sexpr().ok()).collect::<Vec<_>>();
+        if params.len() < self.value.len() {
+            return Err(SError::Invalid("Unable to parse parameters".into()));
+        }
+        Ok(S::Cons("params".into(), params))
     }
 }
 
@@ -191,19 +195,21 @@ impl SExpr for Params {
 pub struct Lambda {
     pub s: Surround,
     pub params: Params,
-    pub expr: Box<ExprNode>
+    pub expr: Box<ExprNode>,
+    pub loc: Location,
 }
 impl Lambda {
-    pub fn new(params: Params, expr: ExprNode) -> Self {
+    pub fn new(params: Params, expr: ExprNode, loc: Location) -> Self {
         Self {
             s: Surround::default(),
-            params, expr: Box::new(expr)
+            params, expr: Box::new(expr),
+            loc
         }
     }
 }
 impl Unparse for Lambda  {
     fn unparse(&self) -> Vec<Tok> {
-        vec![self.params.unparse(), vec![Tok::LeftArrow], self.expr.unparse()].into_iter().flatten().collect()
+        vec![vec![Tok::Backslash], self.params.unparse(), vec![Tok::LeftArrow], self.expr.unparse()].into_iter().flatten().collect()
     }
 
     fn to_string(&self) -> String {
@@ -225,6 +231,7 @@ pub enum Expr {
     PrefixExpr(PrefixNode, Box<ExprNode>),
     InfixExpr(InfixNode, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
+    Apply(Ident, Vec<ExprNode>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -264,6 +271,12 @@ impl Unparse for ExprNode {
             Lambda(e) => {
                 out.append(&mut e.unparse());
             }
+            Apply(ident, args) => {
+                out.append(&mut ident.unparse());
+                for arg in args {
+                    out.append(&mut arg.unparse());
+                }
+            }
         };
         self.s.unparse(out)
     }
@@ -290,6 +303,12 @@ impl Unparse for ExprNode {
             Lambda(e) => {
                 out.push(e.to_string());
             }
+            Apply(ident, args) => {
+                out.push(ident.to_string());
+                for arg in args {
+                    out.push(arg.to_string());
+                }
+            }
         };
         out.join("")
     }
@@ -309,7 +328,11 @@ impl SExpr for ExprNode {
                 let s = expr.sexpr()?;
                 Ok(S::Cons(prefix.to_string(), vec![s]))
             }
-            Lambda(e) => e.sexpr()
+            Lambda(e) => e.sexpr(),
+            Apply(ident, args) => {
+                let s_args = args.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
+                Ok(S::Cons(ident.to_string(), s_args))
+            }
         }
     }
 }
@@ -555,15 +578,31 @@ impl Literal {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Location {
+    pub offset: usize,
+    pub line: usize,
+    pub col: usize,
+    pub fragment: String,
+}
+
+impl Location {
+    pub fn new(offset: usize, line: usize, col: usize, fragment: String) -> Self {
+        Self { offset, line, col, fragment }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct LiteralNode {
     pub value: Literal,
     pub s: Surround,
+    pub loc: Location,
 }
 impl LiteralNode {
-    pub fn new(value: Literal, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
+    pub fn new(value: Literal, pre: Vec<Tok>, post: Vec<Tok>, loc: Location) -> Self {
         Self {
             value,
             s: Surround { pre, post },
+            loc
         }
     }
 
@@ -594,10 +633,11 @@ impl SExpr for LiteralNode {
 pub struct Ident {
     pub value: String,
     pub s: Surround,
+    pub loc: Location,
 }
 impl Ident {
     pub fn from_token(token: Token) -> Option<Self> {
-        let maybe_ident = match token.tok {
+        let maybe_ident = match &token.tok {
             Tok::Ident(s) => Some(s),
             _ => None,
         };
@@ -607,11 +647,19 @@ impl Ident {
                     pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
                     post: token.post.iter().map(|t| t.toks()).flatten().collect(),
                 },
-                value: ident,
+                value: ident.clone(),
+                loc: token.to_location(),
             }),
             None => None,
         }
     }
+
+    pub fn tok(&self) -> Tok {
+        Tok::Ident(self.value.clone())
+    }
+    //pub fn token(&self) -> Token {
+        //Token { pre: self.s.pre, post: self.s.post, tok: self.tok() } 
+    //}
 }
 
 impl Unparse for Ident {

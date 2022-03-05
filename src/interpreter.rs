@@ -77,16 +77,22 @@ impl InterpretValue {
         match self {
             Self::Literal(Literal::IntLiteral(u)) => Ok(*u as f64),
             Self::Literal(Literal::FloatLiteral(f)) => Ok(*f),
+            Self::Lambda(e) => Err(InterpretError::Runtime {
+                message: format!(
+                             "Expecting a number, got a lambda: {} on line:{}, column:{}, fragment:{}",
+                             self.unlex(), e.loc.line, e.loc.col, e.loc.fragment),
+                line: e.loc.line,
+            }),
             _ => Err(InterpretError::Runtime {
-                message: "Expecting a number".into(),
+                message: format!("Expecting a number: {}", self.unlex()),
                 line: 0,
             }),
         }
     }
 
     pub fn plus(&self, other: &Self) -> Result<Self, InterpretError> {
-        let left = self.check_number()?;
-        let right = other.check_number()?;
+        let left = self.check_number().unwrap();
+        let right = other.check_number().unwrap();
         let eval = left + right;
         Ok(Self::Literal(Literal::FloatLiteral(eval)))
     }
@@ -200,14 +206,21 @@ impl Interpreter {
             Expr::Lambda(e) => {
                 Ok(InterpretValue::Lambda(e.clone()))
             }
+            Expr::Apply(ident, args) => {
+                let f = self.globals.get(ident.value.as_str())?;
+                let env = Environment::default();
+                //env.define(
+                Ok(InterpretValue::Literal(Literal::IntLiteral(0)))
+            }
         }
     }
 
     pub fn execute(&mut self, stmt: StmtNode) -> Result<(), InterpretError> {
         match stmt.value {
             Stmt::Expr(expr) => {
-                let value = self.evaluate(&expr)?;
                 println!("sexpr Expr: {}", expr.sexpr().unwrap());
+                println!("expr Expr: {}", expr.unlex());
+                let value = self.evaluate(&expr)?;
                 println!("Evaluate Expr: {} -> {}", expr.unlex(), value.unlex());
             }
             Stmt::Lit(lit) => {
