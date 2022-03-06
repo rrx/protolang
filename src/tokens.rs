@@ -41,6 +41,8 @@ pub enum Tok {
     Else,
     Return,
     Yield,
+    Null,
+
     // Operators
     Assign,
     Equals,
@@ -70,10 +72,6 @@ pub enum Tok {
 }
 
 impl Tok {
-    pub fn to_string(&self) -> String {
-        self.unlex()
-    }
-
     pub fn unlex(&self) -> String {
         use Tok::*;
         String::from(match self {

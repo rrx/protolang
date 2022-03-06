@@ -1,4 +1,6 @@
 use crate::sexpr::*;
+use crate::value::*;
+use crate::function::*;
 use crate::tokens::{Tok, Token};
 
 #[derive(PartialEq, Debug, Clone)]
@@ -49,7 +51,7 @@ pub trait Unparse {
             .collect::<Vec<_>>()
             .join("")
     }
-    fn to_string(&self) -> String;
+    //fn to_string(&self) -> String;
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -88,15 +90,17 @@ impl Unparse for StmtNode {
             Stmt::Invalid(s) => vec![Tok::Invalid(s.clone())],
         })
     }
-    fn to_string(&self) -> String {
+}
+impl StmtNode {
+    fn unlex2(&self) -> String {
         match &self.value {
-            Stmt::Expr(expr) => expr.to_string(),
-            Stmt::Lit(lit) => lit.to_string(),
+            Stmt::Expr(expr) => expr.unlex(),
+            Stmt::Lit(lit) => lit.unlex(),
             Stmt::Assign(ident, expr) => {
-                vec![ident.to_string(), (Tok::Assign).unlex(), expr.to_string()].join("")
+                vec![ident.unlex(), (Tok::Assign).unlex(), expr.unlex()].join("")
             }
             Stmt::Block(_) => {
-                self.unparse().iter().map(|s| s.to_string()).collect::<Vec<_>>().join("")
+                self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
             }
             Stmt::Invalid(s) => s.clone(),
         }
@@ -147,7 +151,7 @@ impl Unparse for Program {
                 .collect(),
         )
     }
-    fn to_string(&self) -> String {
+    fn unlex(&self) -> String {
         self.unparse().iter()
             .map(|t| t.unlex())
             .collect::<Vec<_>>()
@@ -159,69 +163,6 @@ impl SExpr for Program {
     fn sexpr(&self) -> SResult<S> {
         let results = self.value.iter().filter_map(|v| v.sexpr().ok()).collect();
         Ok(S::Cons("program".into(), results))
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct Params {
-    pub s: Surround,
-    pub value: Vec<Ident>,
-}
-impl Params {
-    pub fn new(value: Vec<Ident>) -> Self {
-        Self {
-            s: Surround::default(),
-            value,
-        }
-    }
-}
-impl Unparse for Params {
-    fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(self.value.iter().map(|s| s.unparse()).flatten().collect::<Vec<_>>())
-    }
-
-    fn to_string(&self) -> String {
-        self.unparse().iter().map(|t| t.to_string()).collect::<Vec<_>>().join("")
-    }
-}
-impl SExpr for Params {
-    fn sexpr(&self) -> SResult<S> {
-        let params = self.value.iter().map_while(|v| v.sexpr().ok()).collect::<Vec<_>>();
-        if params.len() < self.value.len() {
-            return Err(SError::Invalid("Unable to parse parameters".into()));
-        }
-        Ok(S::Cons("params".into(), params))
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct Lambda {
-    pub s: Surround,
-    pub params: Params,
-    pub expr: Box<StmtNode>,
-    pub loc: Location,
-}
-impl Lambda {
-    pub fn new(params: Params, expr: StmtNode, loc: Location) -> Self {
-        Self {
-            s: Surround::default(),
-            params, expr: Box::new(expr),
-            loc
-        }
-    }
-}
-impl Unparse for Lambda  {
-    fn unparse(&self) -> Vec<Tok> {
-        vec![vec![Tok::Backslash], self.params.unparse(), vec![Tok::LeftArrow], self.expr.unparse()].into_iter().flatten().collect()
-    }
-
-    fn to_string(&self) -> String {
-        vec![self.params.to_string(), Tok::LeftArrow.to_string(), self.expr.to_string()].join("")
-    }
-}
-impl SExpr for Lambda {
-    fn sexpr(&self) -> SResult<S> {
-        Ok(S::Cons("lambda".into(), vec![self.params.sexpr()?, self.expr.sexpr()?]))
     }
 }
 
@@ -287,37 +228,38 @@ impl Unparse for ExprNode {
         };
         self.s.unparse(out)
     }
-
-    fn to_string(&self) -> String {
+}
+impl ExprNode {
+    fn unlex2(&self) -> String {
         use Expr::*;
         let mut out = vec![];
         match &self.value {
             IdentExpr(x) => {
-                out.push(x.to_string());
+                out.push(x.unlex());
             }
             LitExpr(x) => {
-                out.push(x.to_string());
+                out.push(x.unlex());
             }
             PrefixExpr(prefix, expr) => {
-                out.push(prefix.to_string());
-                out.push(expr.to_string());
+                out.push(prefix.unlex());
+                out.push(expr.unlex());
             }
             InfixExpr(op, left, right) => {
-                out.push(left.to_string());
-                out.push(op.to_string());
-                out.push(right.to_string());
+                out.push(left.unlex());
+                out.push(op.unlex());
+                out.push(right.unlex());
             }
             Lambda(e) => {
                 out.push(e.to_string());
             }
             Apply(ident, args) => {
-                out.push(ident.to_string());
+                out.push(ident.unlex());
                 for arg in args {
-                    out.push(arg.to_string());
+                    out.push(arg.unlex());
                 }
             }
             Block(_) => {
-                out.append(&mut self.unparse().into_iter().map(|s| s.to_string()).collect::<Vec<_>>());
+                out.append(&mut self.unparse().into_iter().map(|t| t.unlex()).collect::<Vec<_>>());
             }
         };
         out.join("")
@@ -336,12 +278,12 @@ impl SExpr for ExprNode {
             }
             PrefixExpr(prefix, expr) => {
                 let s = expr.sexpr()?;
-                Ok(S::Cons(prefix.to_string(), vec![s]))
+                Ok(S::Cons(prefix.unlex(), vec![s]))
             }
             Lambda(e) => e.sexpr(),
             Apply(ident, args) => {
                 let s_args = args.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
-                Ok(S::Cons(ident.to_string(), s_args))
+                Ok(S::Cons(ident.value.clone(), s_args))
             }
             Block(stmts) => Ok(S::Cons(
                 "block".into(),
@@ -412,7 +354,7 @@ impl Unparse for PrefixNode {
         self.s.unparse(vec![self.token()])
     }
 
-    fn to_string(&self) -> String {
+    fn unlex(&self) -> String {
         self.token().unlex()
     }
 }
@@ -503,10 +445,6 @@ impl Unparse for InfixNode {
     fn unlex(&self) -> String {
         self.token().unlex()
     }
-
-    fn to_string(&self) -> String {
-        self.token().unlex()
-    }
 }
 
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
@@ -560,38 +498,6 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Infix>) {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Literal {
-    IntLiteral(u64),
-    FloatLiteral(f64),
-    BoolLiteral(bool),
-    StringLiteral(String),
-    Invalid(String),
-}
-
-impl Literal {
-    pub fn from_token(token: Tok) -> Option<Literal> {
-        match token {
-            Tok::IntLiteral(u) => Some(Literal::IntLiteral(u)),
-            Tok::FloatLiteral(u) => Some(Literal::FloatLiteral(u)),
-            Tok::StringLiteral(s) => Some(Literal::StringLiteral(s.clone())),
-            Tok::BoolLiteral(b) => Some(Literal::BoolLiteral(b)),
-            //Tok::Invalid(s) => Some(Literal::Invalid(s.clone())),
-            _ => None,
-        }
-    }
-    pub fn token(&self) -> Tok {
-        use Literal::*;
-        match &self {
-            IntLiteral(x) => Tok::IntLiteral(*x),
-            FloatLiteral(x) => Tok::FloatLiteral(*x),
-            BoolLiteral(x) => Tok::BoolLiteral(*x),
-            StringLiteral(x) => Tok::StringLiteral(x.clone()),
-            Invalid(x) => Tok::Invalid(x.clone()),
-        }
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
 pub struct Location {
     pub offset: usize,
     pub line: usize,
@@ -607,12 +513,12 @@ impl Location {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct LiteralNode {
-    pub value: Literal,
+    pub value: Value,
     pub s: Surround,
     pub loc: Location,
 }
 impl LiteralNode {
-    pub fn new(value: Literal, loc: Location) -> Self {
+    pub fn new(value: Value, loc: Location) -> Self {
         Self {
             value,
             s: Surround::default(),
@@ -625,20 +531,22 @@ impl Unparse for LiteralNode {
     fn unparse(&self) -> Vec<Tok> {
         self.s.unparse(vec![self.value.token()])
     }
-    fn to_string(&self) -> String {
-        self.value.token().unlex()
-    }
+    //fn unlex(&self) -> String {
+        //self.value.token().unlex()
+    //}
 }
 
 impl SExpr for LiteralNode {
     fn sexpr(&self) -> SResult<S> {
-        use Literal::*;
+        use Value::*;
         match &self.value {
             IntLiteral(x) => Ok(S::Atom(x.to_string())),
             FloatLiteral(x) => Ok(S::Atom(x.to_string())),
             BoolLiteral(x) => Ok(S::Atom(x.to_string())),
             StringLiteral(x) => Ok(S::Atom(x.to_string())),
             Invalid(s) => Err(SError::Invalid(s.clone())),
+            Null => Ok(S::Null),
+            Callable(s) => Ok(S::Atom(s.value.clone())),
         }
     }
 }
@@ -680,9 +588,9 @@ impl Unparse for Ident {
     fn unparse(&self) -> Vec<Tok> {
         self.s.unparse(vec![Tok::Ident(self.value.clone())])
     }
-    fn to_string(&self) -> String {
-        self.value.clone()
-    }
+    //fn unlex(&self) -> String {
+        //self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
+    //}
 }
 
 impl SExpr for Ident {

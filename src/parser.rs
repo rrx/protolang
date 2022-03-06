@@ -1,6 +1,8 @@
 use nom::*;
 
 use crate::ast::*;
+use crate::value::*;
+use crate::function::*;
 use crate::results::*;
 use crate::tokens::*;
 use nom::branch::*;
@@ -265,11 +267,12 @@ fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
     let (i1, t1) = take_one_any(i.clone())?;
     let token = &t1.tok[0];
     let maybe_lit = match &token.tok {
-        Tok::IntLiteral(u) => Some(Literal::IntLiteral(*u)),
-        Tok::FloatLiteral(u) => Some(Literal::FloatLiteral(*u)),
-        Tok::StringLiteral(s) => Some(Literal::StringLiteral(s.clone())),
-        Tok::BoolLiteral(b) => Some(Literal::BoolLiteral(*b)),
-        //Tok::Invalid(s) => Some(Literal::Invalid(s.clone())),
+        Tok::IntLiteral(u) => Some(Value::IntLiteral(*u)),
+        Tok::FloatLiteral(u) => Some(Value::FloatLiteral(*u)),
+        Tok::StringLiteral(s) => Some(Value::StringLiteral(s.clone())),
+        Tok::BoolLiteral(b) => Some(Value::BoolLiteral(*b)),
+        Tok::Null => Some(Value::Null),
+        //Tok::Invalid(s) => Some(Value::Invalid(s.clone())),
         _ => None,
     };
     if let Some(lit) = maybe_lit {
@@ -444,7 +447,7 @@ mod tests {
             println!("prog_rest {:?}", prog_rest.toks());
         }
         println!("prog {:?}", (&prog));
-        let s2 = prog.to_string();
+        let s2 = prog.unlex();
         println!("test {:?}", (s, &s2));
         s == s2
     }

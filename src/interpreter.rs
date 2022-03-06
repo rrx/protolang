@@ -1,4 +1,6 @@
 use crate::ast::*;
+use crate::value::*;
+use crate::function::*;
 use crate::sexpr::SExpr;
 use std::collections::HashMap;
 use std::result::Result;
@@ -52,7 +54,7 @@ pub enum InterpretError {
 
 #[derive(Debug, Clone)]
 pub enum InterpretValue {
-    Literal(Literal),
+    Literal(Value),
     Lambda(Lambda),
 }
 
@@ -60,23 +62,23 @@ impl InterpretValue {
 
     pub fn unlex(&self) -> String {
         match self {
-            InterpretValue::Literal(x) => x.token().to_string(),
+            InterpretValue::Literal(x) => x.token().unlex(),
             InterpretValue::Lambda(x) => x.unlex(),
         }
     }
 
     pub fn is_number(&self) -> bool {
         match self {
-            Self::Literal(Literal::IntLiteral(_)) => true,
-            Self::Literal(Literal::FloatLiteral(_)) => true,
+            Self::Literal(Value::IntLiteral(_)) => true,
+            Self::Literal(Value::FloatLiteral(_)) => true,
             _ => false,
         }
     }
 
     fn check_number(&self) -> Result<f64, InterpretError> {
         match self {
-            Self::Literal(Literal::IntLiteral(u)) => Ok(*u as f64),
-            Self::Literal(Literal::FloatLiteral(f)) => Ok(*f),
+            Self::Literal(Value::IntLiteral(u)) => Ok(*u as f64),
+            Self::Literal(Value::FloatLiteral(f)) => Ok(*f),
             Self::Lambda(e) => Err(InterpretError::Runtime {
                 message: format!(
                              "Expecting a number, got a lambda: {} on line:{}, column:{}, fragment:{}",
@@ -94,14 +96,14 @@ impl InterpretValue {
         let left = self.check_number().unwrap();
         let right = other.check_number().unwrap();
         let eval = left + right;
-        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+        Ok(Self::Literal(Value::FloatLiteral(eval)))
     }
 
     pub fn minus(&self, other: &Self) -> Result<Self, InterpretError> {
         let left = self.check_number()?;
         let right = other.check_number()?;
         let eval = left - right;
-        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+        Ok(Self::Literal(Value::FloatLiteral(eval)))
     }
 
     pub fn exp(&self, other: &Self) -> Result<Self, InterpretError> {
@@ -109,60 +111,60 @@ impl InterpretValue {
         let right = other.check_number()?;
         let eval = left.powf(right);
         println!("{:?}", (&left, &right, &eval));
-        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+        Ok(Self::Literal(Value::FloatLiteral(eval)))
     }
 
     pub fn multiply(&self, other: &Self) -> Result<Self, InterpretError> {
         let left = self.check_number()?;
         let right = other.check_number()?;
         let eval = left * right;
-        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+        Ok(Self::Literal(Value::FloatLiteral(eval)))
     }
 
     pub fn divide(&self, other: &Self) -> Result<Self, InterpretError> {
         let left = self.check_number()?;
         let right = other.check_number()?;
         let eval = left / right;
-        Ok(Self::Literal(Literal::FloatLiteral(eval)))
+        Ok(Self::Literal(Value::FloatLiteral(eval)))
     }
 
     pub fn lte(&self, other: &Self) -> Result<Self, InterpretError> {
         let left = self.check_number()?;
         let right = other.check_number()?;
         let eval = left <= right;
-        Ok(Self::Literal(Literal::BoolLiteral(eval)))
+        Ok(Self::Literal(Value::BoolLiteral(eval)))
     }
 
     pub fn lt(&self, other: &Self) -> Result<Self, InterpretError> {
         let left = self.check_number()?;
         let right = other.check_number()?;
         let eval = left < right;
-        Ok(Self::Literal(Literal::BoolLiteral(eval)))
+        Ok(Self::Literal(Value::BoolLiteral(eval)))
     }
 
     pub fn gte(&self, other: &Self) -> Result<Self, InterpretError> {
         let left = self.check_number()?;
         let right = other.check_number()?;
         let eval = left >= right;
-        Ok(Self::Literal(Literal::BoolLiteral(eval)))
+        Ok(Self::Literal(Value::BoolLiteral(eval)))
     }
 
     pub fn gt(&self, other: &Self) -> Result<Self, InterpretError> {
         let left = self.check_number()?;
         let right = other.check_number()?;
         let eval = left > right;
-        Ok(Self::Literal(Literal::BoolLiteral(eval)))
+        Ok(Self::Literal(Value::BoolLiteral(eval)))
     }
 
     pub fn prefix(&self, prefix: &Prefix) -> Result<Self, InterpretError> {
         match prefix {
             Prefix::PrefixPlus => {
                 let right = self.check_number()?;
-                Ok(Self::Literal(Literal::FloatLiteral(right)))
+                Ok(Self::Literal(Value::FloatLiteral(right)))
             }
             Prefix::PrefixMinus => {
                 let right = self.check_number()?;
-                Ok(Self::Literal(Literal::FloatLiteral(-right)))
+                Ok(Self::Literal(Value::FloatLiteral(-right)))
             }
             _ => unimplemented!(),
         }
@@ -210,10 +212,10 @@ impl Interpreter {
                 let f = self.globals.get(ident.value.as_str())?;
                 let env = Environment::default();
                 //env.define(
-                Ok(InterpretValue::Literal(Literal::IntLiteral(0)))
+                Ok(InterpretValue::Literal(Value::IntLiteral(0)))
             }
             Expr::Block(stmts) => {
-                Ok(InterpretValue::Literal(Literal::IntLiteral(0)))
+                Ok(InterpretValue::Literal(Value::IntLiteral(0)))
             }
         }
     }
