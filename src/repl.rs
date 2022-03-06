@@ -109,8 +109,7 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
                 //println!("{:?}", (&prog));
                 let sexpr = prog.sexpr().unwrap();
                 println!("XXXsexpr {}", &sexpr);
-                let mut interp = Interpreter::default();
-                interp.interpret(prog);
+                interpreter.interpret(prog);
             }
         }
         Err(e) => {

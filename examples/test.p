@@ -23,6 +23,8 @@ b = 3
 c = 4
 a/b/c
 y < y
+(assert (y <= y))
+(assert (y < y))
 \x -> y;
 f = \x -> x^2;
 f

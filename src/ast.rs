@@ -538,16 +538,7 @@ impl Unparse for LiteralNode {
 
 impl SExpr for LiteralNode {
     fn sexpr(&self) -> SResult<S> {
-        use Value::*;
-        match &self.value {
-            IntLiteral(x) => Ok(S::Atom(x.to_string())),
-            FloatLiteral(x) => Ok(S::Atom(x.to_string())),
-            BoolLiteral(x) => Ok(S::Atom(x.to_string())),
-            StringLiteral(x) => Ok(S::Atom(x.to_string())),
-            Invalid(s) => Err(SError::Invalid(s.clone())),
-            Null => Ok(S::Null),
-            Callable(s) => Ok(S::Atom(s.value.clone())),
-        }
+        self.value.sexpr()
     }
 }
 

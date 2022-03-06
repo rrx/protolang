@@ -8,3 +8,4 @@ pub mod tokens;
 pub mod value;
 pub mod function;
 pub mod repl;
+pub mod builtins;

@@ -111,9 +111,13 @@ impl Tok {
             LeftArrow => "->".into(),
             RightArrow => "<-".into(),
             Backslash => "\\".into(),
+            Null => "null".into(),
 
             EOF => "".into(),
-            _ => "[UNKNOWN]".into(),
+            _ => {
+                println!("Panic: Unable to unlex token: {:?}", self);
+                unreachable!()//"[UNKNOWN]".into(),
+            }
         })
     }
 

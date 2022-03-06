@@ -8,6 +8,19 @@ use std::{
     fmt::{Debug, Display}
 };
 
+#[derive(Debug, Clone)]
+pub struct CallableNode {
+    pub value: Box<dyn Callable>,
+    pub s: Surround,
+    pub loc: Location,
+}
+
+impl CallableNode {
+    pub fn new(value: Box<dyn Callable>, loc: Location) -> Self {
+        Self { value, s: Surround::default(), loc }
+    }
+}
+
 pub trait Callable: Debug + Display {
     fn arity(&self) -> usize;
     fn call(&self, interp: &mut Interpreter, args: Vec<Value>) -> Result<Value, InterpretError>;
@@ -67,6 +80,10 @@ impl Lambda {
             params, expr: Box::new(expr),
             loc
         }
+    }
+    pub fn node(&self) -> CallableNode {
+        let c = self.box_clone();
+        CallableNode::new(c, self.loc.clone())
     }
 }
 
