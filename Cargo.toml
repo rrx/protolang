@@ -10,3 +10,5 @@ argh = "0.1"
 codespan = "0.11"
 nom = "7"
 nom_locate = "4"
+anyhow = { version = "1", feature = ["backtrace"] }
+rustyline = "9.1"

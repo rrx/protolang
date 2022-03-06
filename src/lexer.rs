@@ -351,18 +351,18 @@ fn lex_op_bool(i: Span) -> IResult<Span, Tok> {
     ))(i)
 }
 
-pub fn lex_eof<'a>(i: &'a str) -> IResult<Span<'a>, Vec<Token>> {
+pub fn lex_eof<'a>(i: &'a str) -> IResult<Span<'a>, Vec<Token<'a>>> {
     let (i, pos) = position(span(i))?;
     let (i, mut r) = lex_tokens(i)?;
     r.push(token(Tok::EOF, pos));
     Ok((i, r))
 }
 
-pub fn lex<'a>(i: &str) -> IResult<Span, Vec<Token>> {
+pub fn lex<'a>(i: &'a str) -> IResult<Span<'a>, Vec<Token<'a>>> {
     lex_tokens(span(i))
 }
 
-fn span(s: &str) -> Span {
+fn span<'a>(s: &'a str) -> Span<'a> {
     Span::new(s)
 }
 
