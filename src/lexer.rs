@@ -16,6 +16,8 @@ use nom::{
     IResult, InputIter,
 };
 
+use std::collections::VecDeque;
+
 use crate::tokens::*;
 use nom_locate::position;
 
@@ -364,7 +366,7 @@ fn lex_token_with_linespace<'a>(i: Span<'a>) -> PResult<Span<'a>, Vec<Token<'a>>
     ))(i)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LexType {
     Token,
     Newline,
@@ -372,10 +374,10 @@ pub enum LexType {
     EOF,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LexNext<'a>(LexType, Vec<Token<'a>>);
 
-fn lex_token_eof(i: Span) -> PResult<Span, Token> {
+fn _lex_token_eof(i: Span) -> PResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, _) = eof(i)?;
     let t = token(Tok::EOF, pos).clone(); 
@@ -383,11 +385,6 @@ fn lex_token_eof(i: Span) -> PResult<Span, Token> {
 }
 
 fn lex_next(i: Span) -> PResult<Span, LexNext> {
-    //let (i, pos) = position(i)?;
-    //if i.len() == 0 {
-        //let (i, pos) = position(i)?;
-        //return Ok((i, LexNext(LexType::EOF, vec![token(Tok::EOF, pos)])));
-    //}
     context("next",
         alt((
                 map(many1(lex_newline), |v| LexNext(LexType::Newline, v)),
@@ -403,11 +400,12 @@ pub struct LexerState<'a> {
     acc: Vec<Token<'a>>,
     //tokens: Tokens<'a>,
     indent_size: usize,
-    whitespace: Vec<Token<'a>>
+    whitespace: Vec<Token<'a>>,
+    trail: VecDeque<LexNext<'a>>,
 }
 impl<'a> Default for LexerState<'a> {
     fn default() -> Self {
-        Self { count: 0, acc: vec![], whitespace: vec![], indent_size: 0 }
+        Self { count: 0, acc: vec![], whitespace: vec![], indent_size: 0, trail: VecDeque::new() }
     }
 }
 impl<'a> LexerState<'a> {
@@ -426,6 +424,7 @@ impl<'a> LexerState<'a> {
             _ => unreachable!()
         }
     }
+
     pub fn push_token(&mut self, mut token: Token<'a>) {
         println!("Push: {:?}", &token);
         token.s.prepend(self.whitespace.drain(..).map(|v| v.toks()).flatten().collect::<Vec<_>>());
@@ -458,8 +457,10 @@ impl<'a> LexerState<'a> {
             last.s.append(self.whitespace.drain(..).map(|v| v.toks()).flatten().collect::<Vec<_>>());
         }
     }
+
     pub fn tokens(&'a mut self) -> Tokens<'a> {
         self.flush();
+        self.dump();
         Tokens::new(&self.acc[..])
     }
 
@@ -473,7 +474,37 @@ impl<'a> LexerState<'a> {
         }
     }
 
+    pub fn dump(&self) {
+        println!("State");
+        for token in &self.acc {
+            println!("\tToken: {:?}", token);
+        }
+        for next in &self.trail {
+            println!("\tTrail: {:?}", next);
+        }
+    }
+
     pub fn push(&mut self, mut next: LexNext<'a>) {
+        if self.trail.len() == 3 {
+            self.trail.pop_back();
+        }
+        let maybe_front = self.trail.front();
+        let push_front = match maybe_front {
+            Some(front) => front.0 != next.0 ,
+            None => false
+        };
+        if push_front {
+            self.trail.push_front(next.clone());
+        }
+        // [] + L -> [L], Indent([L]), pending indentation
+        // [] + T -> [T], Ident([]), got a token, waiting for L, or N, add ws to T.pre
+        // [] + N -> [] Indent([]) - reset
+        // [T] + L -> [T] - Ident([]) - no identation, T.post += L
+        // [T] + N -> [] -> Indent([]) - T.post += N, reset
+        // [T] + T -> [T] -> Indent([]) - reset to last T
+        // [L] + N -> [],  Indent([]), reset, add to whitespace
+        // [L] + T -> [T], indent([L]), T.pre += L
+        // [L] + L2 -> [L+L2], indent([L,L2])
         match next.0 {
             LexType::Token | LexType::EOF => {
                 let t = next.1.pop().unwrap();
@@ -495,9 +526,9 @@ impl<'a> LexerState<'a> {
     pub fn lex(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
         let (i, tokens) = many0(lex_next)(span(i))?;
         println!("all: {:?}", (&tokens));
-        tokens.into_iter().for_each(|item| {
-            println!("Next: {:?}", (&item));
-            self.push(item);
+        tokens.into_iter().for_each(|token| {
+            println!("Next: {:?}", (&token));
+            self.push(token);
             println!("State: {:?}", (&self));
         });
         Ok((i, ()))
