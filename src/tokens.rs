@@ -5,6 +5,7 @@ use nom_locate::LocatedSpan;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
 use crate::ast::{Location, Surround};
+use std::fmt;
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
@@ -143,13 +144,25 @@ impl Tok {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Token<'a> {
     pub s: Surround,
     //pub pre: Vec<Token<'a>>,
     //pub post: Vec<Token<'a>>,
     pub tok: Tok,
     pub pos: Span<'a>,
+}
+
+impl<'a> fmt::Debug for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Token")
+         .field("tok", &self.tok)
+         .field("pre", &self.s.pre)
+         .field("post", &self.s.post)
+         .field("line", &self.pos.location_line())
+         .field("col", &self.pos.get_column())
+         .finish()
+    }
 }
 
 impl<'a> Token<'a> {

@@ -2,24 +2,84 @@ use crate::sexpr::*;
 use crate::value::*;
 use crate::function::*;
 use crate::tokens::{Tok, Token};
+use std::fmt;
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Linespace(pub usize, pub usize);
+impl Default for Linespace {
+    fn default() -> Self {
+        Self(0,0)
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Surround {
     pub pre: Vec<Tok>,
     pub post: Vec<Tok>,
+    pub has_trailing_linespace: bool,
+    pub has_preceding_linespace: bool,
+    pub has_newline: bool,
+    pub linespace: Linespace,
 }
+
 impl Default for Surround {
     fn default() -> Self {
         Self {
             pre: vec![],
             post: vec![],
+            has_trailing_linespace: false,
+            has_preceding_linespace: false,
+            has_newline: false,
+            linespace: Linespace::default()
         }
     }
 }
 
 impl Surround {
     pub fn new(pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        Self { pre, post }
+        let mut x = Self {
+            pre, post,
+            has_preceding_linespace: false,
+            has_trailing_linespace: false,
+            has_newline: false,
+            linespace: Linespace::default(),
+        };
+        x._update();
+        x
+    }
+
+    fn _update(&mut self) {
+        let mut has_trailing_linespace = false;
+        let mut has_newline = false;
+        let mut linespace_after = 0;
+        for e in &self.post {
+            if !has_newline {
+                if e.is_linespace() {
+                    linespace_after += 1;
+                } else if e.is_newline() {
+                    has_newline = true;
+                    if linespace_after > 0 {
+                        has_trailing_linespace = true;
+                    }
+                    break;
+                }
+            }
+        }
+        self.has_trailing_linespace = has_trailing_linespace;
+        self.has_newline = has_newline;
+
+        let mut has_preceding_linespace = false;
+        let mut linespace_before = 0;
+        for e in self.pre.iter().rev() {
+            if e.is_linespace() {
+                linespace_before += 1;
+            } else {
+                break;
+            }
+        }
+
+        self.has_preceding_linespace = has_preceding_linespace;
+        self.linespace = Linespace(linespace_before, linespace_after);
     }
 
     pub fn prepend(&mut self, toks: Vec<Tok>) {
@@ -27,11 +87,15 @@ impl Surround {
             let mut v = toks;
             v.append(&mut self.pre);
             self.pre = v;
+            self._update();
         }
     }
 
     pub fn append(&mut self, toks: Vec<Tok>) {
-        self.post.append(&mut toks.clone());
+        if toks.len() > 0 {
+            self.post.append(&mut toks.clone());
+            self._update();
+        }
     }
 
     pub fn unparse(&self, tokens: Vec<Tok>) -> Vec<Tok> {
@@ -51,7 +115,6 @@ pub trait Unparse {
             .collect::<Vec<_>>()
             .join("")
     }
-    //fn to_string(&self) -> String;
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -93,22 +156,6 @@ impl Unparse for StmtNode {
         })
     }
 }
-impl StmtNode {
-    fn unlex2(&self) -> String {
-        match &self.value {
-            Stmt::Expr(expr) => expr.unlex(),
-            Stmt::Lit(lit) => lit.unlex(),
-            Stmt::Assign(ident, expr) => {
-                vec![ident.unlex(), (Tok::Assign).unlex(), expr.unlex()].join("")
-            }
-            Stmt::Block(_) => {
-                self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
-            }
-            Stmt::Invalid(s) => s.clone(),
-        }
-    }
-}
-
 impl SExpr for StmtNode {
     fn sexpr(&self) -> SResult<S> {
         match &self.value {
@@ -346,7 +393,7 @@ impl PrefixNode {
 
     pub fn from_tokens(prefix: Prefix, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
         Self {
-            s: Surround { pre, post },
+            s: Surround::new(pre, post),
             value: prefix,
         }
     }
@@ -432,7 +479,7 @@ impl InfixNode {
         post: Vec<Tok>,
     ) -> Self {
         Self {
-            s: Surround { pre, post },
+            s: Surround::new(pre, post),
             value: infix,
             precedence,
         }

@@ -416,8 +416,6 @@ impl<'a> LexerState<'a> {
         match lexer.lex_eof(s.into()) {
             Ok((rest, r)) => {
                 Some(lexer)
-                //let tokens = lexer.tokens();
-                //Some(tokens)
             }
             Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors { 
@@ -495,24 +493,19 @@ impl<'a> LexerState<'a> {
     //}
 
     pub fn lex(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
-        //let (i, _) = lex_tokens(span(i))?;
-        //Ok((i, ()))
         let (i, tokens) = many0(lex_next)(span(i))?;
         println!("all: {:?}", (&tokens));
         tokens.into_iter().for_each(|item| {
-            println!("Next: {:?}", (&item, &self));
+            println!("Next: {:?}", (&item));
             self.push(item);
+            println!("State: {:?}", (&self));
         });
-        //let (i, pos) = position(i)?;
-        //state.push_token(token(Tok::EOF, pos));
         Ok((i, ()))
     }
 
     pub fn lex_eof(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
         let (i, _) = self.lex(i)?;
         let (i, pos) = position(i)?;
-        //let (i, pos) = position(span(i))?;
-        //let (i, mut state) = lex_tokens(i)?;
         // flush before pushing EOF
         // we only want surround on EOF if we have a whitespace file
         self.flush();
@@ -520,34 +513,6 @@ impl<'a> LexerState<'a> {
         println!("state: {:?}", self);
         Ok((i, ()))
     }
-}
-
-fn _lex_tokens(i: Span) -> PResult<Span, LexerState> {
-    let (i, state) = fold_many0(
-        lex_next,
-        LexerState::default,
-        |mut state: LexerState, item| {
-            println!("Next: {:?}", (&item, &state));
-            state.push(item);
-            state
-        },
-    )(i)?;
-    //let (i, pos) = position(i)?;
-    //state.push_token(token(Tok::EOF, pos));
-    Ok((i, state))
-}
-
-
-pub fn _lex_eof<'a>(i: &'a str) -> PResult<Span<'a>, Vec<Token<'a>>> {
-    let mut state = LexerState::default();
-    let (i, _) = state.lex_eof(i)?;
-    Ok((i, state.token_vec()))
-}
-
-pub fn _lex<'a>(i: &'a str) -> PResult<Span<'a>, Vec<Token<'a>>> {
-    let mut state = LexerState::default();
-    let (i, _) = state.lex(i)?;
-    Ok((i, state.token_vec()))
 }
 
 pub fn span<'a>(s: &'a str) -> Span<'a> {
@@ -689,6 +654,19 @@ mod tests {
             "+ 1 / (2 - 5)",
             "x+1",
             "(((((0)))))",
+            "
+            
+                ",
+            "
+f +
+1
+",
+            "
+f = 2 +
+    1
+f +
+    1
+",
         ];
 
         r.iter().for_each(|q| assert!(lexer_losslessness(q)));
@@ -714,11 +692,31 @@ mod tests {
             let mut lexer = LexerState::from_str(q).unwrap();
             let tokens = lexer.tokens();
             let toks = tokens.toks();
-            //let tokens = test_lex(q).unwrap();
-            //let (_, result) = lex(q).unwrap();
-            //let tokens = result.iter().map(|v| v.tok.clone()).collect::<Vec<_>>();
             a.push(EOF);
             assert_eq!(toks, *a);
+
+        });
+    }
+
+    #[test]
+    fn surround() {
+        use crate::ast::Linespace;
+        let r = vec![
+            (".1234", Linespace(0,0)),
+            (".1234\n", Linespace(0,0)),
+            ("\n.1234\n", Linespace(0,0)),
+            ("\n .1234 \n", Linespace(1,1)),
+            (" \n .1234 \n ", Linespace(1,1)),
+            (" \n.1234\n ", Linespace(0,0)),
+            (" \n     \n.1234\n    x    ", Linespace(0,0)),
+            ("\n.1234 + \n  x\n  y \n", Linespace(0,0)),
+        ];
+        r.into_iter().for_each(|(q, ls)| {
+            let mut lexer = LexerState::from_str(q).unwrap();
+            let tokens = lexer.tokens();
+            //let toks = tokens.toks();
+            let tok = tokens.tok.get(0).unwrap();
+            assert_eq!(tok.s.linespace, ls);
 
         });
     }

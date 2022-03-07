@@ -571,6 +571,15 @@ mod tests {
         }
     }
 
+    fn dump_stmt(stmt: &StmtNode) {
+        println!("Stmt: {}", stmt.unlex());
+        println!("\tSurround: {:?}", stmt.s);
+        for token in stmt.unparse() {
+            println!("\tToken:: {:?}", token);
+        }
+    }
+
+
     #[test]
     fn literal() {
         let r = vec![
@@ -657,6 +666,7 @@ mod tests {
             ";",
             "\\x -> y;",
             "f = \\x -> { x^2 };",
+            "x + 1 +\n  2\n  ;\nx+1;\n",
 
         ];
         r.iter().for_each(|v| {
@@ -670,12 +680,18 @@ mod tests {
                     results.iter().for_each(|r| {
                         println!("result {:?}", (&r));
                     });
-                    let result = results.get(0).unwrap();
+
                     if rest.input_len() > 0 {
                         println!("ERROR tokens remaining {:?}", (&rest));
                     }
+
+                    for stmt in &results {
+                        dump_stmt(&stmt);
+                    }
+
                     assert!(rest.input_len() == 0);
-                    let restored = result.unlex();
+
+                    let restored = results.iter().map(|s| s.unlex()).collect::<Vec<_>>().join("");
                     println!("cmp {:?}", (&v, &restored));
                     assert_eq!(v, &restored);
                     println!("remaining {:?}", (&rest.toks()));
