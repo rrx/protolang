@@ -23,12 +23,7 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
     match results {
         Ok((_, _)) => {
             let tokens = lexer.tokens();
-            //toks.iter().for_each(|x| {
-            //println!("[{}] {:?}", filename, x);
-            //});
-            //let tokens = Tokens::new(&toks[..]);
-            //println!("{:?}", (&tokens));
-
+            /*
             match parse_program(tokens.clone()) {
                 Ok((rest, prog)) => {
                     if rest.input_len() > 0 {
@@ -42,8 +37,8 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
                     return Ok(());
                 }
             }
+            */
 
-            //let tokens = Tokens::new(&toks[..]);
             let (maybe_prog, results) = parse_program_with_results(tokens);
             for r in results {
                 match r {

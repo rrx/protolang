@@ -244,9 +244,18 @@ impl Interpreter {
     }
 
     pub fn execute(&mut self, stmt: StmtNode) -> Result<(), InterpretError> {
-        println!("STMT: {:?}", stmt.unparse());
-        println!("STMT: {:?}", stmt.unlex());
-        println!("STMT: {}", stmt.sexpr().unwrap());
+        println!("STMT-unparse: {:?}", stmt.unparse());
+        println!("STMT-unlex: {:?}", stmt.unlex());
+        match stmt.sexpr() {
+            Ok(s) => {
+                println!("STMT-sexpr: {}", s);
+            }
+            Err(e) => {
+                println!("ERROR: {:?}", e);
+                return Err(InterpretError::Runtime { message: "Unable to parse sexpr".into(), line: 0 });
+            }
+        }
+
         match stmt.value {
             Stmt::Expr(expr) => {
                 let value = self.evaluate(&expr)?;
