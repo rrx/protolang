@@ -202,7 +202,15 @@ impl Interpreter {
                     }
                 }
             }
+            Expr::List(elements) => {
+                let mut eval_elements = vec![];
+                for e in elements {
+                    eval_elements.push(self.evaluate(&e)?);
+                }
+                Ok(Value::List(eval_elements))
+            }
             Expr::Lambda(e) => {
+                println!("Lambda({:?})", &e);
                 Ok(Value::Callable(e.node()))
             }
             Expr::Apply(ident, args) => {
@@ -236,27 +244,33 @@ impl Interpreter {
     }
 
     pub fn execute(&mut self, stmt: StmtNode) -> Result<(), InterpretError> {
+        println!("STMT: {:?}", stmt.unparse());
+        println!("STMT: {:?}", stmt.unlex());
+        println!("STMT: {}", stmt.sexpr().unwrap());
         match stmt.value {
             Stmt::Expr(expr) => {
-                println!("sexpr Expr: {}", expr.sexpr().unwrap());
-                println!("expr Expr: {}", expr.unlex());
                 let value = self.evaluate(&expr)?;
                 println!("Evaluate Expr: {} -> {}", expr.unlex(), value.unlex());
+                Ok(())
             }
             Stmt::Lit(lit) => {
                 println!("Evaluate Literal: {:?}", lit.value);
+                Ok(())
             }
             Stmt::Assign(ident, expr) => {
                 let value = self.evaluate(&expr)?;
                 self.globals.define(ident.value.as_str(), &value);
                 // assign value to ident
-                println!("Save {:?} to {}", value, ident.value);
+                println!("Assign {:?} to {}", value, ident.value);
+                Ok(())
+            }
+            Stmt::Invalid(line) => {
+                Err(InterpretError::Runtime { message: format!("Invalid Statement {}", line), line: stmt.loc.line })
             }
             _ => {
-                return Err(InterpretError::Runtime { message: format!("Unimplemented {:?}", stmt.value), line: 0 });
+                Err(InterpretError::Runtime { message: format!("Unimplemented {:?}", stmt.value), line: stmt.loc.line })
             }
         }
-        Ok(())
     }
 
     pub fn interpret(&mut self, program: Program) {

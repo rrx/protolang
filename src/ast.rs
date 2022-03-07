@@ -5,8 +5,8 @@ use crate::tokens::{Tok, Token};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Surround {
-    pre: Vec<Tok>,
-    post: Vec<Tok>,
+    pub pre: Vec<Tok>,
+    pub post: Vec<Tok>,
 }
 impl Default for Surround {
     fn default() -> Self {
@@ -66,12 +66,14 @@ pub enum Stmt {
 pub struct StmtNode {
     pub s: Surround,
     pub value: Stmt,
+    pub loc: Location,
 }
 impl StmtNode {
-    pub fn new(value: Stmt) -> Self {
+    pub fn new(value: Stmt, loc: Location) -> Self {
         Self {
             s: Surround::default(),
             value,
+            loc,
         }
     }
 }
@@ -175,6 +177,7 @@ pub enum Expr {
     PrefixExpr(PrefixNode, Box<ExprNode>),
     InfixExpr(InfixNode, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
+    List(Vec<ExprNode>),
     Apply(Ident, Vec<ExprNode>),
     Block(Vec<StmtNode>),
 }
@@ -213,6 +216,11 @@ impl Unparse for ExprNode {
                 out.append(&mut op.unparse());
                 out.append(&mut right.unparse());
             }
+            List(elements) => {
+                for e in elements {
+                    out.append(&mut e.unparse());
+                }
+            }
             Lambda(e) => {
                 out.append(&mut e.unparse());
             }
@@ -249,6 +257,11 @@ impl ExprNode {
                 out.push(op.unlex());
                 out.push(right.unlex());
             }
+            List(elements) => {
+                for e in elements {
+                    out.push(e.unlex());
+                }
+            }
             Lambda(e) => {
                 out.push(e.to_string());
             }
@@ -280,6 +293,10 @@ impl SExpr for ExprNode {
                 let s = expr.sexpr()?;
                 Ok(S::Cons(prefix.unlex(), vec![s]))
             }
+            List(elements) => {
+                let s_args = elements.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
+                Ok(S::Cons("list".into(), s_args))
+            },
             Lambda(e) => e.sexpr(),
             Apply(ident, args) => {
                 let s_args = args.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
@@ -316,10 +333,11 @@ impl PrefixNode {
         };
         match maybe_prefix {
             Some(prefix) => Some(Self {
-                s: Surround {
-                    pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
-                    post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                },
+                //s: Surround {
+                    //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
+                    //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
+                //},
+                s: token.s,
                 value: prefix,
             }),
             None => None,
@@ -395,10 +413,11 @@ impl InfixNode {
         let (precedence, maybe_prefix) = infix_op(&token.tok);
         match maybe_prefix {
             Some(prefix) => Some(Self {
-                s: Surround {
-                    pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
-                    post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                },
+                //s: Surround {
+                    //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
+                    //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
+                //},
+                s: token.s,
                 value: prefix,
                 precedence,
             }),
@@ -556,10 +575,11 @@ impl Ident {
         };
         match maybe_ident {
             Some(ident) => Some(Self {
-                s: Surround {
-                    pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
-                    post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                },
+                //s: Surround {
+                    //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
+                    //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
+                //},
+                s: token.s.clone(),
                 value: ident.clone(),
                 loc: token.to_location(),
             }),

@@ -1,5 +1,5 @@
 use crate::interpreter::Interpreter;
-use crate::parser::parse_program_with_results;
+use crate::parser::{parse_program, parse_program_with_results};
 use crate::sexpr::SExpr;
 use crate::tokens::Tokens;
 use crate::results::*;
@@ -7,6 +7,7 @@ use crate::lexer;
 use std::{env, io::Write, process};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use nom::InputLength;
 
 pub fn cli() -> anyhow::Result<()> {
     for filename in std::env::args().skip(1) {
@@ -17,15 +18,32 @@ pub fn cli() -> anyhow::Result<()> {
 
 pub fn run_file(filename: &str) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(filename.clone())?.to_string();
-    let results = lexer::lex(contents.as_str());
+    let mut lexer = lexer::LexerState::default();
+    let results = lexer.lex(contents.as_str());
     match results {
-        Ok((_, toks)) => {
+        Ok((_, _)) => {
+            let tokens = lexer.tokens();
             //toks.iter().for_each(|x| {
             //println!("[{}] {:?}", filename, x);
             //});
-            let tokens = Tokens::new(&toks[..]);
+            //let tokens = Tokens::new(&toks[..]);
             //println!("{:?}", (&tokens));
 
+            match parse_program(tokens.clone()) {
+                Ok((rest, prog)) => {
+                    if rest.input_len() > 0 {
+                        println!("ERROR Not Parsed {:?}", rest.to_location());
+                        return Ok(());
+                    }
+                    println!("PROG: {:?}", prog.sexpr());
+                }
+                Err(e) => {
+                    println!("ERROR {:?}", e);
+                    return Ok(());
+                }
+            }
+
+            //let tokens = Tokens::new(&toks[..]);
             let (maybe_prog, results) = parse_program_with_results(tokens);
             for r in results {
                 match r {
@@ -94,9 +112,10 @@ pub fn run_prompt() -> anyhow::Result<()> {
 }
 
 pub fn run(interpreter: &mut Interpreter, source: &str) {
-    match lexer::lex_eof(source) {
-        Ok((_, toks)) => {
-            let tokens = Tokens::new(&toks[..]);
+    let mut lexer = lexer::LexerState::default();
+    match lexer.lex_eof(source) {
+        Ok((_, _)) => {
+            let tokens = lexer.tokens();
             let (maybe_prog, results) = parse_program_with_results(tokens);
             for r in results {
                 match r {
