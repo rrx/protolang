@@ -1,5 +1,4 @@
-use crate::ast::{Location, Surround};
-use crate::lexer::LexerState;
+use crate::lexer::{Location, Surround};
 use crate::results::Results;
 use nom::*;
 use nom_locate::LocatedSpan;

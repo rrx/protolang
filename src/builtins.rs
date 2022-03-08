@@ -1,8 +1,7 @@
 use crate::{
-    ast::Location,
-    function::{Callable, CallableNode},
+    lexer::Location,
+    ast::{Callable, CallableNode, Value},
     interpreter::{InterpretError, Interpreter},
-    value::Value,
 };
 use std::{
     any::Any,

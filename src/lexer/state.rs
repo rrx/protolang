@@ -47,7 +47,12 @@ impl<'a> LexerState<'a> {
     pub fn from_str(s: &'a str) -> Option<Self> {
         let mut lexer = Self::default();
         match lexer.lex_eof(s.into()) {
-            Ok((rest, r)) => Some(lexer),
+            Ok((rest, _)) => {
+                if rest.len() > 0 {
+                    println!("remaining {:?}", (&rest));
+                }
+                Some(lexer)
+            }
             Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors {
                     println!("error {:?}", (&err, tokens));
@@ -119,7 +124,7 @@ impl<'a> LexerState<'a> {
         Tokens::new(&self.acc[..])
     }
 
-    pub fn token_vec(&mut self) -> Vec<Token<'a>> {
+    pub fn _token_vec(&mut self) -> Vec<Token<'a>> {
         if self.acc.len() == 0 {
             self.whitespace.clone()
         } else {

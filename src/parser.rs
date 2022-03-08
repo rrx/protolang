@@ -1,10 +1,8 @@
 use nom::*;
 
 use crate::ast::*;
-use crate::function::*;
 use crate::results::*;
 use crate::tokens::*;
-use crate::value::*;
 use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::{into, verify};
@@ -359,36 +357,6 @@ fn _parse_ident(i: Tokens) -> PResult<Tokens, Ident> {
     }
 }
 
-//fn parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-//let (i, ident) = into(parse_ident)(i)?;
-//into(parse_ident)(i)
-//Ok((i, ident.into()))//ExprNode::new(Expr::IdentExpr(ident.clone()), ident.loc)))
-//}
-
-//fn _parse_literal_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
-//let (i, lit) = parse_literal(i)?;
-//Ok((i, lit.into()))
-//let loc = i.to_location();
-//Ok((i, StmtNode::new(Stmt::Lit(lit), loc)))
-//}
-use std::convert::TryFrom;
-use std::convert::TryInto;
-
-impl TryFrom<&Tok> for Value {
-    type Error = ();
-    fn try_from(value: &Tok) -> Result<Self, Self::Error> {
-        match value {
-            Tok::IntLiteral(u) => Ok(Value::IntLiteral(*u)),
-            Tok::FloatLiteral(u) => Ok(Value::FloatLiteral(*u)),
-            Tok::StringLiteral(s) => Ok(Value::StringLiteral(s.clone())),
-            Tok::BoolLiteral(b) => Ok(Value::BoolLiteral(*b)),
-            Tok::Null => Ok(Value::Null),
-            //Tok::Invalid(s) => Some(Value::Invalid(s.clone())),
-            _ => Err(()),
-        }
-    }
-}
-
 fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
     let (i1, t1) = take_one_any(i.clone())?;
     let token = &t1.tok[0];
@@ -405,23 +373,6 @@ fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
     }
 }
 
-//fn parse_literal_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-//context("literal", _parse_literal_expr)(i)
-//}
-//fn _parse_literal_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-//let (i, lit) = parse_literal(i)?;
-//Ok((i, ExprNode::new(Expr::LitExpr(lit.clone()), lit.loc)))
-//}
-
-//fn _parse_atom_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
-//let (i, expr) = parse_atom_expr(i)?;
-//let loc = i.to_location();
-//Ok((i, StmtNode::new(Stmt::Expr(expr), loc)))
-//}
-
-//fn parse_atom_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-//context("atom", _parse_atom_expr)(i)
-//}
 fn parse_atom(i: Tokens) -> PResult<Tokens, ExprNode> {
     context(
         "atom",

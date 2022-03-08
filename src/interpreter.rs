@@ -1,8 +1,5 @@
 use crate::ast::*;
-use crate::function::*;
 use crate::sexpr::SExpr;
-use crate::tokens::Tok;
-use crate::value::*;
 use std::collections::HashMap;
 use std::result::Result;
 
@@ -53,12 +50,6 @@ impl Interpreter {}
 pub enum InterpretError {
     Invalid,
     Runtime { message: String, line: usize },
-}
-
-impl Unparse for Value {
-    fn unparse(&self) -> Vec<Tok> {
-        vec![self.token()]
-    }
 }
 
 impl Value {
@@ -215,9 +206,9 @@ impl Interpreter {
             }
             Expr::Apply(ident, args) => {
                 let f = self.globals.get(ident.value.as_str())?;
-                let env = Environment::default();
+                //let env = Environment::default();
                 match f {
-                    Value::Callable(mut c) => {
+                    Value::Callable(c) => {
                         let mut eval_args = vec![];
                         for arg in args {
                             eval_args.push(self.evaluate(arg)?);
@@ -235,7 +226,7 @@ impl Interpreter {
                 //env.define(
                 //Ok(Value::IntLiteral(0))
             }
-            Expr::Block(stmts) => Ok(Value::IntLiteral(0)),
+            Expr::Block(_) => Ok(Value::IntLiteral(0)),
         }
     }
 

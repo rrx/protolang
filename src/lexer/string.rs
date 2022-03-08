@@ -156,6 +156,6 @@ fn parse_str(i: Span) -> PResult<Span, String> {
     match parse_string_with_context(i.fragment()) {
         Ok((i2, s)) => Ok((span(i2), s)),
         //Err(e) => Err(error_position!(i, ErrorKind::Tag))
-        Err(e) => Err(nom::Err::Error(error_position!(i, ErrorKind::Tag))),
+        Err(_) => Err(nom::Err::Error(error_position!(i, ErrorKind::Tag))),
     }
 }

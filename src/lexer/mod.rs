@@ -19,22 +19,12 @@ mod error;
 pub(crate) mod state;
 mod string;
 pub(crate) use state::LexerState;
+mod surround;
+pub(crate) use surround::{Linespace, Location, Surround};
 
 use string::lex_string;
 
 pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
-
-fn ws0(i: Span) -> PResult<Span, Vec<Token>> {
-    many0(lex_whitespace)(i)
-}
-
-fn ws1(i: Span) -> PResult<Span, Vec<Token>> {
-    many1(lex_whitespace)(i)
-}
-
-fn lex_whitespace(i: Span) -> PResult<Span, Token> {
-    alt((lex_linespace, lex_newline))(i)
-}
 
 fn lex_linespace(i: Span) -> PResult<Span, Token> {
     use Tok::*;
@@ -186,41 +176,41 @@ fn lex_token<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
     ))(i)
 }
 
-fn parse_token_space(i: Span) -> PResult<Span, Vec<Token>> {
-    alt((ws0, many1(lex_invalid)))(i)
-}
+//fn parse_token_space(i: Span) -> PResult<Span, Vec<Token>> {
+    //alt((ws0, many1(lex_invalid)))(i)
+//}
 
-fn lex_token_with_whitespace<'a>(i: Span<'a>) -> PResult<Span<'a>, Vec<Token<'a>>> {
-    alt((
-        map(
-            tuple((parse_token_space, lex_token, parse_token_space)),
-            |(mut a, mut b, mut c)| {
-                let mut v = vec![];
-                b.s.prepend(a.iter().map(|t| t.toks()).flatten().collect());
-                b.s.append(c.iter().map(|t| t.toks()).flatten().collect());
-                v.push(b);
-                v
-            },
-        ),
-        ws1,
-    ))(i)
-}
+//fn lex_token_with_whitespace<'a>(i: Span<'a>) -> PResult<Span<'a>, Vec<Token<'a>>> {
+    //alt((
+        //map(
+            //tuple((parse_token_space, lex_token, parse_token_space)),
+            //|(mut a, mut b, mut c)| {
+                //let mut v = vec![];
+                //b.s.prepend(a.iter().map(|t| t.toks()).flatten().collect());
+                //b.s.append(c.iter().map(|t| t.toks()).flatten().collect());
+                //v.push(b);
+                //v
+            //},
+        //),
+        //ws1,
+    //))(i)
+//}
 
-fn lex_token_with_linespace<'a>(i: Span<'a>) -> PResult<Span<'a>, Vec<Token<'a>>> {
-    alt((
-        map(
-            tuple((many0(lex_linespace), lex_token, many0(lex_linespace))),
-            |(mut a, mut b, mut c)| {
-                let mut v = vec![];
-                b.s.prepend(a.iter().map(|t| t.toks()).flatten().collect());
-                b.s.append(c.iter().map(|t| t.toks()).flatten().collect());
-                v.push(b);
-                v
-            },
-        ),
-        ws1,
-    ))(i)
-}
+//fn _lex_token_with_linespace<'a>(i: Span<'a>) -> PResult<Span<'a>, Vec<Token<'a>>> {
+    //alt((
+        //map(
+            //tuple((many0(lex_linespace), lex_token, many0(lex_linespace))),
+            //|(a, mut b, c)| {
+                //let mut v = vec![];
+                //b.s.prepend(a.iter().map(|t| t.toks()).flatten().collect());
+                //b.s.append(c.iter().map(|t| t.toks()).flatten().collect());
+                //v.push(b);
+                //v
+            //},
+        //),
+        //ws1,
+    //))(i)
+//}
 
 pub fn span<'a>(s: &'a str) -> Span<'a> {
     Span::new(s)
@@ -246,7 +236,7 @@ mod tests {
     #[test]
     fn test_ws() {
         assert_eq!("\t".len(), 1);
-        assert!(lex_whitespace(span("")).is_err());
+        //assert!(lex_whitespace(span("")).is_err());
 
         let r = vec![
             ("", vec![]),
@@ -406,7 +396,7 @@ f +
 
     #[test]
     fn surround() {
-        use crate::ast::Linespace;
+        use crate::lexer::Linespace;
         let r = vec![
             (".1234", Linespace(0, 0)),
             (".1234\n", Linespace(0, 0)),
