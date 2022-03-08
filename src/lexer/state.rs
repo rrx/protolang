@@ -4,20 +4,32 @@ use super::*;
 pub enum LexType {
     Token,
     Newline,
-    Linespace,
+    Space,
+    Tab,
     EOF,
 }
 
 #[derive(Debug, Clone)]
-pub struct LexNext<'a>(LexType, Vec<Token<'a>>);
+pub struct LexNext<'a>(LexType, Token<'a>);
+
+impl<'a> LexNext<'a> {
+    fn linespace_count(&self) -> usize {
+        match self.1.tok {
+            Tok::Spaces(n) => n,
+            Tok::Tabs(n) => n,
+            _ => 0
+        }
+    }
+}
 
 fn lex_next(i: Span) -> PResult<Span, LexNext> {
     context(
         "next",
         alt((
-            map(many1(lex_newline), |v| LexNext(LexType::Newline, v)),
-            map(many1(lex_linespace), |v| LexNext(LexType::Linespace, v)),
-            map(lex_token, |t| LexNext(LexType::Token, vec![t])),
+            map(lex_newline, |v| LexNext(LexType::Newline, v)),
+            map(lex_space, |v| LexNext(LexType::Space, v)),
+            map(lex_tab, |v| LexNext(LexType::Tab, v)),
+            map(lex_token, |v| LexNext(LexType::Token, v)),
             //map(lex_token_eof, |t| LexNext(LexType::EOF, vec![t])),
         )),
     )(i)
@@ -30,7 +42,8 @@ pub struct LexerState<'a> {
     //tokens: Tokens<'a>,
     indent_size: usize,
     whitespace: Vec<Token<'a>>,
-    trail: VecDeque<LexNext<'a>>,
+    //whitespace: Vec<Tok>,
+    trail: Option<LexNext<'a>>,
 }
 impl<'a> Default for LexerState<'a> {
     fn default() -> Self {
@@ -39,7 +52,7 @@ impl<'a> Default for LexerState<'a> {
             acc: vec![],
             whitespace: vec![],
             indent_size: 0,
-            trail: VecDeque::new(),
+            trail: None,
         }
     }
 }
@@ -107,15 +120,18 @@ impl<'a> LexerState<'a> {
     }
 
     fn flush(&mut self) {
-        if let Some(last) = self.acc.last_mut() {
-            last.s.append(
-                self.whitespace
-                    .drain(..)
-                    .map(|v| v.toks())
-                    .flatten()
-                    .collect::<Vec<_>>(),
-            );
+        if self.acc.len() > 0 {
+            let ws = self.drain_whitespace();
+            self.acc.last_mut().unwrap().s.append(ws);
         }
+    }
+
+    fn drain_whitespace(&mut self) -> Vec<Tok> {
+        self.whitespace
+            .drain(..)
+            .map(|v| v.toks())
+            .flatten()
+            .collect::<Vec<_>>()
     }
 
     pub fn tokens(&'a mut self) -> Tokens<'a> {
@@ -151,26 +167,80 @@ impl<'a> LexerState<'a> {
     }
 
     pub fn push(&mut self, mut next: LexNext<'a>) {
-        if self.trail.len() == 3 {
-            self.trail.pop_back();
+        //if self.trail.len() == 3 {
+            //self.trail.pop_back();
+        //}
+        //let maybe_front = self.trail.front();
+        //let push_front = match maybe_front {
+            //Some(front) => front.0 != next.0,
+            //None => false,
+        //};
+        //if push_front {
+            //self.trail.push_front(next.clone());
+        //}
+        //
+        use LexType::*;
+
+        match &self.trail {
+            Some(LexNext(Token, token)) => {
+                match next.0 {
+                    // [T] + L -> [T] - Ident unchanged - no identation, T.post += L
+                    Space | Tab => {
+                        // we must have a token in acc
+                        self.acc.last_mut().unwrap().s.append(vec![next.1.tok.clone()]);
+                    }
+                    // [T] + T -> [T] -> Indent unchanged - reset to last T
+                    Token => {
+                        self.push_token(next.1);
+                    }
+                    // [T] + N -> [] -> Indent([]) - T.post += N, reset
+                    Newline | EOF => {
+                        self.indent_size = 0;
+                        self.acc.last_mut().unwrap().s.append(vec![next.1.tok.clone()]);
+                        self.trail = None;
+                    }
+                }
+            }
+            Some(LexNext(Space | Tab, token)) => {
+                match next.0 {
+                    // [L] + N -> [],  Indent([]), reset, add to whitespace
+                    Newline | EOF => {
+                        self.indent_size = 0;
+                        self.trail = None;
+                        self.whitespace.push(next.1);
+                    }
+                    // [L] + T -> [T], indent unchanded, T.pre += L
+                    Token => {
+                        next.1.s.prepend(self.drain_whitespace());
+                        self.trail = Some(next);
+                    }
+                    _ => unreachable!()
+                }
+            }
+            Some(_) => unreachable!(),
+            None => {
+                match next.0 {
+                    // [] + L -> [], Indent([L]), pending indentation
+                    Space | Tab => {
+                        self.indent_size += next.linespace_count();
+                        self.whitespace.push(next.1);
+                    }
+                    // [] + T -> [T], Ident([]), got a token, waiting for L, or N, add ws to T.pre
+                    Token => {
+                        self.indent_size = 0;
+                        next.1.s.prepend(self.drain_whitespace());
+                        self.trail = Some(next.clone());
+                        self.push_token(next.1);
+                    }
+                    // [] + N -> [] Indent([]) - reset
+                    Newline | EOF => {
+                        self.indent_size = 0;
+                        self.whitespace.push(next.1);
+                    }
+                }
+            }
         }
-        let maybe_front = self.trail.front();
-        let push_front = match maybe_front {
-            Some(front) => front.0 != next.0,
-            None => false,
-        };
-        if push_front {
-            self.trail.push_front(next.clone());
-        }
-        // [] + L -> [L], Indent([L]), pending indentation
-        // [] + T -> [T], Ident([]), got a token, waiting for L, or N, add ws to T.pre
-        // [] + N -> [] Indent([]) - reset
-        // [T] + L -> [T] - Ident([]) - no identation, T.post += L
-        // [T] + N -> [] -> Indent([]) - T.post += N, reset
-        // [T] + T -> [T] -> Indent([]) - reset to last T
-        // [L] + N -> [],  Indent([]), reset, add to whitespace
-        // [L] + T -> [T], indent([L]), T.pre += L
-        // [L] + L2 -> [L+L2], indent([L,L2])
+    /*
         match next.0 {
             LexType::Token | LexType::EOF => {
                 let t = next.1.pop().unwrap();
@@ -183,6 +253,7 @@ impl<'a> LexerState<'a> {
                 self.whitespace.append(&mut next.1);
             }
         }
+        */
     }
 
     //pub fn eof(&mut self, token: Token<'a>) {

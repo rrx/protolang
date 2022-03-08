@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_while1},
     character::complete::{alpha1, alphanumeric1, crlf, digit0, digit1, u64},
-    combinator::{eof, map, map_parser, recognize},
+    combinator::{map, map_parser, recognize},
     error::{context, VerboseError},
     multi::{many0, many1},
     number::complete::double,
@@ -10,34 +10,40 @@ use nom::{
     IResult,
 };
 
-use std::collections::VecDeque;
-
 use crate::tokens::*;
 use nom_locate::position;
 
 mod error;
 pub(crate) mod state;
+
 mod string;
+use string::lex_string;
+
 pub(crate) use state::LexerState;
 mod surround;
-pub(crate) use surround::{Linespace, Location, Surround};
+pub(crate) use surround::{Location, Surround};
 
-use string::lex_string;
 
 pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
 
-fn lex_linespace(i: Span) -> PResult<Span, Token> {
-    use Tok::*;
+fn lex_space(i: Span) -> PResult<Span, Token> {
     let (i, pos) = position(i)?;
-    let (i, t) = alt((
-        map(recognize(take_while1(|c| c == ' ')), |s: Span| {
-            Spaces(s.len())
-        }),
-        map(recognize(take_while1(|c| c == '\t')), |s: Span| {
-            Tabs(s.len())
-        }),
-    ))(i)?;
+    let (i, t) = map(recognize(take_while1(|c| c == ' ')), |s: Span| {
+        Tok::Spaces(s.len())
+    })(i)?;
     Ok((i, token(t, pos)))
+}
+
+fn lex_tab(i: Span) -> PResult<Span, Token> {
+    let (i, pos) = position(i)?;
+    let (i, t) = map(recognize(take_while1(|c| c == '\t')), |s: Span| {
+        Tok::Tabs(s.len())
+    })(i)?;
+    Ok((i, token(t, pos)))
+}
+
+fn lex_linespace(i: Span) -> PResult<Span, Token> {
+    alt((lex_space, lex_tab))(i)
 }
 
 fn lex_newline(i: Span) -> PResult<Span, Token> {
@@ -221,9 +227,6 @@ mod tests {
     use super::*;
     use state::*;
     use Tok::*;
-    //fn just_toks(r: &Vec<Token>) -> Vec<Tok> {
-    //r.iter().map(|v| v.tok.clone()).collect::<Vec<_>>()
-    //}
 
     #[test]
     fn tokens() {
@@ -236,7 +239,6 @@ mod tests {
     #[test]
     fn test_ws() {
         assert_eq!("\t".len(), 1);
-        //assert!(lex_whitespace(span("")).is_err());
 
         let r = vec![
             ("", vec![]),
@@ -280,8 +282,7 @@ mod tests {
         ];
         r.iter().for_each(|(q, a)| {
             let mut lexer = LexerState::from_str(q).unwrap();
-            assert_eq!(lexer.tokens().toks(), *a); //just_toks(&result), *a);
-                                                   //assert_eq!(just_toks(&result), *a);
+            assert_eq!(lexer.tokens().toks(), *a);
         });
     }
 
@@ -289,7 +290,6 @@ mod tests {
     fn test_tag_token() {
         let s = " [ ] ";
         let mut lexer = LexerState::from_str(s).unwrap();
-        //let tokens = lexer.tokens();
         let toks = lexer.final_toks();
         assert_eq!(vec![LBracket, RBracket, EOF], toks);
     }
@@ -396,7 +396,7 @@ f +
 
     #[test]
     fn surround() {
-        use crate::lexer::Linespace;
+        use crate::lexer::surround::Linespace;
         let r = vec![
             (".1234", Linespace(0, 0)),
             (".1234\n", Linespace(0, 0)),
@@ -405,13 +405,14 @@ f +
             (" \n .1234 \n ", Linespace(1, 1)),
             (" \n.1234\n ", Linespace(0, 0)),
             (" \n     \n.1234\n    x    ", Linespace(0, 0)),
-            ("\n.1234 + \n  x\n  y \n", Linespace(0, 0)),
+            ("\n.1234 + \n  x\n  y \n", Linespace(0, 1)),
         ];
         r.into_iter().for_each(|(q, ls)| {
             let mut lexer = LexerState::from_str(q).unwrap();
             let tokens = lexer.tokens();
-            //let toks = tokens.toks();
             let tok = tokens.tok.get(0).unwrap();
+            println!("q: {:?}", q);
+            println!("tokens: {:?}", tokens);
             assert_eq!(tok.s.linespace, ls);
         });
     }
