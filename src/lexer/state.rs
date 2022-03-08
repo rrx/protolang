@@ -37,18 +37,14 @@ fn lex_next(i: Span) -> PResult<Span, LexNext> {
 
 #[derive(Debug)]
 pub struct LexerState<'a> {
-    count: usize,
     acc: Vec<Token<'a>>,
-    //tokens: Tokens<'a>,
     indent_size: usize,
     whitespace: Vec<Token<'a>>,
-    //whitespace: Vec<Tok>,
-    trail: Option<LexNext<'a>>,
+    trail: Option<LexType>,
 }
 impl<'a> Default for LexerState<'a> {
     fn default() -> Self {
         Self {
-            count: 0,
             acc: vec![],
             whitespace: vec![],
             indent_size: 0,
@@ -167,22 +163,9 @@ impl<'a> LexerState<'a> {
     }
 
     pub fn push(&mut self, mut next: LexNext<'a>) {
-        //if self.trail.len() == 3 {
-            //self.trail.pop_back();
-        //}
-        //let maybe_front = self.trail.front();
-        //let push_front = match maybe_front {
-            //Some(front) => front.0 != next.0,
-            //None => false,
-        //};
-        //if push_front {
-            //self.trail.push_front(next.clone());
-        //}
-        //
         use LexType::*;
-
         match &self.trail {
-            Some(LexNext(Token, token)) => {
+            Some(Token) => {
                 match next.0 {
                     // [T] + L -> [T] - Ident unchanged - no identation, T.post += L
                     Space | Tab => {
@@ -201,7 +184,7 @@ impl<'a> LexerState<'a> {
                     }
                 }
             }
-            Some(LexNext(Space | Tab, token)) => {
+            Some(Space | Tab) => {
                 match next.0 {
                     // [L] + N -> [],  Indent([]), reset, add to whitespace
                     Newline | EOF => {
@@ -212,7 +195,7 @@ impl<'a> LexerState<'a> {
                     // [L] + T -> [T], indent unchanded, T.pre += L
                     Token => {
                         next.1.s.prepend(self.drain_whitespace());
-                        self.trail = Some(next);
+                        self.trail = Some(next.0);
                     }
                     _ => unreachable!()
                 }
@@ -229,7 +212,7 @@ impl<'a> LexerState<'a> {
                     Token => {
                         self.indent_size = 0;
                         next.1.s.prepend(self.drain_whitespace());
-                        self.trail = Some(next.clone());
+                        self.trail = Some(next.0);
                         self.push_token(next.1);
                     }
                     // [] + N -> [] Indent([]) - reset
@@ -240,25 +223,7 @@ impl<'a> LexerState<'a> {
                 }
             }
         }
-    /*
-        match next.0 {
-            LexType::Token | LexType::EOF => {
-                let t = next.1.pop().unwrap();
-                self.push_token(t);
-            }
-            LexType::Linespace => {
-                self.whitespace.append(&mut next.1);
-            }
-            LexType::Newline => {
-                self.whitespace.append(&mut next.1);
-            }
-        }
-        */
     }
-
-    //pub fn eof(&mut self, token: Token<'a>) {
-    //self.push_token(token);
-    //}
 
     pub fn lex(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
         let (i, tokens) = many0(lex_next)(span(i))?;
