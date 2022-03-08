@@ -10,8 +10,11 @@ pub enum LexNext<'a> {
     EOF,
 }
 
-//#[derive(Debug, Clone)]
-//pub struct LexNext<'a>(LexType, Option<Token<'a>>);
+#[derive(Debug, Clone, PartialEq)]
+pub enum IndentState {
+    LineNotIndented,
+    LineIndented
+}
 
 impl<'a> LexNext<'a> {
     fn linespace_count(&self) -> usize {
@@ -46,7 +49,7 @@ pub struct LexerState<'a> {
     acc: Vec<Token<'a>>,
     indent_size: usize,
     whitespace: Vec<Token<'a>>,
-    trail: Option<LexNext<'a>>,
+    indent_state: IndentState,
     indent_stack: Vec<Token<'a>>
 }
 
@@ -56,11 +59,12 @@ impl<'a> Default for LexerState<'a> {
             acc: vec![],
             whitespace: vec![],
             indent_size: 0,
-            trail: None,
+            indent_state:  IndentState::LineNotIndented,
             indent_stack: vec![],
         }
     }
 }
+
 impl<'a> LexerState<'a> {
     pub fn from_str(s: &'a str) -> Option<Self> {
         let mut lexer = Self::default();
@@ -168,15 +172,13 @@ impl<'a> LexerState<'a> {
         for token in &self.acc {
             println!("\tToken: {:?}", token);
         }
-        for next in &self.trail {
-            println!("\tTrail: {:?}", next);
-        }
+        println!("\tIndentState: {:?}", self.indent_state);
     }
 
     pub fn push(&mut self, next: LexNext<'a>) {
         use LexNext::*;
-        match &self.trail {
-            Some(Token(_)) => {
+        match self.indent_state {
+            IndentState::LineIndented => {
                 match next {
                     // [T] + L -> [T] - Ident unchanged - no identation, T.post += L
                     Space(t) | Tab(t) => {
@@ -190,48 +192,20 @@ impl<'a> LexerState<'a> {
                     // [T] + N -> [] -> Indent([]) - T.post += N, reset
                     Newline(t) => {
                         // push indent to stack and reset
-                        //if self.indent_size > 0 {
-                            //self.indent_stack.push(self.acc.last().unwrap().clone());//self.indent_size);
-                        //}
                         self.indent_size = 0;
                         
                         // append whitespace to the last token
                         self.acc.last_mut().unwrap().s.append(vec![t.tok.clone()]);
-                        self.trail = None;
+                        self.indent_state = IndentState::LineNotIndented;
                     }
                     EOF => {
                         self.indent_size = 0;
-                        self.trail = None;
+                        self.indent_state = IndentState::LineNotIndented;
                     }
                 }
             }
 
-            // this never gets run
-            Some(Space(_) | Tab(_)) => {
-                match next {
-                    // [L] + N -> [],  Indent([]), reset, add to whitespace
-                    Newline(t) => {
-                        // ignore this spurious linespace, we don't change our indent stack, just
-                        // reset
-                        self.indent_size = 0;
-                        self.trail = None;
-                        self.whitespace.push(t);
-                    }
-                    EOF => {
-                        self.indent_size = 0;
-                        self.trail = None;
-                    }
-                    // [L] + T -> [T], indent unchanged, T.pre += L
-                    Token(mut t) => {
-                        t.s.prepend(self.drain_whitespace());
-                        self.push_token(t.clone());
-                        self.trail = Some(LexNext::Token(t));
-                    }
-                    _ => unreachable!()
-                }
-            }
-            Some(_) => unreachable!(),
-            None => {
+            IndentState::LineNotIndented => {
                 let linespace_count = next.linespace_count();
                 match next {
                     // [] + L -> [], Indent([L]), pending indentation
@@ -253,12 +227,9 @@ impl<'a> LexerState<'a> {
                             if self.indent_size < prev_indent {
                                 // close out
                                 let prev = self.indent_stack.pop().unwrap();
-                                //self.push_token(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
                                 self.whitespace.push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
                             } else if self.indent_size > prev_indent {
-                                //self.push_token(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
                                 self.whitespace.push(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
-                                //self.indent_stack.push(prev);
                                 //
                                 // update indentation before pushing
                                 let mut x = t.clone();
@@ -272,7 +243,7 @@ impl<'a> LexerState<'a> {
                         }
 
                         t.s.prepend(self.drain_whitespace());
-                        self.trail = Some(LexNext::Token(t.clone()));
+                        self.indent_state = IndentState::LineIndented;
                         self.push_token(t.clone());
                     }
                     // [] + N -> [] Indent([]) - reset
