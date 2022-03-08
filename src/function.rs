@@ -1,11 +1,11 @@
-use crate::sexpr::*;
 use crate::ast::*;
-use crate::value::*;
 use crate::interpreter::*;
+use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
+use crate::value::*;
 use std::{
     any::Any,
-    fmt::{Debug, Display}
+    fmt::{Debug, Display},
 };
 
 #[derive(Debug, Clone)]
@@ -17,7 +17,11 @@ pub struct CallableNode {
 
 impl CallableNode {
     pub fn new(value: Box<dyn Callable>, loc: Location) -> Self {
-        Self { value, s: Surround::default(), loc }
+        Self {
+            value,
+            s: Surround::default(),
+            loc,
+        }
     }
 }
 
@@ -49,16 +53,30 @@ impl Params {
 }
 impl Unparse for Params {
     fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(self.value.iter().map(|s| s.unparse()).flatten().collect::<Vec<_>>())
+        self.s.unparse(
+            self.value
+                .iter()
+                .map(|s| s.unparse())
+                .flatten()
+                .collect::<Vec<_>>(),
+        )
     }
 
     fn unlex(&self) -> String {
-        self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
+        self.unparse()
+            .iter()
+            .map(|t| t.unlex())
+            .collect::<Vec<_>>()
+            .join("")
     }
 }
 impl SExpr for Params {
     fn sexpr(&self) -> SResult<S> {
-        let params = self.value.iter().map_while(|v| v.sexpr().ok()).collect::<Vec<_>>();
+        let params = self
+            .value
+            .iter()
+            .map_while(|v| v.sexpr().ok())
+            .collect::<Vec<_>>();
         if params.len() < self.value.len() {
             return Err(SError::Invalid("Unable to parse parameters".into()));
         }
@@ -77,8 +95,9 @@ impl Lambda {
     pub fn new(params: Params, expr: StmtNode, loc: Location) -> Self {
         Self {
             s: Surround::default(),
-            params, expr: Box::new(expr),
-            loc
+            params,
+            expr: Box::new(expr),
+            loc,
         }
     }
     pub fn node(&self) -> CallableNode {
@@ -93,13 +112,16 @@ impl std::fmt::Display for Lambda {
     }
 }
 
-
 impl Callable for Lambda {
     fn arity(&self) -> usize {
         self.params.value.len()
     }
 
-    fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, InterpretError> {
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
+    ) -> Result<Value, InterpretError> {
         Ok(Value::IntLiteral(0))
     }
 
@@ -112,19 +134,33 @@ impl Callable for Lambda {
     }
 }
 
-impl Unparse for Lambda  {
+impl Unparse for Lambda {
     fn unparse(&self) -> Vec<Tok> {
-        vec![vec![Tok::Backslash], self.params.unparse(), vec![Tok::LeftArrow], self.expr.unparse()].into_iter().flatten().collect()
+        vec![
+            vec![Tok::Backslash],
+            self.params.unparse(),
+            vec![Tok::LeftArrow],
+            self.expr.unparse(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     fn unlex(&self) -> String {
-        vec![self.params.unlex(), Tok::LeftArrow.unlex(), self.expr.unlex()].join("")
+        vec![
+            self.params.unlex(),
+            Tok::LeftArrow.unlex(),
+            self.expr.unlex(),
+        ]
+        .join("")
     }
 }
 impl SExpr for Lambda {
     fn sexpr(&self) -> SResult<S> {
-        Ok(S::Cons("lambda".into(), vec![self.params.sexpr()?, self.expr.sexpr()?]))
+        Ok(S::Cons(
+            "lambda".into(),
+            vec![self.params.sexpr()?, self.expr.sexpr()?],
+        ))
     }
 }
-
-

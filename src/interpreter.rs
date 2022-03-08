@@ -1,8 +1,8 @@
 use crate::ast::*;
-use crate::value::*;
-use crate::tokens::Tok;
 use crate::function::*;
 use crate::sexpr::SExpr;
+use crate::tokens::Tok;
+use crate::value::*;
 use std::collections::HashMap;
 use std::result::Result;
 
@@ -43,9 +43,7 @@ impl Default for Interpreter {
         use crate::builtins::*;
         globals.define("clock", &Clock::value());
         globals.define("assert", &Assert::value());
-        Self {
-            globals
-        }
+        Self { globals }
     }
 }
 
@@ -78,8 +76,12 @@ impl Value {
             Self::FloatLiteral(f) => Ok(*f),
             Self::Callable(e) => Err(InterpretError::Runtime {
                 message: format!(
-                             "Expecting a number, got a lambda: {} on line:{}, column:{}, fragment:{}",
-                             self.unlex(), e.loc.line, e.loc.col, e.loc.fragment),
+                    "Expecting a number, got a lambda: {} on line:{}, column:{}, fragment:{}",
+                    self.unlex(),
+                    e.loc.line,
+                    e.loc.col,
+                    e.loc.fragment
+                ),
                 line: e.loc.line,
             }),
             _ => Err(InterpretError::Runtime {
@@ -192,14 +194,12 @@ impl Interpreter {
                     Infix::GreaterThan => eval_left.gt(&eval_right),
                     Infix::LessThan => eval_left.lt(&eval_right),
                     //Infix::Map => {
-                        //Ok(InterpretValue::Lambda(e.clone()))
+                    //Ok(InterpretValue::Lambda(e.clone()))
                     //}
-                    _ => {
-                        Err(InterpretError::Runtime {
-                            message: format!("Unimplemented expression op: Infix::{:?}", op.value),
-                            line: 0
-                        })
-                    }
+                    _ => Err(InterpretError::Runtime {
+                        message: format!("Unimplemented expression op: Infix::{:?}", op.value),
+                        line: 0,
+                    }),
                 }
             }
             Expr::List(elements) => {
@@ -227,19 +227,15 @@ impl Interpreter {
                         println!("Result {:?}", &result);
                         result
                     }
-                    _ => {
-                        Err(InterpretError::Runtime {
-                            message: format!("Not a function: {:?}", f),
-                            line: 0
-                        })
-                    }
+                    _ => Err(InterpretError::Runtime {
+                        message: format!("Not a function: {:?}", f),
+                        line: 0,
+                    }),
                 }
                 //env.define(
                 //Ok(Value::IntLiteral(0))
             }
-            Expr::Block(stmts) => {
-                Ok(Value::IntLiteral(0))
-            }
+            Expr::Block(stmts) => Ok(Value::IntLiteral(0)),
         }
     }
 
@@ -252,7 +248,10 @@ impl Interpreter {
             }
             Err(e) => {
                 println!("ERROR: {:?}", e);
-                return Err(InterpretError::Runtime { message: "Unable to parse sexpr".into(), line: 0 });
+                return Err(InterpretError::Runtime {
+                    message: "Unable to parse sexpr".into(),
+                    line: 0,
+                });
             }
         }
 
@@ -273,12 +272,14 @@ impl Interpreter {
                 println!("Assign {:?} to {}", value, ident.value);
                 Ok(())
             }
-            Stmt::Invalid(line) => {
-                Err(InterpretError::Runtime { message: format!("Invalid Statement {}", line), line: stmt.loc.line })
-            }
-            _ => {
-                Err(InterpretError::Runtime { message: format!("Unimplemented {:?}", stmt.value), line: stmt.loc.line })
-            }
+            Stmt::Invalid(line) => Err(InterpretError::Runtime {
+                message: format!("Invalid Statement {}", line),
+                line: stmt.loc.line,
+            }),
+            _ => Err(InterpretError::Runtime {
+                message: format!("Unimplemented {:?}", stmt.value),
+                line: stmt.loc.line,
+            }),
         }
     }
 

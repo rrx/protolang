@@ -1,8 +1,8 @@
 use crate::{
+    ast::Location,
     function::{Callable, CallableNode},
     interpreter::{InterpretError, Interpreter},
     value::Value,
-    ast::Location,
 };
 use std::{
     any::Any,
@@ -15,7 +15,10 @@ pub struct Clock;
 
 impl Clock {
     pub fn value() -> Value {
-        Value::Callable(CallableNode::new(Box::new(Self), Location::new(0,0,0,"".into()) ))
+        Value::Callable(CallableNode::new(
+            Box::new(Self),
+            Location::new(0, 0, 0, "".into()),
+        ))
     }
 }
 
@@ -53,7 +56,10 @@ pub struct Assert;
 
 impl Assert {
     pub fn value() -> Value {
-        Value::Callable(CallableNode::new(Box::new(Self), Location::new(0,0,0,"".into()) ))
+        Value::Callable(CallableNode::new(
+            Box::new(Self),
+            Location::new(0, 0, 0, "".into()),
+        ))
     }
 }
 
@@ -74,10 +80,16 @@ impl Callable for Assert {
             if *b {
                 Ok(Value::Null)
             } else {
-                Err(InterpretError::Runtime { message: format!("Assertion error"), line: 0 })
+                Err(InterpretError::Runtime {
+                    message: format!("Assertion error"),
+                    line: 0,
+                })
             }
         } else {
-            Err(InterpretError::Runtime { message: format!("Invalid Type: {:?}", args), line: 0 })
+            Err(InterpretError::Runtime {
+                message: format!("Invalid Type: {:?}", args),
+                line: 0,
+            })
         }
     }
 
@@ -89,4 +101,3 @@ impl Callable for Assert {
         self
     }
 }
-

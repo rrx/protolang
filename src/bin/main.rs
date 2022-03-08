@@ -1,12 +1,4 @@
-use protolang::{
-    sexpr::SExpr,
-    interpreter::Interpreter,
-    lexer,
-    parser::parse_program_with_results,
-    results::*,
-    repl::*,
-    tokens::Tokens,
-};
+use protolang::repl::*;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

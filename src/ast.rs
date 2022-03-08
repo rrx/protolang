@@ -1,14 +1,14 @@
-use crate::sexpr::*;
-use crate::value::*;
 use crate::function::*;
+use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
+use crate::value::*;
 use std::fmt;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Linespace(pub usize, pub usize);
 impl Default for Linespace {
     fn default() -> Self {
-        Self(0,0)
+        Self(0, 0)
     }
 }
 
@@ -30,7 +30,7 @@ impl Default for Surround {
             has_trailing_linespace: false,
             has_preceding_linespace: false,
             has_newline: false,
-            linespace: Linespace::default()
+            linespace: Linespace::default(),
         }
     }
 }
@@ -38,7 +38,8 @@ impl Default for Surround {
 impl Surround {
     pub fn new(pre: Vec<Tok>, post: Vec<Tok>) -> Self {
         let mut x = Self {
-            pre, post,
+            pre,
+            post,
             has_preceding_linespace: false,
             has_trailing_linespace: false,
             has_newline: false,
@@ -149,9 +150,7 @@ impl Unparse for StmtNode {
                 .into_iter()
                 .flatten()
                 .collect(),
-            Stmt::Block(stmts) => {
-                stmts.iter().map(|s| s.unparse()).flatten().collect()
-            }
+            Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
             Stmt::Invalid(s) => vec![Tok::Invalid(s.clone())],
         })
     }
@@ -201,7 +200,8 @@ impl Unparse for Program {
         )
     }
     fn unlex(&self) -> String {
-        self.unparse().iter()
+        self.unparse()
+            .iter()
             .map(|t| t.unlex())
             .collect::<Vec<_>>()
             .join("")
@@ -214,8 +214,6 @@ impl SExpr for Program {
         Ok(S::Cons("program".into(), results))
     }
 }
-
-
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
@@ -233,13 +231,50 @@ pub enum Expr {
 pub struct ExprNode {
     pub s: Surround,
     pub value: Expr,
+    pub loc: Location,
 }
 impl ExprNode {
-    pub fn new(value: Expr) -> Self {
+    pub fn new(value: Expr, loc: Location) -> Self {
         Self {
             s: Surround::default(),
             value,
+            loc,
         }
+    }
+}
+
+impl From<ExprNode> for StmtNode {
+    fn from(item: ExprNode) -> Self {
+        let loc = item.loc.clone();
+        Self::new(Stmt::Expr(item), loc)
+    }
+}
+
+impl From<LiteralNode> for StmtNode {
+    fn from(item: LiteralNode) -> Self {
+        let loc = item.loc.clone();
+        Self::new(Stmt::Lit(item), loc)
+    }
+}
+
+impl From<LiteralNode> for ExprNode {
+    fn from(item: LiteralNode) -> Self {
+        let loc = item.loc.clone();
+        Self::new(Expr::LitExpr(item), loc)
+    }
+}
+
+impl From<Ident> for ExprNode {
+    fn from(item: Ident) -> Self {
+        let loc = item.loc.clone();
+        Self::new(Expr::IdentExpr(item), loc)
+    }
+}
+
+impl From<Lambda> for ExprNode {
+    fn from(item: Lambda) -> Self {
+        let loc = item.loc.clone();
+        Self::new(Expr::Lambda(item), loc)
     }
 }
 
@@ -319,7 +354,13 @@ impl ExprNode {
                 }
             }
             Block(_) => {
-                out.append(&mut self.unparse().into_iter().map(|t| t.unlex()).collect::<Vec<_>>());
+                out.append(
+                    &mut self
+                        .unparse()
+                        .into_iter()
+                        .map(|t| t.unlex())
+                        .collect::<Vec<_>>(),
+                );
             }
         };
         out.join("")
@@ -341,12 +382,18 @@ impl SExpr for ExprNode {
                 Ok(S::Cons(prefix.unlex(), vec![s]))
             }
             List(elements) => {
-                let s_args = elements.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
+                let s_args = elements
+                    .iter()
+                    .filter_map(|a| a.sexpr().ok())
+                    .collect::<Vec<_>>();
                 Ok(S::Cons("list".into(), s_args))
-            },
+            }
             Lambda(e) => e.sexpr(),
             Apply(ident, args) => {
-                let s_args = args.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
+                let s_args = args
+                    .iter()
+                    .filter_map(|a| a.sexpr().ok())
+                    .collect::<Vec<_>>();
                 Ok(S::Cons(ident.value.clone(), s_args))
             }
             Block(stmts) => Ok(S::Cons(
@@ -368,6 +415,7 @@ pub enum Prefix {
 pub struct PrefixNode {
     pub s: Surround,
     pub value: Prefix,
+    pub loc: Location,
 }
 
 impl PrefixNode {
@@ -379,14 +427,18 @@ impl PrefixNode {
             _ => None,
         };
         match maybe_prefix {
-            Some(prefix) => Some(Self {
-                //s: Surround {
+            Some(prefix) => {
+                let loc = token.to_location();
+                Some(Self {
+                    //s: Surround {
                     //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
                     //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                //},
-                s: token.s,
-                value: prefix,
-            }),
+                    //},
+                    s: token.s,
+                    value: prefix,
+                    loc,
+                })
+            }
             None => None,
         }
     }
@@ -395,6 +447,7 @@ impl PrefixNode {
         Self {
             s: Surround::new(pre, post),
             value: prefix,
+            loc: Location::default(),
         }
     }
 
@@ -402,6 +455,7 @@ impl PrefixNode {
         Self {
             s: Surround::default(),
             value: prefix,
+            loc: Location::default(),
         }
     }
 
@@ -445,29 +499,35 @@ pub struct InfixNode {
     pub s: Surround,
     pub value: Infix,
     pub precedence: Precedence,
+    pub loc: Location,
 }
 
 impl InfixNode {
-    pub fn new(infix: Infix, precedence: Precedence) -> Self {
+    pub fn new(infix: Infix, precedence: Precedence, loc: Location) -> Self {
         Self {
             s: Surround::default(),
             value: infix,
             precedence,
+            loc,
         }
     }
 
     pub fn from_token(token: Token) -> Option<Self> {
         let (precedence, maybe_prefix) = infix_op(&token.tok);
         match maybe_prefix {
-            Some(prefix) => Some(Self {
-                //s: Surround {
+            Some(prefix) => {
+                let loc = token.to_location();
+                Some(Self {
+                    //s: Surround {
                     //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
                     //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                //},
-                s: token.s,
-                value: prefix,
-                precedence,
-            }),
+                    //},
+                    s: token.s,
+                    value: prefix,
+                    precedence,
+                    loc,
+                })
+            }
             None => None,
         }
     }
@@ -482,6 +542,7 @@ impl InfixNode {
             s: Surround::new(pre, post),
             value: infix,
             precedence,
+            loc: Location::default(),
         }
     }
 
@@ -571,9 +632,24 @@ pub struct Location {
     pub fragment: String,
 }
 
+impl Default for Location {
+    fn default() -> Self {
+        Self {
+            offset: 0,
+            line: 0,
+            col: 0,
+            fragment: "".into(),
+        }
+    }
+}
 impl Location {
     pub fn new(offset: usize, line: usize, col: usize, fragment: String) -> Self {
-        Self { offset, line, col, fragment }
+        Self {
+            offset,
+            line,
+            col,
+            fragment,
+        }
     }
 }
 
@@ -588,17 +664,16 @@ impl LiteralNode {
         Self {
             value,
             s: Surround::default(),
-            loc
+            loc,
         }
     }
-
 }
 impl Unparse for LiteralNode {
     fn unparse(&self) -> Vec<Tok> {
         self.s.unparse(vec![self.value.token()])
     }
     //fn unlex(&self) -> String {
-        //self.value.token().unlex()
+    //self.value.token().unlex()
     //}
 }
 
@@ -623,8 +698,8 @@ impl Ident {
         match maybe_ident {
             Some(ident) => Some(Self {
                 //s: Surround {
-                    //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
-                    //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
+                //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
+                //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
                 //},
                 s: token.s.clone(),
                 value: ident.clone(),
@@ -638,7 +713,7 @@ impl Ident {
         Tok::Ident(self.value.clone())
     }
     //pub fn token(&self) -> Token {
-        //Token { pre: self.s.pre, post: self.s.post, tok: self.tok() } 
+    //Token { pre: self.s.pre, post: self.s.post, tok: self.tok() }
     //}
 }
 
@@ -647,7 +722,7 @@ impl Unparse for Ident {
         self.s.unparse(vec![Tok::Ident(self.value.clone())])
     }
     //fn unlex(&self) -> String {
-        //self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
+    //self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
     //}
 }
 
@@ -669,7 +744,7 @@ mod tests {
 
     #[test]
     fn infix() {
-        let p = InfixNode::new(Infix::Minus, Precedence::PLowest);
+        let p = InfixNode::new(Infix::Minus, Precedence::PLowest, Location::default());
         //println!("{:?}", (&p, &p.token(), &p.unlex()));
         assert_eq!(p.unlex(), "-");
     }

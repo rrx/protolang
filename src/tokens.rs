@@ -1,11 +1,11 @@
+use crate::ast::{Location, Surround};
+use crate::lexer::LexerState;
 use crate::results::Results;
 use nom::*;
-use crate::lexer::LexerState;
 use nom_locate::LocatedSpan;
+use std::fmt;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
-use crate::ast::{Location, Surround};
-use std::fmt;
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
@@ -31,7 +31,7 @@ pub enum Tok {
     Colon,
     Comma,
     SemiColon,
-    Backslash,   // \\
+    Backslash, // \\
 
     DoubleSlash, // //
     TripleQuote, // """
@@ -118,7 +118,7 @@ impl Tok {
             EOF => "".into(),
             _ => {
                 println!("Panic: Unable to unlex token: {:?}", self);
-                unreachable!()//"[UNKNOWN]".into(),
+                unreachable!() //"[UNKNOWN]".into(),
             }
         })
     }
@@ -156,23 +156,22 @@ pub struct Token<'a> {
 impl<'a> fmt::Debug for Token<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Token")
-         .field("tok", &self.tok)
-         .field("pre", &self.s.pre)
-         .field("post", &self.s.post)
-         .field("line", &self.pos.location_line())
-         .field("col", &self.pos.get_column())
-         .finish()
+            .field("tok", &self.tok)
+            .field("pre", &self.s.pre)
+            .field("post", &self.s.post)
+            .field("line", &self.pos.location_line())
+            .field("col", &self.pos.get_column())
+            .finish()
     }
 }
 
 impl<'a> Token<'a> {
-
     pub fn toks_pre(&self) -> Vec<Tok> {
-        self.s.pre.clone()//.iter().map(|t| t.toks()).flatten().collect()
+        self.s.pre.clone() //.iter().map(|t| t.toks()).flatten().collect()
     }
 
     pub fn toks_post(&self) -> Vec<Tok> {
-        self.s.post.clone()//.iter().map(|t| t.toks()).flatten().collect()
+        self.s.post.clone() //.iter().map(|t| t.toks()).flatten().collect()
     }
 
     pub fn toks(&self) -> Vec<Tok> {
@@ -180,18 +179,19 @@ impl<'a> Token<'a> {
     }
 
     pub fn expand_toks(&self) -> Vec<Tok> {
-        vec![
-            self.toks_pre(),
-            vec![self.tok.clone()],
-            self.toks_post(),
-        ]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
+        vec![self.toks_pre(), vec![self.tok.clone()], self.toks_post()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
     }
 
     pub fn to_location(&self) -> Location {
-        Location::new(self.pos.location_offset(), self.pos.location_line() as usize, self.pos.get_utf8_column(), self.pos.fragment().to_string())
+        Location::new(
+            self.pos.location_offset(),
+            self.pos.location_line() as usize,
+            self.pos.get_utf8_column(),
+            self.pos.fragment().to_string(),
+        )
     }
 
     pub fn to_string(&self) -> String {
@@ -241,9 +241,9 @@ impl<'a> Tokens<'a> {
     }
 
     //pub fn from_lexer(lexer: &'a mut LexerState) -> Self {
-        //let toks = lexer.token_vec();
-        //let tokens = Tokens::new(&toks[..]);
-        //tokens
+    //let toks = lexer.token_vec();
+    //let tokens = Tokens::new(&toks[..]);
+    //tokens
     //}
 
     //fn from_string(i: &'a str) -> IResult<Span<'a>, Tokens<'a>> {
@@ -254,7 +254,7 @@ impl<'a> Tokens<'a> {
         if self.tok.len() > 0 {
             self.tok[0].to_location()
         } else {
-            Location::new(0,0,0,"EOF".into())
+            Location::new(0, 0, 0, "EOF".into())
         }
     }
 

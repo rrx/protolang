@@ -1,7 +1,7 @@
-use crate::tokens::Tok;
-use crate::function::CallableNode;
 use crate::ast::{Ident, Unparse};
+use crate::function::CallableNode;
 use crate::sexpr::*;
+use crate::tokens::Tok;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -36,7 +36,7 @@ impl Value {
             List(x) => Tok::Ident("list".into()),
             Invalid(x) => Tok::Invalid(x.clone()),
             Null => Tok::Null,
-            Callable(x) => Tok::Ident("callable".into())//x.unlex())
+            Callable(x) => Tok::Ident("callable".into()), //x.unlex())
         }
     }
 }
@@ -56,13 +56,15 @@ impl SExpr for Value {
             BoolLiteral(x) => Ok(S::Atom(x.to_string())),
             StringLiteral(x) => Ok(S::Atom(x.to_string())),
             List(values) => {
-                let s_args = values.iter().filter_map(|a| a.sexpr().ok()).collect::<Vec<_>>();
+                let s_args = values
+                    .iter()
+                    .filter_map(|a| a.sexpr().ok())
+                    .collect::<Vec<_>>();
                 Ok(S::Cons("list".into(), s_args))
             }
             Invalid(s) => Err(SError::Invalid(s.clone())),
             Null => Ok(S::Null),
-            Callable(s) => Ok(S::Atom("callable".into()))
+            Callable(s) => Ok(S::Atom("callable".into())),
         }
     }
 }
-
