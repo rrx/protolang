@@ -1,22 +1,28 @@
 use super::*;
+use crate::tokens::Token;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LexType {
-    Token,
-    Newline,
-    Space,
-    Tab,
+pub enum LexNext<'a> {
+    Token(Token<'a>),
+    Newline(Token<'a>),
+    Space(Token<'a>),
+    Tab(Token<'a>),
     EOF,
 }
 
-#[derive(Debug, Clone)]
-pub struct LexNext<'a>(LexType, Token<'a>);
+//#[derive(Debug, Clone)]
+//pub struct LexNext<'a>(LexType, Option<Token<'a>>);
 
 impl<'a> LexNext<'a> {
     fn linespace_count(&self) -> usize {
-        match self.1.tok {
-            Tok::Spaces(n) => n,
-            Tok::Tabs(n) => n,
+        match self {
+            Self::Space(t) | Self::Tab(t) => {
+                match t.tok {
+                    Tok::Spaces(n) => n,
+                    Tok::Tabs(n) => n,
+                    _ => 0
+                }
+            }
             _ => 0
         }
     }
@@ -26,10 +32,10 @@ fn lex_next(i: Span) -> PResult<Span, LexNext> {
     context(
         "next",
         alt((
-            map(lex_newline, |v| LexNext(LexType::Newline, v)),
-            map(lex_space, |v| LexNext(LexType::Space, v)),
-            map(lex_tab, |v| LexNext(LexType::Tab, v)),
-            map(lex_token, |v| LexNext(LexType::Token, v)),
+            map(lex_newline, |v| LexNext::Newline(v)),
+            map(lex_space, |v| LexNext::Space(v)),
+            map(lex_tab, |v| LexNext::Tab(v)),
+            map(lex_token, |v| LexNext::Token(v)),
             //map(lex_token_eof, |t| LexNext(LexType::EOF, vec![t])),
         )),
     )(i)
@@ -40,8 +46,10 @@ pub struct LexerState<'a> {
     acc: Vec<Token<'a>>,
     indent_size: usize,
     whitespace: Vec<Token<'a>>,
-    trail: Option<LexType>,
+    trail: Option<LexNext<'a>>,
+    indent_stack: Vec<Token<'a>>
 }
+
 impl<'a> Default for LexerState<'a> {
     fn default() -> Self {
         Self {
@@ -49,6 +57,7 @@ impl<'a> Default for LexerState<'a> {
             whitespace: vec![],
             indent_size: 0,
             trail: None,
+            indent_stack: vec![],
         }
     }
 }
@@ -74,6 +83,7 @@ impl<'a> LexerState<'a> {
 
     pub fn push_token(&mut self, mut token: Token<'a>) {
         println!("Push: {:?}", &token);
+        token.indent = self.indent_size;
         token.s.prepend(
             self.whitespace
                 .drain(..)
@@ -154,6 +164,7 @@ impl<'a> LexerState<'a> {
 
     pub fn dump(&self) {
         println!("State");
+        println!("\tStack: {:?}", self.indent_stack);
         for token in &self.acc {
             println!("\tToken: {:?}", token);
         }
@@ -162,63 +173,123 @@ impl<'a> LexerState<'a> {
         }
     }
 
-    pub fn push(&mut self, mut next: LexNext<'a>) {
-        use LexType::*;
+    pub fn push(&mut self, next: LexNext<'a>) {
+        use LexNext::*;
         match &self.trail {
-            Some(Token) => {
-                match next.0 {
+            Some(Token(_)) => {
+                match next {
                     // [T] + L -> [T] - Ident unchanged - no identation, T.post += L
-                    Space | Tab => {
+                    Space(t) | Tab(t) => {
                         // we must have a token in acc
-                        self.acc.last_mut().unwrap().s.append(vec![next.1.tok.clone()]);
+                        self.acc.last_mut().unwrap().s.append(vec![t.tok.clone()]);
                     }
                     // [T] + T -> [T] -> Indent unchanged - reset to last T
-                    Token => {
-                        self.push_token(next.1);
+                    Token(t) => {
+                        self.push_token(t);
                     }
                     // [T] + N -> [] -> Indent([]) - T.post += N, reset
-                    Newline | EOF => {
+                    Newline(t) => {
+                        // push indent to stack and reset
+                        //if self.indent_size > 0 {
+                            //self.indent_stack.push(self.acc.last().unwrap().clone());//self.indent_size);
+                        //}
                         self.indent_size = 0;
-                        self.acc.last_mut().unwrap().s.append(vec![next.1.tok.clone()]);
+                        
+                        // append whitespace to the last token
+                        self.acc.last_mut().unwrap().s.append(vec![t.tok.clone()]);
+                        self.trail = None;
+                    }
+                    EOF => {
+                        self.indent_size = 0;
                         self.trail = None;
                     }
                 }
             }
-            Some(Space | Tab) => {
-                match next.0 {
+
+            // this never gets run
+            Some(Space(_) | Tab(_)) => {
+                match next {
                     // [L] + N -> [],  Indent([]), reset, add to whitespace
-                    Newline | EOF => {
+                    Newline(t) => {
+                        // ignore this spurious linespace, we don't change our indent stack, just
+                        // reset
                         self.indent_size = 0;
                         self.trail = None;
-                        self.whitespace.push(next.1);
+                        self.whitespace.push(t);
                     }
-                    // [L] + T -> [T], indent unchanded, T.pre += L
-                    Token => {
-                        next.1.s.prepend(self.drain_whitespace());
-                        self.trail = Some(next.0);
+                    EOF => {
+                        self.indent_size = 0;
+                        self.trail = None;
+                    }
+                    // [L] + T -> [T], indent unchanged, T.pre += L
+                    Token(mut t) => {
+                        t.s.prepend(self.drain_whitespace());
+                        self.push_token(t.clone());
+                        self.trail = Some(LexNext::Token(t));
                     }
                     _ => unreachable!()
                 }
             }
             Some(_) => unreachable!(),
             None => {
-                match next.0 {
+                let linespace_count = next.linespace_count();
+                match next {
                     // [] + L -> [], Indent([L]), pending indentation
-                    Space | Tab => {
-                        self.indent_size += next.linespace_count();
-                        self.whitespace.push(next.1);
+                    Space(t) | Tab(t) => {
+                        self.indent_size += linespace_count;
+                        self.whitespace.push(t.clone());
                     }
                     // [] + T -> [T], Ident([]), got a token, waiting for L, or N, add ws to T.pre
-                    Token => {
-                        self.indent_size = 0;
-                        next.1.s.prepend(self.drain_whitespace());
-                        self.trail = Some(next.0);
-                        self.push_token(next.1);
+                    // First token on a line
+                    // check if we are closing out previous indentation
+                    Token(mut t) => {
+                        loop {
+                            let prev_indent = if let Some(prev) = self.indent_stack.last() {
+                                prev.indent
+                            } else {
+                                0
+                            };
+
+                            if self.indent_size < prev_indent {
+                                // close out
+                                let prev = self.indent_stack.pop().unwrap();
+                                //self.push_token(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                                self.whitespace.push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                            } else if self.indent_size > prev_indent {
+                                //self.push_token(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
+                                self.whitespace.push(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
+                                //self.indent_stack.push(prev);
+                                //
+                                // update indentation before pushing
+                                let mut x = t.clone();
+                                x.indent = self.indent_size;
+                                self.indent_stack.push(x);
+                                break;
+                            } else {
+                                // do nothing
+                                break;
+                            }
+                        }
+
+                        t.s.prepend(self.drain_whitespace());
+                        self.trail = Some(LexNext::Token(t.clone()));
+                        self.push_token(t.clone());
                     }
                     // [] + N -> [] Indent([]) - reset
-                    Newline | EOF => {
+                    Newline(t) => {
+                        // do nothing with the indent stack
                         self.indent_size = 0;
-                        self.whitespace.push(next.1);
+                        self.whitespace.push(t.clone());
+                    }
+                    EOF => {
+                        loop {
+                            if let Some(prev) = self.indent_stack.pop() {
+                                // close out
+                                self.push_token(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                            } else {
+                                break;
+                            };
+                        }
                     }
                 }
             }
@@ -236,6 +307,11 @@ impl<'a> LexerState<'a> {
         Ok((i, ()))
     }
 
+    pub fn eof(&mut self) {
+        self.flush();
+        self.push(LexNext::EOF);
+    }
+
     pub fn lex_eof(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
         let (i, _) = self.lex(i)?;
         let (i, pos) = position(i)?;
@@ -243,6 +319,7 @@ impl<'a> LexerState<'a> {
         // we only want surround on EOF if we have a whitespace file
         self.flush();
         self.push_token(token(Tok::EOF, pos));
+        self.eof();
         println!("state: {:?}", self);
         Ok((i, ()))
     }

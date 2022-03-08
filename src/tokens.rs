@@ -37,6 +37,10 @@ pub enum Tok {
     RightArrow,  // ->
     LeftArrow,   // <-
 
+    // Indentation
+    IndentOpen,
+    IndentClose,
+
     // Keywords
     If,
     Else,
@@ -115,6 +119,8 @@ impl Tok {
             Null => "null".into(),
 
             EOF => "".into(),
+            IndentOpen => "".into(),
+            IndentClose => "".into(),
             _ => {
                 println!("Panic: Unable to unlex token: {:?}", self);
                 unreachable!() //"[UNKNOWN]".into(),
@@ -127,6 +133,13 @@ impl Tok {
             Tok::NL(_) => true,
             Tok::CRLF(_) => true,
             Tok::LF(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_indent(&self) -> bool {
+        match self {
+            Tok::IndentOpen | Tok::IndentClose => true,
             _ => false,
         }
     }
@@ -146,6 +159,7 @@ impl Tok {
 #[derive(Clone, PartialEq)]
 pub struct Token<'a> {
     pub s: Surround,
+    pub indent: usize,
     //pub pre: Vec<Token<'a>>,
     //pub post: Vec<Token<'a>>,
     pub tok: Tok,
@@ -160,11 +174,21 @@ impl<'a> fmt::Debug for Token<'a> {
             .field("post", &self.s.post)
             .field("line", &self.pos.location_line())
             .field("col", &self.pos.get_column())
+            .field("indent", &self.indent)
             .finish()
     }
 }
 
 impl<'a> Token<'a> {
+    pub fn new(tok: Tok, pos: Span) -> Token {
+        Token {
+            s: Surround::default(),
+            indent: 0,
+            tok,
+            pos,
+        }
+    }
+
     pub fn toks_pre(&self) -> Vec<Tok> {
         self.s.pre.clone() //.iter().map(|t| t.toks()).flatten().collect()
     }
@@ -211,13 +235,7 @@ impl<'a> Token<'a> {
 }
 
 pub fn token(tok: Tok, pos: Span) -> Token {
-    Token {
-        s: Surround::default(),
-        tok,
-        pos,
-        //pre: vec![],
-        //post: vec![],
-    }
+    Token::new(tok, pos)
 }
 
 #[derive(Clone, Debug)]

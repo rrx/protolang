@@ -81,7 +81,8 @@ impl Surround {
         let mut linespace_after = 0;
         for e in &self.post {
             if !has_newline {
-                if e.is_linespace() {
+                if e.is_indent() {
+                } else if e.is_linespace() {
                     linespace_after += 1;
                 } else if e.is_newline() {
                     has_newline = true;
@@ -98,7 +99,8 @@ impl Surround {
         //let mut has_preceding_linespace = false;
         let mut linespace_before = 0;
         for e in self.pre.iter().rev() {
-            if e.is_linespace() {
+            if e.is_indent() {
+            } else if e.is_linespace() {
                 linespace_before += 1;
             } else {
                 break;
