@@ -5,9 +5,9 @@ use crate::results::*;
 use crate::tokens::*;
 use nom::branch::*;
 use nom::bytes::complete::take;
-use nom::combinator::{into, verify};
+use nom::combinator::{self, into, opt, verify};
 use nom::error::{context, ErrorKind, VerboseError};
-use nom::multi::many0;
+use nom::multi::{many0, many1};
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
@@ -141,23 +141,38 @@ fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 pub fn parse_statements0(i: Tokens) -> PResult<Tokens, Vec<StmtNode>> {
-    many0(alt((parse_statement, parse_invalid_stmt)))(i)
+    many0(parse_statement)(i)//alt((parse_statement, parse_invalid_stmt)))(i)
+}
+
+pub fn parse_empty_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
+    combinator::map(tag_token(Tok::SemiColon), |t| {
+        let mut stmt = StmtNode::new(Stmt::Empty, t.to_location());
+        stmt.s.append(t.expand_toks());
+        stmt
+    })(i)
 }
 
 pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
     //println!("parse_statment: {:?}", i);
-    let (i, (before, mut stmt, after)) = tuple((
-        many0(parse_whitespace_or_eof),
-        alt((
+    let (i, stmt) =
+         //ntuple((
+        //many0(parse_whitespace_or_eof),
+        //alt((
             //parse_block_stmt,
-            parse_expr_stmt,
-            parse_assignment_stmt,
+            alt((
+                    parse_expr_stmt,
+                    parse_empty_stmt,
+                    parse_invalid_stmt
+                    ))
+            //pair(parse_expr_stmt, many0(tag_token(Tok::SemiColon)))
+            //parse_assignment_stmt,
             //parse_invalid_stmt,
             //parse_literal_stmt,
-        )),
-        many0(parse_stmt_end), //parse_whitespace_or_eof),
-    ))(i)?;
+        //)),
+        //many0(parse_stmt_end), //parse_whitespace_or_eof),
+    (i)?;
     println!("{:?}", stmt);
+    /*
     stmt.s.prepend(
         before
             .into_iter()
@@ -172,6 +187,7 @@ pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
             .flatten()
             .collect(),
     );
+    */
     Ok((i, stmt))
 }
 
@@ -302,7 +318,7 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
 fn go_parse_pratt_expr(
     input: Tokens,
     precedence: Precedence,
-    left: ExprNode,
+    mut left: ExprNode,
 ) -> PResult<Tokens, ExprNode> {
     //println!("go: {:?}", &input);
     let (i1, t1) = take_one_any(input.clone())?;
@@ -314,8 +330,9 @@ fn go_parse_pratt_expr(
     } else {
         // inspect the next element, if it's a valid op
         let preview = &t1.tok[0];
+
         let p = infix_op(&preview.tok);
-        //println!("infix: {:?}", (&preview, &p));
+        println!("infix: {:?}", (&preview, &p));
         match p {
             //(Precedence::PExp, _) if precedence < Precedence::PExp => {
             //let (i2, left2) = parse_caret_expr(input, left)?;
@@ -331,6 +348,14 @@ fn go_parse_pratt_expr(
                 let (i2, left2) = parse_index_expr(input, left)?;
                 go_parse_pratt_expr(i2, precedence, left2)
             }
+            
+            // otherwise we just return the LHS
+            (Precedence::PHighest, _) => {
+                println!("high: {:?}", &input);
+                let (i2, token) = tag_token(Tok::SemiColon)(input)?;
+                left.s.append(token.toks());
+                Ok((i2, left))
+            }
 
             // if the precedence of the next op is greater then the current precedence,
             // then we include it in this expr, and try to parse the RHS
@@ -338,7 +363,6 @@ fn go_parse_pratt_expr(
                 let (i2, left2) = parse_infix_expr(input, left)?;
                 go_parse_pratt_expr(i2, precedence, left2)
             }
-            // otherwise we just return the LHS
             _ => Ok((input, left)),
         }
     }
@@ -500,6 +524,7 @@ fn parse_infix(i: Tokens) -> PResult<Tokens, Binary> {
     let (i1, t1) = take_one_any(i.clone())?;
     let next = &t1.tok[0];
     let (_, maybe_op) = infix_op(&next.tok);
+    println!("maybe: {:?}", (&next, &maybe_op));
     match maybe_op {
         None => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
         Some(_) => Ok((i1, Binary::from_token(next.clone()).unwrap())),
@@ -542,10 +567,32 @@ fn parse_call_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
     Ok((i3, expr))
 }
 
+pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
+    match left.value {
+        Expr::IdentExpr(mut ident) => {
+            let (i, (assign, mut expr)) = tuple((
+                    tag_token(Tok::Assign),
+                    parse_expr
+                    ))(i)?;
+
+            // transfer surround from assign to nodes we store
+            ident.s.append(assign.tok[0].s.pre.clone());
+            expr.s.prepend(assign.tok[0].s.post.clone());
+
+            let value = Expr::Binary(Binary::from_token(assign.tok[0].clone()).unwrap(), Box::new(ident.into()), Box::new(expr));
+            let expr = ExprNode::new(value, i.to_location());
+            Ok((i, expr))
+        }
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag)))
+    }
+
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::lexer::*;
+    use nom::multi::many1;
     use crate::sexpr::SExpr;
 
     fn parser_losslessness(s: &str) -> bool {
@@ -629,18 +676,30 @@ mod tests {
             "1 + 2",
             " 1 + 2 ",
             "c()",
+            "c[1]",
+            "1 + 2\nx + 4",
+            "1 + 2 + \n\tx + 4",
+            "1 + 2  x + 4",
+            "x = 1",
+            "x = 1 y = 2",
+            "x + y = 1 + 2",
+            "y = 1 + 2",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str(v).unwrap();
             let tokens = lexer.tokens();
-            println!("v {:?}", (&v));
-            println!("tokens: {:?}", (&tokens));
+            //println!("v {:?}", (&v));
+            //println!("tokens: {:?}", (&tokens));
 
-            match parse_expr(tokens) {
+            let mut p = many1(parse_expr);
+            match p(tokens) {
                 Ok((rest, result)) => {
                     println!("p {:?}", (&result));
                     println!("rest {:?}", (&rest));
-                    let restored = result.unlex();
+                    result.iter().for_each(|v| {
+                        println!("S: {}", (&v.sexpr().unwrap()));
+                    });
+                    let restored = result.into_iter().map(|v| v.unlex()).collect::<Vec<_>>().join("");
                     println!("{:?}", (&v, &restored));
                     assert_eq!(v, &restored);
                 }
@@ -669,7 +728,7 @@ mod tests {
             ";",
             "\\x -> y;",
             "f = \\x -> { x^2 };",
-            "x + 1 +\n  2\n  ;\nx+1;\n",
+            "x + 1 +\n  2\n  \nx+1;\n",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str(v).unwrap();
@@ -691,7 +750,6 @@ mod tests {
                         dump_stmt(&stmt);
                     }
 
-                    assert!(rest.input_len() == 0);
 
                     let restored = results
                         .iter()
@@ -701,7 +759,8 @@ mod tests {
                     println!("cmp {:?}", (&v, &restored));
                     assert_eq!(v, &restored);
                     println!("remaining {:?}", (&rest.toks()));
-                    assert_eq!(rest.toks().len(), 0);
+                    //assert_eq!(rest.toks().len(), 0);
+                    //assert!(rest.input_len() == 0);
                 }
                 Err(nom::Err::Error(e)) => {
                     for (tokens, err) in e.errors {
@@ -768,6 +827,7 @@ mod tests {
             "((x))",
             "x(y)",
             "x[y]",
+            "x = 1 y = 2",
         ];
         r.iter().for_each(|v| {
             assert!(parser_losslessness(v));
@@ -856,6 +916,7 @@ mod tests {
             ),
             ("x( 1 2 3)", "(apply x 1 2 3)"),
             ("(x+y)( 1 2 3)", "(apply (+ x y) 1 2 3)"),
+            ("x = 1", "(= x 1)"),
         ];
 
         r.iter().for_each(|(q, a)| {

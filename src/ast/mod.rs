@@ -27,6 +27,7 @@ pub enum Stmt {
     Expr(ExprNode),
     Lit(LiteralNode),
     Invalid(String),
+    Empty
 }
 #[derive(PartialEq, Debug, Clone)]
 pub struct StmtNode {
@@ -54,6 +55,7 @@ impl Unparse for StmtNode {
                 .collect(),
             Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
             Stmt::Invalid(s) => vec![Tok::Invalid(s.clone())],
+            Stmt::Empty => vec![],
         })
     }
 }
@@ -72,6 +74,7 @@ impl SExpr for StmtNode {
                 stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
             )),
             Stmt::Invalid(s) => Err(SError::Invalid(s.clone())),
+            Stmt::Empty => Ok(S::Null)
         }
     }
 }
@@ -358,6 +361,7 @@ pub enum Operator {
     LessThanEqual,
     GreaterThan,
     LessThan,
+    Assign,
     //Map,
 }
 
@@ -426,6 +430,7 @@ impl Binary {
             Operator::GreaterThanEqual => Tok::GTE,
             Operator::LessThan => Tok::LT,
             Operator::GreaterThan => Tok::GT,
+            Operator::Assign => Tok::Assign,
             //Operator::Map => Tok::LeftArrow,
         }
     }
@@ -444,6 +449,7 @@ impl Unparse for Binary {
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Precedence {
     PLowest,
+    PAssign,
     //PMap,
     PEquals,
     PLessGreater,
@@ -452,6 +458,7 @@ pub enum Precedence {
     PExp,
     PCall,
     PIndex,
+    PHighest,
 }
 
 pub fn infix_precedence(op: Operator) -> Precedence {
@@ -467,6 +474,7 @@ pub fn infix_precedence(op: Operator) -> Precedence {
         Operator::Multiply => Precedence::PProduct,
         Operator::Divide => Precedence::PProduct,
         Operator::Exp => Precedence::PExp,
+        Operator::Assign => Precedence::PAssign,
         //Operator::Map => Precedence::PMap,
     }
 }
@@ -487,6 +495,8 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
         Tok::Caret => (Precedence::PExp, Some(Operator::Exp)),
         Tok::LParen => (Precedence::PCall, None),
         Tok::LBracket => (Precedence::PIndex, None),
+        Tok::Assign => (Precedence::PAssign, Some(Operator::Assign)),
+        Tok::SemiColon => (Precedence::PHighest, None),
         _ => (Precedence::PLowest, None),
     }
 }
