@@ -175,20 +175,20 @@ impl Interpreter {
                 let eval_left = self.evaluate(&left)?;
                 let eval_right = self.evaluate(&right)?;
                 match op.value {
-                    Infix::Plus => eval_left.plus(&eval_right),
-                    Infix::Minus => eval_left.minus(&eval_right),
-                    Infix::Exp => eval_left.exp(&eval_right),
-                    Infix::Multiply => eval_left.multiply(&eval_right),
-                    Infix::Divide => eval_left.divide(&eval_right),
-                    Infix::GreaterThanEqual => eval_left.gte(&eval_right),
-                    Infix::LessThanEqual => eval_left.lte(&eval_right),
-                    Infix::GreaterThan => eval_left.gt(&eval_right),
-                    Infix::LessThan => eval_left.lt(&eval_right),
-                    //Infix::Map => {
+                    Operator::Plus => eval_left.plus(&eval_right),
+                    Operator::Minus => eval_left.minus(&eval_right),
+                    Operator::Exp => eval_left.exp(&eval_right),
+                    Operator::Multiply => eval_left.multiply(&eval_right),
+                    Operator::Divide => eval_left.divide(&eval_right),
+                    Operator::GreaterThanEqual => eval_left.gte(&eval_right),
+                    Operator::LessThanEqual => eval_left.lte(&eval_right),
+                    Operator::GreaterThan => eval_left.gt(&eval_right),
+                    Operator::LessThan => eval_left.lt(&eval_right),
+                    //Operator::Map => {
                     //Ok(InterpretValue::Lambda(e.clone()))
                     //}
                     _ => Err(InterpretError::Runtime {
-                        message: format!("Unimplemented expression op: Infix::{:?}", op.value),
+                        message: format!("Unimplemented expression op: Operator::{:?}", op.value),
                         line: 0,
                     }),
                 }
@@ -204,11 +204,20 @@ impl Interpreter {
                 println!("Lambda({:?})", &e);
                 Ok(Value::Callable(e.node()))
             }
-            Expr::Apply(ident, args) => {
-                let f = self.globals.get(ident.value.as_str())?;
+            Expr::Index(ident, args) => {
+                Ok(Value::IntLiteral(0))
+            }
+            Expr::Apply(expr, args) => {
+                let f = match &expr.value {
+                    Expr::IdentExpr(ident) => {
+                        Some(self.globals.get(ident.value.as_str())?)
+                    }
+                    _ => None
+                };
+
                 //let env = Environment::default();
                 match f {
-                    Value::Callable(c) => {
+                    Some(Value::Callable(c)) => {
                         let mut eval_args = vec![];
                         for arg in args {
                             eval_args.push(self.evaluate(arg)?);

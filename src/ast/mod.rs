@@ -125,7 +125,8 @@ pub enum Expr {
     Binary(Binary, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
     List(Vec<ExprNode>),
-    Apply(Ident, Vec<ExprNode>),
+    Apply(Box<ExprNode>, Vec<ExprNode>),
+    Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<StmtNode>),
 }
 
@@ -208,6 +209,10 @@ impl Unparse for ExprNode {
             Lambda(e) => {
                 out.append(&mut e.unparse());
             }
+            Index(expr, arg) => {
+                out.append(&mut expr.unparse());
+                out.append(&mut arg.unparse());
+            }
             Apply(ident, args) => {
                 out.append(&mut ident.unparse());
                 for arg in args {
@@ -244,12 +249,19 @@ impl SExpr for ExprNode {
                 Ok(S::Cons("list".into(), s_args))
             }
             Lambda(e) => e.sexpr(),
-            Apply(ident, args) => {
-                let s_args = args
+            Index(expr, arg) => {
+                let sexpr = expr.sexpr()?;
+                let sarg = arg.sexpr()?;
+                Ok(S::Cons("index".into(), vec![sexpr, sarg]))
+            }
+            Apply(expr, args) => {
+                let mut s_args = args
                     .iter()
                     .filter_map(|a| a.sexpr().ok())
                     .collect::<Vec<_>>();
-                Ok(S::Cons(ident.value.clone(), s_args))
+                let mut v = vec![expr.sexpr()?];
+                v.append(&mut s_args);
+                Ok(S::Cons("apply".into(), v))
             }
             Block(stmts) => Ok(S::Cons(
                 "block".into(),
@@ -334,7 +346,7 @@ impl Unparse for Unary {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Infix {
+pub enum Operator {
     Plus,
     Minus,
     Divide,
@@ -352,13 +364,13 @@ pub enum Infix {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Binary {
     pub s: Surround,
-    pub value: Infix,
+    pub value: Operator,
     pub precedence: Precedence,
     pub loc: Location,
 }
 
 impl Binary {
-    pub fn new(infix: Infix, precedence: Precedence, loc: Location) -> Self {
+    pub fn new(infix: Operator, precedence: Precedence, loc: Location) -> Self {
         Self {
             s: Surround::default(),
             value: infix,
@@ -388,7 +400,7 @@ impl Binary {
     }
 
     pub fn from_tokens(
-        infix: Infix,
+        infix: Operator,
         precedence: Precedence,
         pre: Vec<Tok>,
         post: Vec<Tok>,
@@ -403,18 +415,18 @@ impl Binary {
 
     pub fn token(&self) -> Tok {
         match self.value {
-            Infix::Plus => Tok::Plus,
-            Infix::Minus => Tok::Minus,
-            Infix::Multiply => Tok::Mul,
-            Infix::Divide => Tok::Div,
-            Infix::Exp => Tok::Caret,
-            Infix::Equal => Tok::Equals,
-            Infix::NotEqual => Tok::NotEquals,
-            Infix::LessThanEqual => Tok::LTE,
-            Infix::GreaterThanEqual => Tok::GTE,
-            Infix::LessThan => Tok::LT,
-            Infix::GreaterThan => Tok::GT,
-            //Infix::Map => Tok::LeftArrow,
+            Operator::Plus => Tok::Plus,
+            Operator::Minus => Tok::Minus,
+            Operator::Multiply => Tok::Mul,
+            Operator::Divide => Tok::Div,
+            Operator::Exp => Tok::Caret,
+            Operator::Equal => Tok::Equals,
+            Operator::NotEqual => Tok::NotEquals,
+            Operator::LessThanEqual => Tok::LTE,
+            Operator::GreaterThanEqual => Tok::GTE,
+            Operator::LessThan => Tok::LT,
+            Operator::GreaterThan => Tok::GT,
+            //Operator::Map => Tok::LeftArrow,
         }
     }
 }
@@ -442,37 +454,37 @@ pub enum Precedence {
     PIndex,
 }
 
-pub fn infix_precedence(op: Infix) -> Precedence {
+pub fn infix_precedence(op: Operator) -> Precedence {
     match op {
-        Infix::Equal => Precedence::PEquals,
-        Infix::NotEqual => Precedence::PEquals,
-        Infix::LessThanEqual => Precedence::PLessGreater,
-        Infix::GreaterThanEqual => Precedence::PLessGreater,
-        Infix::LessThan => Precedence::PLessGreater,
-        Infix::GreaterThan => Precedence::PLessGreater,
-        Infix::Plus => Precedence::PSum,
-        Infix::Minus => Precedence::PSum,
-        Infix::Multiply => Precedence::PProduct,
-        Infix::Divide => Precedence::PProduct,
-        Infix::Exp => Precedence::PExp,
-        //Infix::Map => Precedence::PMap,
+        Operator::Equal => Precedence::PEquals,
+        Operator::NotEqual => Precedence::PEquals,
+        Operator::LessThanEqual => Precedence::PLessGreater,
+        Operator::GreaterThanEqual => Precedence::PLessGreater,
+        Operator::LessThan => Precedence::PLessGreater,
+        Operator::GreaterThan => Precedence::PLessGreater,
+        Operator::Plus => Precedence::PSum,
+        Operator::Minus => Precedence::PSum,
+        Operator::Multiply => Precedence::PProduct,
+        Operator::Divide => Precedence::PProduct,
+        Operator::Exp => Precedence::PExp,
+        //Operator::Map => Precedence::PMap,
     }
 }
 
-pub fn infix_op(t: &Tok) -> (Precedence, Option<Infix>) {
+pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
     match *t {
-        Tok::Equals => (Precedence::PEquals, Some(Infix::Equal)),
-        Tok::NotEquals => (Precedence::PEquals, Some(Infix::NotEqual)),
-        //Tok::LeftArrow => (Precedence::PMap, Some(Infix::Map)),
-        Tok::LTE => (Precedence::PLessGreater, Some(Infix::LessThanEqual)),
-        Tok::GTE => (Precedence::PLessGreater, Some(Infix::GreaterThanEqual)),
-        Tok::LT => (Precedence::PLessGreater, Some(Infix::LessThan)),
-        Tok::GT => (Precedence::PLessGreater, Some(Infix::GreaterThan)),
-        Tok::Plus => (Precedence::PSum, Some(Infix::Plus)),
-        Tok::Minus => (Precedence::PSum, Some(Infix::Minus)),
-        Tok::Mul => (Precedence::PProduct, Some(Infix::Multiply)),
-        Tok::Div => (Precedence::PProduct, Some(Infix::Divide)),
-        Tok::Caret => (Precedence::PExp, Some(Infix::Exp)),
+        Tok::Equals => (Precedence::PEquals, Some(Operator::Equal)),
+        Tok::NotEquals => (Precedence::PEquals, Some(Operator::NotEqual)),
+        //Tok::LeftArrow => (Precedence::PMap, Some(Operator::Map)),
+        Tok::LTE => (Precedence::PLessGreater, Some(Operator::LessThanEqual)),
+        Tok::GTE => (Precedence::PLessGreater, Some(Operator::GreaterThanEqual)),
+        Tok::LT => (Precedence::PLessGreater, Some(Operator::LessThan)),
+        Tok::GT => (Precedence::PLessGreater, Some(Operator::GreaterThan)),
+        Tok::Plus => (Precedence::PSum, Some(Operator::Plus)),
+        Tok::Minus => (Precedence::PSum, Some(Operator::Minus)),
+        Tok::Mul => (Precedence::PProduct, Some(Operator::Multiply)),
+        Tok::Div => (Precedence::PProduct, Some(Operator::Divide)),
+        Tok::Caret => (Precedence::PExp, Some(Operator::Exp)),
         Tok::LParen => (Precedence::PCall, None),
         Tok::LBracket => (Precedence::PIndex, None),
         _ => (Precedence::PLowest, None),
@@ -570,7 +582,7 @@ mod tests {
 
     #[test]
     fn infix() {
-        let p = Binary::new(Infix::Minus, Precedence::PLowest, Location::default());
+        let p = Binary::new(Operator::Minus, Precedence::PLowest, Location::default());
         //println!("{:?}", (&p, &p.token(), &p.unlex()));
         assert_eq!(p.unlex(), "-");
     }

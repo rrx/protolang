@@ -145,7 +145,7 @@ pub fn parse_statements0(i: Tokens) -> PResult<Tokens, Vec<StmtNode>> {
 }
 
 pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
-    println!("parse_statment: {:?}", i);
+    //println!("parse_statment: {:?}", i);
     let (i, (before, mut stmt, after)) = tuple((
         many0(parse_whitespace_or_eof),
         alt((
@@ -230,9 +230,7 @@ pub fn _parse_invalid_stmt2(i: Tokens) -> PResult<Tokens, StmtNode> {
 }
 
 pub fn parse_invalid_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
-    println!("pinvalid: {:?}", &i);
     let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i.clone())?;
-    println!("pinvalid2: {:?}", &i1);
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
     i1.result(Results::Error(format!("Invalid Statement: {}", s), 0));
     let mut stmt = StmtNode::new(Stmt::Invalid(s), i.to_location());
@@ -245,9 +243,7 @@ pub fn parse_invalid_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
 pub fn parse_expr_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
     let (i, (expr, nl)) = pair(parse_expr, parse_stmt_end)(i)?;
     let mut stmt: StmtNode = expr.into();
-    //let mut stmt = StmtNode::new(Stmt::Expr(expr), i.to_location());
     stmt.s.append(nl.expand_toks());
-    //println!("***: {:?}", (&stmt));
     Ok((i, stmt))
 }
 
@@ -280,9 +276,8 @@ pub fn parse_program_with_results(i: Tokens) -> (Option<Program>, Vec<Results>) 
 }
 
 pub fn parse_program(i: Tokens) -> PResult<Tokens, Program> {
-    let (i, (stmts, end)) = pair(parse_statements0, many0(parse_whitespace_or_eof))(i)?; //many0(parse_statement)(i)?;
+    let (i, (stmts, end)) = pair(parse_statements0, many0(parse_whitespace_or_eof))(i)?;
     let mut value = Program::new(stmts);
-    //value.s.prepend(pre.iter().map(|v| v.expand_toks()).flatten().collect());
     value
         .s
         .append(end.iter().map(|v| v.expand_toks()).flatten().collect());
@@ -298,8 +293,10 @@ pub fn _parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 
 fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, ExprNode> {
     let (i1, left) = parse_atom(input)?;
-    println!("atom: {:?}", &left);
-    go_parse_pratt_expr(i1, precedence, left)
+    println!("pratt atom: {:?}", &left.value);
+    let r = go_parse_pratt_expr(i1, precedence, left);
+    println!("pratt r: {:?}", &r);
+    r
 }
 
 fn go_parse_pratt_expr(
@@ -307,7 +304,7 @@ fn go_parse_pratt_expr(
     precedence: Precedence,
     left: ExprNode,
 ) -> PResult<Tokens, ExprNode> {
-    println!("go: {:?}", &input);
+    //println!("go: {:?}", &input);
     let (i1, t1) = take_one_any(input.clone())?;
 
     // if we have a LHS, and nothing remains, just return LHS
@@ -324,14 +321,16 @@ fn go_parse_pratt_expr(
             //let (i2, left2) = parse_caret_expr(input, left)?;
             //go_parse_pratt_expr(i2, precedence, left2)
             //}
-            //(Precedence::PCall, _) if precedence < Precedence::PCall => {
-            //let (i2, left2) = parse_call_expr(input, left)?;
-            //go_parse_pratt_expr(i2, precedence, left2)
-            //}
-            //(Precedence::PIndex, _) if precedence < Precedence::PIndex => {
-            //let (i2, left2) = parse_index_expr(input, left)?;
-            //go_parse_pratt_expr(i2, precedence, left2)
-            //}
+
+            (Precedence::PCall, _) if precedence < Precedence::PCall => {
+                let (i2, left2) = parse_call_expr(input, left)?;
+                go_parse_pratt_expr(i2, precedence, left2)
+            }
+
+            (Precedence::PIndex, _) if precedence < Precedence::PIndex => {
+                let (i2, left2) = parse_index_expr(input, left)?;
+                go_parse_pratt_expr(i2, precedence, left2)
+            }
 
             // if the precedence of the next op is greater then the current precedence,
             // then we include it in this expr, and try to parse the RHS
@@ -378,7 +377,7 @@ fn parse_atom(i: Tokens) -> PResult<Tokens, ExprNode> {
         "atom",
         alt((
             //caret really isn't an atom, but this is how we give it precedence over prefix
-            parse_apply2_expr,
+            //parse_apply2_expr,
             //parse_apply1_expr,
             parse_caret_expr,
             into(parse_literal),
@@ -399,34 +398,33 @@ fn _parse_apply_end(i: Tokens) -> PResult<Tokens, Tokens> {
     alt((tag_token(Tok::SemiColon), parse_newline_or_eof))(i)
 }
 
-fn _parse_apply1_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, (left, ident, args, right)) = tuple((
-        tag_token(Tok::LParen),
-        parse_ident,
-        many0(parse_expr),
-        tag_token(Tok::RParen),
-    ))(i)?;
-    let mut lambda = ExprNode::new(Expr::Apply(ident.clone(), args), ident.loc);
-    lambda.s.prepend(left.expand_toks());
-    lambda.s.append(right.expand_toks());
-    Ok((i, lambda))
-}
+//fn _parse_apply1_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+    //let (i, (left, ident, args, right)) = tuple((
+        //tag_token(Tok::LParen),
+        //parse_ident,
+        //many0(parse_expr),
+        //tag_token(Tok::RParen),
+    //))(i)?;
+    //let mut lambda = ExprNode::new(Expr::Apply(ident.clone(), args), ident.loc);
+    //lambda.s.prepend(left.expand_toks());
+    //lambda.s.append(right.expand_toks());
+    //Ok((i, lambda))
+//}
 
-fn parse_apply2_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, (mut ident, left, args, right)) = tuple((
-        parse_ident,
-        tag_token(Tok::LParen),
-        many0(parse_expr),
-        tag_token(Tok::RParen),
-    ))(i)?;
-    ident.s.append(left.expand_toks());
-    let mut lambda = ExprNode::new(Expr::Apply(ident.clone(), args), ident.loc);
-    lambda.s.append(right.expand_toks());
-    Ok((i, lambda))
-}
+//fn parse_apply2_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+    //let (i, (mut ident, left, args, right)) = tuple((
+        //parse_ident,
+        //tag_token(Tok::LParen),
+        //many0(parse_expr),
+        //tag_token(Tok::RParen),
+    //))(i)?;
+    //ident.s.append(left.expand_toks());
+    //let mut lambda = ExprNode::new(Expr::Apply(ident.clone(), args), ident.loc);
+    //lambda.s.append(right.expand_toks());
+    //Ok((i, lambda))
+//}
 
 fn parse_lambda_end(i: Tokens) -> PResult<Tokens, Tokens> {
-    //parse_newline_or_eof(i)
     alt((tag_token(Tok::SemiColon), parse_newline_or_eof))(i)
 }
 
@@ -464,9 +462,9 @@ fn parse_caret_side(i: Tokens) -> PResult<Tokens, ExprNode> {
 fn parse_caret_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (left, op, right)) =
         tuple((parse_caret_side, tag_token(Tok::Caret), parse_caret_side))(i)?;
-    let infix = Binary::from_token(op.tok[0].clone()).unwrap();
-    let loc = infix.loc.clone();
-    let expr = ExprNode::new(Expr::Binary(infix, Box::new(left), Box::new(right)), loc);
+    let op = Binary::from_token(op.tok[0].clone()).unwrap();
+    let loc = op.loc.clone();
+    let expr = ExprNode::new(Expr::Binary(op, Box::new(left), Box::new(right)), loc);
     Ok((i, expr))
 }
 
@@ -520,6 +518,30 @@ fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
     ))
 }
 
+fn parse_index_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
+    let (i, open) = tag_token(Tok::LBracket)(i)?;
+    let (i2, index) = parse_pratt_expr(i, Precedence::PIndex)?;
+    let (i3, close) = tag_token(Tok::RBracket)(i2)?;
+    left.s.append(open.expand_toks());
+    let loc = index.loc.clone();
+    let mut expr = ExprNode::new(Expr::Index(Box::new(left), Box::new(index)), loc);
+    expr.s.append(close.expand_toks());
+    Ok((i3, expr))
+}
+
+fn parse_call_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
+    let (i, open) = tag_token(Tok::LParen)(i)?;
+    //let (i2, args) = parse_pratt_expr(i, Precedence::PCall)?;//many0(parse_expr)(i)?;
+    let (i2, args) = many0(parse_expr)(i)?;
+    let (i3, close) = tag_token(Tok::RParen)(i2)?;
+    left.s.append(open.expand_toks());
+    let loc = open.to_location();
+    let mut expr = ExprNode::new(Expr::Apply(Box::new(left), args), loc);
+    //let mut expr = ExprNode::new(Expr::Lambda(Lambda::new(Box::new(left), args), loc);
+    expr.s.append(close.expand_toks());
+    Ok((i3, expr))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,7 +553,7 @@ mod tests {
         let mut lexer = LexerState::from_str(s).unwrap();
         let tokens = lexer.tokens();
         //let toks = tokens.toks();
-        println!("tokens {:?}", tokens);
+        //println!("tokens {:?}", tokens);
         match parse_program(tokens) {
             Ok((prog_rest, prog)) => {
                 if prog_rest.input_len() > 0 {
@@ -741,7 +763,11 @@ mod tests {
             "c()",
             ";",
             "\n;\n",
-            //"{\n;\n}",
+            "{\n;\n}",
+            "(x))",
+            "((x))",
+            "x(y)",
+            "x[y]",
         ];
         r.iter().for_each(|v| {
             assert!(parser_losslessness(v));
@@ -792,6 +818,13 @@ mod tests {
             ("-1-5^2", "(- (- 1) (^ 5 2))"),
             ("-5^2", "(- (^ 5 2))"),
             ("-x^y", "(- (^ x y))"),
+            ("a*-b", "(* a (- b))"),
+            ("-a+b", "(+ (- a) b)"),
+
+            // TODO: this should parse as "(- (* a (- b)))"
+            // It's fine because * is associative, but not generally
+            ("-a*-b", "(* (- a) (- b))"),
+
             ("(x+y)^(y+x)", "(^ (+ x y) (+ y x))"),
             // there are two ways to handle multiple-carets
             // https://en.wikipedia.org/wiki/Order_of_operations#Serial_exponentiation
@@ -821,7 +854,8 @@ mod tests {
                 "\\ x y -> (x^2 + 1);\n",
                 "(lambda (params x y) (+ (^ x 2) 1))",
             ),
-            ("x( 1 2 3)", "(x 1 2 3)"),
+            ("x( 1 2 3)", "(apply x 1 2 3)"),
+            ("(x+y)( 1 2 3)", "(apply (+ x y) 1 2 3)"),
         ];
 
         r.iter().for_each(|(q, a)| {
