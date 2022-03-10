@@ -454,6 +454,7 @@ pub enum Precedence {
     PEquals,
     PLessGreater,
     PSum,
+    PPrefix,
     PProduct,
     PExp,
     PCall,
@@ -476,6 +477,15 @@ pub fn infix_precedence(op: Operator) -> Precedence {
         Operator::Exp => Precedence::PExp,
         Operator::Assign => Precedence::PAssign,
         //Operator::Map => Precedence::PMap,
+    }
+}
+
+pub fn prefix_op(t: &Tok) -> (Precedence, Option<Operator>) {
+    match *t {
+        Tok::Plus => (Precedence::PPrefix, Some(Operator::Plus)),
+        Tok::Minus => (Precedence::PPrefix, Some(Operator::Minus)),
+        Tok::Not => (Precedence::PPrefix, Some(Operator::NotEqual)),
+        _ => (Precedence::PLowest, None),
     }
 }
 

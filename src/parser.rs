@@ -155,39 +155,17 @@ pub fn parse_empty_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
 pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
     //println!("parse_statment: {:?}", i);
     let (i, stmt) =
-         //ntuple((
-        //many0(parse_whitespace_or_eof),
-        //alt((
-            //parse_block_stmt,
             alt((
                     parse_expr_stmt,
                     parse_empty_stmt,
                     parse_invalid_stmt
                     ))
-            //pair(parse_expr_stmt, many0(tag_token(Tok::SemiColon)))
             //parse_assignment_stmt,
             //parse_invalid_stmt,
             //parse_literal_stmt,
         //)),
-        //many0(parse_stmt_end), //parse_whitespace_or_eof),
     (i)?;
     println!("{:?}", stmt);
-    /*
-    stmt.s.prepend(
-        before
-            .into_iter()
-            .map(|v| v.tok[0].expand_toks())
-            .flatten()
-            .collect(),
-    );
-    stmt.s.append(
-        after
-            .into_iter()
-            .map(|v| v.tok[0].expand_toks())
-            .flatten()
-            .collect(),
-    );
-    */
     Ok((i, stmt))
 }
 
@@ -308,11 +286,27 @@ pub fn _parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, ExprNode> {
-    let (i1, left) = parse_atom(input)?;
-    println!("pratt atom: {:?}", &left.value);
-    let r = go_parse_pratt_expr(i1, precedence, left);
-    println!("pratt r: {:?}", &r);
-    r
+    // parse N token
+    let (i0, maybe_unary) = opt(parse_prefix)(input)?;
+    match maybe_unary {
+        Some(unary) => {
+            println!("pratt unary: {:?}", &unary);
+            let (prec, _) = prefix_op(&unary.token());
+            let (i1, expr) = parse_pratt_expr(i0, Precedence::PLessGreater)?;
+            println!("pratt unary expr: {:?}", (&i1, &expr));
+            let loc = unary.loc.clone();
+            let value = ExprNode::new(Expr::Unary(unary, Box::new(expr)), loc);
+            println!("pratt unary rsult: {:?}", (&value));
+            Ok((i1, value))
+        }
+        None => {
+            let (i1, left) = parse_atom(i0)?;
+            println!("pratt atom: {:?}", &left.value);
+            let (i2, r) = go_parse_pratt_expr(i1, precedence, left)?;
+            println!("pratt rest: {:?}", (&i2, &r));
+            Ok((i2, r))
+        }
+    }
 }
 
 fn go_parse_pratt_expr(
@@ -321,6 +315,7 @@ fn go_parse_pratt_expr(
     mut left: ExprNode,
 ) -> PResult<Tokens, ExprNode> {
     //println!("go: {:?}", &input);
+    // parse L token
     let (i1, t1) = take_one_any(input.clone())?;
 
     // if we have a LHS, and nothing remains, just return LHS
@@ -353,7 +348,7 @@ fn go_parse_pratt_expr(
             (Precedence::PHighest, _) => {
                 println!("high: {:?}", &input);
                 let (i2, token) = tag_token(Tok::SemiColon)(input)?;
-                left.s.append(token.toks());
+                left.s.append(token.expand_toks());
                 Ok((i2, left))
             }
 
@@ -403,7 +398,7 @@ fn parse_atom(i: Tokens) -> PResult<Tokens, ExprNode> {
             //caret really isn't an atom, but this is how we give it precedence over prefix
             //parse_apply2_expr,
             //parse_apply1_expr,
-            parse_caret_expr,
+            //parse_caret_expr,
             into(parse_literal),
             into(parse_ident),
             parse_prefix_expr,
@@ -456,13 +451,18 @@ fn parse_lambda_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("lambda-expr", _parse_lambda_expr)(i)
 }
 fn _parse_lambda_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, (slash, idents, arrow, mut body, end)) = tuple((
+    let (i, (slash, idents, arrow)) = tuple((
         tag_token(Tok::Backslash),
         many0(parse_ident),
-        tag_token(Tok::LeftArrow),
-        alt((parse_block_stmt, into(parse_atom), parse_expr_stmt)),
-        parse_lambda_end,
-    ))(i)?;
+        tag_token(Tok::LeftArrow)
+        ))(i)?;
+   
+    let (i, mut body) = parse_expr(i)?;
+        //alt((parse_block_stmt, into(parse_atom), parse_expr_stmt)),
+        //into(parse_atom),
+        //parse_expr_stmt,
+        //parse_lambda_end,
+    //))(i)?;
     println!("slash: {:?}", &slash);
     println!("idents: {:?}", &idents);
     println!("body: {:?}", &body);
@@ -471,10 +471,10 @@ fn _parse_lambda_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     params.s.append(arrow.tok[0].toks_pre());
     body.s.prepend(arrow.tok[0].toks_post());
     let loc = slash.tok[0].to_location();
-    let mut lambda: ExprNode = Lambda::new(params, body, loc.clone()).into();
+    let mut lambda: ExprNode = Lambda::new(params, body.into(), loc.clone()).into();
     lambda.s.prepend(slash.tok[0].toks_pre());
-    lambda.s.append(end.expand_toks());
-    println!("lambda: {:?}", &lambda);
+    //lambda.s.append(end.expand_toks());
+    //println!("lambda: {:?}", &lambda);
 
     Ok((i, lambda))
 }
@@ -597,7 +597,7 @@ mod tests {
 
     fn parser_losslessness(s: &str) -> bool {
         println!("{:?}", &s);
-        let mut lexer = LexerState::from_str(s).unwrap();
+        let mut lexer = LexerState::from_str_eof(s).unwrap();
         let tokens = lexer.tokens();
         //let toks = tokens.toks();
         //println!("tokens {:?}", tokens);
@@ -684,11 +684,14 @@ mod tests {
             "x = 1 y = 2",
             "x + y = 1 + 2",
             "y = 1 + 2",
+            "\\x -> y^2 ",
+            "\\x -> y^2\n",
+            "\\x -> y^2;\n",
         ];
         r.iter().for_each(|v| {
-            let mut lexer = LexerState::from_str(v).unwrap();
+            let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
-            //println!("v {:?}", (&v));
+            println!("v {:?}", (&v));
             //println!("tokens: {:?}", (&tokens));
 
             let mut p = many1(parse_expr);
@@ -729,9 +732,10 @@ mod tests {
             "\\x -> y;",
             "f = \\x -> { x^2 };",
             "x + 1 +\n  2\n  \nx+1;\n",
+            "\\x -> y^2;\n",
         ];
         r.iter().for_each(|v| {
-            let mut lexer = LexerState::from_str(v).unwrap();
+            let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
             //let toks = tokens.toks();
             println!("q: {}", v);
@@ -741,10 +745,6 @@ mod tests {
                     results.iter().for_each(|r| {
                         println!("result {:?}", (&r));
                     });
-
-                    if rest.input_len() > 0 {
-                        println!("ERROR tokens remaining {:?}", (&rest));
-                    }
 
                     for stmt in &results {
                         dump_stmt(&stmt);
@@ -758,7 +758,12 @@ mod tests {
                         .join("");
                     println!("cmp {:?}", (&v, &restored));
                     assert_eq!(v, &restored);
-                    println!("remaining {:?}", (&rest.toks()));
+                    //println!("remaining {:?}", (&rest.toks()));
+
+                    if rest.input_len() > 0 {
+                        println!("ERROR tokens remaining {:?}", (&rest));
+                    }
+
                     //assert_eq!(rest.toks().len(), 0);
                     //assert!(rest.input_len() == 0);
                 }
@@ -843,7 +848,7 @@ mod tests {
         ];
         r.iter().for_each(|v| {
             println!("q {:?}", (&v));
-            let mut lexer = LexerState::from_str(v).unwrap();
+            let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
             println!("{:?}", (&tokens));
             match parse_assignment_stmt(tokens) {
@@ -869,21 +874,29 @@ mod tests {
             ("+ 1", "(+ 1)"),
             ("123", "123"),
             ("-123", "(- 123)"),
-            ("- 1 / (2 - 5)", "(/ (- 1) (- 2 5))"),
-            ("+ 1 / (2 - 5)", "(/ (+ 1) (- 2 5))"),
+
+            ("- 1 / (2 - 5)", "(- (/ 1 (- 2 5)))"),
+            ("+ 1 / (2 - 5)", "(+ (/ 1 (- 2 5)))"),
             // handle ambiguous div correctly
             ("1/2/3", "(/ (/ 1 2) 3)"),
+            ("a*-b", "(* a (- b))"),
+            ("-a*b", "(- (* a b))"),
+            ("-a/b", "(- (/ a b))"),
+            ("-a-b", "(- (- a b))"),
+            ("-a+b", "(- (+ a b))"),
+
+            // exponents
             ("5^2", "(^ 5 2)"),
+            ("1-5^2+1", "(+ (- 1 (^ 5 2)) 1)"),
             ("1-5^2", "(- 1 (^ 5 2))"),
-            ("-1-5^2", "(- (- 1) (^ 5 2))"),
+            ("-1-5^2", "(- (- 1 (^ 5 2)))"),
+
+            // handle prefix properly
             ("-5^2", "(- (^ 5 2))"),
             ("-x^y", "(- (^ x y))"),
-            ("a*-b", "(* a (- b))"),
-            ("-a+b", "(+ (- a) b)"),
 
-            // TODO: this should parse as "(- (* a (- b)))"
-            // It's fine because * is associative, but not generally
-            ("-a*-b", "(* (- a) (- b))"),
+            // make sure prefix works
+            ("-a*-b", "(- (* a (- b)))"),
 
             ("(x+y)^(y+x)", "(^ (+ x y) (+ y x))"),
             // there are two ways to handle multiple-carets

@@ -182,42 +182,6 @@ fn lex_token<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
     ))(i)
 }
 
-//fn parse_token_space(i: Span) -> PResult<Span, Vec<Token>> {
-    //alt((ws0, many1(lex_invalid)))(i)
-//}
-
-//fn lex_token_with_whitespace<'a>(i: Span<'a>) -> PResult<Span<'a>, Vec<Token<'a>>> {
-    //alt((
-        //map(
-            //tuple((parse_token_space, lex_token, parse_token_space)),
-            //|(mut a, mut b, mut c)| {
-                //let mut v = vec![];
-                //b.s.prepend(a.iter().map(|t| t.toks()).flatten().collect());
-                //b.s.append(c.iter().map(|t| t.toks()).flatten().collect());
-                //v.push(b);
-                //v
-            //},
-        //),
-        //ws1,
-    //))(i)
-//}
-
-//fn _lex_token_with_linespace<'a>(i: Span<'a>) -> PResult<Span<'a>, Vec<Token<'a>>> {
-    //alt((
-        //map(
-            //tuple((many0(lex_linespace), lex_token, many0(lex_linespace))),
-            //|(a, mut b, c)| {
-                //let mut v = vec![];
-                //b.s.prepend(a.iter().map(|t| t.toks()).flatten().collect());
-                //b.s.append(c.iter().map(|t| t.toks()).flatten().collect());
-                //v.push(b);
-                //v
-            //},
-        //),
-        //ws1,
-    //))(i)
-//}
-
 pub fn span<'a>(s: &'a str) -> Span<'a> {
     Span::new(s)
 }
@@ -250,7 +214,7 @@ mod tests {
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);
             println!("q: {:?}", q);
-            let mut lexer = LexerState::from_str(q).unwrap();
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
             println!("state: {:?}", &lexer);
             assert_eq!(lexer.final_toks(), *a);
         });
@@ -268,7 +232,7 @@ mod tests {
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);
             println!("q: {:?}", q);
-            let mut lexer = LexerState::from_str(q).unwrap();
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
             println!("state: {:?}", &lexer);
             assert_eq!(lexer.expand_toks(), *a);
         });
@@ -281,7 +245,7 @@ mod tests {
             (" $\t", vec![Invalid("$".into()), EOF]),
         ];
         r.iter().for_each(|(q, a)| {
-            let mut lexer = LexerState::from_str(q).unwrap();
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
             assert_eq!(lexer.tokens().toks(), *a);
         });
     }
@@ -289,14 +253,14 @@ mod tests {
     #[test]
     fn test_tag_token() {
         let s = " [ ] ";
-        let mut lexer = LexerState::from_str(s).unwrap();
+        let mut lexer = LexerState::from_str_eof(s).unwrap();
         let toks = lexer.final_toks();
         assert_eq!(vec![LBracket, RBracket, EOF], toks);
     }
 
     fn lexer_losslessness(s: &str) -> bool {
         println!("{:?}", &s);
-        match LexerState::from_str(s) {
+        match LexerState::from_str_eof(s) {
             Some(mut lexer) => {
                 let tokens = lexer.tokens();
                 let toks = tokens.toks();
@@ -317,7 +281,7 @@ mod tests {
             ("-", vec![Tok::Minus]),
         ];
         r.into_iter().for_each(|(q, mut a)| {
-            let mut lexer = LexerState::from_str(q).unwrap();
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
             let tokens = lexer.tokens();
             let toks = tokens.toks();
             println!("{:?}", (&toks));
@@ -386,7 +350,7 @@ f +
             ("1+1", vec![IntLiteral(1), Plus, IntLiteral(1)]),
         ];
         r.into_iter().for_each(|(q, mut a)| {
-            let mut lexer = LexerState::from_str(q).unwrap();
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
             let tokens = lexer.tokens();
             let toks = tokens.toks();
             a.push(EOF);

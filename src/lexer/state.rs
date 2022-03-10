@@ -66,7 +66,7 @@ impl<'a> Default for LexerState<'a> {
 }
 
 impl<'a> LexerState<'a> {
-    pub fn from_str(s: &'a str) -> Option<Self> {
+    pub fn from_str_eof(s: &'a str) -> Option<Self> {
         let mut lexer = Self::default();
         match lexer.lex_eof(s.into()) {
             Ok((rest, _)) => {
@@ -84,9 +84,27 @@ impl<'a> LexerState<'a> {
             _ => unreachable!(),
         }
     }
+    pub fn from_str(s: &'a str) -> Option<Self> {
+        let mut lexer = Self::default();
+        match lexer.lex(s.into()) {
+            Ok((rest, _)) => {
+                if rest.len() > 0 {
+                    println!("remaining {:?}", (&rest));
+                }
+                Some(lexer)
+            }
+            Err(nom::Err::Error(e)) => {
+                for (tokens, err) in e.errors {
+                    println!("error {:?}", (&err, tokens));
+                }
+                None
+            }
+            _ => unreachable!(),
+        }
+    }
 
     pub fn push_token(&mut self, mut token: Token<'a>) {
-        println!("Push: {:?}", &token);
+        //println!("Push: {:?}", &token);
         token.indent = self.indent_size;
         token.s.prepend(
             self.whitespace
@@ -269,11 +287,11 @@ impl<'a> LexerState<'a> {
 
     pub fn lex(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
         let (i, tokens) = many0(lex_next)(span(i))?;
-        println!("all: {:?}", (&tokens));
+        //println!("all: {:?}", (&tokens));
         tokens.into_iter().for_each(|token| {
-            println!("Next: {:?}", (&token));
+            //println!("Next: {:?}", (&token));
             self.push(token);
-            println!("State: {:?}", (&self));
+            //println!("State: {:?}", (&self));
         });
         Ok((i, ()))
     }
@@ -291,7 +309,7 @@ impl<'a> LexerState<'a> {
         self.flush();
         self.push_token(token(Tok::EOF, pos));
         self.eof();
-        println!("state: {:?}", self);
+        //println!("state: {:?}", self);
         Ok((i, ()))
     }
 }
