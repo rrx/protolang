@@ -121,8 +121,8 @@ impl SExpr for Program {
 pub enum Expr {
     IdentExpr(Ident),
     LitExpr(LiteralNode),
-    PrefixExpr(PrefixNode, Box<ExprNode>),
-    InfixExpr(InfixNode, Box<ExprNode>, Box<ExprNode>),
+    Unary(Unary, Box<ExprNode>),
+    Binary(Binary, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
     List(Vec<ExprNode>),
     Apply(Ident, Vec<ExprNode>),
@@ -191,11 +191,11 @@ impl Unparse for ExprNode {
             LitExpr(x) => {
                 out.append(&mut x.unparse());
             }
-            PrefixExpr(prefix, expr) => {
+            Unary(prefix, expr) => {
                 out.append(&mut prefix.unparse());
                 out.append(&mut expr.unparse());
             }
-            InfixExpr(op, left, right) => {
+            Binary(op, left, right) => {
                 out.append(&mut left.unparse());
                 out.append(&mut op.unparse());
                 out.append(&mut right.unparse());
@@ -227,12 +227,12 @@ impl SExpr for ExprNode {
         match &self.value {
             LitExpr(x) => x.sexpr(),
             IdentExpr(x) => x.sexpr(),
-            InfixExpr(op, left, right) => {
+            Binary(op, left, right) => {
                 let sleft = left.sexpr()?;
                 let sright = right.sexpr()?;
                 Ok(S::Cons(op.unlex(), vec![sleft, sright]))
             }
-            PrefixExpr(prefix, expr) => {
+            Unary(prefix, expr) => {
                 let s = expr.sexpr()?;
                 Ok(S::Cons(prefix.unlex(), vec![s]))
             }
@@ -267,13 +267,13 @@ pub enum Prefix {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct PrefixNode {
+pub struct Unary {
     pub s: Surround,
     pub value: Prefix,
     pub loc: Location,
 }
 
-impl PrefixNode {
+impl Unary {
     pub fn from_token(token: Token) -> Option<Self> {
         let maybe_prefix = match token.tok {
             Tok::Plus => Some(Prefix::PrefixPlus),
@@ -323,7 +323,7 @@ impl PrefixNode {
     }
 }
 
-impl Unparse for PrefixNode {
+impl Unparse for Unary {
     fn unparse(&self) -> Vec<Tok> {
         self.s.unparse(vec![self.token()])
     }
@@ -350,14 +350,14 @@ pub enum Infix {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct InfixNode {
+pub struct Binary {
     pub s: Surround,
     pub value: Infix,
     pub precedence: Precedence,
     pub loc: Location,
 }
 
-impl InfixNode {
+impl Binary {
     pub fn new(infix: Infix, precedence: Precedence, loc: Location) -> Self {
         Self {
             s: Surround::default(),
@@ -419,7 +419,7 @@ impl InfixNode {
     }
 }
 
-impl Unparse for InfixNode {
+impl Unparse for Binary {
     fn unparse(&self) -> Vec<Tok> {
         self.s.unparse(vec![self.token()])
     }
@@ -564,13 +564,13 @@ mod tests {
 
     #[test]
     fn prefix() {
-        let p = PrefixNode::new(Prefix::PrefixMinus);
+        let p = Unary::new(Prefix::PrefixMinus);
         assert_eq!(p.unlex(), "-");
     }
 
     #[test]
     fn infix() {
-        let p = InfixNode::new(Infix::Minus, Precedence::PLowest, Location::default());
+        let p = Binary::new(Infix::Minus, Precedence::PLowest, Location::default());
         //println!("{:?}", (&p, &p.token(), &p.unlex()));
         assert_eq!(p.unlex(), "-");
     }

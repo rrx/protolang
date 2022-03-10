@@ -166,12 +166,12 @@ impl Interpreter {
         match &expr.value {
             Expr::LitExpr(lit) => Ok(lit.value.clone()),
             Expr::IdentExpr(ident) => self.globals.get(ident.value.as_str()),
-            Expr::PrefixExpr(prefix, expr) => {
+            Expr::Unary(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
                 let eval = eval.prefix(&prefix.value)?;
                 Ok(eval)
             }
-            Expr::InfixExpr(op, left, right) => {
+            Expr::Binary(op, left, right) => {
                 let eval_left = self.evaluate(&left)?;
                 let eval_right = self.evaluate(&right)?;
                 match op.value {

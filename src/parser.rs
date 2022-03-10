@@ -464,9 +464,9 @@ fn parse_caret_side(i: Tokens) -> PResult<Tokens, ExprNode> {
 fn parse_caret_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (left, op, right)) =
         tuple((parse_caret_side, tag_token(Tok::Caret), parse_caret_side))(i)?;
-    let infix = InfixNode::from_token(op.tok[0].clone()).unwrap();
+    let infix = Binary::from_token(op.tok[0].clone()).unwrap();
     let loc = infix.loc.clone();
-    let expr = ExprNode::new(Expr::InfixExpr(infix, Box::new(left), Box::new(right)), loc);
+    let expr = ExprNode::new(Expr::Binary(infix, Box::new(left), Box::new(right)), loc);
     Ok((i, expr))
 }
 
@@ -478,33 +478,33 @@ fn parse_paren_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, expr))
 }
 
-fn parse_prefix(i: Tokens) -> PResult<Tokens, PrefixNode> {
+fn parse_prefix(i: Tokens) -> PResult<Tokens, Unary> {
     let (i, tokens) = alt((
         tag_token(Tok::Plus),
         tag_token(Tok::Minus),
         tag_token(Tok::Not),
     ))(i)?;
 
-    Ok((i, PrefixNode::from_token(tokens.tok[0].clone()).unwrap()))
+    Ok((i, Unary::from_token(tokens.tok[0].clone()).unwrap()))
 }
 
 fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    use Expr::PrefixExpr;
+    use Expr::Unary;
     let (i1, prefix) = parse_prefix(i)?;
     let (i2, expr1) = parse_atom(i1)?;
     Ok((
         i2,
-        ExprNode::new(PrefixExpr(prefix.clone(), Box::new(expr1)), prefix.loc),
+        ExprNode::new(Unary(prefix.clone(), Box::new(expr1)), prefix.loc),
     ))
 }
 
-fn parse_infix(i: Tokens) -> PResult<Tokens, InfixNode> {
+fn parse_infix(i: Tokens) -> PResult<Tokens, Binary> {
     let (i1, t1) = take_one_any(i.clone())?;
     let next = &t1.tok[0];
     let (_, maybe_op) = infix_op(&next.tok);
     match maybe_op {
         None => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
-        Some(_) => Ok((i1, InfixNode::from_token(next.clone()).unwrap())),
+        Some(_) => Ok((i1, Binary::from_token(next.clone()).unwrap())),
     }
 }
 
@@ -514,7 +514,7 @@ fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
     Ok((
         i2,
         ExprNode::new(
-            Expr::InfixExpr(infix.clone(), Box::new(left), Box::new(right)),
+            Expr::Binary(infix.clone(), Box::new(left), Box::new(right)),
             infix.loc,
         ),
     ))
