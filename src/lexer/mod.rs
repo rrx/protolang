@@ -147,7 +147,7 @@ fn lex_op<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
         tag_token("?", Question),
         tag_token("^", Caret),
         tag_token("%", Percent),
-        tag_token("!", Not),
+        tag_token("!", Exclamation),
         tag_token("in", In),
         tag_token("is", Is),
     ))(i)?;

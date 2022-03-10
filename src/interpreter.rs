@@ -146,13 +146,13 @@ impl Value {
         Ok(Self::BoolLiteral(eval))
     }
 
-    pub fn prefix(&self, prefix: &Prefix) -> Result<Self, InterpretError> {
+    pub fn prefix(&self, prefix: &UnaryOp) -> Result<Self, InterpretError> {
         match prefix {
-            Prefix::PrefixPlus => {
+            UnaryOp::PrefixPlus => {
                 let right = self.check_number()?;
                 Ok(Self::FloatLiteral(right))
             }
-            Prefix::PrefixMinus => {
+            UnaryOp::PrefixMinus => {
                 let right = self.check_number()?;
                 Ok(Self::FloatLiteral(-right))
             }

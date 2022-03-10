@@ -52,7 +52,6 @@ pub enum Tok {
     Assign,
     Equals,
     NotEquals,
-    Not,
     Plus,
     Minus,
     Div,
@@ -62,6 +61,7 @@ pub enum Tok {
     DivEq,
     MulEq,
     Percent,
+    Exclamation,
     Question,
     Caret,
     GT,
@@ -72,6 +72,7 @@ pub enum Tok {
     Or,
     In,
     Is,
+
 
     EOF,
 }
@@ -96,6 +97,7 @@ impl Tok {
             Minus => "-".into(),
             Caret => "^".into(),
             Percent => "%".into(),
+            Tok::Exclamation => "!".into(),
             LTE => "<=".into(),
             LT => "<".into(),
             GTE => ">=".into(),

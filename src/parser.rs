@@ -288,7 +288,7 @@ pub fn _parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, ExprNode> {
     // parse N token
     let (i0, maybe_unary) = opt(parse_prefix)(input)?;
-    match maybe_unary {
+    let (i1, expr) = match maybe_unary {
         Some(unary) => {
             println!("pratt unary: {:?}", &unary);
             let (prec, _) = prefix_op(&unary.token());
@@ -297,15 +297,25 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
             let loc = unary.loc.clone();
             let value = ExprNode::new(Expr::Unary(unary, Box::new(expr)), loc);
             println!("pratt unary rsult: {:?}", (&value));
-            Ok((i1, value))
+            (i1, value)
         }
         None => {
             let (i1, left) = parse_atom(i0)?;
             println!("pratt atom: {:?}", &left.value);
             let (i2, r) = go_parse_pratt_expr(i1, precedence, left)?;
             println!("pratt rest: {:?}", (&i2, &r));
-            Ok((i2, r))
+            (i2, r)
         }
+    };
+
+    let (i2, maybe_postfix) = opt(parse_postfix)(i1)?;
+    match maybe_postfix {
+        Some(unary) => {
+            let loc = unary.loc.clone();
+            let value = ExprNode::new(Expr::Unary(unary, Box::new(expr)), loc);
+            Ok((i2, value))
+        }
+        None => Ok((i2, expr))
     }
 }
 
@@ -340,6 +350,12 @@ fn go_parse_pratt_expr(
             }
 
             (Precedence::PIndex, _) if precedence < Precedence::PIndex => {
+                let (i2, left2) = parse_index_expr(input, left)?;
+                go_parse_pratt_expr(i2, precedence, left2)
+            }
+
+            (Precedence::PBang, _) if precedence < Precedence::PBang => {
+
                 let (i2, left2) = parse_index_expr(input, left)?;
                 go_parse_pratt_expr(i2, precedence, left2)
             }
@@ -504,11 +520,21 @@ fn parse_prefix(i: Tokens) -> PResult<Tokens, Unary> {
     let (i, tokens) = alt((
         tag_token(Tok::Plus),
         tag_token(Tok::Minus),
-        tag_token(Tok::Not),
+        tag_token(Tok::Exclamation),
     ))(i)?;
 
-    Ok((i, Unary::from_token(tokens.tok[0].clone()).unwrap()))
+    Ok((i, Unary::from_prefix_token(tokens.tok[0].clone()).unwrap()))
 }
+
+fn parse_postfix(i: Tokens) -> PResult<Tokens, Unary> {
+    let (i, tokens) = alt((
+        tag_token(Tok::Percent),
+        tag_token(Tok::Exclamation),
+    ))(i)?;
+
+    Ok((i, Unary::from_postfix_token(tokens.tok[0].clone()).unwrap()))
+}
+
 
 fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     use Expr::Unary;
@@ -833,6 +859,9 @@ mod tests {
             "x(y)",
             "x[y]",
             "x = 1 y = 2",
+            "x=y=z",
+            "x!",
+            "a! ^ b",
         ];
         r.iter().for_each(|v| {
             assert!(parser_losslessness(v));

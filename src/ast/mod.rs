@@ -186,43 +186,50 @@ impl From<Lambda> for ExprNode {
 
 impl Unparse for ExprNode {
     fn unparse(&self) -> Vec<Tok> {
-        use Expr::*;
         let mut out = vec![];
         match &self.value {
-            IdentExpr(x) => {
+            Expr::IdentExpr(x) => {
                 out.append(&mut x.unparse());
             }
-            LitExpr(x) => {
+            Expr::LitExpr(x) => {
                 out.append(&mut x.unparse());
             }
-            Unary(prefix, expr) => {
-                out.append(&mut prefix.unparse());
-                out.append(&mut expr.unparse());
+            Expr::Unary(unary, expr) => {
+                match unary.value {
+                    UnaryOp::PostfixBang => {
+                        out.append(&mut expr.unparse());
+                        out.append(&mut unary.unparse());
+                    }
+                    _ => {
+                        out.append(&mut unary.unparse());
+                        out.append(&mut expr.unparse());
+                    }
+                }
             }
-            Binary(op, left, right) => {
+            Expr::Binary(op, left, right) => {
                 out.append(&mut left.unparse());
                 out.append(&mut op.unparse());
                 out.append(&mut right.unparse());
             }
-            List(elements) => {
+            Expr::List(elements) => {
                 for e in elements {
                     out.append(&mut e.unparse());
                 }
             }
-            Lambda(e) => {
+            Expr::Lambda(e) => {
                 out.append(&mut e.unparse());
             }
-            Index(expr, arg) => {
+            Expr::Index(expr, arg) => {
                 out.append(&mut expr.unparse());
                 out.append(&mut arg.unparse());
             }
-            Apply(ident, args) => {
+            Expr::Apply(ident, args) => {
                 out.append(&mut ident.unparse());
                 for arg in args {
                     out.append(&mut arg.unparse());
                 }
             }
-            Block(stmts) => {
+            Expr::Block(stmts) => {
                 out.append(&mut stmts.into_iter().map(|s| s.unparse()).flatten().collect());
             }
         };
@@ -275,35 +282,51 @@ impl SExpr for ExprNode {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Prefix {
+pub enum UnaryOp {
     PrefixPlus,
     PrefixMinus,
     PrefixNot,
+    PostfixBang,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Unary {
     pub s: Surround,
-    pub value: Prefix,
+    pub value: UnaryOp,
     pub loc: Location,
 }
 
 impl Unary {
-    pub fn from_token(token: Token) -> Option<Self> {
+    pub fn from_postfix_token(token: Token) -> Option<Self> {
+        let maybe_postfix = match token.tok {
+            Tok::Percent => Some(UnaryOp::PostfixBang),
+            Tok::Exclamation => Some(UnaryOp::PostfixBang),
+            _ => None,
+        };
+        match maybe_postfix {
+            Some(postfix) => {
+                let loc = token.to_location();
+                Some(Self {
+                    s: token.s,
+                    value: postfix,
+                    loc,
+                })
+            }
+            None => None,
+        }
+    }
+
+    pub fn from_prefix_token(token: Token) -> Option<Self> {
         let maybe_prefix = match token.tok {
-            Tok::Plus => Some(Prefix::PrefixPlus),
-            Tok::Minus => Some(Prefix::PrefixMinus),
-            Tok::Not => Some(Prefix::PrefixNot),
+            Tok::Plus => Some(UnaryOp::PrefixPlus),
+            Tok::Minus => Some(UnaryOp::PrefixMinus),
+            Tok::Exclamation => Some(UnaryOp::PrefixNot),
             _ => None,
         };
         match maybe_prefix {
             Some(prefix) => {
                 let loc = token.to_location();
                 Some(Self {
-                    //s: Surround {
-                    //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
-                    //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                    //},
                     s: token.s,
                     value: prefix,
                     loc,
@@ -313,7 +336,7 @@ impl Unary {
         }
     }
 
-    pub fn from_tokens(prefix: Prefix, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
+    pub fn from_tokens(prefix: UnaryOp, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
         Self {
             s: Surround::new(pre, post),
             value: prefix,
@@ -321,7 +344,7 @@ impl Unary {
         }
     }
 
-    pub fn new(prefix: Prefix) -> Self {
+    pub fn new(prefix: UnaryOp) -> Self {
         Self {
             s: Surround::default(),
             value: prefix,
@@ -331,9 +354,10 @@ impl Unary {
 
     pub fn token(&self) -> Tok {
         match self.value {
-            Prefix::PrefixPlus => Tok::Plus,
-            Prefix::PrefixMinus => Tok::Minus,
-            Prefix::PrefixNot => Tok::Not,
+            UnaryOp::PrefixPlus => Tok::Plus,
+            UnaryOp::PrefixMinus => Tok::Minus,
+            UnaryOp::PrefixNot => Tok::Exclamation,
+            UnaryOp::PostfixBang => Tok::Exclamation,
         }
     }
 }
@@ -362,6 +386,8 @@ pub enum Operator {
     GreaterThan,
     LessThan,
     Assign,
+    Bang,
+    Modulus,
     //Map,
 }
 
@@ -431,6 +457,8 @@ impl Binary {
             Operator::LessThan => Tok::LT,
             Operator::GreaterThan => Tok::GT,
             Operator::Assign => Tok::Assign,
+            Operator::Modulus => Tok::Percent,
+            Operator::Bang => Tok::Exclamation,
             //Operator::Map => Tok::LeftArrow,
         }
     }
@@ -448,17 +476,19 @@ impl Unparse for Binary {
 
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Precedence {
-    PLowest,
-    PAssign,
+    PLowest, // Parens, Start
+    PAssign, // Assignment operator
     //PMap,
-    PEquals,
+    PEquals, // Equality ==/!=
     PLessGreater,
     PSum,
     PPrefix,
     PProduct,
+    PModulus,
     PExp,
     PCall,
     PIndex,
+    PBang,
     PHighest,
 }
 
@@ -476,6 +506,8 @@ pub fn infix_precedence(op: Operator) -> Precedence {
         Operator::Divide => Precedence::PProduct,
         Operator::Exp => Precedence::PExp,
         Operator::Assign => Precedence::PAssign,
+        Operator::Modulus => Precedence::PModulus,
+        Operator::Bang => Precedence::PBang,
         //Operator::Map => Precedence::PMap,
     }
 }
@@ -484,7 +516,14 @@ pub fn prefix_op(t: &Tok) -> (Precedence, Option<Operator>) {
     match *t {
         Tok::Plus => (Precedence::PPrefix, Some(Operator::Plus)),
         Tok::Minus => (Precedence::PPrefix, Some(Operator::Minus)),
-        Tok::Not => (Precedence::PPrefix, Some(Operator::NotEqual)),
+        Tok::Exclamation => (Precedence::PPrefix, Some(Operator::NotEqual)),
+        _ => (Precedence::PLowest, None),
+    }
+}
+
+pub fn postfix_op(t: &Tok) -> (Precedence, Option<Operator>) {
+    match *t {
+        Tok::Exclamation => (Precedence::PBang, Some(Operator::Bang)), 
         _ => (Precedence::PLowest, None),
     }
 }
@@ -506,6 +545,7 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
         Tok::LParen => (Precedence::PCall, None),
         Tok::LBracket => (Precedence::PIndex, None),
         Tok::Assign => (Precedence::PAssign, Some(Operator::Assign)),
+        Tok::Percent => (Precedence::PModulus, Some(Operator::Modulus)),
         Tok::SemiColon => (Precedence::PHighest, None),
         _ => (Precedence::PLowest, None),
     }
@@ -596,7 +636,7 @@ mod tests {
 
     #[test]
     fn prefix() {
-        let p = Unary::new(Prefix::PrefixMinus);
+        let p = Unary::new(UnaryOp::PrefixMinus);
         assert_eq!(p.unlex(), "-");
     }
 
