@@ -67,6 +67,9 @@ impl Op {
             Operator::GreaterThanEqual => Self::new(op, Some(10), Some(9), Some(20)),
             Operator::GreaterThan => Self::new(op, Some(10), Some(9), Some(20)),
             Operator::Modulus => Self::new(op, Some(40), Some(40), Some(40)),
+
+            // Final
+            Operator::End => Self::new_default_left(),//Self::new(op, Some(0), Some(0), None),
         }
     }
 
@@ -286,45 +289,55 @@ fn P<'a>(i: &[Tok], inx: usize) -> (usize, Node) {
 
 // Parse an expression, it will return a P node, and maybe more depending on the precedence
 // It will return the initiating node
-fn E<'a>(i: &[Tok], inx: usize, p: Prec) -> (usize, Node) {
+fn E<'a>(i: &[Tok], inx: usize, prec: Prec) -> (usize, Node) {
     let mut r = 127;
     let (mut inx, mut t) = P(i, inx);
     println!("E {:?}, P:{:?}", &inx, &t);
 
+    // get a chain of subsequent expressions
+    // What follows could be a postfix operator, a binary operator, or a ternary operator
+    // We figure this out by looking up the op
     loop {
         let maybe_left = i.get(inx);
-        match maybe_left {
-            None | Some(Tok::EOF) => {
-                println!("got eof");
-                break;
-            }
-            Some(left) => {
-                println!("left {:?}", (&left));
-                let maybe_op = left.op();
-                let op = if let Some(op) = maybe_op {
-                    op
-                } else {
-                    inx += 1;
-                    Op::new_default_left()
-                };
-
-                let lbp = left.lbp().unwrap_or(-1);
-                // break if we have a token that does not have lbp
-                println!("guard: {:?}", (p.unwrap(), lbp, r));
-                if p.unwrap() <= lbp && lbp <= r {
-                    inx += 1;
-                    let op = left.op().unwrap();
-                    let (inx2, y) = op.LeD(i, inx, t.clone(), left.clone());
-                    t = y;
-                    inx = inx2;
-                    r = left.nbp().unwrap();
-                } else {
-                    println!("guard exit: {:?}", &i[inx..]);
-                    break;
-                }
-            }
+        let maybe_op = maybe_left.map(|op| op.op()).flatten();
+        if maybe_left.is_none() {
+            println!("got eof");
+            break;
         }
 
+        let left = maybe_left.unwrap();
+        if left == &Tok::EOF {
+            println!("got eof");
+            break;
+        }
+
+        println!("left {:?}", (&left));
+        let maybe_op = left.op();
+        let op = if let Some(op) = maybe_op {
+            op
+        } else {
+            inx += 1;
+            Op::new_default_left()
+        };
+
+        let lbp = op.lbp.unwrap_or(-1);
+        println!("guard: {:?}", (prec.unwrap(), lbp, r));
+
+        // lbp must be between r and prec, or we exit
+        // if we have lbp greater than or equal to prec, then we parse and include the RHS
+        // if lbp is great than r, then we are done
+        // r is the previous operations nbp (next binding power)
+        // if we set nbp low, we will match less in the next pass
+        if prec.unwrap() <= lbp && lbp <= r {
+            inx += 1;
+            let (inx2, y) = op.LeD(i, inx, t.clone(), left.clone());
+            t = y;
+            inx = inx2;
+            r = op.nbp.unwrap();
+        } else {
+            println!("guard exit: {:?}", &i[inx..]);
+            break;
+        }
     }
     (inx, t)
 }
@@ -384,11 +397,14 @@ mod tests {
             "a=b=c",
             "a!^b",
             "a^b!^c",
+            "a!^b!^c!",
             "x[1]",
             "x(1)",
             "+1",
             "-x ?: y ",
             "-x ?: y : z ",
+            "x+1 = y+2",
+            //"x+1 ; y+2",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
