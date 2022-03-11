@@ -388,6 +388,10 @@ pub enum Operator {
     Assign,
     Bang,
     Modulus,
+    Index,
+    Call,
+    Elvis,
+    ElvisElse
     //Map,
 }
 
@@ -459,6 +463,10 @@ impl Binary {
             Operator::Assign => Tok::Assign,
             Operator::Modulus => Tok::Percent,
             Operator::Bang => Tok::Exclamation,
+            Operator::Index => Tok::LBracket,
+            Operator::Call => Tok::RBracket,
+            Operator::Elvis => Tok::Elvis,
+            Operator::ElvisElse => Tok::Colon,
             //Operator::Map => Tok::LeftArrow,
         }
     }
@@ -508,6 +516,11 @@ pub fn infix_precedence(op: Operator) -> Precedence {
         Operator::Assign => Precedence::PAssign,
         Operator::Modulus => Precedence::PModulus,
         Operator::Bang => Precedence::PBang,
+        Operator::Index => Precedence::PIndex,
+        Operator::Call => Precedence::PCall,
+        Operator::Elvis => Precedence::PCall,
+        Operator::ElvisElse => Precedence::PCall,
+
         //Operator::Map => Precedence::PMap,
     }
 }

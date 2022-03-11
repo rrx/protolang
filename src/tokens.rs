@@ -72,7 +72,8 @@ pub enum Tok {
     Or,
     In,
     Is,
-
+    Elvis,
+    Spaceship,
 
     EOF,
 }

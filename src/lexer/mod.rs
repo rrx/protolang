@@ -135,6 +135,9 @@ fn lex_op<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
     let (i, pos) = position(i)?;
     let (i, t) = alt((
         lex_op_bool,
+
+        tag_token("<=>", Spaceship),
+        tag_token("?:", Elvis),
         tag_token("+=", PlusEq),
         tag_token("-=", MinusEq),
         tag_token("*=", MulEq),
