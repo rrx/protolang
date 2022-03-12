@@ -12,32 +12,17 @@ use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
 
-type PResult<I, O> = IResult<I, O, VerboseError<I>>;
+pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
 
-fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
+pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
+    //let s = format!("tag-token: {:?}", t);//.to_owned();
     context(
+        //s.as_str(),
         "tag-token",
         verify(take_one_any, move |tokens: &Tokens<'a>| {
             tokens.tok[0].tok == t
         }),
     )
-}
-
-fn _parse_take1_with_whitespace<'a>(i: Tokens) -> PResult<Tokens, Token> {
-    let (i1, (ws0, t1, ws1)) = tuple((
-        many0(parse_whitespace),
-        take_one_any,
-        many0(parse_whitespace),
-    ))(i)?;
-    let mut token = t1.tok[0].clone();
-    token
-        .s
-        .prepend(ws0.iter().map(|v| v.expand_toks()).flatten().collect());
-    token
-        .s
-        .append(ws1.iter().map(|v| v.expand_toks()).flatten().collect());
-    //token.s.append(ws1.toks());
-    Ok((i1, token))
 }
 
 fn _tag_not_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
@@ -83,29 +68,9 @@ fn parse_newline<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     })(i)
 }
 
-fn _parse_invalid<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
-    verify(take_one_any, |tokens: &Tokens<'a>| {
-        let tok = &tokens.tok[0].tok;
-        if let Tok::Invalid(_) = tok {
-            true
-        } else {
-            false
-        }
-    })(i)
-}
-
-fn take_one_any(i: Tokens) -> PResult<Tokens, Tokens> {
+pub(crate) fn take_one_any(i: Tokens) -> PResult<Tokens, Tokens> {
     take(1usize)(i)
 }
-
-//fn _take_one_valid(i: Tokens) -> PResult<Tokens, Tokens> {
-//let (i, (_, tokens)) = pair(many0(parse_invalid), take(1usize))(i)?;
-//let tok = &tokens.tok[0].tok;
-//if let Tok::Invalid(c) = tok {
-//tokens.result(Results::Error(format!("Invalid Char: {:?}", c), 0));
-//}
-//Ok((i, tokens))
-//}
 
 fn parse_newline_or_eof(i: Tokens) -> PResult<Tokens, Tokens> {
     context(
@@ -213,10 +178,10 @@ pub fn parse_assignment_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
 }
 
 pub fn _parse_invalid_stmt2(i: Tokens) -> PResult<Tokens, StmtNode> {
-    let (mut i1, r) = many0(take_one_any)(i.clone())?;
+    let (mut i1, r) = many0(take_one_any)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
     i1.result(Results::Error(format!("Invalid Statement: {}", s), 0));
-    let stmt = StmtNode::new(Stmt::Invalid(s), i.to_location());
+    let stmt = StmtNode::new(Stmt::Invalid(s), i1.to_location());
     // handle trailing newline
     //stmt.s.append(end.expand_toks());
     //println!("invalid: {:?}", (i.toks(), &stmt, r, end));
@@ -224,13 +189,14 @@ pub fn _parse_invalid_stmt2(i: Tokens) -> PResult<Tokens, StmtNode> {
 }
 
 pub fn parse_invalid_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
-    let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i.clone())?;
+    let loc = i.to_location().clone();
+    let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
     i1.result(Results::Error(format!("Invalid Statement: {}", s), 0));
-    let mut stmt = StmtNode::new(Stmt::Invalid(s), i.to_location());
+    let mut stmt = StmtNode::new(Stmt::Invalid(s), loc);
     // handle trailing newline
     stmt.s.append(end.expand_toks());
-    println!("invalid: {:?}", (i.toks(), &stmt, r, end));
+    //println!("invalid: {:?}", (&i.toks(), &stmt, r, end));
     Ok((i1, stmt))
 }
 
@@ -324,7 +290,6 @@ fn go_parse_pratt_expr(
     precedence: Precedence,
     mut left: ExprNode,
 ) -> PResult<Tokens, ExprNode> {
-    //println!("go: {:?}", &input);
     // parse L token
     let (i1, t1) = take_one_any(input.clone())?;
 
@@ -383,16 +348,16 @@ fn parse_ident(i: Tokens) -> PResult<Tokens, Ident> {
     context("ident", _parse_ident)(i)
 }
 fn _parse_ident(i: Tokens) -> PResult<Tokens, Ident> {
-    let (i1, t1) = take_one_any(i.clone())?;
+    let (i1, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
     match Ident::from_token(token.clone()) {
         Some(ident) => Ok((i1, ident)),
-        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
+        _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
     }
 }
 
 fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
-    let (i1, t1) = take_one_any(i.clone())?;
+    let (i1, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
     let tok = &token.tok;
 
@@ -403,7 +368,7 @@ fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
         //println!("LIT: {:?}", litnode);
         Ok((i1, litnode))
     } else {
-        Err(Err::Error(error_position!(i, ErrorKind::Tag)))
+        Err(Err::Error(error_position!(i1, ErrorKind::Tag)))
     }
 }
 
@@ -547,12 +512,12 @@ fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 fn parse_infix(i: Tokens) -> PResult<Tokens, Binary> {
-    let (i1, t1) = take_one_any(i.clone())?;
+    let (i1, t1) = take_one_any(i)?;
     let next = &t1.tok[0];
     let (_, maybe_op) = infix_op(&next.tok);
     println!("maybe: {:?}", (&next, &maybe_op));
     match maybe_op {
-        None => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
+        None => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
         Some(_) => Ok((i1, Binary::from_token(next.clone()).unwrap())),
     }
 }

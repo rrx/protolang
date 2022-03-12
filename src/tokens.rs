@@ -260,6 +260,10 @@ impl<'a> Tokens<'a> {
         }
     }
 
+    pub fn peek(&self) -> Option<&Token> {
+        self.tok.get(0)
+    }
+
     //pub fn from_lexer(lexer: &'a mut LexerState) -> Self {
     //let toks = lexer.token_vec();
     //let tokens = Tokens::new(&toks[..]);
