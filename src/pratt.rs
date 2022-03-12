@@ -35,12 +35,17 @@ impl Op {
     }
 
     pub fn new_chaining(op: &Tok, p: i8) -> Self {
-        Self::new(op, Some(p), Some(p-1), Some(p+1))
+        Self::new(op, Some(p+1), Some(p), Some(p+2))
     }
 
     pub fn new_left_assoc(op: &Tok, p: i8) -> Self {
         // NBP=LBP=RBP-1
         Self::new(op, Some(p), Some(p), Some(p+1))
+    }
+
+    pub fn new_right_assoc(op: &Tok, p: i8) -> Self {
+        // NBP=LBP=RBP
+        Self::new(op, Some(p), Some(p), Some(p))
     }
 
     pub fn new_default_left() -> Self {
@@ -52,7 +57,7 @@ impl Op {
             // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1 
             Tok::Assign => Some(Self::new_chaining(op, 10)),
             Tok::Elvis => Some(Self::new_chaining(op, 35)),
-            Tok::Comma => Some(Self::new_chaining(op, 0)),
+            Tok::Comma => Some(Self::new_chaining(op, 1)),
 
             // Conditional
             Tok::Question => Some(Self::new_chaining(op, 35)),
@@ -61,14 +66,14 @@ impl Op {
 
             // left associative ops, which are indicated by rbp = lbp + 1, nbp = lbp
             // NBP=LBP=RBP-1
-            Tok::Plus | Tok::Minus => Some(Self::new(op, Some(20), Some(20), Some(21))),
-            Tok::Mul | Tok::Div => Some(Self::new(op, Some(30), Some(30), Some(31))),
+            Tok::Plus | Tok::Minus => Some(Self::new_left_assoc(op, 20)),
+            Tok::Mul | Tok::Div => Some(Self::new_left_assoc(op, 30)),
 
             // right associative ops, which are indicated by rbp = lbp 
             // NBP=LBP=RBP
-            Tok::Caret => Some(Self::new(op, Some(50), Some(50), Some(50))),
-            Tok::LBracket => Some(Self::new(op, Some(60), Some(60), Some(61))),
-            Tok::LParen => Some(Self::new(op, Some(70), Some(70), Some(71))),
+            Tok::Caret => Some(Self::new_right_assoc(op, 50)),
+            Tok::LBracket => Some(Self::new_right_assoc(op, 60)),
+            Tok::LParen => Some(Self::new_right_assoc(op, 70)),
 
             // postfix ops, lack rbp
             // We bump up NBP, so that postfix operators are allowed to be left operands
@@ -78,11 +83,12 @@ impl Op {
 
             Tok::Equals => Some(Self::new(op, Some(10), Some(9), Some(20))),
             Tok::NotEquals => Some(Self::new(op, Some(10), Some(9), Some(20))),
-            Tok::LTE => Some(Self::new(op, Some(10), Some(9), Some(20))),
-            Tok::LT => Some(Self::new(op, Some(10), Some(9), Some(20))),
-            Tok::GTE => Some(Self::new(op, Some(10), Some(9), Some(20))),
-            Tok::GT => Some(Self::new(op, Some(10), Some(9), Some(20))),
-            Tok::Percent => Some(Self::new(op, Some(40), Some(40), Some(40))),
+
+            Tok::LTE => Some(Self::new_chaining(op, 10)),
+            Tok::LT => Some(Self::new_chaining(op, 10)),
+            Tok::GTE => Some(Self::new_chaining(op, 10)),
+            Tok::GT => Some(Self::new_chaining(op, 10)),
+            Tok::Percent => Some(Self::new_right_assoc(op, 40)),
             _ => None
         }
     }
@@ -94,19 +100,15 @@ impl Op {
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
         let (i, y) = E(i, Some(self.rbp.unwrap()+1), depth+1)?;
 
-        let (op1, mut c) = match x {
-            Node::Chain(op, chain) => {
-                if op == token {
-                    let mut c = chain.clone();
-                    c.push(y.clone());
-                    (op, c)
-                    //Node::Chain(op.clone(), c)
-                } else {
-                    //Node::Chain(self.op.clone(), vec![x.clone(), y.clone()])
-                    (op, vec![x.clone(), y.clone()])
-                }
+        let (left_op, mut c) = match x {
+            Node::Chain(op, chain) if false && op == token => {
+                let mut c = chain.clone();
+                c.push(y.clone());
+                (op, c)
+                //Node::Chain(op.clone(), c)
             }
             //_ => Node::Chain(self.op.clone(), vec![x.clone(), y.clone()])
+            //_ => Node::Chain(token.clone(), vec![x.clone(), y.clone()])
             _ => (token, vec![x.clone(), y.clone()])
         };
 
@@ -114,44 +116,56 @@ impl Op {
         //chain.push(y.clone());
         //let mut chain = vec![x.clone(), y.clone()];//Box::new(x.clone()), Box::new(y.clone())];
         //let mut t = Node::Chain(self.op.clone(), chain);
-        println!("chain_LeD2: {:?}", &c);
 
         let n = i.peek().unwrap();
-        let tok = n.tok.clone();
+        let next_tok = n.tok.clone();
+        println!("chain_LeD2: {:?}", (&left_op, &c, &n));
 
         //println!("chain: {:?}", (&i.toks()));
-        if tok == Tok::EOF {
-            println!("got eof2");
-            let mut t = Node::Chain(self.op.clone(), c);
+        if next_tok == Tok::EOF {
+            println!("chain: got eof");
+            //let mut t = Node::Chain(left_op.clone(), c);
+            let t = Node::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             return Ok((i, t));
         }
 
-        let next_op = tok.op().unwrap(); 
+        let next_op = next_tok.op().unwrap(); 
+        println!("chain next: {:?}", (self, &next_tok));
         if self.lbp == next_op.lbp {
             // consume
             let (i, _) = take_one_any(i)?;
-            let (i, t1) = self.chain_LeD(i, &y, &tok, depth)?;
+            let (i, t) = self.chain_LeD(i, &y, &next_tok, depth)?;
+            println!("chain consume: {:?}", (self.lbp, next_op, &t));
+            /*
             let t = match t1 {
-                Node::Chain(op, mut chain) => {
-                    if &op == token {
+                Node::Chain(op, mut chain) if false && &op == left_op => {
+                    //if &op == token {
                         c.append(&mut chain.iter().skip(1).cloned().collect::<Vec<_>>());
                         //let mut c = chain.clone();
                         //c.push(y.clone());
                         //c
-                        Node::Chain(self.op.clone(), c)
-                    } else {
-                        Node::Chain(self.op.clone(), c)
-                    }
+                        Node::Chain(token.clone(), c)
+                    //} else {
+                        //Node::Chain(self.op.clone(), c)
+                    //}
                 }
-                _ => Node::Chain(tok, c)
+                _ => {
+                    //Node::Chain(next_tok, vec![Node::Chain(token.clone(), c), t1])
+                    //Node::Chain(next_tok, vec![Node::Chain(token.clone(), c), t1])
+                }
             };
+            */
                             //Node::Chain(op.clone(), c)
             //c.push(t1);
-            //let t = Node::Chain(self.op.clone(), c);
-            //let t = Node::Binary(Tok::Percent, Box::new(t), Box::new(t1));
+            //let t0 = Node::Binary(self.op.clone(), Box::new(y.clone()), Box::new(t) );
+            let t0 = Node::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+            //let t0 = Node::Chain(self.op.clone(), c);
+            //let t = Node::Chain(Tok::Percent, vec![t0, t]);//Box::new(t), Box::new(t1));
+            let t = Node::Chain(Tok::Percent, vec![t0, t]);
             Ok((i, t))
         } else {
-            let t = Node::Chain(self.op.clone(), c);
+            let t = Node::Chain(left_op.clone(), c);
+            println!("chain drop: {:?}", (self.lbp, next_op, &t));
             Ok((i, t))
         }
     }
@@ -180,7 +194,7 @@ impl Op {
                 let (i, y) = E(i, Some(0), depth + 1)?;
                 (i, Node::Binary(Tok::Elvis, Box::new(x.clone()), Box::new(y)))
             }
-            Tok::Assign | Tok::Comma => {
+            Tok::Assign | Tok::Comma | Tok::LT | Tok::LTE | Tok::GT | Tok::GTE => {
                 let (i, y) = self.chain_LeD(i, x, token, depth)?;
                 (i, y)
             }
@@ -399,7 +413,7 @@ fn G<'a>(i: Tokens, r: i8, t: Node, prec: Prec, depth: usize) -> PResult<Tokens,
     println!("op: {:?}", (&token, &op));
 
     let lbp = op.lbp.unwrap_or(-1);
-    println!("guard: {:?}", (prec.unwrap(), lbp, r, &t));
+    println!("guard: {:?}", (&op, prec.unwrap(), lbp, r, &t, &i.toks()));
 
     // lbp must be between r and prec, or we exit
     // if we have lbp greater than or equal to prec, then we parse and include the RHS
@@ -481,9 +495,11 @@ mod tests {
             "x ?: y ?: z", // chaining elvis
             "x ? y : z ",  // ternary conditional
             "x,y",
-            "x,y,z",
-            "x1=y2=z2,y+1,z^2,x1=y=z",
+            "a < b <= c",
+            "a < b < c",
             "a=b=c",
+            "x1=y2=z2,y+1,z^2,x1=y=z",
+            "x,y,z",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
