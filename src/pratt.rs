@@ -3,8 +3,8 @@ use crate::tokens::{Tok,Tokens};
 use nom::{InputLength, InputIter, InputTake, Slice};
 type Prec = Option<i8>;
 use crate::parser::{tag_token, PResult, take_one_any};
-use nom::IResult;
-use nom::error::context;
+use nom::{error_position, IResult};
+use nom::error::{context, ErrorKind};
 type RNode<'a> = PResult<Tokens<'a>, Node>;
 
 #[derive(Clone, Debug)]
@@ -45,7 +45,9 @@ impl Op {
             // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1 
             Operator::Assign => Self::new_chaining(op, 10),//Some(10), Some(9), Some(20)),
             Operator::Elvis => Self::new_chaining(op, 35),
-            Operator::ElvisElse => Self::new_chaining(op, 100),
+            Operator::Conditional => Self::new_chaining(op, 35),
+            // O token associated with Conditional
+            Operator::ConditionalElse => Self::new_default_left(),
 
             // left associative ops, which are indicated by rbp = lbp + 1, nbp = lbp
             // NBP=LBP=RBP-1
@@ -73,38 +75,38 @@ impl Op {
             Operator::Modulus => Self::new(op, Some(40), Some(40), Some(40)),
 
             // Final
-            Operator::End => Self::new_default_left(),//Self::new(op, Some(0), Some(0), None),
+            Operator::End => Self::new_default_left(),
         }
     }
 
-    fn elvis_LeD<'a>(&self, i: Tokens<'a>, x: Node, token: Tok, depth: usize) -> RNode<'a> {
-        //let (mut inx2, mut t) = self.chain_LeD(i, inx, x, token);
-        let (i, y) = E(i, Some(0), depth + 1)?;//self.rbp.unwrap()+1));
+    /*
+    fn elvis_LeD<'a>(&self, i: Tokens<'a>, x: &Node, token: &Tok, depth: usize) -> RNode<'a> {
 
-        //let n = i.get(inx2).unwrap();
-        let n = i.peek().unwrap();
-        println!("check ternary: {:?}", (&i, &y, &n, &token));
-        if n.tok == Tok::Colon {
-            //if let Node::Binary(op, x, y) = t {
-                // consume
-                let (i, _) = take_one_any(i)?;
+        // match any precedence
+        let (i, y) = E(i, Some(0), depth + 1)?;
 
-                let (i, z) = E(i, Some(0), depth + 1)?;//self.rbp.unwrap()+1));
-                //inx2 = inx3;
-                Ok((i, Node::Ternary(Operator::Elvis, Box::new(x), Box::new(y), Box::new(z.clone()))))
-            //} else {
-                //unreachable!()
-            //}
+        let n = i.tok[0].tok.clone();
+        //let n = i.peek().unwrap();
+        println!("check ternary: {:?}", (&i.toks(), &y, &n, &token));
+        if n == Tok::Colon {
+            // consume
+            let (i, _) = take_one_any(i)?;
+
+            let (i, z) = E(i, Some(0), depth + 1)?;
+            Ok((i, Node::Ternary(Operator::Elvis, Box::new(x.clone()), Box::new(y), Box::new(z.clone()))))
         } else {
-            Ok((i, Node::Binary(Operator::Elvis, Box::new(x), Box::new(y))))
+            Ok((i, Node::Binary(Operator::Elvis, Box::new(x.clone()), Box::new(y))))
         }
-        //(inx2, t)
     }
+    */
 
-    fn chain_LeD<'a>(&self, i: Tokens<'a>, x: Node, token: Tok, depth: usize) -> RNode<'a> {
+    fn chain_LeD<'a>(&self, i: Tokens<'a>, x: &Node, token: &Tok, depth: usize) -> RNode<'a> {
         println!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
+
+        // parse the RHS, making sure the expression we are getting stops when we reach
+        // a LBP that is equal to the current BP, this is why we pass in RBP+1
         let (i, y) = E(i, Some(self.rbp.unwrap()+1), depth+1)?;
-        let t = Node::Binary(self.op.clone(), Box::new(x), Box::new(y.clone()));
+        let t = Node::Binary(self.op.clone(), Box::new(x.clone()), Box::new(y.clone()));
         println!("chain_LeD2: {:?}", &t);
 
         let n = i.peek().unwrap();
@@ -116,11 +118,11 @@ impl Op {
             return Ok((i, t));
         }
 
-        let nextOp = tok.op().unwrap(); 
-        if self.lbp == nextOp.lbp {
+        let next_op = tok.op().unwrap(); 
+        if self.lbp == next_op.lbp {
             // consume
             let (i, _) = take_one_any(i)?;
-            let (i, t1) = self.chain_LeD(i, y, tok.clone(), depth)?;
+            let (i, t1) = self.chain_LeD(i, &y, &tok, depth)?;
             let t = Node::Binary(Operator::Modulus, Box::new(t), Box::new(t1));
             Ok((i, t))
         } else {
@@ -128,33 +130,67 @@ impl Op {
         }
     }
 
-    fn LeD<'a>(&self, i: Tokens<'a>, x: Node, token: Tok, depth: usize) -> RNode<'a> {
+    fn LeD<'a>(&self, i: Tokens<'a>, x: &Node, token: &Tok, depth: usize) -> RNode<'a> {
+        // Given the LHS, and an op (token), return a Node
+        //
         //println!("LeD: {:?}", (&x, &token, &i.toks()));
-        match token {
+        let (i, t) = match token {
             // chaining
+            Tok::Question => {
+                // Ternary operator (x ? y : z)
+                
+                // match any precedence
+                let (i, y) = E(i, Some(0), depth + 1)?;
+        
+                let (i, _) = tag_token(Tok::Colon)(i)?;
+
+                // match any precedence
+                let (i, z) = E(i, Some(0), depth + 1)?;
+
+                (i, Node::Ternary(Operator::Conditional, Box::new(x.clone()), Box::new(y), Box::new(z.clone())))
+            }
             Tok::Elvis =>{
-                let (i, y) = self.elvis_LeD(i, x.clone(), token.clone(), depth)?;
-                Ok((i, y))
+                // match any precedence
+                let (i, y) = E(i, Some(0), depth + 1)?;
+                (i, Node::Binary(Operator::Elvis, Box::new(x.clone()), Box::new(y)))
             }
             Tok::Assign => {
-                let (i, y) = self.chain_LeD(i, x.clone(), token.clone(), depth)?;
-                Ok((i, y))
+                let (i, y) = self.chain_LeD(i, x, token, depth)?;
+                (i, y)
             }
             _ => {
                 if token.isBinary() {
                     // binary parses the RHS, and returns a binary node
                     let (i, y) = E(i, self.rbp, depth+1)?;
-                    println!("Binary: {:?} {:?} {:?}", &x, token, &y);
-                    let t = Node::Binary(self.op.clone(), Box::new(x), Box::new(y));
-                    Ok((i, t))//Node::Binary(self.op.clone(), Box::new(x), Box::new(y))))
+                    println!("Binary: {:?} {:?} {:?}", &x, &token, &y);
+                    let t = Node::Binary(self.op.clone(), Box::new(x.clone()), Box::new(y));
+                    (i, t)
                 } else {
                     // postfix just returns, there's no RHS
-                    println!("Postfix: {:?}", (&x, token));
-                    let t = Node::Postfix(self.op.clone(), Box::new(x));
-                    Ok((i, t))//Node::Postfix(self.op.clone(), Box::new(x))))
+                    println!("Postfix: {:?}", (&x, &token));
+                    let t = Node::Postfix(self.op.clone(), Box::new(x.clone()));
+                    (i, t)
                 }
             }
-        }
+        };
+
+        //
+        // parse closing delimiter
+        // we handle this as an exception, but it should be data driven
+        // some ops expect closure, some do not
+        let i = match &token {
+            Tok::LParen => {
+                let (i, _) = tag_token(Tok::RParen)(i)?;
+                i
+            }
+            Tok::LBracket => {
+                let (i, _) = tag_token(Tok::RBracket)(i)?;
+                i
+            }
+            _ => i
+        };
+
+        Ok((i, t))
     }
 }
 
@@ -171,7 +207,8 @@ impl Tok {
             Tok::LBracket => Some(Op::from(Operator::Index)),
             Tok::LParen => Some(Op::from(Operator::Call)),
             Tok::Elvis => Some(Op::from(Operator::Elvis)),
-            Tok::Colon => Some(Op::from(Operator::ElvisElse)),
+            Tok::Colon => Some(Op::from(Operator::ConditionalElse)),
+            Tok::Question => Some(Op::from(Operator::Conditional)),
             _ => None
         }
     }
@@ -227,14 +264,14 @@ enum Node {
 // Parse a prefix token, and return a full node
 // Could be -(...), or (...), or a variable
 fn P<'a>(i: Tokens, depth: usize) -> RNode {
-    //let (i, tokens) = take_one_any(i)?;
+    // P branch
     // peek
     let n = i.tok[0].tok.clone();
-    //let n = tokens.tok[0].tok.clone();
     println!("P {:?}", (&n));
-    // P branch
+
     let rbp = n.op().map_or(None, |t|t.rbp);
 
+    // All possible N tokens
     match Some(&n) {
         Some(Tok::Minus) | Some(Tok::Plus) => {
             // consume prefix
@@ -266,10 +303,6 @@ fn P<'a>(i: Tokens, depth: usize) -> RNode {
             let (i, _) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
             let t = Node::List(vec![t]);
             Ok((i, t))
-            //match expect(i, inx2, Tok::RBracket) {
-                //Some(inx3) => (inx3, t),
-                //None => (inx2, Node::Error("Mismatching brackets".into()))
-            //}
         }
 
         // Parenthesis
@@ -279,74 +312,78 @@ fn P<'a>(i: Tokens, depth: usize) -> RNode {
             println!("L1: {:?}", (&i.toks(), &x.toks()));
             let (i, t) = E(i, rbp, depth+1)?;
             println!("L2: {:?}", (&i.toks(), &t));
-            let (i, _) = tag_token(Tok::RParen)(i)?;
+            let (i, _) = context("r-paren", tag_token(Tok::RParen))(i)?;
             Ok((i, t))
-            //match expect(i, inx2, Tok::RParen) {
-                //Some(inx3) => (inx3, t),
-                //None => (inx, Node::Error("Mismatching parens".into()))
-            //}
         }
 
-        Some(Tok::EOF) => {
+        // Non N-tokens, are handled as errors
+        Some(Tok::EOF) | None => {
             println!("got eof3");
-            Ok((i, Node::Empty))
+            // we got an EOF when we were expecting an N token
+            Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)))
         }
-        None => {
-            println!("got eof4");
-            Ok((i, Node::Empty))
-        }
+
         _ => {
-            println!("got {:?}", &n);
-            unreachable!()
+            println!("got unexpected token {:?}", &n);
+            Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Fail)))
+            //unreachable!()
         }
     }
 }
 
 
-// Parse an expression, it will return a P node, and maybe more depending on the precedence
-// It will return the initiating node
+// Parse an expression, it will return a Node
 fn E<'a>(input: Tokens, prec: Prec, depth: usize) -> RNode {
-    let p = prec.unwrap();
+    // precondition p >= 0
+    let _ = prec.unwrap();
+
+    // r = +inf
     let r = 127;
-    let (i, t) = P(input, depth)?;
-    println!("E1 {:?}, prec: {:?}, P:{:?}, depth:{}", i.toks(), prec, &t, depth);
+
+    // The P parser starts with an N token, and goes with it, returning a Node
+    // This is the first element of the expression
+    let (i, p) = P(input, depth)?;
+    println!("E1 {:?}, prec: {:?}, P:{:?}, depth:{}", i.toks(), prec, &p, depth);
 
     // get a chain of subsequent expressions
     // What follows could be a postfix operator, a binary operator, or a ternary operator
     // We figure this out by looking up the op
-    let (i, (r, t)) = G(i, r, t, prec, 0)?;
+    // Given the p-node p, parse when follows.  p becomes the LHS, and we want to see what follows
+    // It could be a postfix operator, or a binary/ternary op
+    // G will parse what's next recursively, until we find something that has a lower precedence
+    let (i, (r, t)) = G(i, r, p, prec, 0)?;
 
     println!("E2 {:?}", (&t, r, depth, i.toks()));
     Ok((i, t))
 }
 
 fn G<'a>(i: Tokens, r: i8, t: Node, prec: Prec, depth: usize) -> PResult<Tokens,(i8, Node)> {
-    // peek 
-    let n = i.tok[0].tok.clone();
-    println!("G: {:?}", (&i.toks(), &r, &prec, &r, &n, depth));
-    if n == Tok::EOF {
-        println!("got eof");
-        return Ok((i, (r, t)));
-    }
-
+    // Here we are going to take a look at the L token
+    // A L token is a token that has a left operand (t)
+    // An L token can never start an expression
+    // We are given the LHS in `t`, and we are looking for an op
+    // could be postfix, or binary, or ternary
+    // We do this recursively until we find an operation that has a lower precedence
+    // When we find an operation that has a lower precedence, we exit, returning the LHS
+    //
     // peek
-    //let (i, n) = take_one_any(i.clone())?;
-    let left = i.tok[0].tok.clone();
-    //let (i, (r, t)) = F(i, r, t, prec)?;
-    if left == Tok::EOF {
+    let token = i.tok[0].tok.clone();
+    println!("G: {:?}", (&i.toks(), &r, &prec, &r, &token, depth));
+    if token == Tok::EOF {
         println!("got eof");
         return Ok((i, (r, t)));
     }
 
     // get op from left
-    let maybe_op = left.op();//left.tok[0].tok.op();
+    // it could be any token
+    let maybe_op = token.op();
     let (i, op) = if let Some(op) = maybe_op {
         (i, op)
     } else {
         (i, Op::new_default_left())
     };
 
-    println!("left: {:?}", (&left, &op));
+    println!("op: {:?}", (&token, &op));
 
     let lbp = op.lbp.unwrap_or(-1);
     println!("guard: {:?}", (prec.unwrap(), lbp, r, &t));
@@ -360,23 +397,10 @@ fn G<'a>(i: Tokens, r: i8, t: Node, prec: Prec, depth: usize) -> PResult<Tokens,
         // consume
         let (i, _) = take_one_any(i)?;
 
-        // LeD
+        // LeD, parse the RHS, and return the appropriate node
         let t1 = t.clone();
-        let (i, t) = op.LeD(i, t.clone(), left.clone(), depth)?;
-        println!("LeD: {:?} -> {:?}", (&t1, &left), &t);
-
-        // parse closing delimiter
-        let i = match &left {
-            Tok::LParen => {
-                let (i, _) = tag_token(Tok::RParen)(i)?;
-                i
-            }
-            Tok::LBracket => {
-                let (i, _) = tag_token(Tok::RBracket)(i)?;
-                i
-            }
-            _ => i
-        };
+        let (i, t) = op.LeD(i, &t, &token, depth)?;
+        println!("LeD: {:?} -> {:?}", (&t1, &token), &t);
 
         // set r = NBP of op
         let r = op.nbp.unwrap();
@@ -388,103 +412,12 @@ fn G<'a>(i: Tokens, r: i8, t: Node, prec: Prec, depth: usize) -> PResult<Tokens,
         Ok((i, (r, t)))
     }
 }
-/*
-fn F<'a>(i: Tokens, r: i8, t: Node, prec: Prec) -> PResult<Tokens,(i8, Node)> {
-    //let maybe_left = i.get(inx);
-    // peek
-    //let left = i.tok[0].tok.clone();
-    
-    let (i, n) = take_one_any(i.clone())?;
-    let left = i.tok[0].tok.clone();
-    
-    println!("F: {:?}", (&i.toks(), &r, &prec, &left));
-    //stdout().flush();
-    if left == Tok::EOF {
-        println!("got eof");
-        //stdout().flush();
-        //let (i, left) = take_one_any(i.clone())?;
-        //return Ok((i, (r, t)));
-        //break;
-    }
-
-    //let (i, left) = take_one_any(i.clone())?;
-    //println!("E take: {:?}", (&i, &left));
-    //if left.tok[0].tok == Tok::EOF {
-        //println!("got eof");
-        //break;
-        //stdout().flush();
-        //let (i, left) = take_one_any(i.clone())?;
-        //return Ok((i, (r, t)));
-        //return Ok((i, t));
-    //}
-    //return Ok((i, t));
-    //let maybe_left = i.peek();
-    //let maybe_op = maybe_left.map(|op| op.tok.op()).flatten();
-    //if maybe_left.is_none() {
-    //println!("got eof");
-    //return Ok((i, t));
-    //}
-
-    //let left = maybe_left.unwrap();
-    //if left.tok == Tok::EOF {
-    //println!("got eof");
-    //return Ok((i, t));
-    //}
-
-    println!("left {:?}", (&left));//.toks()));
-    let maybe_op = left.op();//left.tok[0].tok.op();
-    let (i, op) = if let Some(op) = maybe_op {
-        (i, op)
-    } else {
-        //let (i, _) = take_one_any(i)?;
-        //let i = i.take(1);
-        //inx += 1;
-        (i, Op::new_default_left())
-            //return Ok((i, t))
-    };
-
-    let lbp = op.lbp.unwrap_or(-1);
-    println!("guard: {:?}", (prec.unwrap(), lbp, r, &t));
-
-    // lbp must be between r and prec, or we exit
-    // if we have lbp greater than or equal to prec, then we parse and include the RHS
-    // if lbp is great than r, then we are done
-    // r is the previous operations nbp (next binding power)
-    // if we set nbp low, we will match less in the next pass
-    if prec.unwrap() <= lbp && lbp <= r {
-        //inx += 1;
-        //let (i, _) = take_one_any(i)?;
-        //let i = i.take(1);
-        let (i, t) = op.LeD(i, t.clone(), left, depth)?;//left.tok[0].tok.clone())?;
-        //t = t2;
-        //i = i2;
-        //inx = inx2;
-        let r = op.nbp.unwrap();
-        Ok((i, (r, t)))
-    } else {
-        println!("guard exit: {:?}", i);//&i.slice(inx..));
-        Ok((i, (r, t)))
-        //break;
-    }
-    //Ok((i, t))
-}
-
-*/
-//fn expect(i: Tokens, inx: usize, tok: Tok) -> Option<usize> {
-    //let n = i.get(inx);
-    //let i2 = i.take();
-    //match n {
-        //Some(t) if t == &tok => Some(inx+1),
-        //_ => None
-    //}
-//}
 
 fn parse<'a>(i: Tokens) -> RNode {
     match E(i, Some(0), 0) {
         Ok((i, node)) => {
             println!("EXPR {:?}", (&node, &i.toks()));
             let (i, eof) = tag_token(Tok::EOF)(i)?;
-            assert!(i.input_len() == 0);
             println!("EOF {:?}", (eof));
             Ok((i, node))
         }
@@ -523,7 +456,6 @@ mod tests {
             "a!^b!^c!",
             "+1",
             "-x ?: y ",
-            "-x ?: y : z ",
             //"x+1 ; y+2",
             "a=b=c",
             "x+1 = y+2",
@@ -531,6 +463,10 @@ mod tests {
             "[x]",
             "x[1]",
             "x(1)",
+            //"(1",
+            "x ?: y",  // elvis
+            "x ?: y ?: z", // chaining elvis
+            "x ? y : z ",  // ternary conditional
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
@@ -544,7 +480,7 @@ mod tests {
             let (i, node) = parse(i).unwrap();
             println!("NODE {:?}", (&node));
             println!("REM {:?}", (&i.toks()));
-            //assert_eq!(0, i.input_len());
+            assert_eq!(0, i.input_len());
         });
     }
 

@@ -391,7 +391,8 @@ pub enum Operator {
     Index,
     Call,
     Elvis,
-    ElvisElse,
+    Conditional,
+    ConditionalElse,
     End
     //Map,
 }
@@ -467,7 +468,8 @@ impl Binary {
             Operator::Index => Tok::LBracket,
             Operator::Call => Tok::RBracket,
             Operator::Elvis => Tok::Elvis,
-            Operator::ElvisElse => Tok::Colon,
+            Operator::ConditionalElse => Tok::Colon,
+            Operator::Conditional => Tok::Question,
             Operator::End => Tok::SemiColon,
             //Operator::Map => Tok::LeftArrow,
         }
@@ -521,7 +523,8 @@ pub fn infix_precedence(op: Operator) -> Precedence {
         Operator::Index => Precedence::PIndex,
         Operator::Call => Precedence::PCall,
         Operator::Elvis => Precedence::PCall,
-        Operator::ElvisElse => Precedence::PCall,
+        Operator::ConditionalElse => Precedence::PCall,
+        Operator::Conditional => Precedence::PCall,
         Operator::End => Precedence::PLowest,
 
         //Operator::Map => Precedence::PMap,
