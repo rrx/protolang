@@ -52,6 +52,7 @@ impl Op {
             // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1 
             Tok::Assign => Some(Self::new_chaining(op, 10)),
             Tok::Elvis => Some(Self::new_chaining(op, 35)),
+            Tok::Comma => Some(Self::new_chaining(op, 0)),
 
             // Conditional
             Tok::Question => Some(Self::new_chaining(op, 35)),
@@ -83,31 +84,8 @@ impl Op {
             Tok::GT => Some(Self::new(op, Some(10), Some(9), Some(20))),
             Tok::Percent => Some(Self::new(op, Some(40), Some(40), Some(40))),
             _ => None
-            // Final
-            //Tok::End => Some(Self::new_default_left()),
         }
     }
-
-    /*
-    fn elvis_LeD<'a>(&self, i: Tok<'a>, x: &Node, token: &Tok, depth: usize) -> RNode<'a> {
-
-        // match any precedence
-        let (i, y) = E(i, Some(0), depth + 1)?;
-
-        let n = i.tok[0].tok.clone();
-        //let n = i.peek().unwrap();
-        println!("check ternary: {:?}", (&i.toks(), &y, &n, &token));
-        if n == Tok::Colon {
-            // consume
-            let (i, _) = take_one_any(i)?;
-
-            let (i, z) = E(i, Some(0), depth + 1)?;
-            Ok((i, Node::Ternary(Tok::Elvis, Box::new(x.clone()), Box::new(y), Box::new(z.clone()))))
-        } else {
-            Ok((i, Node::Binary(Tok::Elvis, Box::new(x.clone()), Box::new(y))))
-        }
-    }
-    */
 
     fn chain_LeD<'a>(&self, i: Tokens<'a>, x: &Node, token: &Tok, depth: usize) -> RNode<'a> {
         println!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
@@ -115,15 +93,36 @@ impl Op {
         // parse the RHS, making sure the expression we are getting stops when we reach
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
         let (i, y) = E(i, Some(self.rbp.unwrap()+1), depth+1)?;
-        let t = Node::Binary(self.op.clone(), Box::new(x.clone()), Box::new(y.clone()));
-        println!("chain_LeD2: {:?}", &t);
+
+        let (op1, mut c) = match x {
+            Node::Chain(op, chain) => {
+                if op == token {
+                    let mut c = chain.clone();
+                    c.push(y.clone());
+                    (op, c)
+                    //Node::Chain(op.clone(), c)
+                } else {
+                    //Node::Chain(self.op.clone(), vec![x.clone(), y.clone()])
+                    (op, vec![x.clone(), y.clone()])
+                }
+            }
+            //_ => Node::Chain(self.op.clone(), vec![x.clone(), y.clone()])
+            _ => (token, vec![x.clone(), y.clone()])
+        };
+
+        //let chain = vec![Box::new(x.clone()), Box::new(y.clone())];
+        //chain.push(y.clone());
+        //let mut chain = vec![x.clone(), y.clone()];//Box::new(x.clone()), Box::new(y.clone())];
+        //let mut t = Node::Chain(self.op.clone(), chain);
+        println!("chain_LeD2: {:?}", &c);
 
         let n = i.peek().unwrap();
         let tok = n.tok.clone();
 
-        println!("chain: {:?}", (&t, &i.toks()));
+        //println!("chain: {:?}", (&i.toks()));
         if tok == Tok::EOF {
             println!("got eof2");
+            let mut t = Node::Chain(self.op.clone(), c);
             return Ok((i, t));
         }
 
@@ -132,9 +131,27 @@ impl Op {
             // consume
             let (i, _) = take_one_any(i)?;
             let (i, t1) = self.chain_LeD(i, &y, &tok, depth)?;
-            let t = Node::Binary(Tok::Percent, Box::new(t), Box::new(t1));
+            let t = match t1 {
+                Node::Chain(op, mut chain) => {
+                    if &op == token {
+                        c.append(&mut chain.iter().skip(1).cloned().collect::<Vec<_>>());
+                        //let mut c = chain.clone();
+                        //c.push(y.clone());
+                        //c
+                        Node::Chain(self.op.clone(), c)
+                    } else {
+                        Node::Chain(self.op.clone(), c)
+                    }
+                }
+                _ => Node::Chain(tok, c)
+            };
+                            //Node::Chain(op.clone(), c)
+            //c.push(t1);
+            //let t = Node::Chain(self.op.clone(), c);
+            //let t = Node::Binary(Tok::Percent, Box::new(t), Box::new(t1));
             Ok((i, t))
         } else {
+            let t = Node::Chain(self.op.clone(), c);
             Ok((i, t))
         }
     }
@@ -163,7 +180,7 @@ impl Op {
                 let (i, y) = E(i, Some(0), depth + 1)?;
                 (i, Node::Binary(Tok::Elvis, Box::new(x.clone()), Box::new(y)))
             }
-            Tok::Assign => {
+            Tok::Assign | Tok::Comma => {
                 let (i, y) = self.chain_LeD(i, x, token, depth)?;
                 (i, y)
             }
@@ -206,23 +223,6 @@ impl Op {
 impl Tok {
     fn op(&self) -> Option<Op> {
         Op::try_from(self)
-            /*
-        match self {
-            Tok::Assign => Some(Op::from(Tok::Assign)),
-            Tok::Plus => Some(Op::from(Tok::Plus)),
-            Tok::Minus => Some(Op::from(Tok::Minus)),
-            Tok::Mul => Some(Op::from(Tok::Multiply)),
-            Tok::Div => Some(Op::from(Tok::Divide)),
-            Tok::Exclamation => Some(Op::from(Tok::Bang)),
-            Tok::Caret => Some(Op::from(Tok::Exp)),
-            Tok::LBracket => Some(Op::from(Tok::Index)),
-            Tok::LParen => Some(Op::from(Tok::Call)),
-            Tok::Elvis => Some(Op::from(Tok::Elvis)),
-            Tok::Colon => Some(Op::from(Tok::ConditionalElse)),
-            Tok::Question => Some(Op::from(Tok::Conditional)),
-            _ => None
-        }
-        */
     }
 
     fn isBinary(&self) -> bool {
@@ -271,6 +271,7 @@ enum Node {
     Var(String),
     Error(String),
     List(Vec<Node>),
+    Chain(Tok, Vec<Node>),
 }
 
 // Parse a prefix token, and return a full node
@@ -420,7 +421,7 @@ fn G<'a>(i: Tokens, r: i8, t: Node, prec: Prec, depth: usize) -> PResult<Tokens,
         // loop recursively
         G(i, r, t, prec, depth+1)
     } else {
-        println!("guard exit: {:?}", i);
+        println!("guard exit: {:?}", &i.toks());
         Ok((i, (r, t)))
     }
 }
@@ -470,7 +471,6 @@ mod tests {
             "+1",
             "-x ?: y ",
             //"x+1 ; y+2",
-            "a=b=c",
             "x+1 = y+2",
             "(x)",
             "[x]",
@@ -480,6 +480,10 @@ mod tests {
             "x ?: y",  // elvis
             "x ?: y ?: z", // chaining elvis
             "x ? y : z ",  // ternary conditional
+            "x,y",
+            "x,y,z",
+            "x1=y2=z2,y+1,z^2,x1=y=z",
+            "a=b=c",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
