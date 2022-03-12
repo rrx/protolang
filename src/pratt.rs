@@ -1,18 +1,25 @@
+/*
+ * A Pratt Parser for Nom
+ * Based heavily on this excellent article that explains Pratt Parsing
+ * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
+ */
 use crate::ast::*;
 use crate::tokens::{Tok,Tokens};
-use nom::{InputLength, InputIter, InputTake, Slice};
-type Prec = Option<i8>;
 use crate::parser::{tag_token, PResult, take_one_any};
-use nom::{error_position, IResult};
+//use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
+
 type RNode<'a> = PResult<Tokens<'a>, Node>;
+type Prec = Option<i8>;
 
 #[derive(Clone, Debug)]
 struct Op {
-    op: Operator,
-    //isBinary: bool,
+    op: Tok,
+
     // left binding power
     lbp: Prec,
+
+    // next binding power
     nbp: Prec,
 
     // right binding power determines the left binding power of the lowest precedence operator that
@@ -23,64 +30,66 @@ struct Op {
 }
 
 impl Op {
-    pub fn new(op: Operator, lbp: Prec, nbp: Prec, rbp: Prec) -> Self {
-        Self { op, lbp, nbp, rbp }
+    pub fn new(op: &Tok, lbp: Prec, nbp: Prec, rbp: Prec) -> Self {
+        Self { op: op.clone(), lbp, nbp, rbp }
     }
 
-    pub fn new_chaining(op: Operator, p: i8) -> Self {
+    pub fn new_chaining(op: &Tok, p: i8) -> Self {
         Self::new(op, Some(p), Some(p-1), Some(p+1))
     }
 
-    pub fn new_left_assoc(op: Operator, p: i8) -> Self {
+    pub fn new_left_assoc(op: &Tok, p: i8) -> Self {
         // NBP=LBP=RBP-1
         Self::new(op, Some(p), Some(p), Some(p+1))
     }
 
     pub fn new_default_left() -> Self {
-        Self::new(Operator::Assign, None, None, None)
+        Self::new(&Tok::Assign, None, None, None)
     }
 
-    pub fn from(op: Operator) -> Self {
+    pub fn try_from(op: &Tok) -> Option<Self> {
         match op {
             // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1 
-            Operator::Assign => Self::new_chaining(op, 10),//Some(10), Some(9), Some(20)),
-            Operator::Elvis => Self::new_chaining(op, 35),
-            Operator::Conditional => Self::new_chaining(op, 35),
+            Tok::Assign => Some(Self::new_chaining(op, 10)),
+            Tok::Elvis => Some(Self::new_chaining(op, 35)),
+
+            // Conditional
+            Tok::Question => Some(Self::new_chaining(op, 35)),
             // O token associated with Conditional
-            Operator::ConditionalElse => Self::new_default_left(),
+            Tok::Colon => Some(Self::new_default_left()),
 
             // left associative ops, which are indicated by rbp = lbp + 1, nbp = lbp
             // NBP=LBP=RBP-1
-            Operator::Plus | Operator::Minus => Self::new(op, Some(20), Some(20), Some(21)),
-            Operator::Multiply | Operator::Divide => Self::new(op, Some(30), Some(30), Some(31)),
+            Tok::Plus | Tok::Minus => Some(Self::new(op, Some(20), Some(20), Some(21))),
+            Tok::Mul | Tok::Div => Some(Self::new(op, Some(30), Some(30), Some(31))),
 
             // right associative ops, which are indicated by rbp = lbp 
             // NBP=LBP=RBP
-            Operator::Exp => Self::new(op, Some(50), Some(50), Some(50)),
-            Operator::Index => Self::new(op, Some(60), Some(60), Some(61)),
-            Operator::Call => Self::new(op, Some(70), Some(70), Some(71)),
+            Tok::Caret => Some(Self::new(op, Some(50), Some(50), Some(50))),
+            Tok::LBracket => Some(Self::new(op, Some(60), Some(60), Some(61))),
+            Tok::LParen => Some(Self::new(op, Some(70), Some(70), Some(71))),
 
             // postfix ops, lack rbp
             // We bump up NBP, so that postfix operators are allowed to be left operands
             // NBP defines the highest precedence of an operator that this operator can be a left
             // operand of. 127, will allows to be the left operand for everything
-            Operator::Bang => Self::new(op, Some(40), Some(127), None),
+            Tok::Exclamation => Some(Self::new(op, Some(40), Some(127), None)),
 
-            Operator::Equal => Self::new(op, Some(10), Some(9), Some(20)),
-            Operator::NotEqual => Self::new(op, Some(10), Some(9), Some(20)),
-            Operator::LessThanEqual => Self::new(op, Some(10), Some(9), Some(20)),
-            Operator::LessThan => Self::new(op, Some(10), Some(9), Some(20)),
-            Operator::GreaterThanEqual => Self::new(op, Some(10), Some(9), Some(20)),
-            Operator::GreaterThan => Self::new(op, Some(10), Some(9), Some(20)),
-            Operator::Modulus => Self::new(op, Some(40), Some(40), Some(40)),
-
+            Tok::Equals => Some(Self::new(op, Some(10), Some(9), Some(20))),
+            Tok::NotEquals => Some(Self::new(op, Some(10), Some(9), Some(20))),
+            Tok::LTE => Some(Self::new(op, Some(10), Some(9), Some(20))),
+            Tok::LT => Some(Self::new(op, Some(10), Some(9), Some(20))),
+            Tok::GTE => Some(Self::new(op, Some(10), Some(9), Some(20))),
+            Tok::GT => Some(Self::new(op, Some(10), Some(9), Some(20))),
+            Tok::Percent => Some(Self::new(op, Some(40), Some(40), Some(40))),
+            _ => None
             // Final
-            Operator::End => Self::new_default_left(),
+            //Tok::End => Some(Self::new_default_left()),
         }
     }
 
     /*
-    fn elvis_LeD<'a>(&self, i: Tokens<'a>, x: &Node, token: &Tok, depth: usize) -> RNode<'a> {
+    fn elvis_LeD<'a>(&self, i: Tok<'a>, x: &Node, token: &Tok, depth: usize) -> RNode<'a> {
 
         // match any precedence
         let (i, y) = E(i, Some(0), depth + 1)?;
@@ -93,9 +102,9 @@ impl Op {
             let (i, _) = take_one_any(i)?;
 
             let (i, z) = E(i, Some(0), depth + 1)?;
-            Ok((i, Node::Ternary(Operator::Elvis, Box::new(x.clone()), Box::new(y), Box::new(z.clone()))))
+            Ok((i, Node::Ternary(Tok::Elvis, Box::new(x.clone()), Box::new(y), Box::new(z.clone()))))
         } else {
-            Ok((i, Node::Binary(Operator::Elvis, Box::new(x.clone()), Box::new(y))))
+            Ok((i, Node::Binary(Tok::Elvis, Box::new(x.clone()), Box::new(y))))
         }
     }
     */
@@ -123,7 +132,7 @@ impl Op {
             // consume
             let (i, _) = take_one_any(i)?;
             let (i, t1) = self.chain_LeD(i, &y, &tok, depth)?;
-            let t = Node::Binary(Operator::Modulus, Box::new(t), Box::new(t1));
+            let t = Node::Binary(Tok::Percent, Box::new(t), Box::new(t1));
             Ok((i, t))
         } else {
             Ok((i, t))
@@ -147,12 +156,12 @@ impl Op {
                 // match any precedence
                 let (i, z) = E(i, Some(0), depth + 1)?;
 
-                (i, Node::Ternary(Operator::Conditional, Box::new(x.clone()), Box::new(y), Box::new(z.clone())))
+                (i, Node::Ternary(Tok::Question, Box::new(x.clone()), Box::new(y), Box::new(z.clone())))
             }
             Tok::Elvis =>{
                 // match any precedence
                 let (i, y) = E(i, Some(0), depth + 1)?;
-                (i, Node::Binary(Operator::Elvis, Box::new(x.clone()), Box::new(y)))
+                (i, Node::Binary(Tok::Elvis, Box::new(x.clone()), Box::new(y)))
             }
             Tok::Assign => {
                 let (i, y) = self.chain_LeD(i, x, token, depth)?;
@@ -196,21 +205,24 @@ impl Op {
 
 impl Tok {
     fn op(&self) -> Option<Op> {
+        Op::try_from(self)
+            /*
         match self {
-            Tok::Assign => Some(Op::from(Operator::Assign)),
-            Tok::Plus => Some(Op::from(Operator::Plus)),
-            Tok::Minus => Some(Op::from(Operator::Minus)),
-            Tok::Mul => Some(Op::from(Operator::Multiply)),
-            Tok::Div => Some(Op::from(Operator::Divide)),
-            Tok::Exclamation => Some(Op::from(Operator::Bang)),
-            Tok::Caret => Some(Op::from(Operator::Exp)),
-            Tok::LBracket => Some(Op::from(Operator::Index)),
-            Tok::LParen => Some(Op::from(Operator::Call)),
-            Tok::Elvis => Some(Op::from(Operator::Elvis)),
-            Tok::Colon => Some(Op::from(Operator::ConditionalElse)),
-            Tok::Question => Some(Op::from(Operator::Conditional)),
+            Tok::Assign => Some(Op::from(Tok::Assign)),
+            Tok::Plus => Some(Op::from(Tok::Plus)),
+            Tok::Minus => Some(Op::from(Tok::Minus)),
+            Tok::Mul => Some(Op::from(Tok::Multiply)),
+            Tok::Div => Some(Op::from(Tok::Divide)),
+            Tok::Exclamation => Some(Op::from(Tok::Bang)),
+            Tok::Caret => Some(Op::from(Tok::Exp)),
+            Tok::LBracket => Some(Op::from(Tok::Index)),
+            Tok::LParen => Some(Op::from(Tok::Call)),
+            Tok::Elvis => Some(Op::from(Tok::Elvis)),
+            Tok::Colon => Some(Op::from(Tok::ConditionalElse)),
+            Tok::Question => Some(Op::from(Tok::Conditional)),
             _ => None
         }
+        */
     }
 
     fn isBinary(&self) -> bool {
@@ -252,10 +264,10 @@ impl Tok {
 #[derive(Clone, Debug)]
 enum Node {
     Empty,
-    Prefix(Operator, Box<Node>),
-    Binary(Operator, Box<Node>, Box<Node>),
-    Ternary(Operator, Box<Node>, Box<Node>, Box<Node>),
-    Postfix(Operator, Box<Node>),
+    Prefix(Tok, Box<Node>),
+    Binary(Tok, Box<Node>, Box<Node>),
+    Ternary(Tok, Box<Node>, Box<Node>, Box<Node>),
+    Postfix(Tok, Box<Node>),
     Var(String),
     Error(String),
     List(Vec<Node>),
@@ -435,6 +447,7 @@ fn parse<'a>(i: Tokens) -> RNode {
 mod tests {
     use super::*;
     use crate::lexer::*;
+    use nom::{InputLength, InputIter, InputTake, Slice};
 
     #[test]
     fn expressions() {
