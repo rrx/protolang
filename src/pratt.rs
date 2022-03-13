@@ -9,7 +9,7 @@ use crate::parser::{tag_token, PResult, take_one_any};
 //use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
 //use crate::lexer::{Location, Surround};
-use crate::ast::{LiteralNode, Binary, Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
+use crate::ast::{Binary, Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
 use crate::sexpr::{S, SExpr, SResult};
 
 //type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
@@ -343,21 +343,21 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         }
         Some(Tok::IntLiteral(n)) => {
             // consume literal
-            let (i, x) = LiteralNode::parse(i)?;
+            let (i, x) = ExprNode::parse_literal(i)?;
             //let (i, _) = take_one_any(i)?;
             //let t = PrattValue::Integer(*n);
-            let t = PrattValue::LitExpr(x);//Tok::IntLiteral(*n));
-            i.node_success(t)
+            //let t = PrattValue::LitExpr(x);//Tok::IntLiteral(*n));
+            i.node_success(x.value)
             //Ok((i, t))
         }
 
         Some(Tok::FloatLiteral(n)) => {
             // consume literal
             //let (i, _) = take_one_any(i)?;
-            let (i, x) = LiteralNode::parse(i)?;
+            let (i, x) = ExprNode::parse_literal(i)?;
             //let t = PrattValue::Float(*n);
-            let t = PrattValue::LitExpr(x);//Tok::FloatLiteral(*n));
-            i.node_success(t)
+            //let t = PrattValue::LitExpr(x);//Tok::FloatLiteral(*n));
+            i.node_success(x.value)
             //Ok((i, t))
         }
 

@@ -354,24 +354,23 @@ fn _parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i1, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
     match &token.tok {
-        Tok::Ident(s) => {
+        Tok::Ident(_) => {
             let expr = ExprNode::from_token(token).unwrap();
             Ok((i1, expr))
-            //Some(ExprNode::Expr::Ident(s.clone())),
         }
         _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
     }
 }
 
-pub(crate) fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
+pub(crate) fn parse_literal(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i1, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
     let tok = &token.tok;
 
     if let Ok(lit) = tok.try_into() {
-        let mut litnode = LiteralNode::new(lit, token.to_location());
-        litnode.s.prepend(token.s.pre.clone());
-        litnode.s.append(token.s.post.clone());
+        let mut litnode = ExprNode::new(Expr::LitExpr(lit), &token.to_location());
+        litnode.context.s.prepend(token.s.pre.clone());
+        litnode.context.s.append(token.s.post.clone());
         //println!("LIT: {:?}", litnode);
         Ok((i1, litnode))
     } else {

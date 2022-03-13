@@ -28,7 +28,7 @@ pub enum Stmt {
     Assign(ExprNode, ExprNode),
     Block(Vec<StmtNode>),
     Expr(ExprNode),
-    Lit(LiteralNode),
+    Lit(Value),
     Invalid(String),
     Empty
 }
@@ -126,7 +126,7 @@ impl SExpr for Program {
 #[derive(Debug, Clone)]
 pub enum Expr {
     Ident(String),
-    LitExpr(LiteralNode),
+    LitExpr(Value),
     Prefix(OperatorNode, Box<ExprNode>),
     Postfix(OperatorNode, Box<ExprNode>),
     Binary(Binary, Box<ExprNode>, Box<ExprNode>),
@@ -140,15 +140,10 @@ pub enum Expr {
     Block(Vec<StmtNode>),
 }
 
-//impl Expr {
-    //pub fn is_invalid n
-    //
 #[derive(Clone)]
 pub struct ExprNode {
     pub context: NodeContext,
-    //pub s: Surround,
     pub value: Expr,
-    //pub loc: Location,
 }
 
 impl fmt::Debug for ExprNode {
@@ -167,6 +162,11 @@ impl ExprNode {
             context: NodeContext::from_location(loc),
             value,
         }
+    }
+
+    pub fn parse_literal(i: Tokens) -> PResult<Tokens, Self> {
+        use crate::parser::parse_literal;
+        parse_literal(i)
     }
 
     pub fn is_ident(&self) -> bool {
@@ -237,20 +237,21 @@ impl From<ExprNode> for StmtNode {
         Self::new(Stmt::Expr(item), loc)
     }
 }
-
-impl From<LiteralNode> for StmtNode {
-    fn from(item: LiteralNode) -> Self {
+/*
+impl From<Value> for StmtNode {
+    fn from(item: Value) -> Self {
         let loc = item.loc.clone();
         Self::new(Stmt::Lit(item), loc)
     }
 }
 
-impl From<LiteralNode> for ExprNode {
-    fn from(item: LiteralNode) -> Self {
+impl From<Value> for ExprNode {
+    fn from(item: Value) -> Self {
         let loc = item.loc.clone();
         Self::new(Expr::LitExpr(item), &loc)
     }
 }
+*/
 
 /*
 impl From<Ident> for ExprNode {
@@ -713,7 +714,7 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
         _ => (Precedence::PLowest, None),
     }
 }
-
+/*
 #[derive(PartialEq, Debug, Clone)]
 pub struct LiteralNode {
     pub value: Value,
@@ -723,11 +724,6 @@ pub struct LiteralNode {
 
 impl LiteralNode {
     
-    pub fn parse(i: Tokens) -> PResult<Tokens, LiteralNode> {
-        use crate::parser::parse_literal;      
-        parse_literal(i)
-    }
-   
     pub fn new(value: Value, loc: Location) -> Self {
         Self {
             value,
@@ -750,6 +746,7 @@ impl SExpr for LiteralNode {
         self.value.sexpr()
     }
 }
+*/
 
 /*
 #[derive(PartialEq, Debug, Clone)]

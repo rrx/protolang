@@ -196,7 +196,7 @@ impl Value {
 impl Interpreter {
     pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Value, InterpretError> {
         match &expr.value {
-            Expr::LitExpr(lit) => Ok(lit.value.clone()),
+            Expr::LitExpr(lit) => Ok(lit.clone()),
             Expr::Ident(ident) => self.globals.get(ident),
             Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
@@ -308,7 +308,7 @@ impl Interpreter {
                 Ok(())
             }
             Stmt::Lit(lit) => {
-                println!("Evaluate Literal: {:?}", lit.value);
+                println!("Evaluate Literal: {:?}", lit);//.value);
                 Ok(())
             }
             Stmt::Assign(ident_expr, expr) => {
