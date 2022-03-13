@@ -255,15 +255,17 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
     // parse N token
     let (i0, maybe_unary) = opt(parse_prefix)(input)?;
     let (i1, expr) = match maybe_unary {
-        Some(unary) => {
+        Some(mut unary) => {
             println!("pratt unary: {:?}", &unary);
-            let (_, _) = prefix_op(&unary.value.token());
+            //let (_, _) = prefix_op(&unary.value.token());
             let (i1, expr) = parse_pratt_expr(i0, Precedence::PLessGreater)?;
             println!("pratt unary expr: {:?}", (&i1, &expr));
             let loc = unary.context.loc.clone();
-            let value = ExprNode::new(Expr::Prefix(unary, Box::new(expr)), &loc);
-            println!("pratt unary rsult: {:?}", (&value));
-            (i1, value)
+            let mut node = ExprNode::new(Expr::Prefix(unary.clone(), Box::new(expr)), &loc);
+            node.context.s.prepend(unary.unparse());
+
+            println!("pratt unary result: {:?}", (&node));
+            (i1, node)
         }
         None => {
             let (i1, left) = parse_atom(i0)?;
@@ -340,14 +342,16 @@ fn go_parse_pratt_expr(
             // then we include it in this expr, and try to parse the RHS
             (ref peek_precedence, _) if precedence < *peek_precedence => {
                 let (i2, left2) = parse_infix_expr(input, left)?;
-                go_parse_pratt_expr(i2, precedence, left2)
+                let (i, mut node) = go_parse_pratt_expr(i2, precedence, left2.clone())?;
+                //node.context.s.prepend(left2.unparse());
+                Ok((i, node))
             }
             _ => Ok((input, left)),
         }
     }
 }
 
-fn parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
+pub(crate) fn parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("ident", _parse_ident)(i)
 }
 fn _parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
@@ -511,10 +515,9 @@ fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     use Expr::Prefix;
     let (i1, prefix) = parse_prefix(i)?;
     let (i2, expr1) = parse_atom(i1)?;
-    Ok((
-        i2,
-        ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.context.loc),
-    ))
+    let mut node = ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.context.loc);
+    node.context.s.prepend(prefix.unparse());//vec![prefix.token()]);
+    Ok((i2, node))
 }
 
 fn parse_infix(i: Tokens) -> PResult<Tokens, Binary> {
@@ -530,14 +533,13 @@ fn parse_infix(i: Tokens) -> PResult<Tokens, Binary> {
 
 fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
     let (i, infix) = parse_infix(i)?;
-    let (i2, right) = parse_pratt_expr(i, infix.precedence.clone())?;
-    Ok((
-        i2,
-        ExprNode::new(
-            Expr::Binary(infix.clone(), Box::new(left), Box::new(right)),
-            &infix.loc,
-        ),
-    ))
+    let (i2, mut right) = parse_pratt_expr(i, infix.precedence.clone())?;
+    right.context.s.prepend(infix.unparse());
+    let node = ExprNode::new(
+        Expr::Binary(infix.clone(), Box::new(left), Box::new(right)),
+        &infix.loc,
+        );
+    Ok((i2, node))
 }
 
 fn parse_index_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {

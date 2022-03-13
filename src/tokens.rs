@@ -110,6 +110,7 @@ impl Tok {
             LBrace => "{".into(),
             RBrace => "}".into(),
             SemiColon => ";".into(),
+            Colon => ":".into(),
             Comma => ",".into(),
             Elvis => "?:".into(),
             IntLiteral(x) => x.to_string(),

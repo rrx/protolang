@@ -151,7 +151,10 @@ impl fmt::Debug for ExprNode {
         f.debug_struct("ExprNode")
             //.field("s", &self.context.s)
             //.field("loc", &self.context.loc)
+            //
+            .field("pre", &self.context.s.pre)
             .field("v", &self.value)
+            .field("post", &self.context.s.post)
             .finish()
     }
 }
@@ -162,6 +165,11 @@ impl ExprNode {
             context: NodeContext::from_location(loc),
             value,
         }
+    }
+
+    pub fn parse_ident(i: Tokens) -> PResult<Tokens, Self> {
+        use crate::parser::parse_ident;
+        parse_ident(i)
     }
 
     pub fn parse_literal(i: Tokens) -> PResult<Tokens, Self> {
@@ -273,7 +281,11 @@ impl Unparse for ExprNode {
     fn unparse(&self) -> Vec<Tok> {
         let mut out = vec![];
         match &self.value {
-            Expr::Ternary(_,_,_,_) => {}
+            Expr::Ternary(_,x,y,z) => {
+                out.append(&mut x.unparse());
+                out.append(&mut y.unparse());
+                out.append(&mut z.unparse());
+            }
             Expr::Chain(_,_) => {}
             Expr::Ident(x) => {
                 //out.append(&mut x.unparse());
@@ -283,16 +295,16 @@ impl Unparse for ExprNode {
                 out.append(&mut x.unparse());
             }
             Expr::Prefix(unary, expr) => {
-                out.append(&mut unary.unparse());
+                //out.append(&mut unary.unparse());
                 out.append(&mut expr.unparse());
             }
             Expr::Postfix(unary, expr) => {
                 out.append(&mut expr.unparse());
-                out.append(&mut unary.unparse());
+                //out.append(&mut unary.unparse());
             }
             Expr::Binary(op, left, right) => {
                 out.append(&mut left.unparse());
-                out.append(&mut op.unparse());
+                //out.append(&mut op.unparse());
                 out.append(&mut right.unparse());
             }
             Expr::List(elements) => {
@@ -338,7 +350,7 @@ impl SExpr for ExprNode {
             Binary(op, left, right) => {
                 let sleft = left.sexpr()?;
                 let sright = right.sexpr()?;
-                Ok(S::Cons(op.unlex(), vec![sleft, sright]))
+                Ok(S::Cons(op.token().unlex(), vec![sleft, sright]))
             }
             Prefix(op, expr) => {
                 let s = expr.sexpr()?;
@@ -711,6 +723,7 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
         Tok::Percent => (Precedence::PModulus, Some(Operator::Modulus)),
         Tok::SemiColon => (Precedence::PHighest, None),
         Tok::Comma => (Precedence::PLowest, Some(Operator::Comma)),
+        Tok::Elvis => (Precedence::PLowest, Some(Operator::Elvis)),
         _ => (Precedence::PLowest, None),
     }
 }
@@ -809,10 +822,12 @@ mod tests {
         assert_eq!(p.unlex(), "-");
     }
 
+    /*
     #[test]
     fn infix() {
         let p = Binary::new(Operator::Minus, Precedence::PLowest, Location::default());
         //println!("{:?}", (&p, &p.token(), &p.unlex()));
         assert_eq!(p.unlex(), "-");
     }
+    */
 }
