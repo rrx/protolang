@@ -7,10 +7,10 @@ use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    IntLiteral(u64),
-    FloatLiteral(f64),
-    BoolLiteral(bool),
-    StringLiteral(String),
+    //IntLiteral(u64),
+    //FloatLiteral(f64),
+    //BoolLiteral(bool),
+    Literal(Tok),
     List(Vec<Value>),
     Null,
     Callable(CallableNode),
@@ -26,10 +26,10 @@ impl Value {
 impl Unparse for Value {
     fn unparse(&self) -> Vec<Tok> {
         match &self {
-            Self::IntLiteral(x) => vec![Tok::IntLiteral(*x)],
-            Self::FloatLiteral(x) => vec![Tok::FloatLiteral(*x)],
-            Self::BoolLiteral(x) => vec![Tok::BoolLiteral(*x)],
-            Self::StringLiteral(x) => vec![Tok::StringLiteral(x.clone())],
+            //Self::IntLiteral(x) => vec![Tok::IntLiteral(*x)],
+            //Self::FloatLiteral(x) => vec![Tok::FloatLiteral(*x)],
+            //Self::BoolLiteral(x) => vec![Tok::BoolLiteral(*x)],
+            Self::Literal(x) => vec![x.clone()],//Tok::StringLiteral(x.clone())],
             Self::List(x) => {
                 let tokens_list = x.clone().into_iter().map(|v| v.unparse()).collect::<Vec<Vec<Tok>>>();
                 vec![
@@ -49,10 +49,10 @@ impl TryFrom<&Tok> for Value {
     type Error = ();
     fn try_from(value: &Tok) -> Result<Self, Self::Error> {
         match value {
-            Tok::IntLiteral(u) => Ok(Value::IntLiteral(*u)),
-            Tok::FloatLiteral(u) => Ok(Value::FloatLiteral(*u)),
-            Tok::StringLiteral(s) => Ok(Value::StringLiteral(s.clone())),
-            Tok::BoolLiteral(b) => Ok(Value::BoolLiteral(*b)),
+            Tok::IntLiteral(_) => Ok(Value::Literal(value.clone())),
+            Tok::FloatLiteral(_) => Ok(Value::Literal(value.clone())),
+            Tok::StringLiteral(_) => Ok(Value::Literal(value.clone())),//s.clone())),
+            Tok::BoolLiteral(_) => Ok(Value::Literal(value.clone())),
             Tok::Null => Ok(Value::Null),
             //Tok::Invalid(s) => Some(Value::Invalid(s.clone())),
             _ => Err(()),
@@ -70,10 +70,10 @@ impl SExpr for Value {
     fn sexpr(&self) -> SResult<S> {
         use Value::*;
         match &self {
-            IntLiteral(x) => Ok(S::Atom(x.to_string())),
-            FloatLiteral(x) => Ok(S::Atom(x.to_string())),
-            BoolLiteral(x) => Ok(S::Atom(x.to_string())),
-            StringLiteral(x) => Ok(S::Atom(x.to_string())),
+            //IntLiteral(x) => Ok(S::Atom(x.to_string())),
+            //FloatLiteral(x) => Ok(S::Atom(x.to_string())),
+            //BoolLiteral(x) => Ok(S::Atom(x.to_string())),
+            Literal(x) => Ok(S::Atom(x.unlex())),
             List(values) => {
                 let s_args = values
                     .iter()

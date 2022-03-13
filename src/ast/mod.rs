@@ -20,7 +20,7 @@ pub trait Unparse {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Assign(Ident, ExprNode),
     Block(Vec<StmtNode>),
@@ -29,7 +29,7 @@ pub enum Stmt {
     Invalid(String),
     Empty
 }
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct StmtNode {
     pub s: Surround,
     pub value: Stmt,
@@ -79,7 +79,7 @@ impl SExpr for StmtNode {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub value: Vec<StmtNode>,
     pub s: Surround,
@@ -120,20 +120,21 @@ impl SExpr for Program {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     IdentExpr(Ident),
     LitExpr(LiteralNode),
     Unary(Unary, Box<ExprNode>),
     Binary(Binary, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
+    Callable(Box<dyn Callable>),
     List(Vec<ExprNode>),
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<StmtNode>),
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct ExprNode {
     pub s: Surround,
     pub value: Expr,
@@ -219,6 +220,9 @@ impl Unparse for ExprNode {
             Expr::Lambda(e) => {
                 out.append(&mut e.unparse());
             }
+            Expr::Callable(e) => {
+                //out.append(&mut e.unparse());
+            }
             Expr::Index(expr, arg) => {
                 out.append(&mut expr.unparse());
                 out.append(&mut arg.unparse());
@@ -259,6 +263,7 @@ impl SExpr for ExprNode {
                 Ok(S::Cons("list".into(), s_args))
             }
             Lambda(e) => e.sexpr(),
+            Callable(_) => Ok(S::Cons("callable".into(), vec![])),
             Index(expr, arg) => {
                 let sexpr = expr.sexpr()?;
                 let sarg = arg.sexpr()?;

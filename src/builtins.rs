@@ -2,6 +2,7 @@ use crate::{
     lexer::Location,
     ast::{Callable, CallableNode, Value},
     interpreter::{InterpretError, Interpreter},
+    tokens::{Tok},
 };
 use std::{
     any::Any,
@@ -38,7 +39,7 @@ impl Callable for Clock {
             .expect("we mustn't travel back in time")
             .as_secs_f64();
 
-        Ok(Value::FloatLiteral(secs))
+        Ok(Value::Literal(Tok::FloatLiteral(secs)))
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {
@@ -75,7 +76,7 @@ impl Callable for Assert {
 
     fn call(&self, _: &mut Interpreter, args: Vec<Value>) -> Result<Value, InterpretError> {
         let v = args.get(0).unwrap();
-        if let Value::BoolLiteral(b) = v {
+        if let Value::Literal(Tok::BoolLiteral(b)) = v {
             if *b {
                 Ok(Value::Null)
             } else {

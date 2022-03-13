@@ -37,7 +37,7 @@ impl Clone for Box<dyn Callable> {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Params {
     pub s: Surround,
     pub value: Vec<Ident>,
@@ -83,7 +83,7 @@ impl SExpr for Params {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Lambda {
     pub s: Surround,
     pub params: Params,
@@ -121,7 +121,7 @@ impl Callable for Lambda {
         _: &mut Interpreter,
         _: Vec<Value>,
     ) -> Result<Value, InterpretError> {
-        Ok(Value::IntLiteral(0))
+        Ok(Value::Literal(Tok::IntLiteral(0)))
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {

@@ -5,7 +5,6 @@ use nom_locate::LocatedSpan;
 use std::fmt;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
-
 pub type Span<'a> = LocatedSpan<&'a str>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,8 +162,6 @@ impl Tok {
 pub struct Token<'a> {
     pub s: Surround,
     pub indent: usize,
-    //pub pre: Vec<Token<'a>>,
-    //pub post: Vec<Token<'a>>,
     pub tok: Tok,
     pub pos: Span<'a>,
 }
