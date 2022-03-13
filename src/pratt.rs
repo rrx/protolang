@@ -73,11 +73,14 @@ impl Op {
             // NBP=LBP=RBP-1
             Tok::Plus | Tok::Minus => Some(Self::new_left_assoc(op, 20)),
             Tok::Mul | Tok::Div => Some(Self::new_left_assoc(op, 30)),
+            Tok::Caret => Some(Self::new_left_assoc(op, 50)),
 
             // right associative ops, which are indicated by rbp = lbp 
             // NBP=LBP=RBP
-            Tok::Caret => Some(Self::new_right_assoc(op, 50)),
+            //Tok::Caret => Some(Self::new_right_assoc(op, 50)),
+            // Index
             Tok::LBracket => Some(Self::new_right_assoc(op, 60)),
+            // Call
             Tok::LParen => Some(Self::new_right_assoc(op, 70)),
 
             // postfix ops, lack rbp
@@ -322,12 +325,15 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
     match Some(&n) {
         Some(Tok::Minus) | Some(Tok::Plus) => {
             // consume prefix
-            let (i, _) = take_one_any(i)?;
+            let (i, op_tokens) = take_one_any(i)?;
             let (i, t) = i.E(rbp, depth + 1)?;
             //let op = n.op().unwrap().op.clone();
             let op = OperatorNode::from_prefix_token(token).unwrap();
             let value = PrattValue::Prefix(op, Box::new(t));
-            i.node_success(value)
+            let mut node = i.node(value);
+            //node.context.s.prepend(op_tokens.expand_toks());
+            Ok((i, node))
+            //i.node_success(value)
             //let node = ASTNode::new(value, &i.to_location());
             //Ok((i, node))
         }
@@ -364,10 +370,10 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         // Array
         Some(Tok::LBracket) => {
             // consume LBracket
-            let (i, _) = take_one_any(i)?;
-            println!("exp1: {:?}", (&i, &n));
+            let (i, op_token) = take_one_any(i)?;
+            println!("prefix bracket1: {:?}", (&i, &n, &op_token));
             let (i, t) = i.E(Some(0), depth+1)?;
-            println!("exp2: {:?}", (&i, &t));
+            println!("prefix bracket2: {:?}", (&i, &t));
             // consume RBracket
             let (i, _) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
             let t = PrattValue::List(vec![t]);
@@ -379,9 +385,10 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LParen) => {
             // consume LParen
             let (i, x) = take_one_any(i)?;
-            println!("L1: {:?}", (&i.toks(), &x.toks()));
-            let (i, t) = i.E(rbp, depth+1)?;
-            println!("L2: {:?}", (&i.toks(), &t));
+            println!("prefix paren1: {:?}", (&i.toks(), &x.toks()));
+            //let (i, t) = i.E(rbp, depth+1)?;
+            let (i, t) = i.E(Some(0), depth+1)?;
+            println!("prefix paren2: {:?}", (&i.toks(), &t));
             let (i, _) = context("r-paren", tag_token(Tok::RParen))(i)?;
             //node_success(i, t)
 
@@ -409,8 +416,12 @@ fn E<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // precondition p >= 0
     let _ = prec.unwrap();
 
+
     // r = +inf
     let r = 127;
+
+    println!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
+
 
     // The P parser starts with an N token, and goes with it, returning a Node
     // This is the first element of the expression
@@ -458,7 +469,10 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     println!("op: {:?}", (&token, &op));
 
     let lbp = op.lbp.unwrap_or(-1);
-    println!("guard: {:?}", (&op, prec.unwrap(), lbp, r, &t, &i.toks()));
+    println!("guard: prec:{} <= lbp:{} <= r:{}\n\tLHS: {:?}\n\t{:?}",
+             prec.unwrap(), lbp, r,
+             t,
+             (&op, &i.toks()));
 
     // lbp must be between r and prec, or we exit
     // if we have lbp greater than or equal to prec, then we parse and include the RHS
@@ -519,6 +533,7 @@ mod tests {
             " 1 + 2 ",
             " x + y ",
             "- x * y ",
+            "- 1 / (2 - 5)",
             "x!",
             "x^2",
             "-x!^2",
@@ -561,10 +576,108 @@ mod tests {
             //println!("NODE {:?}", (&node));
             println!("NODE {:?}", (&node.unparse()));
             println!("REM {:?}", (&i.toks()));
-            println!("S {:?}", (&node.sexpr()));
+            println!("S {}", &node.sexpr().unwrap());
             assert_eq!(0, i.input_len());
         });
     }
+
+    #[test]
+    fn sexpr() {
+        let r = vec![
+            ("+1", "(+ 1)"),
+            ("+ 1", "(+ 1)"),
+            ("123", "123"),
+            ("-123", "(- 123)"),
+
+            ("- 1 / (2 - 5)", "(- (/ 1 (- 2 5)))"),
+            ("+ 1 / (2 - 5)", "(+ (/ 1 (- 2 5)))"),
+            // handle ambiguous div correctly
+            ("1/2/3", "(/ (/ 1 2) 3)"),
+            ("a*-b", "(* a (- b))"),
+            ("-a*b", "(- (* a b))"),
+            ("-a/b", "(- (/ a b))"),
+
+            //("-a-b", "(- (- a b))"),
+            ("-a-b", "(- (- a) b)"),
+
+            //("-a+b", "(- (+ a b))"),
+            ("-a+b", "(+ (- a) b)"),
+
+            // exponents
+            ("5^2", "(^ 5 2)"),
+            ("1-5^2+1", "(+ (- 1 (^ 5 2)) 1)"),
+            ("1-5^2", "(- 1 (^ 5 2))"),
+            //("-1-5^2", "(- (- 1 (^ 5 2)))"),
+            ("-1-5^2", "(- (- 1) (^ 5 2))"),
+
+            // handle prefix properly
+            ("-5^2", "(- (^ 5 2))"),
+            ("-x^y", "(- (^ x y))"),
+
+            // make sure prefix works
+            ("-a*-b", "(- (* a (- b)))"),
+
+            ("(x+y)^(y+x)", "(^ (+ x y) (+ y x))"),
+            // there are two ways to handle multiple-carets
+            // https://en.wikipedia.org/wiki/Order_of_operations#Serial_exponentiation
+            // this one is consistent with how we handle div, eval from left to right
+            ("2^3^4", "(^ (^ 2 3) 4)"),
+            // this one is not, eval is from right to left, which is more math convention
+            //("2^3^4", "(^ 2 (^ 3 4))"),
+
+            // multiply should have higher priority than div, but if you evaluate from left to
+            // right, that breaks down
+            ("8/2*(2+2)", "(* (/ 8 2) (+ 2 2))"),
+            // with proper precedence, this should be the answer
+            //("8/2*(2+2)", "(/ 8 (* 2 (+ 2 2)))"),
+
+            // tricky, what should it do?  The plus sort of implies that -2 is the base
+            // ("0+−2^2", "(+ 0 (^ (- 2) 2))"),
+            // +- could also be interpreted as just -
+            // ("0+−2^2", "(- 0 (^ 2 2))"),
+            // or the plus could be the infix op, and - the prefix
+            ("0+-2^2", "(+ 0 (- (^ 2 2)))"),
+            // this one has a unicode minus sign, which is invalid
+            //("0+−2^2", "(+ 0 (- (^ 2 2)))"),
+            ("y > y", "(> y y)"),
+            //("x( 1 2 3)", "(apply x 1 2 3)"),
+            //("(x+y)( 1 2 3)", "(apply (+ x y) 1 2 3)"),
+            ("x = 1", "(= x 1)"),
+        ];
+
+        r.iter().for_each(|(q, a)| {
+            println!("q {:?}", (&q));
+
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
+            let i = lexer.tokens();
+
+            println!("tokens: {:?}", (i.toks()));
+
+            i.iter_elements().for_each(|t| {
+                println!("{:?}", t);
+            });
+
+            let (i, node) = i.parse().unwrap();
+            println!("NODE {:?}", (&node.unparse()));
+            println!("REM {:?}", (&i.toks()));
+            //println!("S {}", &node.sexpr().unwrap());
+
+            match node.sexpr() {
+                Ok(sexpr) => {
+                    let rendered = format!("{}", &sexpr);
+                    println!("sexpr {:?}", (&q, &sexpr, a));
+                    println!("S {}", &rendered);
+                    assert_eq!(rendered, a.to_string());
+                }
+                Err(e) => {
+                    println!("Error: {:?}", e);
+                    assert!(false);
+                }
+            }
+            assert_eq!(0, i.input_len());
+        });
+    }
+
 
 }
 
