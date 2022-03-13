@@ -166,6 +166,16 @@ impl Value {
         //Ok(Self::BoolLiteral(eval))
     }
 
+    pub fn postfix(&self, op: &UnaryOp) -> Result<Self, InterpretError> {
+        match op {
+            UnaryOp::PostfixBang => {
+                let right = self.check_number()?;
+                Ok(Self::Literal(Tok::FloatLiteral(right)))
+            }
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn prefix(&self, prefix: &UnaryOp) -> Result<Self, InterpretError> {
         match prefix {
             UnaryOp::PrefixPlus => {
@@ -188,9 +198,14 @@ impl Interpreter {
         match &expr.value {
             Expr::LitExpr(lit) => Ok(lit.value.clone()),
             Expr::IdentExpr(ident) => self.globals.get(ident.value.as_str()),
-            Expr::Unary(prefix, expr) => {
+            Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
                 let eval = eval.prefix(&prefix.value)?;
+                Ok(eval)
+            }
+            Expr::Postfix(op, expr) => {
+                let eval = self.evaluate(&expr)?;
+                let eval = eval.postfix(&op.value)?;
                 Ok(eval)
             }
             Expr::Binary(op, left, right) => {
@@ -265,6 +280,8 @@ impl Interpreter {
                 //Ok(Value::IntLiteral(0))
             }
             Expr::Block(_) => Ok(Value::Literal(Tok::IntLiteral(0))),
+            Expr::Ternary(_,_,_,_) => Ok(Value::Literal(Tok::IntLiteral(0))),
+            Expr::Chain(_,_) => Ok(Value::Literal(Tok::IntLiteral(0))),
         }
     }
 

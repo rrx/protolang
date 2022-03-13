@@ -8,11 +8,13 @@ use crate::tokens::{Tok,Tokens};
 use crate::parser::{tag_token, PResult, take_one_any};
 //use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
-use crate::lexer::{Location, Surround};
-use crate::ast::Unparse;
+//use crate::lexer::{Location, Surround};
+use crate::ast::{LiteralNode, Binary, Expr, ExprNode, Ident, infix_op, postfix_op, Operator, Unary, UnaryOp, Unparse};
 use crate::sexpr::{S, SExpr, SResult};
 
-type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
+//type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
+type RNode<'a> = PResult<Tokens<'a>, ExprNode>;
+
 type Prec = Option<i8>;
 
 #[derive(Clone, Debug)]
@@ -104,22 +106,17 @@ impl Op {
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
         let (i, y) = E(i, Some(self.rbp.unwrap()+1), depth+1)?;
 
+        let op = Binary::from_token(&i.tok[0]).unwrap();
         let (left_op, c) = match &x.value {
-            Value::Chain(op, chain) if false && op == token => {
+            PrattValue::Chain(op, chain) => { //if false && op == token => {
                 let mut c = chain.clone();
                 c.push(y.clone());
                 (op, c)
-                //Value::Chain(op.clone(), c)
             }
-            //_ => Value::Chain(self.op.clone(), vec![x.clone(), y.clone()])
-            //_ => Value::Chain(token.clone(), vec![x.clone(), y.clone()])
-            _ => (token, vec![x.clone(), y.clone()])
+            _ => {
+                (&op, vec![x.clone(), y.clone()])
+            }
         };
-
-        //let chain = vec![Box::new(x.clone()), Box::new(y.clone())];
-        //chain.push(y.clone());
-        //let mut chain = vec![x.clone(), y.clone()];//Box::new(x.clone()), Box::new(y.clone())];
-        //let mut t = Value::Chain(self.op.clone(), chain);
 
         let n = i.peek().unwrap();
         let next_tok = n.tok.clone();
@@ -128,8 +125,7 @@ impl Op {
         //println!("chain: {:?}", (&i.toks()));
         if next_tok == Tok::EOF {
             println!("chain: got eof");
-            //let mut t = Value::Chain(left_op.clone(), c);
-            let t = Value::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+            let t = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             return i.node_success(t);//Ok((i, t));
         }
 
@@ -140,38 +136,14 @@ impl Op {
             let (i, _) = take_one_any(i)?;
             let (i, t) = self.chain_LeD(i, &y, &next_tok, depth)?;
             println!("chain consume: {:?}", (self.lbp, next_op, &t));
-            /*
-            let t = match t1 {
-                Value::Chain(op, mut chain) if false && &op == left_op => {
-                    //if &op == token {
-                        c.append(&mut chain.iter().skip(1).cloned().collect::<Vec<_>>());
-                        //let mut c = chain.clone();
-                        //c.push(y.clone());
-                        //c
-                        Value::Chain(token.clone(), c)
-                    //} else {
-                        //Value::Chain(self.op.clone(), c)
-                    //}
-                }
-                _ => {
-                    //Value::Chain(next_tok, vec![Value::Chain(token.clone(), c), t1])
-                    //Value::Chain(next_tok, vec![Value::Chain(token.clone(), c), t1])
-                }
-            };
-            */
-                            //Value::Chain(op.clone(), c)
-            //c.push(t1);
-            //let t0 = Value::Binary(self.op.clone(), Box::new(y.clone()), Box::new(t) );
-            let t0 = Value::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            //let t0 = Value::Chain(self.op.clone(), c);
-            //let t = Value::Chain(Tok::Percent, vec![t0, t]);//Box::new(t), Box::new(t1));
-            let t = Value::Chain(Tok::Percent, vec![i.node(t0), t]);
+            let t0 = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+            let op = Binary::from_location(&i, Operator::End);
+            let t = PrattValue::Chain(op, vec![i.node(t0), t]);
             i.node_success(t)
         } else {
-            let t = Value::Chain(left_op.clone(), c);
+            let t = PrattValue::Chain(left_op.clone(), c);
             println!("chain drop: {:?}", (self.lbp, next_op, &t));
             i.node_success(t)
-            //Ok((i, t))
         }
     }
 
@@ -191,39 +163,45 @@ impl Op {
 
                 // match any precedence
                 let (i, z) = E(i, Some(0), depth + 1)?;
-
-                //(i, Value::Ternary(Tok::Question, Box::new(x.clone()), Box::new(y), Box::new(z.clone())))
-                let value = Value::Ternary(Tok::Question, Box::new(x.clone()), Box::new(y), Box::new(z.clone()));
+    
+                let op = Binary::from_location(&i, Operator::Conditional);
+                let value = PrattValue::Ternary(op, Box::new(x.clone()), Box::new(y), Box::new(z.clone()));
                 let node = i.node(value);
                 (i, node)
             }
             Tok::Elvis =>{
                 // match any precedence
                 let (i, y) = E(i, Some(0), depth + 1)?;
-                let value = Value::Binary(Tok::Elvis, Box::new(x.clone()), Box::new(y));
+                let op = Binary::from_location(&i, Operator::Elvis);
+                let value = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
                 let node = i.node(value);
                 (i, node)
-                //(i, Value::Binary(Tok::Elvis, Box::new(x.clone()), Box::new(y)))
             }
             Tok::Assign | Tok::Comma | Tok::LT | Tok::LTE | Tok::GT | Tok::GTE => {
                 let (i, y) = self.chain_LeD(i, x, token, depth)?;
-                (i, y)//node(i, y))
+                (i, y)
             }
             _ => {
                 if token.isBinary() {
                     // binary parses the RHS, and returns a binary node
                     let (i, y) = E(i, self.rbp, depth+1)?;
                     println!("Binary: {:?} {:?} {:?}", &x, &token, &y);
-                    let t = Value::Binary(self.op.clone(), Box::new(x.clone()), Box::new(y));
+
+                    let (_, maybe_op) = infix_op(&self.op);
+                    let operator = maybe_op.unwrap();
+                    let op = Binary::from_location(&i, operator); 
+                    let t = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
                     let node = i.node(t);
                     (i, node)
                 } else {
                     // postfix just returns, there's no RHS
                     println!("Postfix: {:?}", (&x, &token));
-                    let t = Value::Postfix(self.op.clone(), Box::new(x.clone()));
+                    //let (_, maybe_op) = postfix_op(&self.op);
+                    //let operator = maybe_op.unwrap();
+                    let op = Unary::new(UnaryOp::PostfixBang);
+                    let t = PrattValue::Postfix(op, Box::new(x.clone()));
                     let node = i.node(t);
                     (i, node)
-                    //(i, t)
                 }
             }
         };
@@ -289,146 +267,16 @@ impl Tok {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum Value {
-    Empty,
-    Prefix(Tok, Box<ASTNode>),
-    Binary(Tok, Box<ASTNode>, Box<ASTNode>),
-    Ternary(Tok, Box<ASTNode>, Box<ASTNode>, Box<ASTNode>),
-    Postfix(Tok, Box<ASTNode>),
-    Literal(Tok),
-    Ident(Tok),
-    Error(String),
-    List(Vec<ASTNode>),
-    Chain(Tok, Vec<ASTNode>),
-    Expr(Box<ASTNode>),
-    Null,
-    //Callable(CallableNode),
-    Invalid(String),
-}
+pub type PrattValue = Expr;
 
-impl Unparse for ASTNode {
-    fn unparse(&self) -> Vec<Tok> {
-        let mut out = vec![];
-        match &self.value {
-            Value::Empty => (),
-            Value::Null => (),
-            Value::Invalid(_) => (),
-            Value::Error(_) => (),
-            Value::Chain(_,_) => (),
-            Value::Ternary(_,_,_,_) => (),
-            Value::Ident(x) => {
-                out.push(x.clone());
-                //out.append(&mut x.unparse());
-            }
-            Value::Literal(x) => {
-                out.push(x.clone());
-            }
-            Value::Expr(x) => {
-                out.append(&mut x.unparse());
-            }
-            Value::Prefix(tok, expr) => {
-                out.push(tok.clone());
-                out.append(&mut expr.unparse());
-            }
-            Value::Postfix(tok, expr) => {
-                out.append(&mut expr.unparse());
-                out.push(tok.clone());
-            }
-            Value::Binary(op, left, right) => {
-                out.append(&mut left.unparse());
-                out.push(op.clone());
-                //out.append(&mut op.unparse());
-                out.append(&mut right.unparse());
-            }
-            Value::List(elements) => {
-                for e in elements {
-                    out.append(&mut e.unparse());
-                }
-            }
-        };
-        self.context.s.unparse(out)
-    }
-}
-impl SExpr for ASTNode {
-    fn sexpr(&self) -> SResult<S> {
-        match &self.value {
-            Value::Expr(x) => x.sexpr(),
-            //Value::Ident(x) => x.sexpr(),
-            Value::Binary(op, left, right) => {
-                let sleft = left.sexpr()?;
-                let sright = right.sexpr()?;
-                Ok(S::Cons(op.unlex(), vec![sleft, sright]))
-            }
-            Value::Prefix(prefix, expr) => {
-                let s = expr.sexpr()?;
-                Ok(S::Cons(prefix.unlex(), vec![s]))
-            }
-            Value::Postfix(postfix, expr) => {
-                let s = expr.sexpr()?;
-                Ok(S::Cons(postfix.unlex(), vec![s]))
-            }
-            Value::List(elements) => {
-                let s_args = elements
-                    .iter()
-                    .filter_map(|a| a.sexpr().ok())
-                    .collect::<Vec<_>>();
-                Ok(S::Cons("list".into(), s_args))
-            }
-            _ => unreachable!()
-        }
-    }
-}
-
-pub trait Context {
-    fn from_location(loc: &Location) -> Self;
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct NodeContextWithLocation {
-    pub s: Surround,
-    pub loc: Location,
-}
-
-impl Context for NodeContextWithLocation {
-    fn from_location(loc: &Location) -> Self {
-        Self { s: Surround::default(), loc: loc.clone() }
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct NodeContextNull {
-}
-
-impl Context for NodeContextNull {
-    fn from_location(_: &Location) -> Self {
-        Self {}
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct ASTNodeWithLocationImpl<C: Context> {
-    pub context: C,
-    pub value: Value,
-}
-
-pub type ASTNode = ASTNodeWithLocationImpl<NodeContextWithLocation>;
-
-impl ASTNode {
-    pub fn new(value: Value, loc: &Location) -> Self {
-        Self {
-            context:  NodeContextWithLocation::from_location(loc),
-            value,
-        }
-    }
-}
+pub type ASTNode = ExprNode;
 
 impl<'a> Tokens<'a> {
-    fn node(&self, value: Value) -> ASTNode {
+    fn node(&self, value: PrattValue) -> ASTNode {
         ASTNode::new(value, &self.to_location())
     }
 
-    fn node_success(self, value: Value) -> RNode<'a> {
+    fn node_success(self, value: PrattValue) -> RNode<'a> {
         let node = ASTNode::new(value, &self.to_location());
         Ok((self, node))
     }
@@ -456,6 +304,8 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
     // P branch
     // peek
     let n = i.tok[0].tok.clone();
+    let token = &i.tok[0];
+
     println!("P {:?}", (&n));
 
     let rbp = n.op().map_or(None, |t|t.rbp);
@@ -466,34 +316,39 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // consume prefix
             let (i, _) = take_one_any(i)?;
             let (i, t) = i.E(rbp, depth + 1)?;
-            let op = n.op().unwrap().op.clone();
-            let value = Value::Prefix(op, Box::new(t));
+            //let op = n.op().unwrap().op.clone();
+            let op = Unary::from_prefix_token(token).unwrap();
+            let value = PrattValue::Prefix(op, Box::new(t));
             i.node_success(value)
             //let node = ASTNode::new(value, &i.to_location());
             //Ok((i, node))
         }
-        Some(Tok::Ident(s)) => {
+        Some(Tok::Ident(_)) => {
             // consume variable
+            let ident = Ident::from_token(&i.tok[0]).unwrap(); 
             let (i, t) = take_one_any(i)?;
-            let value = Value::Ident(Tok::Ident(s.clone()));//s.clone());
+
+            let value = PrattValue::IdentExpr(ident);//Tok::Ident(s.clone()));//s.clone());
             i.node_success(value)
             //let node = ASTNode::new(value, &i.to_location());
             //Ok((i, node))
         }
         Some(Tok::IntLiteral(n)) => {
             // consume literal
-            let (i, _) = take_one_any(i)?;
-            //let t = Value::Integer(*n);
-            let t = Value::Literal(Tok::IntLiteral(*n));
+            let (i, x) = LiteralNode::parse(i)?;
+            //let (i, _) = take_one_any(i)?;
+            //let t = PrattValue::Integer(*n);
+            let t = PrattValue::LitExpr(x);//Tok::IntLiteral(*n));
             i.node_success(t)
             //Ok((i, t))
         }
 
         Some(Tok::FloatLiteral(n)) => {
             // consume literal
-            let (i, _) = take_one_any(i)?;
-            //let t = Value::Float(*n);
-            let t = Value::Literal(Tok::FloatLiteral(*n));
+            //let (i, _) = take_one_any(i)?;
+            let (i, x) = LiteralNode::parse(i)?;
+            //let t = PrattValue::Float(*n);
+            let t = PrattValue::LitExpr(x);//Tok::FloatLiteral(*n));
             i.node_success(t)
             //Ok((i, t))
         }
@@ -507,7 +362,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             println!("exp2: {:?}", (&i, &t));
             // consume RBracket
             let (i, _) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
-            let t = Value::List(vec![t]);
+            let t = PrattValue::List(vec![t]);
             i.node_success(t)
             //Ok((i, t))
         }

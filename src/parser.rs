@@ -7,7 +7,7 @@ use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::{self, into, opt, verify};
 use nom::error::{context, ErrorKind, VerboseError};
-use nom::multi::{many0, many1};
+use nom::multi::{many0};
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
@@ -140,7 +140,7 @@ pub fn parse_block_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
         many0(parse_statement),
         tag_token(Tok::RBrace),
     ))(i)?;
-    let mut expr = ExprNode::new(Expr::Block(stmts), left.to_location());
+    let mut expr = ExprNode::new(Expr::Block(stmts), &left.to_location());
     expr.s.prepend(left.tok[0].expand_toks());
     expr.s.append(right.tok[0].expand_toks());
     Ok((i, expr))
@@ -257,11 +257,11 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
     let (i1, expr) = match maybe_unary {
         Some(unary) => {
             println!("pratt unary: {:?}", &unary);
-            let (prec, _) = prefix_op(&unary.token());
+            let (_, _) = prefix_op(&unary.token());
             let (i1, expr) = parse_pratt_expr(i0, Precedence::PLessGreater)?;
             println!("pratt unary expr: {:?}", (&i1, &expr));
             let loc = unary.loc.clone();
-            let value = ExprNode::new(Expr::Unary(unary, Box::new(expr)), loc);
+            let value = ExprNode::new(Expr::Prefix(unary, Box::new(expr)), &loc);
             println!("pratt unary rsult: {:?}", (&value));
             (i1, value)
         }
@@ -278,7 +278,7 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
     match maybe_postfix {
         Some(unary) => {
             let loc = unary.loc.clone();
-            let value = ExprNode::new(Expr::Unary(unary, Box::new(expr)), loc);
+            let value = ExprNode::new(Expr::Prefix(unary, Box::new(expr)), &loc);
             Ok((i2, value))
         }
         None => Ok((i2, expr))
@@ -350,13 +350,13 @@ fn parse_ident(i: Tokens) -> PResult<Tokens, Ident> {
 fn _parse_ident(i: Tokens) -> PResult<Tokens, Ident> {
     let (i1, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
-    match Ident::from_token(token.clone()) {
+    match Ident::from_token(token) {
         Some(ident) => Ok((i1, ident)),
         _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
     }
 }
 
-fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
+pub(crate) fn parse_literal(i: Tokens) -> PResult<Tokens, LiteralNode> {
     let (i1, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
     let tok = &token.tok;
@@ -467,9 +467,9 @@ fn parse_caret_side(i: Tokens) -> PResult<Tokens, ExprNode> {
 fn parse_caret_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (left, op, right)) =
         tuple((parse_caret_side, tag_token(Tok::Caret), parse_caret_side))(i)?;
-    let op = Binary::from_token(op.tok[0].clone()).unwrap();
+    let op = Binary::from_token(&op.tok[0]).unwrap();
     let loc = op.loc.clone();
-    let expr = ExprNode::new(Expr::Binary(op, Box::new(left), Box::new(right)), loc);
+    let expr = ExprNode::new(Expr::Binary(op, Box::new(left), Box::new(right)), &loc);
     Ok((i, expr))
 }
 
@@ -488,7 +488,7 @@ fn parse_prefix(i: Tokens) -> PResult<Tokens, Unary> {
         tag_token(Tok::Exclamation),
     ))(i)?;
 
-    Ok((i, Unary::from_prefix_token(tokens.tok[0].clone()).unwrap()))
+    Ok((i, Unary::from_prefix_token(&tokens.tok[0]).unwrap()))
 }
 
 fn parse_postfix(i: Tokens) -> PResult<Tokens, Unary> {
@@ -502,12 +502,12 @@ fn parse_postfix(i: Tokens) -> PResult<Tokens, Unary> {
 
 
 fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    use Expr::Unary;
+    use Expr::Prefix;
     let (i1, prefix) = parse_prefix(i)?;
     let (i2, expr1) = parse_atom(i1)?;
     Ok((
         i2,
-        ExprNode::new(Unary(prefix.clone(), Box::new(expr1)), prefix.loc),
+        ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.loc),
     ))
 }
 
@@ -518,7 +518,7 @@ fn parse_infix(i: Tokens) -> PResult<Tokens, Binary> {
     println!("maybe: {:?}", (&next, &maybe_op));
     match maybe_op {
         None => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
-        Some(_) => Ok((i1, Binary::from_token(next.clone()).unwrap())),
+        Some(_) => Ok((i1, Binary::from_token(next).unwrap())),
     }
 }
 
@@ -529,7 +529,7 @@ fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
         i2,
         ExprNode::new(
             Expr::Binary(infix.clone(), Box::new(left), Box::new(right)),
-            infix.loc,
+            &infix.loc,
         ),
     ))
 }
@@ -540,7 +540,7 @@ fn parse_index_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> 
     let (i3, close) = tag_token(Tok::RBracket)(i2)?;
     left.s.append(open.expand_toks());
     let loc = index.loc.clone();
-    let mut expr = ExprNode::new(Expr::Index(Box::new(left), Box::new(index)), loc);
+    let mut expr = ExprNode::new(Expr::Index(Box::new(left), Box::new(index)), &loc);
     expr.s.append(close.expand_toks());
     Ok((i3, expr))
 }
@@ -552,13 +552,13 @@ fn parse_call_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
     let (i3, close) = tag_token(Tok::RParen)(i2)?;
     left.s.append(open.expand_toks());
     let loc = open.to_location();
-    let mut expr = ExprNode::new(Expr::Apply(Box::new(left), args), loc);
+    let mut expr = ExprNode::new(Expr::Apply(Box::new(left), args), &loc);
     //let mut expr = ExprNode::new(Expr::Lambda(Lambda::new(Box::new(left), args), loc);
     expr.s.append(close.expand_toks());
     Ok((i3, expr))
 }
 
-pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
+pub fn parse_assignment_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
     match left.value {
         Expr::IdentExpr(mut ident) => {
             let (i, (assign, mut expr)) = tuple((
@@ -570,8 +570,8 @@ pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, E
             ident.s.append(assign.tok[0].s.pre.clone());
             expr.s.prepend(assign.tok[0].s.post.clone());
 
-            let value = Expr::Binary(Binary::from_token(assign.tok[0].clone()).unwrap(), Box::new(ident.into()), Box::new(expr));
-            let expr = ExprNode::new(value, i.to_location());
+            let value = Expr::Binary(Binary::from_token(&assign.tok[0]).unwrap(), Box::new(ident.into()), Box::new(expr));
+            let expr = ExprNode::new(value, &i.to_location());
             Ok((i, expr))
         }
         _ => Err(Err::Error(error_position!(i, ErrorKind::Tag)))
@@ -844,10 +844,10 @@ mod tests {
             println!("q {:?}", (&v));
             let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
-            println!("{:?}", (&tokens));
+            println!("{:?}", (&tokens.toks()));
             match parse_assignment_stmt(tokens) {
                 Ok((rest, prog)) => {
-                    println!("x{:?}", (&rest, &prog));
+                    println!("x{:?}", (&rest.toks(), &prog));
                     assert!(rest.input_len() == 0);
                 }
                 Err(nom::Err::Error(e)) => {

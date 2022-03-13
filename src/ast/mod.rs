@@ -1,6 +1,7 @@
 use crate::sexpr::*;
-use crate::tokens::{Tok, Token};
+use crate::tokens::{Tok, Token, Tokens};
 use crate::lexer::{Location, Surround};
+use crate::parser::{PResult};
 
 mod function;
 pub use function::{Lambda, Callable, CallableNode, Params};
@@ -124,11 +125,14 @@ impl SExpr for Program {
 pub enum Expr {
     IdentExpr(Ident),
     LitExpr(LiteralNode),
-    Unary(Unary, Box<ExprNode>),
+    Prefix(Unary, Box<ExprNode>),
+    Postfix(Unary, Box<ExprNode>),
     Binary(Binary, Box<ExprNode>, Box<ExprNode>),
+    Ternary(Binary, Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
     Callable(Box<dyn Callable>),
     List(Vec<ExprNode>),
+    Chain(Binary, Vec<ExprNode>),
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<StmtNode>),
@@ -141,14 +145,43 @@ pub struct ExprNode {
     pub loc: Location,
 }
 impl ExprNode {
-    pub fn new(value: Expr, loc: Location) -> Self {
+    pub fn new(value: Expr, loc: &Location) -> Self {
         Self {
             s: Surround::default(),
             value,
-            loc,
+            loc: loc.clone(),
         }
     }
 }
+/*
+
+impl TryFrom<&PrattValue> for Expr {
+    type Error = ();
+    fn try_from(value: &PrattValue) -> Result<Self, Self::Error> {
+        match value {
+            PrattValue::Prefix(tok, node) => {
+                Expr::Prefix(
+            }
+            PrattValue::Binary(Tok, Box<ASTNode>, Box<ASTNode>),
+            PrattValue::Ternary(Tok, Box<ASTNode>, Box<ASTNode>, Box<ASTNode>),
+            PrattValue::Postfix(Tok, Box<ASTNode>),
+            PrattValue::Ident(Tok),
+            PrattValue::Error(String),
+            PrattValue::List(Vec<ASTNode>),
+            PrattValue::Chain(Tok, Vec<ASTNode>),
+            PrattValue::Expr(Box<ASTNode>),
+            Tok::IntLiteral(_) => Ok(Value::Literal(value.clone())),
+            Tok::FloatLiteral(_) => Ok(Value::Literal(value.clone())),
+            Tok::StringLiteral(_) => Ok(Value::Literal(value.clone())),//s.clone())),
+            Tok::BoolLiteral(_) => Ok(Value::Literal(value.clone())),
+            Tok::Null => Ok(Value::Null),
+            //Tok::Invalid(s) => Some(Value::Invalid(s.clone())),
+            _ => Err(()),
+        }
+    }
+}
+
+*/
 
 impl From<ExprNode> for StmtNode {
     fn from(item: ExprNode) -> Self {
@@ -167,21 +200,21 @@ impl From<LiteralNode> for StmtNode {
 impl From<LiteralNode> for ExprNode {
     fn from(item: LiteralNode) -> Self {
         let loc = item.loc.clone();
-        Self::new(Expr::LitExpr(item), loc)
+        Self::new(Expr::LitExpr(item), &loc)
     }
 }
 
 impl From<Ident> for ExprNode {
     fn from(item: Ident) -> Self {
         let loc = item.loc.clone();
-        Self::new(Expr::IdentExpr(item), loc)
+        Self::new(Expr::IdentExpr(item), &loc)
     }
 }
 
 impl From<Lambda> for ExprNode {
     fn from(item: Lambda) -> Self {
         let loc = item.loc.clone();
-        Self::new(Expr::Lambda(item), loc)
+        Self::new(Expr::Lambda(item), &loc)
     }
 }
 
@@ -189,23 +222,21 @@ impl Unparse for ExprNode {
     fn unparse(&self) -> Vec<Tok> {
         let mut out = vec![];
         match &self.value {
+            Expr::Ternary(_,_,_,_) => {}
+            Expr::Chain(_,_) => {}
             Expr::IdentExpr(x) => {
                 out.append(&mut x.unparse());
             }
             Expr::LitExpr(x) => {
                 out.append(&mut x.unparse());
             }
-            Expr::Unary(unary, expr) => {
-                match unary.value {
-                    UnaryOp::PostfixBang => {
-                        out.append(&mut expr.unparse());
-                        out.append(&mut unary.unparse());
-                    }
-                    _ => {
-                        out.append(&mut unary.unparse());
-                        out.append(&mut expr.unparse());
-                    }
-                }
+            Expr::Prefix(unary, expr) => {
+                out.append(&mut unary.unparse());
+                out.append(&mut expr.unparse());
+            }
+            Expr::Postfix(unary, expr) => {
+                out.append(&mut expr.unparse());
+                out.append(&mut unary.unparse());
             }
             Expr::Binary(op, left, right) => {
                 out.append(&mut left.unparse());
@@ -220,7 +251,7 @@ impl Unparse for ExprNode {
             Expr::Lambda(e) => {
                 out.append(&mut e.unparse());
             }
-            Expr::Callable(e) => {
+            Expr::Callable(_) => {
                 //out.append(&mut e.unparse());
             }
             Expr::Index(expr, arg) => {
@@ -244,6 +275,12 @@ impl SExpr for ExprNode {
     fn sexpr(&self) -> SResult<S> {
         use Expr::*;
         match &self.value {
+            Ternary(_,_,_,_) => {
+                Ok(S::Cons("ternary".into(), vec![]))
+            }
+            Chain(_,_) => {
+                Ok(S::Cons("chain".into(), vec![]))
+            }
             LitExpr(x) => x.sexpr(),
             IdentExpr(x) => x.sexpr(),
             Binary(op, left, right) => {
@@ -251,9 +288,13 @@ impl SExpr for ExprNode {
                 let sright = right.sexpr()?;
                 Ok(S::Cons(op.unlex(), vec![sleft, sright]))
             }
-            Unary(prefix, expr) => {
+            Prefix(op, expr) => {
                 let s = expr.sexpr()?;
-                Ok(S::Cons(prefix.unlex(), vec![s]))
+                Ok(S::Cons(op.unlex(), vec![s]))
+            }
+            Postfix(op, expr) => {
+                let s = expr.sexpr()?;
+                Ok(S::Cons(op.unlex(), vec![s]))
             }
             List(elements) => {
                 let s_args = elements
@@ -321,7 +362,7 @@ impl Unary {
         }
     }
 
-    pub fn from_prefix_token(token: Token) -> Option<Self> {
+    pub fn from_prefix_token(token: &Token) -> Option<Self> {
         let maybe_prefix = match token.tok {
             Tok::Plus => Some(UnaryOp::PrefixPlus),
             Tok::Minus => Some(UnaryOp::PrefixMinus),
@@ -332,7 +373,7 @@ impl Unary {
             Some(prefix) => {
                 let loc = token.to_location();
                 Some(Self {
-                    s: token.s,
+                    s: token.s.clone(),
                     value: prefix,
                     loc,
                 })
@@ -398,7 +439,8 @@ pub enum Operator {
     Elvis,
     Conditional,
     ConditionalElse,
-    End
+    End,
+    Comma
     //Map,
 }
 
@@ -420,7 +462,16 @@ impl Binary {
         }
     }
 
-    pub fn from_token(token: Token) -> Option<Self> {
+    pub fn from_location(i: &Tokens, infix: Operator) -> Self {
+        Self {
+            s: Surround::default(),
+            value: infix,
+            precedence: Precedence::PLowest,
+            loc: i.to_location()
+        }
+    }
+
+    pub fn from_token(token: &Token) -> Option<Self> {
         let (precedence, maybe_prefix) = infix_op(&token.tok);
         match maybe_prefix {
             Some(prefix) => {
@@ -430,7 +481,7 @@ impl Binary {
                     //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
                     //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
                     //},
-                    s: token.s,
+                    s: token.s.clone(),
                     value: prefix,
                     precedence,
                     loc,
@@ -476,6 +527,7 @@ impl Binary {
             Operator::ConditionalElse => Tok::Colon,
             Operator::Conditional => Tok::Question,
             Operator::End => Tok::SemiColon,
+            Operator::Comma => Tok::Comma,
             //Operator::Map => Tok::LeftArrow,
         }
     }
@@ -531,6 +583,7 @@ pub fn infix_precedence(op: Operator) -> Precedence {
         Operator::ConditionalElse => Precedence::PCall,
         Operator::Conditional => Precedence::PCall,
         Operator::End => Precedence::PLowest,
+        Operator::Comma => Precedence::PLowest,
 
         //Operator::Map => Precedence::PMap,
     }
@@ -581,7 +634,14 @@ pub struct LiteralNode {
     pub s: Surround,
     pub loc: Location,
 }
+
 impl LiteralNode {
+    
+    pub fn parse(i: Tokens) -> PResult<Tokens, LiteralNode> {
+        use crate::parser::parse_literal;      
+        parse_literal(i)
+    }
+   
     pub fn new(value: Value, loc: Location) -> Self {
         Self {
             value,
@@ -612,7 +672,7 @@ pub struct Ident {
     pub loc: Location,
 }
 impl Ident {
-    pub fn from_token(token: Token) -> Option<Self> {
+    pub fn from_token(token: &Token) -> Option<Self> {
         let maybe_ident = match &token.tok {
             Tok::Ident(s) => Some(s),
             _ => None,

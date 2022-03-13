@@ -4,6 +4,7 @@ use crate::sexpr::*;
 use crate::tokens::Tok;
 use std::convert::TryFrom;
 use itertools::Itertools;
+//use crate::pratt::{PrattValue};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -44,6 +45,22 @@ impl Unparse for Value {
         }
     }
 }
+/*
+impl TryFrom<&PrattValue> for Value {
+    type Error = ();
+    fn try_from(value: &PrattValue) -> Result<Self, Self::Error> {
+        match value {
+            PrattValue::Literal(v) => Ok(Value::Literal(v.clone())),
+            PrattValue::Null => Ok(Value::Null),
+            //PrattValue::Empty => Ok(Value::Null),
+            //Callable(CallableNode),
+            //Invalid(String),
+            //Tok::Invalid(s) => Some(Value::Invalid(s.clone())),
+            _ => Err(()),
+        }
+    }
+}
+*/
 
 impl TryFrom<&Tok> for Value {
     type Error = ();
