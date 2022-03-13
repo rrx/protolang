@@ -9,7 +9,7 @@ use crate::parser::{tag_token, PResult, take_one_any};
 //use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
 //use crate::lexer::{Location, Surround};
-use crate::ast::{LiteralNode, Binary, Expr, ExprNode, Ident, infix_op, postfix_op, Operator, Unary, UnaryOp, Unparse};
+use crate::ast::{LiteralNode, Binary, Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
 use crate::sexpr::{S, SExpr, SResult};
 
 //type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
@@ -106,7 +106,14 @@ impl Op {
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
         let (i, y) = E(i, Some(self.rbp.unwrap()+1), depth+1)?;
 
-        let op = Binary::from_token(&i.tok[0]).unwrap();
+        println!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
+
+        let (_, maybe_op) = infix_op(&token);
+        let operator = maybe_op.unwrap();
+        let op = Binary::from_location(&i, operator); 
+        //let t = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
+
+        //let op = Binary::from_token(&i.tok[0]).unwrap();
         let (left_op, c) = match &x.value {
             PrattValue::Chain(op, chain) => { //if false && op == token => {
                 let mut c = chain.clone();
@@ -186,6 +193,7 @@ impl Op {
                     // binary parses the RHS, and returns a binary node
                     let (i, y) = E(i, self.rbp, depth+1)?;
                     println!("Binary: {:?} {:?} {:?}", &x, &token, &y);
+                    println!("Binary: {:?}", &token);
 
                     let (_, maybe_op) = infix_op(&self.op);
                     let operator = maybe_op.unwrap();
@@ -198,7 +206,7 @@ impl Op {
                     println!("Postfix: {:?}", (&x, &token));
                     //let (_, maybe_op) = postfix_op(&self.op);
                     //let operator = maybe_op.unwrap();
-                    let op = Unary::new(UnaryOp::PostfixBang);
+                    let op = OperatorNode::new(Operator::Bang);
                     let t = PrattValue::Postfix(op, Box::new(x.clone()));
                     let node = i.node(t);
                     (i, node)
@@ -317,7 +325,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let (i, _) = take_one_any(i)?;
             let (i, t) = i.E(rbp, depth + 1)?;
             //let op = n.op().unwrap().op.clone();
-            let op = Unary::from_prefix_token(token).unwrap();
+            let op = OperatorNode::from_prefix_token(token).unwrap();
             let value = PrattValue::Prefix(op, Box::new(t));
             i.node_success(value)
             //let node = ASTNode::new(value, &i.to_location());
@@ -325,11 +333,11 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         }
         Some(Tok::Ident(_)) => {
             // consume variable
-            let ident = Ident::from_token(&i.tok[0]).unwrap(); 
+            let value = ExprNode::from_token(&i.tok[0]).unwrap(); 
             let (i, t) = take_one_any(i)?;
 
-            let value = PrattValue::IdentExpr(ident);//Tok::Ident(s.clone()));//s.clone());
-            i.node_success(value)
+            //let value = PrattValue::Ident(ident);//Tok::Ident(s.clone()));//s.clone());
+            i.node_success(value.value)
             //let node = ASTNode::new(value, &i.to_location());
             //Ok((i, node))
         }
@@ -522,22 +530,22 @@ mod tests {
             "+1",
             "-x ?: y ",
             //"x+1 ; y+2",
-            "x+1 = y+2",
             "(x)",
             "[x]",
-            "x[1]",
-            "x(1)",
             //"(1",
             "x ?: y",  // elvis
             "x ?: y ?: z", // chaining elvis
             "x ? y : z ",  // ternary conditional
-            "x,y",
             "a < b <= c",
             "a < b < c",
             "a=b=c",
             "x1=y2=z2,y+1,z^2,x1=y=z",
             "x,y,z",
+            "x+1 = y+2",
             "1.2 + 3.4",
+            "x[1]",
+            "x(1)",
+            "x,y",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
@@ -549,8 +557,11 @@ mod tests {
                 println!("{:?}", t);
             });
             let (i, node) = i.parse().unwrap();
-            println!("NODE {:?}", (&node));
+            println!("v {:?}", (&v));
+            //println!("NODE {:?}", (&node));
+            println!("NODE {:?}", (&node.unparse()));
             println!("REM {:?}", (&i.toks()));
+            println!("S {:?}", (&node.sexpr()));
             assert_eq!(0, i.input_len());
         });
     }

@@ -111,6 +111,7 @@ impl Tok {
             RBrace => "}".into(),
             SemiColon => ";".into(),
             Comma => ",".into(),
+            Elvis => "?:".into(),
             IntLiteral(x) => x.to_string(),
             FloatLiteral(x) => x.to_string(),
             BoolLiteral(x) => x.to_string(),
@@ -190,11 +191,11 @@ impl<'a> Token<'a> {
     }
 
     pub fn toks_pre(&self) -> Vec<Tok> {
-        self.s.pre.clone() //.iter().map(|t| t.toks()).flatten().collect()
+        self.s.pre.clone()
     }
 
     pub fn toks_post(&self) -> Vec<Tok> {
-        self.s.post.clone() //.iter().map(|t| t.toks()).flatten().collect()
+        self.s.post.clone()
     }
 
     pub fn toks(&self) -> Vec<Tok> {

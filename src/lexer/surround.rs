@@ -1,12 +1,23 @@
 use crate::tokens::Tok;
+use std::fmt;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Location {
     pub offset: usize,
     pub line: usize,
     pub col: usize,
     pub fragment: String,
 }
+
+impl fmt::Debug for Location {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Loc")
+            .field("line", &self.line)
+            .field("col", &self.col)
+            .finish()
+    }
+}
+
 
 impl Default for Location {
     fn default() -> Self {
@@ -38,7 +49,7 @@ impl Default for Linespace {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Surround {
     pub pre: Vec<Tok>,
     pub post: Vec<Tok>,
@@ -46,6 +57,15 @@ pub struct Surround {
     //pub has_preceding_linespace: bool,
     pub has_newline: bool,
     pub linespace: Linespace,
+}
+
+impl fmt::Debug for Surround {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Surround")
+            .field("pre", &self.pre)
+            .field("post", &self.post)
+            .finish()
+    }
 }
 
 impl Default for Surround {

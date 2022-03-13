@@ -166,9 +166,9 @@ impl Value {
         //Ok(Self::BoolLiteral(eval))
     }
 
-    pub fn postfix(&self, op: &UnaryOp) -> Result<Self, InterpretError> {
+    pub fn postfix(&self, op: &Operator) -> Result<Self, InterpretError> {
         match op {
-            UnaryOp::PostfixBang => {
+            Operator::Bang => {
                 let right = self.check_number()?;
                 Ok(Self::Literal(Tok::FloatLiteral(right)))
             }
@@ -176,14 +176,14 @@ impl Value {
         }
     }
 
-    pub fn prefix(&self, prefix: &UnaryOp) -> Result<Self, InterpretError> {
+    pub fn prefix(&self, prefix: &Operator) -> Result<Self, InterpretError> {
         match prefix {
-            UnaryOp::PrefixPlus => {
+            Operator::Plus => {
                 let right = self.check_number()?;
                 Ok(Self::Literal(Tok::FloatLiteral(right)))
                 //Ok(Self::FloatLiteral(right))
             }
-            UnaryOp::PrefixMinus => {
+            Operator::Minus => {
                 let right = self.check_number()?;
                 Ok(Self::Literal(Tok::FloatLiteral(-right)))
                 //Ok(Self::FloatLiteral(-right))
@@ -197,7 +197,7 @@ impl Interpreter {
     pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Value, InterpretError> {
         match &expr.value {
             Expr::LitExpr(lit) => Ok(lit.value.clone()),
-            Expr::IdentExpr(ident) => self.globals.get(ident.value.as_str()),
+            Expr::Ident(ident) => self.globals.get(ident),
             Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
                 let eval = eval.prefix(&prefix.value)?;
@@ -253,8 +253,8 @@ impl Interpreter {
             }
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
-                    Expr::IdentExpr(ident) => {
-                        Some(self.globals.get(ident.value.as_str())?)
+                    Expr::Ident(ident) => {
+                        Some(self.globals.get(ident)?)
                     }
                     _ => None
                 };
@@ -311,12 +311,19 @@ impl Interpreter {
                 println!("Evaluate Literal: {:?}", lit.value);
                 Ok(())
             }
-            Stmt::Assign(ident, expr) => {
-                let value = self.evaluate(&expr)?;
-                self.globals.define(ident.value.as_str(), &value);
-                // assign value to ident
-                println!("Assign {:?} to {}", value, ident.value);
-                Ok(())
+            Stmt::Assign(ident_expr, expr) => {
+                if let Expr::Ident(ident) = ident_expr.value {
+                    let value = self.evaluate(&expr)?;
+                    self.globals.define(&ident, &value);
+                    // assign value to ident
+                    println!("Assign {:?} to {}", &value, &ident);
+                    Ok(())
+                } else {
+                    Err(InterpretError::Runtime {
+                        message: format!("Invalid Assignment, LHS must be identifier"),
+                        line: ident_expr.context.loc.line,
+                    })
+                }
             }
             Stmt::Invalid(line) => Err(InterpretError::Runtime {
                 message: format!("Invalid Statement {}", line),

@@ -40,10 +40,10 @@ impl Clone for Box<dyn Callable> {
 #[derive(Debug, Clone)]
 pub struct Params {
     pub s: Surround,
-    pub value: Vec<Ident>,
+    pub value: Vec<ExprNode>,
 }
 impl Params {
-    pub fn new(value: Vec<Ident>) -> Self {
+    pub fn new(value: Vec<ExprNode>) -> Self {
         Self {
             s: Surround::default(),
             value,
@@ -74,6 +74,7 @@ impl SExpr for Params {
         let params = self
             .value
             .iter()
+            //.map(|v| S::Atom(v.clone()))
             .map_while(|v| v.sexpr().ok())
             .collect::<Vec<_>>();
         if params.len() < self.value.len() {
