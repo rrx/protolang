@@ -135,6 +135,8 @@ pub enum Expr {
     Callable(Box<dyn Callable>),
     List(Vec<ExprNode>),
     Chain(Operator, Vec<ExprNode>),
+
+    // Function application (the function, the params)
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<StmtNode>),
@@ -245,30 +247,6 @@ impl From<ExprNode> for StmtNode {
         Self::new(Stmt::Expr(item), loc)
     }
 }
-/*
-impl From<Value> for StmtNode {
-    fn from(item: Value) -> Self {
-        let loc = item.loc.clone();
-        Self::new(Stmt::Lit(item), loc)
-    }
-}
-
-impl From<Value> for ExprNode {
-    fn from(item: Value) -> Self {
-        let loc = item.loc.clone();
-        Self::new(Expr::LitExpr(item), &loc)
-    }
-}
-*/
-
-/*
-impl From<Ident> for ExprNode {
-    fn from(item: Ident) -> Self {
-        let loc = item.loc.clone();
-        Self::new(Expr::Ident(item), &loc)
-    }
-}
-*/
 
 impl From<Lambda> for ExprNode {
     fn from(item: Lambda) -> Self {
@@ -288,23 +266,19 @@ impl Unparse for ExprNode {
             }
             Expr::Chain(_,_) => {}
             Expr::Ident(x) => {
-                //out.append(&mut x.unparse());
                 out.push(Tok::Ident(x.clone()));
             }
             Expr::LitExpr(x) => {
                 out.append(&mut x.unparse());
             }
             Expr::Prefix(unary, expr) => {
-                //out.append(&mut unary.unparse());
                 out.append(&mut expr.unparse());
             }
             Expr::Postfix(unary, expr) => {
                 out.append(&mut expr.unparse());
-                //out.append(&mut unary.unparse());
             }
             Expr::Binary(op, left, right) => {
                 out.append(&mut left.unparse());
-                //out.append(&mut op.unparse());
                 out.append(&mut right.unparse());
             }
             Expr::List(elements) => {
@@ -391,16 +365,6 @@ impl SExpr for ExprNode {
     }
 }
 
-/*
-#[derive(PartialEq, Debug, Clone)]
-pub enum UnaryOp {
-    PrefixPlus,
-    PrefixMinus,
-    PrefixNot,
-    PostfixBang,
-}
-*/
-
 #[derive(PartialEq, Debug, Clone)]
 pub struct OperatorNode {
     pub context: NodeContext,
@@ -435,12 +399,9 @@ impl OperatorNode {
     pub fn from_postfix_token(token: Token) -> Option<Self> {
         match Self::from_postfix_tok(&token.tok) {
             Some(postfix) => {
-                //let loc = token.to_location();
                 Some(Self {
                     context: NodeContext::move_token(token),
-                    //s: token.s,
                     value: postfix,
-                    //loc,
                 })
             }
             None => None,
@@ -460,9 +421,7 @@ impl OperatorNode {
             Some(prefix) => {
                 Some(Self {
                     context: Context::from_token(&token),
-                    //s: token.s.clone(),
                     value: prefix,
-                    //loc,
                 })
             }
             None => None,
@@ -602,94 +561,6 @@ impl Operator {
 
 }
 
-/*
-#[derive(PartialEq, Clone)]
-pub struct Binary {
-    pub s: Surround,
-    pub value: Operator,
-    pub precedence: Precedence,
-    pub loc: Location,
-}
-
-impl fmt::Debug for Binary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Binary")
-            //.field("s", &self.context.s)
-            //.field("loc", &self.context.loc)
-            .field("v", &self.value)
-            .finish()
-    }
-}
-
-impl Binary {
-    pub fn new(infix: Operator, precedence: Precedence, loc: Location) -> Self {
-        Self {
-            s: Surround::default(),
-            value: infix,
-            precedence,
-            loc,
-        }
-    }
-
-    pub fn from_location(i: &Tokens, infix: Operator) -> Self {
-        Self {
-            s: Surround::default(),
-            value: infix,
-            precedence: Precedence::PLowest,
-            loc: i.to_location()
-        }
-    }
-
-    pub fn from_token(token: &Token) -> Option<Self> {
-        let (precedence, maybe_prefix) = infix_op(&token.tok);
-        match maybe_prefix {
-            Some(prefix) => {
-                let loc = token.to_location();
-                Some(Self {
-                    //s: Surround {
-                    //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
-                    //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                    //},
-                    s: token.s.clone(),
-                    value: prefix,
-                    precedence,
-                    loc,
-                })
-            }
-            None => None,
-        }
-    }
-
-    pub fn from_tokens(
-        infix: Operator,
-        precedence: Precedence,
-        pre: Vec<Tok>,
-        post: Vec<Tok>,
-    ) -> Self {
-        Self {
-            s: Surround::new(pre, post),
-            value: infix,
-            precedence,
-            loc: Location::default(),
-        }
-    }
-
-    pub fn token(&self) -> Tok {
-        self.value.token()
-    }
-}
-
-impl Unparse for Binary {
-    fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(vec![self.token()])
-    }
-
-    fn unlex(&self) -> String {
-        self.token().unlex()
-    }
-}
-*/
-
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Precedence {
     PLowest, // Parens, Start
@@ -777,90 +648,6 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
         _ => (Precedence::PLowest, None),
     }
 }
-/*
-#[derive(PartialEq, Debug, Clone)]
-pub struct LiteralNode {
-    pub value: Value,
-    pub s: Surround,
-    pub loc: Location,
-}
-
-impl LiteralNode {
-    
-    pub fn new(value: Value, loc: Location) -> Self {
-        Self {
-            value,
-            s: Surround::default(),
-            loc,
-        }
-    }
-}
-impl Unparse for LiteralNode {
-    fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(self.value.unparse())//vec![self.value.token()])
-    }
-    //fn unlex(&self) -> String {
-    //self.value.token().unlex()
-    //}
-}
-
-impl SExpr for LiteralNode {
-    fn sexpr(&self) -> SResult<S> {
-        self.value.sexpr()
-    }
-}
-*/
-
-/*
-#[derive(PartialEq, Debug, Clone)]
-pub struct Ident {
-    pub value: String,
-    pub s: Surround,
-    pub loc: Location,
-}
-impl Ident {
-    pub fn from_token(token: &Token) -> Option<Self> {
-        let maybe_ident = match &token.tok {
-            Tok::Ident(s) => Some(s),
-            _ => None,
-        };
-        match maybe_ident {
-            Some(ident) => Some(Self {
-                //s: Surround {
-                //pre: token.pre.iter().map(|t| t.toks()).flatten().collect(),
-                //post: token.post.iter().map(|t| t.toks()).flatten().collect(),
-                //},
-                s: token.s.clone(),
-                value: ident.clone(),
-                loc: token.to_location(),
-            }),
-            None => None,
-        }
-    }
-
-    pub fn tok(&self) -> Tok {
-        Tok::Ident(self.value.clone())
-    }
-    //pub fn token(&self) -> Token {
-    //Token { pre: self.s.pre, post: self.s.post, tok: self.tok() }
-    //}
-}
-
-impl Unparse for Ident {
-    fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(vec![Tok::Ident(self.value.clone())])
-    }
-    //fn unlex(&self) -> String {
-    //self.unparse().iter().map(|t| t.unlex()).collect::<Vec<_>>().join("")
-    //}
-}
-
-impl SExpr for Ident {
-    fn sexpr(&self) -> SResult<S> {
-        Ok(S::Atom(self.value.clone()))
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {
@@ -871,13 +658,4 @@ mod tests {
         let p = OperatorNode::new(Operator::Minus);
         assert_eq!(p.unlex(), "-");
     }
-
-    /*
-    #[test]
-    fn infix() {
-        let p = Binary::new(Operator::Minus, Precedence::PLowest, Location::default());
-        //println!("{:?}", (&p, &p.token(), &p.unlex()));
-        assert_eq!(p.unlex(), "-");
-    }
-    */
 }

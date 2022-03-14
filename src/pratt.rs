@@ -8,7 +8,8 @@ use crate::tokens::{Tok,Tokens, Token};
 use crate::parser::{tag_token, PResult, take_one_any};
 //use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
-//use crate::lexer::{Location, Surround};
+use nom::{combinator, branch, multi, sequence};
+
 use crate::ast::{Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
 
 //type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
@@ -195,6 +196,23 @@ impl Op {
                 //let (i, y) = self.chain_LeD(i, x, &token.tok, depth)?;
                 //(i, y)
             //}
+            Tok::LParen => {
+                let (i, (nodes, end)) = sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
+                println!("nodes: {:?}", (&nodes, &end));
+                //let (i, maybe_node) = Eopt(i, Some(0), depth+1)?;
+                //let nodes = match maybe_node {
+                    //Some(node) => vec![node],
+                    //None => vec![]
+                //};
+                let op = Operator::Call;
+                let mut f = x.clone();
+                f.context.s.append(token.expand_toks());
+                let mut node = ExprNode::new(Expr::Apply(Box::new(f), nodes), &i.to_location());
+                node.context.s.append(end.expand_toks());
+                (i, node)
+
+                // application is slightly different than binary.  The RHS is optional
+            }
             _ => {
                 if token.tok.isBinary() {
                     // binary parses the RHS, and returns a binary node
@@ -235,11 +253,13 @@ impl Op {
         // we handle this as an exception, but it should be data driven
         // some ops expect closure, some do not
         let i = match &token.tok {
+            /*
             Tok::LParen => {
                 let (i, right) = tag_token(Tok::RParen)(i)?;
                 t.context.s.append(right.expand_toks());
                 i
             }
+            */
             Tok::LBracket => {
                 let (i, right) = tag_token(Tok::RBracket)(i)?;
                 t.context.s.append(right.expand_toks());
@@ -390,8 +410,20 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // consume LParen
             let (i, left) = take_one_any(i)?;
             println!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
-            //let (i, t) = i.E(rbp, depth+1)?;
+           
+            // consume anything inside the parents, bp = 0
             let (i, mut node) = i.E(Some(0), depth+1)?;
+
+            //let (i, maybe_node) = Eopt(i, Some(0), depth+1)?;
+
+            //let nodes = match maybe_node {
+                //Some(node) => vec![node],
+                //None => vec![]
+            //};
+
+            //let (i, mut maybe_node) = i.E(Some(0), depth+1)?;
+
+            //let mut node = ExprNode::new(Expr::List(nodes), &i.to_location());
             println!("prefix paren2: {:?}", (&i.toks(), &node));
             let (i, right) = context("r-paren", tag_token(Tok::RParen))(i)?;
             node.context.s.prepend(left.expand_toks());
@@ -410,15 +442,27 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         _ => {
             println!("got unexpected token {:?}", &n);
-            Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Fail)))
+            Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Tag)))
             //unreachable!()
         }
     }
 }
 
+// Optional E
+fn Eopt<'a>(i: Tokens<'a>, prec: Prec, depth: usize) -> PResult<Tokens<'a>, Option<ExprNode>> {
+    match E(i.clone(), Some(0), depth+1) {
+        Ok((i, node)) => Ok((i, Some(node))),
+        Err(nom::Err::Error(_)) => Ok((i, None)),
+        Err(e) => Err(e)
+    }
+}
 
 // Parse an expression, it will return a Node
 fn E<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
+    if i.is_eof() {
+        return Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)));
+    }
+
     // precondition p >= 0
     let _ = prec.unwrap();
 
@@ -505,8 +549,18 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     }
 }
 
-fn parse<'a>(i: Tokens) -> RNode {
-    match i.E(Some(0), 0) {
+pub fn parse_expr<'a>(i: Tokens) -> RNode {
+    let (i, (mut node, end)) = sequence::pair(parse_expr1, multi::many0(tag_token(Tok::SemiColon)))(i)?;
+    node.context.s.append(end.into_iter().map(|t| t.expand_toks()).flatten().collect());
+    Ok((i, node))
+}
+
+pub fn parse_expr1<'a>(i: Tokens) -> RNode {
+    i.E(Some(0), 0)
+}
+
+pub fn parse<'a>(i: Tokens) -> RNode {
+    match parse_expr(i) {
         Ok((i, node)) => {
             println!("EXPR {:?}", (&node, &i.toks()));
             let (i, eof) = tag_token(Tok::EOF)(i)?;
@@ -565,6 +619,7 @@ mod tests {
             "1.2 + 3.4",
             "x[1]",
             "x(1)",
+            "x()",
             "x,y",
             "x,y,z",
             "x1=y2=z2,y+1,z^2,x1=y=z",

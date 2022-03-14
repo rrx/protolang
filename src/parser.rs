@@ -119,19 +119,16 @@ pub fn parse_empty_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
 
 pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
     //println!("parse_statment: {:?}", i);
-    let (i, stmt) =
+    context("statement", 
             alt((
                     parse_expr_stmt,
                     parse_empty_stmt,
                     parse_invalid_stmt
-                    ))
+                    )))(i)
             //parse_assignment_stmt,
             //parse_invalid_stmt,
             //parse_literal_stmt,
         //)),
-    (i)?;
-    println!("{:?}", stmt);
-    Ok((i, stmt))
 }
 
 pub fn parse_block_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
@@ -245,9 +242,17 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, Program> {
 }
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    context("expr", _parse_expr)(i)
+    context("expr", 
+            alt((
+                    crate::pratt::parse_expr,
+                    parse_lambda_expr,
+                    )))(i)
 }
-pub fn _parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+
+pub fn parse_expr2(i: Tokens) -> PResult<Tokens, ExprNode> {
+    context("expr", _parse_expr2)(i)
+}
+pub fn _parse_expr2(i: Tokens) -> PResult<Tokens, ExprNode> {
     parse_pratt_expr(i, Precedence::PLowest)
 }
 
@@ -529,8 +534,6 @@ fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 fn parse_infix(i: Tokens) -> PResult<Tokens, Operator> {
     let (i1, t1) = take_one_any(i)?;
     let next = &t1.tok[0];
-    //let (_, maybe_op) = infix_op(&next.tok);
-    //println!("maybe: {:?}", (&next, &maybe_op));
     match Operator::from_tok(&next.tok) {
         None => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
         Some(op) => Ok((i1, op))
@@ -898,14 +901,21 @@ mod tests {
             ("a*-b", "(* a (- b))"),
             ("-a*b", "(- (* a b))"),
             ("-a/b", "(- (/ a b))"),
-            ("-a-b", "(- (- a b))"),
-            ("-a+b", "(- (+ a b))"),
+
+            // Not sure what's correct here
+            // if the prefix has precedence over the infix
+            //("-a-b", "(- (- a b))"),
+            ("-a-b", "(- (- a) b)"),
+            //("-a+b", "(- (+ a b))"),
+            ("-a+b", "(+ (- a) b)"),
 
             // exponents
             ("5^2", "(^ 5 2)"),
             ("1-5^2+1", "(+ (- 1 (^ 5 2)) 1)"),
             ("1-5^2", "(- 1 (^ 5 2))"),
-            ("-1-5^2", "(- (- 1 (^ 5 2)))"),
+
+            //("-1-5^2", "(- (- 1 (^ 5 2)))"),
+            ("-1-5^2", "(- (- 1) (^ 5 2))"),
 
             // handle prefix properly
             ("-5^2", "(- (^ 5 2))"),

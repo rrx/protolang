@@ -263,6 +263,10 @@ impl<'a> Tokens<'a> {
         }
     }
 
+    pub fn is_eof(&self) -> bool {
+        self.tok.len() == 0
+    }
+
     pub fn peek(&self) -> Option<&Token> {
         self.tok.get(0)
     }
