@@ -253,9 +253,10 @@ pub fn _parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 
 fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, ExprNode> {
     // parse N token
+    println!("parse-pratt {:?}", (&precedence, &input.toks()));
     let (i0, maybe_unary) = opt(parse_prefix)(input)?;
     let (i1, expr) = match maybe_unary {
-        Some(mut unary) => {
+        Some(unary) => {
             println!("pratt unary: {:?}", &unary);
             //let (_, _) = prefix_op(&unary.value.token());
             let (i1, expr) = parse_pratt_expr(i0, Precedence::PLessGreater)?;
@@ -341,12 +342,16 @@ fn go_parse_pratt_expr(
             // if the precedence of the next op is greater then the current precedence,
             // then we include it in this expr, and try to parse the RHS
             (ref peek_precedence, _) if precedence < *peek_precedence => {
+                println!("p nest");
                 let (i2, left2) = parse_infix_expr(input, left)?;
-                let (i, mut node) = go_parse_pratt_expr(i2, precedence, left2.clone())?;
+                let (i, node) = go_parse_pratt_expr(i2, precedence, left2.clone())?;
                 //node.context.s.prepend(left2.unparse());
                 Ok((i, node))
             }
-            _ => Ok((input, left)),
+            _ => {
+                println!("p exit");
+                Ok((input, left))
+            }
         }
     }
 }
@@ -475,10 +480,11 @@ fn parse_caret_side(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 fn parse_caret_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, (left, op, right)) =
+    let (i, (left, _, right)) =
         tuple((parse_caret_side, tag_token(Tok::Caret), parse_caret_side))(i)?;
-    let op = Binary::from_token(&op.tok[0]).unwrap();
-    let loc = op.loc.clone();
+    let op = Operator::Exp;
+    //let op = Binary::from_token(&op.tok[0]).unwrap();
+    let loc = left.context.loc.clone();
     let expr = ExprNode::new(Expr::Binary(op, Box::new(left), Box::new(right)), &loc);
     Ok((i, expr))
 }
@@ -520,26 +526,33 @@ fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i2, node))
 }
 
-fn parse_infix(i: Tokens) -> PResult<Tokens, Binary> {
+fn parse_infix(i: Tokens) -> PResult<Tokens, Operator> {
     let (i1, t1) = take_one_any(i)?;
     let next = &t1.tok[0];
-    let (_, maybe_op) = infix_op(&next.tok);
-    println!("maybe: {:?}", (&next, &maybe_op));
-    match maybe_op {
+    //let (_, maybe_op) = infix_op(&next.tok);
+    //println!("maybe: {:?}", (&next, &maybe_op));
+    match Operator::from_tok(&next.tok) {
         None => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
-        Some(_) => Ok((i1, Binary::from_token(next).unwrap())),
+        Some(op) => Ok((i1, op))
     }
 }
 
 fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
-    let (i, infix) = parse_infix(i)?;
-    let (i2, mut right) = parse_pratt_expr(i, infix.precedence.clone())?;
-    right.context.s.prepend(infix.unparse());
-    let node = ExprNode::new(
-        Expr::Binary(infix.clone(), Box::new(left), Box::new(right)),
-        &infix.loc,
-        );
-    Ok((i2, node))
+    let (i, t) = take_one_any(i.clone())?;
+    let token = &t.tok[0];
+    match infix_op(&token.tok) {
+        (precedence, Some(infix)) => {
+            println!("{:?}", (&precedence, &infix, &i.toks()));
+            let (i2, mut right) = parse_pratt_expr(i, precedence)?;
+            right.context.s.prepend(token.expand_toks());
+            let node = ExprNode::new(
+                Expr::Binary(infix, Box::new(left), Box::new(right)),
+                &i2.to_location(),
+                );
+            Ok((i2, node))
+        }
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
+    }
 }
 
 fn parse_index_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
@@ -578,7 +591,8 @@ pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, E
             left.context.s.append(assign.tok[0].s.pre.clone());
             expr.context.s.prepend(assign.tok[0].s.post.clone());
 
-            let value = Expr::Binary(Binary::from_token(&assign.tok[0]).unwrap(), Box::new(left), Box::new(expr));
+            let op = Operator::from_tok(&assign.tok[0].tok).unwrap();
+            let value = Expr::Binary(op, Box::new(left), Box::new(expr));
             let expr = ExprNode::new(value, &i.to_location());
             Ok((i, expr))
         }

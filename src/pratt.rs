@@ -9,8 +9,7 @@ use crate::parser::{tag_token, PResult, take_one_any};
 //use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
 //use crate::lexer::{Location, Surround};
-use crate::ast::{Binary, Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
-use crate::sexpr::{S, SExpr, SResult};
+use crate::ast::{Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
 
 //type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
 type RNode<'a> = PResult<Tokens<'a>, ExprNode>;
@@ -102,7 +101,7 @@ impl Op {
         }
     }
 
-    fn chain_LeD<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Tok, depth: usize) -> RNode<'a> {
+    fn chain_LeD<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Token, depth: usize) -> RNode<'a> {
 
         println!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
 
@@ -112,9 +111,9 @@ impl Op {
 
         println!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
 
-        let (_, maybe_op) = infix_op(&token);
-        let operator = maybe_op.unwrap();
-        let op = Binary::from_location(&i, operator); 
+        let maybe_op = Operator::from_tok(&token.tok);
+        let op = maybe_op.unwrap();
+        //let op = OperatorNode::from_location(&i, operator); 
         //let t = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
 
         //let op = Binary::from_token(&i.tok[0]).unwrap();
@@ -130,25 +129,25 @@ impl Op {
         };
 
         let n = i.peek().unwrap();
-        let next_tok = n.tok.clone();
+        //let next_tok = n.clone();//.tok.clone();
         println!("chain_LeD2: {:?}", (&left_op, &c, &n));
 
         //println!("chain: {:?}", (&i.toks()));
-        if next_tok == Tok::EOF {
+        if n.tok == Tok::EOF {
             println!("chain: got eof");
             let t = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             return i.node_success(t);//Ok((i, t));
         }
 
-        let next_op = next_tok.op().unwrap(); 
-        println!("chain next: {:?}", (self, &next_tok));
+        let next_op = n.tok.op().unwrap(); 
+        println!("chain next: {:?}", (self, &n));
         if self.lbp == next_op.lbp {
             // consume
-            let (i, _) = take_one_any(i)?;
-            let (i, t) = self.chain_LeD(i, &y, &next_tok, depth)?;
+            let (i, _) = take_one_any(i.clone())?;
+            let (i, t) = self.chain_LeD(i, &y, &n, depth)?;
             println!("chain consume: {:?}", (self.lbp, next_op, &t));
             let t0 = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            let op = Binary::from_location(&i, Operator::End);
+            let op = Operator::End;//Operator::from_tok(&Tok::End);
             let t = PrattValue::Chain(op, vec![i.node(t0), t]);
             i.node_success(t)
         } else {
@@ -175,11 +174,11 @@ impl Op {
                 // match any precedence
                 let (i, z) = E(i, Some(0), depth + 1)?;
     
-                let op = Binary::from_location(&i, Operator::Conditional);
+                //let op = Binary::from_location(&i, Operator::Conditional);
                 y.context.s.prepend(token.expand_toks());
                 y.context.s.append(sep.expand_toks());
-                let value = PrattValue::Ternary(op, Box::new(x.clone()), Box::new(y), Box::new(z.clone()));
-                let mut node = i.node(value);
+                let value = PrattValue::Ternary(Operator::Conditional, Box::new(x.clone()), Box::new(y), Box::new(z.clone()));
+                let node = i.node(value);
                 (i, node)
             }
             /*
@@ -206,11 +205,11 @@ impl Op {
                     let (_, maybe_op) = infix_op(&self.op);
                     let operator = maybe_op.unwrap();
                     //let op = Binary::from_location(&i, operator); 
-                    let op = Binary::from_token(&token).unwrap();
-
+                    //let op = Binary::from_token(&token).unwrap();
+                    let op = Operator::from_tok(&token.tok).unwrap();
                     let mut left = x.clone();
                     left.context.s.append(token.expand_toks());//op.unparse());
-                    let mut right = y;
+                    let right = y;
 
                     let t = PrattValue::Binary(op, Box::new(left), Box::new(right));
                     let node = i.node(t);
@@ -359,12 +358,12 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             ExprNode::parse_ident(i)
         }
 
-        Some(Tok::IntLiteral(n)) => {
+        Some(Tok::IntLiteral(_)) => {
             // consume literal
             ExprNode::parse_literal(i)
         }
 
-        Some(Tok::FloatLiteral(n)) => {
+        Some(Tok::FloatLiteral(_)) => {
             // consume literal
             ExprNode::parse_literal(i)
         }
@@ -529,6 +528,7 @@ mod tests {
     use super::*;
     use crate::lexer::*;
     use nom::{InputLength, InputIter, InputTake, Slice};
+    use crate::sexpr::{S, SExpr, SResult};
 
     #[test]
     fn expressions() {
@@ -607,9 +607,10 @@ mod tests {
             ("-a*b", "(- (* a b))"),
             ("-a/b", "(- (/ a b))"),
 
+            // Not sure what's correct here
+            // if the prefix has precedence over the infix
             //("-a-b", "(- (- a b))"),
             ("-a-b", "(- (- a) b)"),
-
             //("-a+b", "(- (+ a b))"),
             ("-a+b", "(+ (- a) b)"),
 
@@ -653,6 +654,14 @@ mod tests {
             //("x( 1 2 3)", "(apply x 1 2 3)"),
             //("(x+y)( 1 2 3)", "(apply (+ x y) 1 2 3)"),
             ("x = 1", "(= x 1)"),
+            (
+                // assignment is right associative
+                // comma is left associative
+                "x1=y2=z2,y+1,z^2,x1=y=z",
+                "(, (, (, (= x1 (= y2 z2)) (+ y 1)) (^ z 2)) (= x1 (= y z)))"
+            ),
+            // comma in ternary op
+            ("a ? b, c : d", "(? a (, b c) d)")
         ];
 
         r.iter().for_each(|(q, a)| {

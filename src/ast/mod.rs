@@ -129,12 +129,12 @@ pub enum Expr {
     LitExpr(Value),
     Prefix(OperatorNode, Box<ExprNode>),
     Postfix(OperatorNode, Box<ExprNode>),
-    Binary(Binary, Box<ExprNode>, Box<ExprNode>),
-    Ternary(Binary, Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
+    Binary(Operator, Box<ExprNode>, Box<ExprNode>),
+    Ternary(Operator, Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
     Lambda(Lambda),
     Callable(Box<dyn Callable>),
     List(Vec<ExprNode>),
-    Chain(Binary, Vec<ExprNode>),
+    Chain(Operator, Vec<ExprNode>),
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<StmtNode>),
@@ -339,8 +339,8 @@ impl SExpr for ExprNode {
     fn sexpr(&self) -> SResult<S> {
         use Expr::*;
         match &self.value {
-            Ternary(_,_,_,_) => {
-                Ok(S::Cons("ternary".into(), vec![]))
+            Ternary(op,x,y,z) => {
+                Ok(S::Cons(op.token().unlex(), vec![x.sexpr()?,y.sexpr()?,z.sexpr()?]))
             }
             Chain(_,_) => {
                 Ok(S::Cons("chain".into(), vec![]))
@@ -469,6 +469,18 @@ impl OperatorNode {
         }
     }
 
+    pub fn from_token(token: &Token) -> Option<Self> {
+        match Operator::from_tok(&token.tok) {
+            Some(prefix) => {
+                Some(Self {
+                    context: Context::from_token(&token),
+                    value: prefix,
+                })
+            }
+            None => None,
+        }
+    }
+
     pub fn from_tokens(prefix: Operator, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
         let s = Surround::new(pre, post);
 
@@ -479,11 +491,23 @@ impl OperatorNode {
         }
     }
 
+    /*
+    pub fn parse(i: Tokens) -> PResult<Tokens, Self> {
+        let (_, maybe_op) = infix_op(&token);
+        let operator = maybe_op.unwrap();
+        let op = OperatorNode::from_location(&i, operator); 
+    }
+    */
+
     pub fn new(prefix: Operator) -> Self {
         Self {
             context: NodeContext::default(),
             value: prefix,
         }
+    }
+
+    pub fn token(&self) -> Tok {
+        self.value.token()
     }
 
 }
@@ -552,8 +576,33 @@ impl Operator {
             //Operator::Map => Tok::LeftArrow,
         }
     }
+
+    pub fn from_tok(token: &Tok) -> Option<Self> {
+        match token {
+            Tok::Equals => Some(Operator::Equal),
+            Tok::NotEquals => Some(Operator::NotEqual),
+            Tok::LTE => Some(Operator::LessThanEqual),
+            Tok::GTE => Some(Operator::GreaterThanEqual),
+            Tok::LT => Some(Operator::LessThan),
+            Tok::GT => Some(Operator::GreaterThan),
+            Tok::Plus => Some(Operator::Plus),
+            Tok::Minus => Some(Operator::Minus),
+            Tok::Mul => Some(Operator::Multiply),
+            Tok::Div => Some(Operator::Divide),
+            Tok::Caret => Some(Operator::Exp),
+            Tok::LParen => Some(Operator::Call),
+            Tok::LBracket => Some(Operator::Index),
+            Tok::Assign => Some(Operator::Assign),
+            Tok::Percent => Some(Operator::Modulus),
+            Tok::Comma => Some(Operator::Comma),
+            Tok::Elvis => Some(Operator::Elvis),
+            _ => None,
+        }
+    }
+
 }
 
+/*
 #[derive(PartialEq, Clone)]
 pub struct Binary {
     pub s: Surround,
@@ -639,6 +688,7 @@ impl Unparse for Binary {
         self.token().unlex()
     }
 }
+*/
 
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Precedence {

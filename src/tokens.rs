@@ -53,6 +53,8 @@ pub enum Tok {
     NotEquals,
     Plus,
     Minus,
+    Increment,
+    Decrement,
     Div,
     Mul,
     PlusEq,
@@ -72,7 +74,7 @@ pub enum Tok {
     In,
     Is,
     Elvis,
-    Spaceship,
+    Spaceship,  // three way comparison
 
     EOF,
 }
@@ -94,7 +96,9 @@ impl Tok {
             Mul => "*".into(),
             Div => "/".into(),
             Plus => "+".into(),
+            Increment => "++".into(),
             Minus => "-".into(),
+            Decrement => "--".into(),
             Caret => "^".into(),
             Percent => "%".into(),
             Tok::Exclamation => "!".into(),

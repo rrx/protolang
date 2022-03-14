@@ -211,7 +211,7 @@ impl Interpreter {
             Expr::Binary(op, left, right) => {
                 let eval_left = self.evaluate(&left)?;
                 let eval_right = self.evaluate(&right)?;
-                match op.value {
+                match op {
                     Operator::Plus => eval_left.plus(&eval_right),
                     Operator::Minus => eval_left.minus(&eval_right),
                     Operator::Exp => eval_left.exp(&eval_right),
@@ -225,7 +225,7 @@ impl Interpreter {
                     //Ok(InterpretValue::Lambda(e.clone()))
                     //}
                     _ => Err(InterpretError::Runtime {
-                        message: format!("Unimplemented expression op: Operator::{:?}", op.value),
+                        message: format!("Unimplemented expression op: Operator::{:?}", op),
                         line: 0,
                     }),
                 }
