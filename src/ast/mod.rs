@@ -1,7 +1,6 @@
 use crate::sexpr::*;
-use crate::tokens::{Tok, Token, Tokens};
+use crate::tokens::{Tok, Token};
 use crate::lexer::{Location, Surround};
-use crate::parser::{PResult};
 use std::fmt;
 mod function;
 pub use function::{Lambda, Callable, CallableNode, Params};
@@ -25,10 +24,10 @@ pub trait Unparse {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Assign(ExprNode, ExprNode),
-    Block(Vec<StmtNode>),
-    Expr(ExprNode),
-    Lit(Value),
+    //Assign(ExprNode, ExprNode),
+    //Block(Vec<StmtNode>),
+    //Expr(ExprNode),
+    //Lit(Value),
     Invalid(String),
     Empty
 }
@@ -50,13 +49,16 @@ impl StmtNode {
 impl Unparse for StmtNode {
     fn unparse(&self) -> Vec<Tok> {
         self.s.unparse(match &self.value {
-            Stmt::Expr(expr) => expr.unparse(),
-            Stmt::Lit(lit) => lit.unparse(),
+            //Stmt::Expr(expr) => expr.unparse(),
+            //Stmt::Lit(lit) => lit.unparse(),
+            //
+            /*
             Stmt::Assign(ident, expr) => vec![ident.unparse(), vec![Tok::Assign], expr.unparse()]
                 .into_iter()
                 .flatten()
                 .collect(),
-            Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
+            */
+            //Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
             Stmt::Invalid(s) => vec![Tok::Invalid(s.clone())],
             Stmt::Empty => vec![],
         })
@@ -65,17 +67,19 @@ impl Unparse for StmtNode {
 impl SExpr for StmtNode {
     fn sexpr(&self) -> SResult<S> {
         match &self.value {
-            Stmt::Lit(x) => x.sexpr(),
-            Stmt::Expr(x) => x.sexpr(),
+            //Stmt::Lit(x) => x.sexpr(),
+            //Stmt::Expr(x) => x.sexpr(),
+            /*
             Stmt::Assign(ident, expr) => {
                 let sident = ident.sexpr()?;
                 let sexpr = expr.sexpr()?;
                 Ok(S::Cons("def".into(), vec![sident, sexpr]))
             }
-            Stmt::Block(stmts) => Ok(S::Cons(
-                "block".into(),
-                stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
-            )),
+            */
+//            Stmt::Block(stmts) => Ok(S::Cons(
+ //               "block".into(),
+  //              stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
+   //         )),
             Stmt::Invalid(s) => Err(SError::Invalid(s.clone())),
             Stmt::Empty => Ok(S::Null)
         }
@@ -84,13 +88,13 @@ impl SExpr for StmtNode {
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub value: Vec<StmtNode>,
-    pub s: Surround,
+    pub value: Vec<ExprNode>,
+    pub context: NodeContext
 }
 impl Program {
-    pub fn new(value: Vec<StmtNode>) -> Self {
+    pub fn new(value: Vec<ExprNode>) -> Self {
         Self {
-            s: Surround::default(),
+            context: NodeContext::default(),
             value,
         }
     }
@@ -98,7 +102,7 @@ impl Program {
 
 impl Unparse for Program {
     fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(
+        self.context.s.unparse(
             self.value
                 .clone()
                 .into_iter()
@@ -139,7 +143,8 @@ pub enum Expr {
     // Function application (the function, the params)
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
-    Block(Vec<StmtNode>),
+    Block(Vec<ExprNode>),
+    Invalid(String)
 }
 
 #[derive(Clone)]
@@ -169,21 +174,19 @@ impl ExprNode {
         }
     }
 
-    pub fn parse_ident(i: Tokens) -> PResult<Tokens, Self> {
-        use crate::parser::parse_ident;
-        parse_ident(i)
-    }
-
-    pub fn parse_literal(i: Tokens) -> PResult<Tokens, Self> {
-        use crate::parser::parse_literal;
-        parse_literal(i)
-    }
-
     pub fn is_ident(&self) -> bool {
         if let Expr::Ident(_) = self.value {
             true
         } else {
             false
+        }
+    }
+
+    pub fn try_ident(&self) -> Option<String> {
+        if let Expr::Ident(s) = &self.value {
+            Some(s.clone())
+        } else {
+            None
         }
     }
 
@@ -241,12 +244,15 @@ impl TryFrom<&PrattValue> for Expr {
 
 */
 
+
+/*
 impl From<ExprNode> for StmtNode {
     fn from(item: ExprNode) -> Self {
         let loc = item.context.loc.clone();
         Self::new(Stmt::Expr(item), loc)
     }
 }
+*/
 
 impl From<Lambda> for ExprNode {
     fn from(item: Lambda) -> Self {
@@ -305,6 +311,9 @@ impl Unparse for ExprNode {
             Expr::Block(stmts) => {
                 out.append(&mut stmts.into_iter().map(|s| s.unparse()).flatten().collect());
             }
+            Expr::Invalid(s) => {
+                out.push(Tok::Invalid(s.clone()));
+            }
         };
         self.context.s.unparse(out)
     }
@@ -361,6 +370,7 @@ impl SExpr for ExprNode {
                 "block".into(),
                 stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
             )),
+            Invalid(s) => Err(SError::Invalid(s.clone())),
         }
     }
 }

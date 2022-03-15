@@ -88,11 +88,11 @@ impl SExpr for Params {
 pub struct Lambda {
     pub s: Surround,
     pub params: Params,
-    pub expr: Box<StmtNode>,
+    pub expr: Box<ExprNode>,
     pub loc: Location,
 }
 impl Lambda {
-    pub fn new(params: Params, expr: StmtNode, loc: Location) -> Self {
+    pub fn new(params: Params, expr: ExprNode, loc: Location) -> Self {
         Self {
             s: Surround::default(),
             params,

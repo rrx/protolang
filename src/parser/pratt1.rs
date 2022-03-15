@@ -11,9 +11,10 @@ use nom::multi::{many0};
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
-use super::{parse_atom, parse_prefix, take_one_any, tag_token};
+//use super::{parse_atom, parse_prefix, take_one_any, tag_token};
+use super::*;
 
-pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
+//pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("expr", _parse_expr)(i)
@@ -81,11 +82,6 @@ fn go_parse_pratt_expr(
         let p = infix_op(&preview.tok);
         println!("infix: {:?}", (&preview, &p));
         match p {
-            //(Precedence::PExp, _) if precedence < Precedence::PExp => {
-            //let (i2, left2) = parse_caret_expr(input, left)?;
-            //go_parse_pratt_expr(i2, precedence, left2)
-            //}
-
             (Precedence::PCall, _) if precedence < Precedence::PCall => {
                 let (i2, left2) = parse_call_expr(input, left)?;
                 go_parse_pratt_expr(i2, precedence, left2)
@@ -168,6 +164,99 @@ fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
         _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
     }
 }
+
+fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+    use Expr::Prefix;
+    let (i1, prefix) = parse_prefix(i)?;
+    let (i2, expr1) = parse_atom(i1)?;
+    let mut node = ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.context.loc);
+    node.context.s.prepend(prefix.unparse());//vec![prefix.token()]);
+    Ok((i2, node))
+}
+
+fn parse_atom(i: Tokens) -> PResult<Tokens, ExprNode> {
+    context(
+        "atom",
+        alt((
+            //caret really isn't an atom, but this is how we give it precedence over prefix
+            //parse_apply2_expr,
+            //parse_apply1_expr,
+            //parse_caret_expr,
+            into(ExprNode::parse_literal),
+            into(ExprNode::parse_ident),
+            parse_prefix_expr,
+            parse_paren_expr,
+            ExprNode::parse_lambda,
+            ExprNode::parse_block,
+            //parse_array_expr,
+            //parse_hash_expr,
+            //parse_if_expr,
+            //parse_fn_expr,
+        )),
+    )(i)
+}
+
+fn parse_infix(i: Tokens) -> PResult<Tokens, Operator> {
+    let (i1, t1) = take_one_any(i)?;
+    let next = &t1.tok[0];
+    match Operator::from_tok(&next.tok) {
+        None => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
+        Some(op) => Ok((i1, op))
+    }
+}
+
+fn parse_paren_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, (left, mut expr, right)) =
+        tuple((tag_token(Tok::LParen), parse_expr, tag_token(Tok::RParen)))(i)?;
+    expr.context.s.prepend(left.expand_toks());
+    expr.context.s.append(right.expand_toks());
+    Ok((i, expr))
+}
+
+
+pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
+    match &left.value {
+        Expr::Ident( _) => {
+            let (i, (assign, mut expr)) = tuple((
+                    tag_token(Tok::Assign),
+                    parse_expr
+                    ))(i)?;
+
+            // transfer surround from assign to nodes we store
+            left.context.s.append(assign.tok[0].s.pre.clone());
+            expr.context.s.prepend(assign.tok[0].s.post.clone());
+
+            let op = Operator::from_tok(&assign.tok[0].tok).unwrap();
+            let value = Expr::Binary(op, Box::new(left), Box::new(expr));
+            let expr = ExprNode::new(value, &i.to_location());
+            Ok((i, expr))
+        }
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag)))
+    }
+
+}
+
+
+fn parse_prefix(i: Tokens) -> PResult<Tokens, OperatorNode> {
+    let (i, tokens) = alt((
+        tag_token(Tok::Plus),
+        tag_token(Tok::Minus),
+        tag_token(Tok::Exclamation),
+    ))(i)?;
+
+    Ok((i, OperatorNode::from_prefix_token(&tokens.tok[0]).unwrap()))
+}
+
+fn parse_postfix(i: Tokens) -> PResult<Tokens, OperatorNode> {
+    let (i, tokens) = alt((
+        tag_token(Tok::Percent),
+        tag_token(Tok::Exclamation),
+    ))(i)?;
+
+    Ok((i, OperatorNode::from_postfix_token(tokens.tok[0].clone()).unwrap()))
+}
+
+
 
 
 #[cfg(test)]

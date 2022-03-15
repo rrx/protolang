@@ -63,6 +63,7 @@ impl Op {
             Tok::Assign => Some(Self::new_right_assoc(op, 10)),
             Tok::Elvis => Some(Self::new_left_assoc(op, 35)),
             Tok::Comma => Some(Self::new_left_assoc(op, 1)),
+            Tok::SemiColon => Some(Self::new(op, Some(0), Some(127), None)),
 
             // Conditional
             Tok::Question => Some(Self::new_chaining(op, 35)),
@@ -163,6 +164,12 @@ impl Op {
         //
         //println!("LeD: {:?}", (&x, &token, &i.toks()));
         let (i, mut t) = match token.tok {
+            Tok::SemiColon => {
+                let mut x = x.clone();
+                x.context.s.append(token.expand_toks());//vec![token.clone()]);
+                (i, x)
+            }
+
             // chaining
             Tok::Question => {
                 // Ternary operator (x ? y : z)
@@ -388,6 +395,25 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             ExprNode::parse_literal(i)
         }
 
+        Some(Tok::Backslash) => {
+            ExprNode::parse_lambda(i)
+        }
+
+        Some(Tok::LBrace) => {
+            // consume LBrace
+            let (i, left) = take_one_any(i)?;
+            println!("prefix brace1: {:?}", (&i, &n, &left));
+            let (i, t) = i.E(Some(0), depth+1)?;
+            println!("prefix brace2: {:?}", (&i, &t));
+            // consume RBrace
+            let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
+            let t = PrattValue::Block(vec![t]);
+            let mut node = i.node(t);
+            node.context.s.prepend(left.expand_toks());
+            node.context.s.append(right.expand_toks());
+            Ok((i, node))
+        }
+        
         // Array
         Some(Tok::LBracket) => {
             // consume LBracket

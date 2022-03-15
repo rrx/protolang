@@ -274,7 +274,7 @@ impl<'a> LexerState<'a> {
                         loop {
                             if let Some(prev) = self.indent_stack.pop() {
                                 // close out
-                                self.push_token(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                                self.whitespace.push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
                             } else {
                                 break;
                             };

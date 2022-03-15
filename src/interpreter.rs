@@ -221,6 +221,18 @@ impl Interpreter {
                     Operator::LessThanEqual => eval_left.lte(&eval_right),
                     Operator::GreaterThan => eval_left.gt(&eval_right),
                     Operator::LessThan => eval_left.lt(&eval_right),
+                    Operator::Assign => {
+                        if let Some(ident) = left.try_ident() {
+                            self.globals.define(&ident, &eval_right);
+                            println!("Assign {:?} to {}", &eval_right, &ident);
+                            Ok(eval_right)
+                        } else {
+                            Err(InterpretError::Runtime {
+                                message: format!("Invalid Assignment, LHS must be identifier"),
+                                line: expr.context.loc.line,
+                            })
+                        }
+                    }
                     //Operator::Map => {
                     //Ok(InterpretValue::Lambda(e.clone()))
                     //}
@@ -279,18 +291,39 @@ impl Interpreter {
                 //env.define(
                 //Ok(Value::IntLiteral(0))
             }
-            Expr::Block(_) => Ok(Value::Literal(Tok::IntLiteral(0))),
+            Expr::Block(exprs) => {
+                let mut result = Value::List(vec![]);
+
+                for expr in exprs {
+                    let r = self.evaluate(expr);
+                    match r {
+                        Ok(v) => {
+                            result = v;
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                }
+                Ok(result)
+            }
             Expr::Ternary(_,_,_,_) => Ok(Value::Literal(Tok::IntLiteral(0))),
             Expr::Chain(_,_) => Ok(Value::Literal(Tok::IntLiteral(0))),
+            Expr::Invalid(s) => {
+                Err(InterpretError::Runtime {
+                    message: format!("Invalid expr: {:?}", s),
+                    line: 0,
+                })
+            }
         }
     }
 
-    pub fn execute(&mut self, stmt: StmtNode) -> Result<(), InterpretError> {
-        println!("STMT-unparse: {:?}", stmt.unparse());
-        println!("STMT-unlex: {:?}", stmt.unlex());
-        match stmt.sexpr() {
+    pub fn execute(&mut self, expr: ExprNode) -> Result<Value, InterpretError> {
+        println!("EXPR-unparse: {:?}", expr.unparse());
+        println!("EXPR-unlex: {:?}", expr.unlex());
+        match expr.sexpr() {
             Ok(s) => {
-                println!("STMT-sexpr: {}", s);
+                println!("EXPR-sexpr: {}", s);
             }
             Err(e) => {
                 println!("ERROR: {:?}", e);
@@ -301,16 +334,24 @@ impl Interpreter {
             }
         }
 
-        match stmt.value {
+        self.evaluate(&expr)
+/*
+        expr
+        match expr.value {
+            /*
             Stmt::Expr(expr) => {
                 let value = self.evaluate(&expr)?;
                 println!("Evaluate Expr: {} -> {}", expr.unlex(), value.unlex());
                 Ok(())
             }
+            */
+            /*
             Stmt::Lit(lit) => {
                 println!("Evaluate Literal: {:?}", lit);//.value);
                 Ok(())
             }
+            */
+            /*
             Stmt::Assign(ident_expr, expr) => {
                 if let Expr::Ident(ident) = ident_expr.value {
                     let value = self.evaluate(&expr)?;
@@ -325,6 +366,7 @@ impl Interpreter {
                     })
                 }
             }
+            */
             Stmt::Invalid(line) => Err(InterpretError::Runtime {
                 message: format!("Invalid Statement {}", line),
                 line: stmt.loc.line,
@@ -334,11 +376,12 @@ impl Interpreter {
                 line: stmt.loc.line,
             }),
         }
+    */
     }
 
     pub fn interpret(&mut self, program: Program) {
-        for stmt in program.value {
-            if let Err(error) = self.execute(stmt) {
+        for expr in program.value {
+            if let Err(error) = self.execute(expr) {
                 println!("ERROR: {:?}", error);
                 return;
             }
