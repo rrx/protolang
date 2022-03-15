@@ -8,7 +8,7 @@ use crate::tokens::{Tok,Tokens, Token};
 use crate::parser::{tag_token, PResult, take_one_any};
 //use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
-use nom::{combinator, branch, multi, sequence};
+use nom::{multi, sequence};
 
 use crate::ast::{Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
 
@@ -581,8 +581,8 @@ pub fn parse<'a>(i: Tokens) -> RNode {
 mod tests {
     use super::*;
     use crate::lexer::*;
-    use nom::{InputLength, InputIter, InputTake, Slice};
-    use crate::sexpr::{S, SExpr, SResult};
+    use nom::{InputLength, InputIter};
+    use crate::sexpr::{SExpr};
 
     #[test]
     fn expressions() {
@@ -623,6 +623,9 @@ mod tests {
             "x,y",
             "x,y,z",
             "x1=y2=z2,y+1,z^2,x1=y=z",
+            "x=y=z",
+            "x!",
+            "a! ^ b",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
@@ -716,7 +719,9 @@ mod tests {
                 "(, (, (, (= x1 (= y2 z2)) (+ y 1)) (^ z 2)) (= x1 (= y z)))"
             ),
             // comma in ternary op
-            ("a ? b, c : d", "(? a (, b c) d)")
+            ("a ? b, c : d", "(? a (, b c) d)"),
+
+            ("a! ^ b", "(^ (! a) b)"),
         ];
 
         r.iter().for_each(|(q, a)| {
