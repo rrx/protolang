@@ -6,6 +6,7 @@ pub enum LexNext<'a> {
     Token(Token<'a>),
     Newline(Token<'a>),
     Space(Token<'a>),
+    Comment(Token<'a>),
     Tab(Token<'a>),
     EOF,
 }
@@ -38,6 +39,7 @@ fn lex_next(i: Span) -> PResult<Span, LexNext> {
             map(lex_newline, |v| LexNext::Newline(v)),
             map(lex_space, |v| LexNext::Space(v)),
             map(lex_tab, |v| LexNext::Tab(v)),
+            map(lex_comments, |v| LexNext::Comment(v)),
             map(lex_token, |v| LexNext::Token(v)),
             //map(lex_token_eof, |t| LexNext(LexType::EOF, vec![t])),
         )),
@@ -208,7 +210,7 @@ impl<'a> LexerState<'a> {
                         self.push_token(t);
                     }
                     // [T] + N -> [] -> Indent([]) - T.post += N, reset
-                    Newline(t) => {
+                    Newline(t) | Comment(t) => {
                         // push indent to stack and reset
                         self.indent_size = 0;
                         
@@ -265,7 +267,7 @@ impl<'a> LexerState<'a> {
                         self.push_token(t.clone());
                     }
                     // [] + N -> [] Indent([]) - reset
-                    Newline(t) => {
+                    Newline(t) | Comment(t) => {
                         // do nothing with the indent stack
                         self.indent_size = 0;
                         self.whitespace.push(t.clone());

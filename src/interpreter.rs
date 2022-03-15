@@ -209,6 +209,20 @@ impl Interpreter {
                 Ok(eval)
             }
             Expr::Binary(op, left, right) => {
+                if op == &Operator::Assign {
+                    return if let Some(ident) = left.try_ident() {
+                        let eval_right = self.evaluate(&right)?;
+                        self.globals.define(&ident, &eval_right);
+                        println!("Assign {:?} to {}", &eval_right, &ident);
+                        Ok(eval_right)
+                    } else {
+                        Err(InterpretError::Runtime {
+                            message: format!("Invalid Assignment, LHS must be identifier"),
+                            line: expr.context.loc.line,
+                        })
+                    };
+                }
+
                 let eval_left = self.evaluate(&left)?;
                 let eval_right = self.evaluate(&right)?;
                 match op {
@@ -221,18 +235,6 @@ impl Interpreter {
                     Operator::LessThanEqual => eval_left.lte(&eval_right),
                     Operator::GreaterThan => eval_left.gt(&eval_right),
                     Operator::LessThan => eval_left.lt(&eval_right),
-                    Operator::Assign => {
-                        if let Some(ident) = left.try_ident() {
-                            self.globals.define(&ident, &eval_right);
-                            println!("Assign {:?} to {}", &eval_right, &ident);
-                            Ok(eval_right)
-                        } else {
-                            Err(InterpretError::Runtime {
-                                message: format!("Invalid Assignment, LHS must be identifier"),
-                                line: expr.context.loc.line,
-                            })
-                        }
-                    }
                     //Operator::Map => {
                     //Ok(InterpretValue::Lambda(e.clone()))
                     //}
@@ -315,10 +317,14 @@ impl Interpreter {
                     line: 0,
                 })
             }
+            Expr::Void => {
+                Ok(Value::Null)
+            }
         }
     }
 
     pub fn execute(&mut self, expr: ExprNode) -> Result<Value, InterpretError> {
+        println!("EXPR: {:?}", &expr);
         println!("EXPR-unparse: {:?}", expr.unparse());
         println!("EXPR-unlex: {:?}", expr.unlex());
         match expr.sexpr() {

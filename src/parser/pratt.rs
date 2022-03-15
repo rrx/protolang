@@ -385,12 +385,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             ExprNode::parse_ident(i)
         }
 
-        Some(Tok::IntLiteral(_)) => {
-            // consume literal
-            ExprNode::parse_literal(i)
-        }
-
-        Some(Tok::FloatLiteral(_)) => {
+        Some(Tok::IntLiteral(_) | Tok::StringLiteral(_) | Tok::FloatLiteral(_)) => {
             // consume literal
             ExprNode::parse_literal(i)
         }
@@ -526,12 +521,17 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     // When we find an operation that has a lower precedence, we exit, returning the LHS
     //
     // peek
-    let token = &i.tok[0];//.tok.clone();
-    println!("G: {:?}", (&i.toks(), &r, &prec, &r, &token, depth));
-    if token.tok == Tok::EOF {
-        println!("got eof");
+   
+    println!("G: {:?}", (&i.toks(), &r, &prec, &r, depth));
+
+    if i.is_eof() {
         return Ok((i, (r, t)));
     }
+    let token = &i.tok[0];//.tok.clone();
+    //if token.tok == Tok::EOF {
+        //println!("got eof");
+        //return Ok((i, (r, t)));
+    //}
 
     // get op from left
     // it could be any token

@@ -130,3 +130,12 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn example() {
+        crate::repl::run_file("examples/test.p").unwrap()
+    }
+}
+

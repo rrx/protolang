@@ -1,12 +1,15 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take, take_while1},
-    character::complete::{alpha1, alphanumeric1, crlf, digit0, digit1, u64},
-    combinator::{map, map_parser, recognize},
+    bytes::complete::{tag, take, take_while, take_while1},
+    character::{
+        complete::{alpha1, alphanumeric1, crlf, digit0, digit1, u64, newline},
+        is_newline,
+    },
+    combinator::{eof, map, map_parser, not, recognize},
     error::{context, VerboseError},
     multi::{many0, many1},
     number::complete::double,
-    sequence::{pair, tuple},
+    sequence::{pair, terminated, tuple},
     IResult,
 };
 
@@ -112,6 +115,24 @@ fn lex_number(i: Span) -> PResult<Span, Token> {
     alt((lex_double, lex_integer))(i)
 }
 
+fn lex_until_eol(i: Span) -> PResult<Span, Span> {
+    // also return if we get EOF
+    if i.len() == 0 {
+        return Ok((i, i));
+    }
+    take_while(|c: char| c != '\n')(i)
+}
+
+fn lex_comments(i: Span) -> PResult<Span, Token> {
+    use Tok::*;
+    let (i, pos) = position(i)?;
+    let (i, t) = recognize(pair(alt((
+        tag_token("//", DoubleSlash),
+        tag_token("#", Pound),
+    )), lex_until_eol))(i)?;
+    Ok((i, token(Tok::Comment(t.to_string()), pos)))
+}
+
 fn lex_punc(i: Span) -> PResult<Span, Token> {
     use Tok::*;
     let (i, pos) = position(i)?;
@@ -175,6 +196,7 @@ fn lex_op_bool(i: Span) -> PResult<Span, Tok> {
 
 fn lex_token<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
     alt((
+        lex_comments,
         lex_op,
         lex_punc,
         lex_string,
@@ -296,6 +318,44 @@ mod tests {
     }
 
     #[test]
+    fn comment() {
+        use Tok::*;
+        let r = vec![
+            ("// asdf \n", vec![Tok::Comment("// asdf ".into()), Tok::NL(1)]),
+            ("// asdf", vec![Tok::Comment("// asdf".into())]),
+            ("// asdf \n asdf ", vec![
+                Comment("// asdf ".into()),
+                NL(1), Spaces(1), IndentOpen,
+                Ident("asdf".into()),
+                Spaces(1)
+            ]),
+            ("# asdf \n asdf ", vec![
+                Comment("# asdf ".into()),
+                NL(1), Spaces(1), IndentOpen,
+                Ident("asdf".into()),
+                Spaces(1)
+            ]),
+            ("asdf #\n asdf ", vec![
+                Tok::Ident("asdf".into()),
+                Spaces(1),
+                Tok::Comment("#".into()),
+                NL(1), Spaces(1), IndentOpen,
+                Tok::Ident("asdf".into()),
+                Spaces(1),
+            ]),
+        ];
+        r.into_iter().for_each(|(q, mut a)| {
+            a.push(EOF);
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
+            let tokens = lexer.tokens();
+            let toks = tokens.expand_toks();
+            assert_eq!(toks, a);//vec![Tok::Comment("// asdf ".into()), Tok::EOF]);
+            assert!(lexer_losslessness(q));
+        });
+    }
+
+
+    #[test]
     fn lossless() {
         let r = vec![
             "\"\"",
@@ -317,6 +377,7 @@ mod tests {
             "+ 1 / 2",
             "+ 1 / (2 - 5)",
             "x+1",
+            "// asdf ",
             "(((((0)))))",
             "
             

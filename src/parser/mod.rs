@@ -112,9 +112,11 @@ fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
     )(i)
 }
 
+/*
 pub fn parse_statements0(i: Tokens) -> PResult<Tokens, Vec<StmtNode>> {
     many0(parse_statement)(i)//alt((parse_statement, parse_invalid_stmt)))(i)
 }
+*/
 
 pub fn parse_empty_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
     combinator::map(tag_token(Tok::SemiColon), |t| {
@@ -123,11 +125,12 @@ pub fn parse_empty_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
         stmt
     })(i)
 }
+
 pub fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     let loc = i.to_location().clone();
     let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
-    i1.result(Results::Error(format!("Invalid Statement: {}", s), 0));
+    i1.result(Results::Error(format!("Invalid Expr: {}", s), 0));
     let mut expr = ExprNode::new(Expr::Invalid(s), &loc);
     // handle trailing newline
     expr.context.s.append(end.expand_toks());
@@ -135,6 +138,7 @@ pub fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i1, expr))
 }
 
+/*
 pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
     //println!("parse_statment: {:?}", i);
     context("statement", 
@@ -149,7 +153,6 @@ pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
         //)),
 }
 
-/*
 pub fn parse_block_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (left, stmts, right)) = tuple((
         tag_token(Tok::LBrace),
@@ -194,6 +197,7 @@ pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, expr))
 }
 
+/*
 pub fn _parse_invalid_stmt2(i: Tokens) -> PResult<Tokens, StmtNode> {
     let (mut i1, r) = many0(take_one_any)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
@@ -216,6 +220,7 @@ pub fn parse_invalid_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
     //println!("invalid: {:?}", (&i.toks(), &stmt, r, end));
     Ok((i1, stmt))
 }
+*/
 
 /*
 pub fn parse_expr_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
@@ -660,6 +665,7 @@ mod tests {
     }
 
 
+    /*
     fn test_program(s: &str) -> Option<Program> {
         let mut lexer = LexerState::default();
         let (_, _) = lexer.lex_eof(s).unwrap();
@@ -673,4 +679,5 @@ mod tests {
         }
         Some(prog)
     }
+    */
 }

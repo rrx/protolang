@@ -31,6 +31,8 @@ pub enum Tok {
     SemiColon,
     Backslash, // \\
 
+    Comment(String),
+    Pound, // #
     DoubleSlash, // //
     TripleQuote, // """
     RightArrow,  // ->
@@ -124,8 +126,10 @@ impl Tok {
             LeftArrow => "->".into(),
             RightArrow => "<-".into(),
             Backslash => "\\".into(),
+            DoubleSlash => "//".into(),
+            Pound => "#".into(),
             Null => "null".into(),
-
+            Comment(s) => s.to_string(),
             EOF => "".into(),
             IndentOpen => "".into(),
             IndentClose => "".into(),
@@ -264,7 +268,7 @@ impl<'a> Tokens<'a> {
     }
 
     pub fn is_eof(&self) -> bool {
-        self.tok.len() == 0
+        self.tok.len() == 0 || &self.tok[0].tok == &Tok::EOF
     }
 
     pub fn peek(&self) -> Option<&Token> {

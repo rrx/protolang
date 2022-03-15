@@ -144,7 +144,8 @@ pub enum Expr {
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<ExprNode>),
-    Invalid(String)
+    Invalid(String),
+    Void
 }
 
 #[derive(Clone)]
@@ -314,6 +315,9 @@ impl Unparse for ExprNode {
             Expr::Invalid(s) => {
                 out.push(Tok::Invalid(s.clone()));
             }
+
+            // void returns nothing
+            Expr::Void => (),
         };
         self.context.s.unparse(out)
     }
@@ -371,6 +375,7 @@ impl SExpr for ExprNode {
                 stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
             )),
             Invalid(s) => Err(SError::Invalid(s.clone())),
+            Void => Ok(S::Null),
         }
     }
 }
