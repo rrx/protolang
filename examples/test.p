@@ -39,6 +39,9 @@ f(x)^f2(x);
         y;
 };;
 \x -> y;;
+
+(1 > 2) ? x : y
+
 // "x" + "y"
 
 asdf = 1 + 2
@@ -46,4 +49,3 @@ asdf
 
 # more comments
 
-asdf

@@ -7,7 +7,7 @@ use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::{self, into, opt, verify};
 use nom::error::{context, ErrorKind, VerboseError};
-use nom::multi::{many0};
+use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
@@ -93,11 +93,10 @@ fn go_parse_pratt_expr(
             }
 
             (Precedence::PBang, _) if precedence < Precedence::PBang => {
-
                 let (i2, left2) = parse_index_expr(input, left)?;
                 go_parse_pratt_expr(i2, precedence, left2)
             }
-            
+
             // otherwise we just return the LHS
             (Precedence::PHighest, _) => {
                 println!("high: {:?}", &input);
@@ -158,7 +157,7 @@ fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
             let node = ExprNode::new(
                 Expr::Binary(infix, Box::new(left), Box::new(right)),
                 &i2.to_location(),
-                );
+            );
             Ok((i2, node))
         }
         _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
@@ -170,7 +169,7 @@ fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i1, prefix) = parse_prefix(i)?;
     let (i2, expr1) = parse_atom(i1)?;
     let mut node = ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.context.loc);
-    node.context.s.prepend(prefix.unparse());//vec![prefix.token()]);
+    node.context.s.prepend(prefix.unparse()); //vec![prefix.token()]);
     Ok((i2, node))
 }
 
@@ -201,7 +200,7 @@ fn parse_infix(i: Tokens) -> PResult<Tokens, Operator> {
     let next = &t1.tok[0];
     match Operator::from_tok(&next.tok) {
         None => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
-        Some(op) => Ok((i1, op))
+        Some(op) => Ok((i1, op)),
     }
 }
 
@@ -213,14 +212,10 @@ fn parse_paren_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, expr))
 }
 
-
 pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
     match &left.value {
-        Expr::Ident( _) => {
-            let (i, (assign, mut expr)) = tuple((
-                    tag_token(Tok::Assign),
-                    parse_expr
-                    ))(i)?;
+        Expr::Ident(_) => {
+            let (i, (assign, mut expr)) = tuple((tag_token(Tok::Assign), parse_expr))(i)?;
 
             // transfer surround from assign to nodes we store
             left.context.s.append(assign.tok[0].s.pre.clone());
@@ -231,11 +226,9 @@ pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, E
             let expr = ExprNode::new(value, &i.to_location());
             Ok((i, expr))
         }
-        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag)))
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
     }
-
 }
-
 
 fn parse_prefix(i: Tokens) -> PResult<Tokens, OperatorNode> {
     let (i, tokens) = alt((
@@ -248,23 +241,20 @@ fn parse_prefix(i: Tokens) -> PResult<Tokens, OperatorNode> {
 }
 
 fn parse_postfix(i: Tokens) -> PResult<Tokens, OperatorNode> {
-    let (i, tokens) = alt((
-        tag_token(Tok::Percent),
-        tag_token(Tok::Exclamation),
-    ))(i)?;
+    let (i, tokens) = alt((tag_token(Tok::Percent), tag_token(Tok::Exclamation)))(i)?;
 
-    Ok((i, OperatorNode::from_postfix_token(tokens.tok[0].clone()).unwrap()))
+    Ok((
+        i,
+        OperatorNode::from_postfix_token(tokens.tok[0].clone()).unwrap(),
+    ))
 }
-
-
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::lexer::*;
-    use nom::multi::many1;
     use crate::sexpr::SExpr;
+    use nom::multi::many1;
 
     use super::super::tests::parser_losslessness;
 
@@ -339,7 +329,6 @@ mod tests {
             ("+ 1", "(+ 1)"),
             ("123", "123"),
             ("-123", "(- 123)"),
-
             ("- 1 / (2 - 5)", "(- (/ 1 (- 2 5)))"),
             ("+ 1 / (2 - 5)", "(+ (/ 1 (- 2 5)))"),
             // handle ambiguous div correctly
@@ -347,26 +336,20 @@ mod tests {
             ("a*-b", "(* a (- b))"),
             ("-a*b", "(- (* a b))"),
             ("-a/b", "(- (/ a b))"),
-
             // Not sure what's correct here
             // if the prefix has precedence over the infix
             ("-a-b", "(- (- a b))"),
             ("-a+b", "(- (+ a b))"),
-
             // exponents
             ("5^2", "(^ 5 2)"),
             ("1-5^2+1", "(+ (- 1 (^ 5 2)) 1)"),
             ("1-5^2", "(- 1 (^ 5 2))"),
-
             ("-1-5^2", "(- (- 1 (^ 5 2)))"),
-
             // handle prefix properly
             ("-5^2", "(- (^ 5 2))"),
             ("-x^y", "(- (^ x y))"),
-
             // make sure prefix works
             ("-a*-b", "(- (* a (- b)))"),
-
             ("(x+y)^(y+x)", "(^ (+ x y) (+ y x))"),
             // there are two ways to handle multiple-carets
             // https://en.wikipedia.org/wiki/Order_of_operations#Serial_exponentiation
@@ -424,4 +407,3 @@ mod tests {
         });
     }
 }
-

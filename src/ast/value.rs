@@ -1,9 +1,9 @@
-use crate::ast::{Unparse};
 use super::function::CallableNode;
+use crate::ast::Unparse;
 use crate::sexpr::*;
 use crate::tokens::Tok;
-use std::convert::TryFrom;
 use itertools::Itertools;
+use std::convert::TryFrom;
 //use crate::pratt::{PrattValue};
 
 #[derive(Debug, Clone)]
@@ -30,14 +30,23 @@ impl Unparse for Value {
             //Self::IntLiteral(x) => vec![Tok::IntLiteral(*x)],
             //Self::FloatLiteral(x) => vec![Tok::FloatLiteral(*x)],
             //Self::BoolLiteral(x) => vec![Tok::BoolLiteral(*x)],
-            Self::Literal(x) => vec![x.clone()],//Tok::StringLiteral(x.clone())],
+            Self::Literal(x) => vec![x.clone()], //Tok::StringLiteral(x.clone())],
             Self::List(x) => {
-                let tokens_list = x.clone().into_iter().map(|v| v.unparse()).collect::<Vec<Vec<Tok>>>();
+                let tokens_list = x
+                    .clone()
+                    .into_iter()
+                    .map(|v| v.unparse())
+                    .collect::<Vec<Vec<Tok>>>();
                 vec![
                     vec![Tok::LBracket],
-                    tokens_list.into_iter().intersperse(vec![Tok::Comma]).flatten().collect::<Vec<_>>(),
-                    vec![Tok::RBracket]
-                ].concat()
+                    tokens_list
+                        .into_iter()
+                        .intersperse(vec![Tok::Comma])
+                        .flatten()
+                        .collect::<Vec<_>>(),
+                    vec![Tok::RBracket],
+                ]
+                .concat()
             }
             Self::Invalid(x) => vec![Tok::Invalid(x.clone())],
             Self::Null => vec![Tok::Null],
@@ -68,7 +77,7 @@ impl TryFrom<&Tok> for Value {
         match value {
             Tok::IntLiteral(_) => Ok(Value::Literal(value.clone())),
             Tok::FloatLiteral(_) => Ok(Value::Literal(value.clone())),
-            Tok::StringLiteral(_) => Ok(Value::Literal(value.clone())),//s.clone())),
+            Tok::StringLiteral(_) => Ok(Value::Literal(value.clone())), //s.clone())),
             Tok::BoolLiteral(_) => Ok(Value::Literal(value.clone())),
             Tok::Null => Ok(Value::Null),
             //Tok::Invalid(s) => Some(Value::Invalid(s.clone())),

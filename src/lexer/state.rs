@@ -14,20 +14,18 @@ pub enum LexNext<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum IndentState {
     LineNotIndented,
-    LineIndented
+    LineIndented,
 }
 
 impl<'a> LexNext<'a> {
     fn linespace_count(&self) -> usize {
         match self {
-            Self::Space(t) | Self::Tab(t) => {
-                match t.tok {
-                    Tok::Spaces(n) => n,
-                    Tok::Tabs(n) => n,
-                    _ => 0
-                }
-            }
-            _ => 0
+            Self::Space(t) | Self::Tab(t) => match t.tok {
+                Tok::Spaces(n) => n,
+                Tok::Tabs(n) => n,
+                _ => 0,
+            },
+            _ => 0,
         }
     }
 }
@@ -52,7 +50,7 @@ pub struct LexerState<'a> {
     indent_size: usize,
     whitespace: Vec<Token<'a>>,
     indent_state: IndentState,
-    indent_stack: Vec<Token<'a>>
+    indent_stack: Vec<Token<'a>>,
 }
 
 impl<'a> Default for LexerState<'a> {
@@ -61,7 +59,7 @@ impl<'a> Default for LexerState<'a> {
             acc: vec![],
             whitespace: vec![],
             indent_size: 0,
-            indent_state:  IndentState::LineNotIndented,
+            indent_state: IndentState::LineNotIndented,
             indent_stack: vec![],
         }
     }
@@ -213,7 +211,7 @@ impl<'a> LexerState<'a> {
                     Newline(t) | Comment(t) => {
                         // push indent to stack and reset
                         self.indent_size = 0;
-                        
+
                         // append whitespace to the last token
                         self.acc.last_mut().unwrap().s.append(vec![t.tok.clone()]);
                         self.indent_state = IndentState::LineNotIndented;
@@ -247,9 +245,11 @@ impl<'a> LexerState<'a> {
                             if self.indent_size < prev_indent {
                                 // close out
                                 let prev = self.indent_stack.pop().unwrap();
-                                self.whitespace.push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                                self.whitespace
+                                    .push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
                             } else if self.indent_size > prev_indent {
-                                self.whitespace.push(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
+                                self.whitespace
+                                    .push(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
                                 //
                                 // update indentation before pushing
                                 let mut x = t.clone();
@@ -276,7 +276,8 @@ impl<'a> LexerState<'a> {
                         loop {
                             if let Some(prev) = self.indent_stack.pop() {
                                 // close out
-                                self.whitespace.push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                                self.whitespace
+                                    .push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
                             } else {
                                 break;
                             };

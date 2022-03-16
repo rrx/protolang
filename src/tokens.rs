@@ -32,7 +32,7 @@ pub enum Tok {
     Backslash, // \\
 
     Comment(String),
-    Pound, // #
+    Pound,       // #
     DoubleSlash, // //
     TripleQuote, // """
     RightArrow,  // ->
@@ -76,7 +76,7 @@ pub enum Tok {
     In,
     Is,
     Elvis,
-    Spaceship,  // three way comparison
+    Spaceship, // three way comparison
 
     EOF,
 }

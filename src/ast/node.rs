@@ -1,8 +1,6 @@
 use crate::lexer::{Location, Surround};
 use crate::tokens::Token;
-use std::{
-    fmt::{Debug, Display},
-};
+use std::fmt::{Debug, Display};
 /*
 #[derive(PartialEq, Debug, Clone)]
 pub enum PrattValue {
@@ -59,19 +57,23 @@ impl std::fmt::Display for NodeContextWithLocation {
 
 impl Context for NodeContextWithLocation {
     fn from_location(loc: &Location) -> Self {
-        Self { s: Surround::default(), loc: loc.clone() }
+        Self {
+            s: Surround::default(),
+            loc: loc.clone(),
+        }
     }
-
 
     fn from_token(token: &Token) -> Self {
         let loc = token.to_location();
-        Self { s: token.s.clone(), loc: loc.clone() }
+        Self {
+            s: token.s.clone(),
+            loc: loc.clone(),
+        }
     }
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct NodeContextNull {
-}
+pub struct NodeContextNull {}
 
 impl Context for NodeContextNull {
     fn from_location(_: &Location) -> Self {

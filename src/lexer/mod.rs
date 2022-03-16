@@ -1,15 +1,12 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_while, take_while1},
-    character::{
-        complete::{alpha1, alphanumeric1, crlf, digit0, digit1, u64, newline},
-        is_newline,
-    },
-    combinator::{eof, map, map_parser, not, recognize},
+    character::complete::{alpha1, alphanumeric1, crlf, digit0, digit1, u64},
+    combinator::{map, map_parser, recognize},
     error::{context, VerboseError},
-    multi::{many0, many1},
+    multi::many0,
     number::complete::double,
-    sequence::{pair, terminated, tuple},
+    sequence::{pair, tuple},
     IResult,
 };
 
@@ -25,7 +22,6 @@ use string::lex_string;
 pub(crate) use state::LexerState;
 mod surround;
 pub(crate) use surround::{Location, Surround};
-
 
 pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
 
@@ -43,10 +39,6 @@ fn lex_tab(i: Span) -> PResult<Span, Token> {
         Tok::Tabs(s.len())
     })(i)?;
     Ok((i, token(t, pos)))
-}
-
-fn lex_linespace(i: Span) -> PResult<Span, Token> {
-    alt((lex_space, lex_tab))(i)
 }
 
 fn lex_newline(i: Span) -> PResult<Span, Token> {
@@ -126,10 +118,10 @@ fn lex_until_eol(i: Span) -> PResult<Span, Span> {
 fn lex_comments(i: Span) -> PResult<Span, Token> {
     use Tok::*;
     let (i, pos) = position(i)?;
-    let (i, t) = recognize(pair(alt((
-        tag_token("//", DoubleSlash),
-        tag_token("#", Pound),
-    )), lex_until_eol))(i)?;
+    let (i, t) = recognize(pair(
+        alt((tag_token("//", DoubleSlash), tag_token("#", Pound))),
+        lex_until_eol,
+    ))(i)?;
     Ok((i, token(Tok::Comment(t.to_string()), pos)))
 }
 
@@ -156,7 +148,6 @@ fn lex_op<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
     let (i, pos) = position(i)?;
     let (i, t) = alt((
         lex_op_bool,
-
         tag_token("<=>", Spaceship),
         tag_token("?:", Elvis),
         tag_token("+=", PlusEq),
@@ -202,7 +193,6 @@ fn lex_token<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
         lex_string,
         lex_number,
         lex_identifier_or_reserved,
-        //lex_newline,
         lex_invalid,
     ))(i)
 }
@@ -321,28 +311,46 @@ mod tests {
     fn comment() {
         use Tok::*;
         let r = vec![
-            ("// asdf \n", vec![Tok::Comment("// asdf ".into()), Tok::NL(1)]),
+            (
+                "// asdf \n",
+                vec![Tok::Comment("// asdf ".into()), Tok::NL(1)],
+            ),
             ("// asdf", vec![Tok::Comment("// asdf".into())]),
-            ("// asdf \n asdf ", vec![
-                Comment("// asdf ".into()),
-                NL(1), Spaces(1), IndentOpen,
-                Ident("asdf".into()),
-                Spaces(1)
-            ]),
-            ("# asdf \n asdf ", vec![
-                Comment("# asdf ".into()),
-                NL(1), Spaces(1), IndentOpen,
-                Ident("asdf".into()),
-                Spaces(1)
-            ]),
-            ("asdf #\n asdf ", vec![
-                Tok::Ident("asdf".into()),
-                Spaces(1),
-                Tok::Comment("#".into()),
-                NL(1), Spaces(1), IndentOpen,
-                Tok::Ident("asdf".into()),
-                Spaces(1),
-            ]),
+            (
+                "// asdf \n asdf ",
+                vec![
+                    Comment("// asdf ".into()),
+                    NL(1),
+                    Spaces(1),
+                    IndentOpen,
+                    Ident("asdf".into()),
+                    Spaces(1),
+                ],
+            ),
+            (
+                "# asdf \n asdf ",
+                vec![
+                    Comment("# asdf ".into()),
+                    NL(1),
+                    Spaces(1),
+                    IndentOpen,
+                    Ident("asdf".into()),
+                    Spaces(1),
+                ],
+            ),
+            (
+                "asdf #\n asdf ",
+                vec![
+                    Tok::Ident("asdf".into()),
+                    Spaces(1),
+                    Tok::Comment("#".into()),
+                    NL(1),
+                    Spaces(1),
+                    IndentOpen,
+                    Tok::Ident("asdf".into()),
+                    Spaces(1),
+                ],
+            ),
         ];
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);
@@ -353,7 +361,6 @@ mod tests {
             assert!(lexer_losslessness(q));
         });
     }
-
 
     #[test]
     fn lossless() {

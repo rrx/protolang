@@ -7,7 +7,7 @@ use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::{self, verify};
 use nom::error::{context, ErrorKind, VerboseError};
-use nom::multi::{many0};
+use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
@@ -141,7 +141,7 @@ pub fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
 /*
 pub fn parse_statement(i: Tokens) -> PResult<Tokens, StmtNode> {
     //println!("parse_statment: {:?}", i);
-    context("statement", 
+    context("statement",
             alt((
                     //parse_expr_stmt,
                     parse_empty_stmt,
@@ -260,21 +260,20 @@ pub fn parse_program_with_results(i: Tokens) -> (Option<Program>, Vec<Results>) 
 }
 
 pub fn parse_program(i: Tokens) -> PResult<Tokens, Program> {
-    let (i, (exprs, end)) = pair(many0(alt((
-                    parse_expr,
-                    parse_invalid,
-                    ))), many0(parse_whitespace_or_eof))(i)?;
+    let (i, (exprs, end)) = pair(
+        many0(alt((parse_expr, parse_invalid))),
+        many0(parse_whitespace_or_eof),
+    )(i)?;
     let mut value = Program::new(exprs);
-    value.context.s.append(end.iter().map(|v| v.expand_toks()).flatten().collect());
+    value
+        .context
+        .s
+        .append(end.iter().map(|v| v.expand_toks()).flatten().collect());
     Ok((i, value))
 }
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    context("expr", 
-            alt((
-                    pratt::parse_expr,
-                    ExprNode::parse_lambda,
-                    )))(i)
+    context("expr", alt((pratt::parse_expr, ExprNode::parse_lambda)))(i)
 }
 
 impl ExprNode {
@@ -315,10 +314,10 @@ impl ExprNode {
     }
     fn _parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
         let (i, (slash, idents, arrow)) = tuple((
-                tag_token(Tok::Backslash),
-                many0(Self::parse_ident),
-                tag_token(Tok::LeftArrow)
-                ))(i)?;
+            tag_token(Tok::Backslash),
+            many0(Self::parse_ident),
+            tag_token(Tok::LeftArrow),
+        ))(i)?;
 
         let (i, mut body) = parse_expr(i)?;
         println!("slash: {:?}", &slash);
@@ -336,16 +335,15 @@ impl ExprNode {
 
     pub fn parse_block(i: Tokens) -> PResult<Tokens, Self> {
         let (i, (left, expressions, right)) = tuple((
-                tag_token(Tok::LBrace),
-                many0(parse_expr),
-                tag_token(Tok::RBrace),
-                ))(i)?;
+            tag_token(Tok::LBrace),
+            many0(parse_expr),
+            tag_token(Tok::RBrace),
+        ))(i)?;
         let mut node = Self::new(Expr::Block(expressions), &i.to_location());
         node.context.s.prepend(left.tok[0].expand_toks());
         node.context.s.append(right.tok[0].expand_toks());
         Ok((i, node))
     }
-
 }
 
 /*
@@ -359,7 +357,6 @@ fn parse_lambda_end(i: Tokens) -> PResult<Tokens, Tokens> {
     alt((tag_token(Tok::SemiColon), parse_newline_or_eof))(i)
 }
 */
-
 
 /*
 fn parse_caret_side(i: Tokens) -> PResult<Tokens, ExprNode> {
@@ -382,8 +379,8 @@ fn parse_caret_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 mod tests {
     use super::*;
     use crate::lexer::*;
-    use nom::multi::many1;
     use crate::sexpr::SExpr;
+    use nom::multi::many1;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         println!("{:?}", &s);
@@ -492,7 +489,11 @@ mod tests {
                     result.iter().for_each(|v| {
                         println!("S: {}", (&v.sexpr().unwrap()));
                     });
-                    let restored = result.into_iter().map(|v| v.unlex()).collect::<Vec<_>>().join("");
+                    let restored = result
+                        .into_iter()
+                        .map(|v| v.unlex())
+                        .collect::<Vec<_>>()
+                        .join("");
                     println!("{:?}", (&v, &restored));
                     assert_eq!(v, &restored);
                 }
@@ -543,7 +544,6 @@ mod tests {
                     for expr in &results {
                         dump_expr(&expr);
                     }
-
 
                     let restored = results
                         .iter()
@@ -663,7 +663,6 @@ mod tests {
             //assert!(parser_losslessness(v));
         });
     }
-
 
     /*
     fn test_program(s: &str) -> Option<Program> {

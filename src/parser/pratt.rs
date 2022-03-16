@@ -4,13 +4,13 @@
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
 //use crate::ast::*;
-use crate::tokens::{Tok,Tokens, Token};
-use crate::parser::{tag_token, PResult, take_one_any};
+use crate::parser::{tag_token, take_one_any, PResult};
+use crate::tokens::{Tok, Token, Tokens};
 //use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
 use nom::{multi, sequence};
 
-use crate::ast::{Expr, ExprNode, infix_op, postfix_op, Operator, OperatorNode, Unparse};
+use crate::ast::{infix_op, postfix_op, Expr, ExprNode, Operator, OperatorNode, Unparse};
 
 //type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
 type RNode<'a> = PResult<Tokens<'a>, ExprNode>;
@@ -36,16 +36,21 @@ struct Op {
 
 impl Op {
     pub fn new(op: &Tok, lbp: Prec, nbp: Prec, rbp: Prec) -> Self {
-        Self { op: op.clone(), lbp, nbp, rbp }
+        Self {
+            op: op.clone(),
+            lbp,
+            nbp,
+            rbp,
+        }
     }
 
     pub fn new_chaining(op: &Tok, p: i8) -> Self {
-        Self::new(op, Some(p+1), Some(p), Some(p+2))
+        Self::new(op, Some(p + 1), Some(p), Some(p + 2))
     }
 
     pub fn new_left_assoc(op: &Tok, p: i8) -> Self {
         // NBP=LBP=RBP-1
-        Self::new(op, Some(p), Some(p), Some(p+1))
+        Self::new(op, Some(p), Some(p), Some(p + 1))
     }
 
     pub fn new_right_assoc(op: &Tok, p: i8) -> Self {
@@ -59,7 +64,7 @@ impl Op {
 
     pub fn try_from(op: &Tok) -> Option<Self> {
         match op {
-            // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1 
+            // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1
             Tok::Assign => Some(Self::new_right_assoc(op, 10)),
             Tok::Elvis => Some(Self::new_left_assoc(op, 35)),
             Tok::Comma => Some(Self::new_left_assoc(op, 1)),
@@ -76,7 +81,7 @@ impl Op {
             Tok::Mul | Tok::Div => Some(Self::new_left_assoc(op, 30)),
             Tok::Caret => Some(Self::new_left_assoc(op, 50)),
 
-            // right associative ops, which are indicated by rbp = lbp 
+            // right associative ops, which are indicated by rbp = lbp
             // NBP=LBP=RBP
             //Tok::Caret => Some(Self::new_right_assoc(op, 50)),
             // Index
@@ -99,35 +104,33 @@ impl Op {
             Tok::GT => Some(Self::new_left_assoc(op, 10)),
 
             Tok::Percent => Some(Self::new_right_assoc(op, 40)),
-            _ => None
+            _ => None,
         }
     }
 
     fn chain_LeD<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Token, depth: usize) -> RNode<'a> {
-
         println!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
 
         // parse the RHS, making sure the expression we are getting stops when we reach
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
-        let (i, y) = E(i, Some(self.rbp.unwrap()+1), depth+1)?;
+        let (i, y) = E(i, Some(self.rbp.unwrap() + 1), depth + 1)?;
 
         println!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
 
         let maybe_op = Operator::from_tok(&token.tok);
         let op = maybe_op.unwrap();
-        //let op = OperatorNode::from_location(&i, operator); 
+        //let op = OperatorNode::from_location(&i, operator);
         //let t = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
 
         //let op = Binary::from_token(&i.tok[0]).unwrap();
         let (left_op, c) = match &x.value {
-            PrattValue::Chain(op, chain) => { //if false && op == token => {
+            PrattValue::Chain(op, chain) => {
+                //if false && op == token => {
                 let mut c = chain.clone();
                 c.push(y.clone());
                 (op, c)
             }
-            _ => {
-                (&op, vec![x.clone(), y.clone()])
-            }
+            _ => (&op, vec![x.clone(), y.clone()]),
         };
 
         let n = i.peek().unwrap();
@@ -138,10 +141,10 @@ impl Op {
         if n.tok == Tok::EOF {
             println!("chain: got eof");
             let t = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            return i.node_success(t);//Ok((i, t));
+            return i.node_success(t); //Ok((i, t));
         }
 
-        let next_op = n.tok.op().unwrap(); 
+        let next_op = n.tok.op().unwrap();
         println!("chain next: {:?}", (self, &n));
         if self.lbp == next_op.lbp {
             // consume
@@ -149,7 +152,7 @@ impl Op {
             let (i, t) = self.chain_LeD(i, &y, &n, depth)?;
             println!("chain consume: {:?}", (self.lbp, next_op, &t));
             let t0 = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            let op = Operator::End;//Operator::from_tok(&Tok::End);
+            let op = Operator::End; //Operator::from_tok(&Tok::End);
             let t = PrattValue::Chain(op, vec![i.node(t0), t]);
             i.node_success(t)
         } else {
@@ -166,26 +169,31 @@ impl Op {
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
                 let mut x = x.clone();
-                x.context.s.append(token.expand_toks());//vec![token.clone()]);
+                x.context.s.append(token.expand_toks()); //vec![token.clone()]);
                 (i, x)
             }
 
             // chaining
             Tok::Question => {
                 // Ternary operator (x ? y : z)
-                
+
                 // match any precedence
                 let (i, mut y) = E(i, Some(0), depth + 1)?;
-        
+
                 let (i, sep) = tag_token(Tok::Colon)(i)?;
 
                 // match any precedence
                 let (i, z) = E(i, Some(0), depth + 1)?;
-    
+
                 //let op = Binary::from_location(&i, Operator::Conditional);
                 y.context.s.prepend(token.expand_toks());
                 y.context.s.append(sep.expand_toks());
-                let value = PrattValue::Ternary(Operator::Conditional, Box::new(x.clone()), Box::new(y), Box::new(z.clone()));
+                let value = PrattValue::Ternary(
+                    Operator::Conditional,
+                    Box::new(x.clone()),
+                    Box::new(y),
+                    Box::new(z.clone()),
+                );
                 let node = i.node(value);
                 (i, node)
             }
@@ -204,12 +212,13 @@ impl Op {
                 //(i, y)
             //}
             Tok::LParen => {
-                let (i, (nodes, end)) = sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
+                let (i, (nodes, end)) =
+                    sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
                 println!("nodes: {:?}", (&nodes, &end));
                 //let (i, maybe_node) = Eopt(i, Some(0), depth+1)?;
                 //let nodes = match maybe_node {
-                    //Some(node) => vec![node],
-                    //None => vec![]
+                //Some(node) => vec![node],
+                //None => vec![]
                 //};
                 let op = Operator::Call;
                 let mut f = x.clone();
@@ -223,17 +232,17 @@ impl Op {
             _ => {
                 if token.tok.isBinary() {
                     // binary parses the RHS, and returns a binary node
-                    let (i, y) = E(i, self.rbp, depth+1)?;
+                    let (i, y) = E(i, self.rbp, depth + 1)?;
                     println!("Binary: {:?} {:?} {:?}", &x, &token, &y);
                     println!("Binary: {:?}", &token);
 
                     let (_, maybe_op) = infix_op(&self.op);
                     let operator = maybe_op.unwrap();
-                    //let op = Binary::from_location(&i, operator); 
+                    //let op = Binary::from_location(&i, operator);
                     //let op = Binary::from_token(&token).unwrap();
                     let op = Operator::from_tok(&token.tok).unwrap();
                     let mut left = x.clone();
-                    left.context.s.append(token.expand_toks());//op.unparse());
+                    left.context.s.append(token.expand_toks()); //op.unparse());
                     let right = y;
 
                     let t = PrattValue::Binary(op, Box::new(left), Box::new(right));
@@ -272,7 +281,7 @@ impl Op {
                 t.context.s.append(right.expand_toks());
                 i
             }
-            _ => i
+            _ => i,
         };
 
         Ok((i, t))
@@ -296,26 +305,26 @@ impl Tok {
         match self {
             Tok::IntLiteral(_) => true,
             Tok::Ident(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     fn nbp(&self) -> Prec {
         match self.op() {
             Some(op) => op.nbp,
-            None => None
+            None => None,
         }
     }
     fn rbp(&self) -> Prec {
         match self.op() {
             Some(op) => op.rbp,
-            None => None
+            None => None,
         }
     }
     fn lbp(&self) -> Prec {
         match self.op() {
             Some(op) => op.lbp,
-            None => None
+            None => None,
         }
     }
 }
@@ -342,7 +351,7 @@ impl<'a> Tokens<'a> {
         E(self, prec, depth)
     }
 
-    fn G(self, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens<'a>,(i8, ASTNode)> {
+    fn G(self, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens<'a>, (i8, ASTNode)> {
         G(self, r, t, prec, depth)
     }
 
@@ -361,7 +370,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
     println!("P {:?}", (&n));
 
-    let rbp = n.op().map_or(None, |t|t.rbp);
+    let rbp = n.op().map_or(None, |t| t.rbp);
 
     // All possible N tokens
     match Some(&n) {
@@ -390,15 +399,13 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             ExprNode::parse_literal(i)
         }
 
-        Some(Tok::Backslash) => {
-            ExprNode::parse_lambda(i)
-        }
+        Some(Tok::Backslash) => ExprNode::parse_lambda(i),
 
         Some(Tok::LBrace) => {
             // consume LBrace
             let (i, left) = take_one_any(i)?;
             println!("prefix brace1: {:?}", (&i, &n, &left));
-            let (i, t) = i.E(Some(0), depth+1)?;
+            let (i, t) = i.E(Some(0), depth + 1)?;
             println!("prefix brace2: {:?}", (&i, &t));
             // consume RBrace
             let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
@@ -408,13 +415,13 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             node.context.s.append(right.expand_toks());
             Ok((i, node))
         }
-        
+
         // Array
         Some(Tok::LBracket) => {
             // consume LBracket
             let (i, left) = take_one_any(i)?;
             println!("prefix bracket1: {:?}", (&i, &n, &left));
-            let (i, t) = i.E(Some(0), depth+1)?;
+            let (i, t) = i.E(Some(0), depth + 1)?;
             println!("prefix bracket2: {:?}", (&i, &t));
             // consume RBracket
             let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
@@ -431,15 +438,15 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // consume LParen
             let (i, left) = take_one_any(i)?;
             println!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
-           
+
             // consume anything inside the parents, bp = 0
-            let (i, mut node) = i.E(Some(0), depth+1)?;
+            let (i, mut node) = i.E(Some(0), depth + 1)?;
 
             //let (i, maybe_node) = Eopt(i, Some(0), depth+1)?;
 
             //let nodes = match maybe_node {
-                //Some(node) => vec![node],
-                //None => vec![]
+            //Some(node) => vec![node],
+            //None => vec![]
             //};
 
             //let (i, mut maybe_node) = i.E(Some(0), depth+1)?;
@@ -471,10 +478,10 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
 // Optional E
 fn Eopt<'a>(i: Tokens<'a>, prec: Prec, depth: usize) -> PResult<Tokens<'a>, Option<ExprNode>> {
-    match E(i.clone(), Some(0), depth+1) {
+    match E(i.clone(), Some(0), depth + 1) {
         Ok((i, node)) => Ok((i, Some(node))),
         Err(nom::Err::Error(_)) => Ok((i, None)),
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
@@ -487,17 +494,21 @@ fn E<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // precondition p >= 0
     let _ = prec.unwrap();
 
-
     // r = +inf
     let r = 127;
 
     println!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
 
-
     // The P parser starts with an N token, and goes with it, returning a Node
     // This is the first element of the expression
     let (i, p) = i.P(depth)?;
-    println!("E1 {:?}, prec: {:?}, P:{:?}, depth:{}", i.toks(), prec, &p, depth);
+    println!(
+        "E1 {:?}, prec: {:?}, P:{:?}, depth:{}",
+        i.toks(),
+        prec,
+        &p,
+        depth
+    );
 
     // get a chain of subsequent expressions
     // What follows could be a postfix operator, a binary operator, or a ternary operator
@@ -511,7 +522,7 @@ fn E<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     Ok((i, t))
 }
 
-fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens,(i8, ASTNode)> {
+fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens, (i8, ASTNode)> {
     // Here we are going to take a look at the L token
     // A L token is a token that has a left operand (t)
     // An L token can never start an expression
@@ -521,17 +532,17 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     // When we find an operation that has a lower precedence, we exit, returning the LHS
     //
     // peek
-   
+
     println!("G: {:?}", (&i.toks(), &r, &prec, &r, depth));
 
     if i.is_eof() {
         return Ok((i, (r, t)));
     }
-    let token = &i.tok[0];//.tok.clone();
-    //if token.tok == Tok::EOF {
-        //println!("got eof");
-        //return Ok((i, (r, t)));
-    //}
+    let token = &i.tok[0]; //.tok.clone();
+                           //if token.tok == Tok::EOF {
+                           //println!("got eof");
+                           //return Ok((i, (r, t)));
+                           //}
 
     // get op from left
     // it could be any token
@@ -545,10 +556,14 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     println!("op: {:?}", (&token, &op));
 
     let lbp = op.lbp.unwrap_or(-1);
-    println!("guard: prec:{} <= lbp:{} <= r:{}\n\tLHS: {:?}\n\t{:?}",
-             prec.unwrap(), lbp, r,
-             t,
-             (&op, &i.toks()));
+    println!(
+        "guard: prec:{} <= lbp:{} <= r:{}\n\tLHS: {:?}\n\t{:?}",
+        prec.unwrap(),
+        lbp,
+        r,
+        t,
+        (&op, &i.toks())
+    );
 
     // lbp must be between r and prec, or we exit
     // if we have lbp greater than or equal to prec, then we parse and include the RHS
@@ -568,7 +583,7 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
         let r = op.nbp.unwrap();
 
         // loop recursively
-        i.G(r, t, prec, depth+1)
+        i.G(r, t, prec, depth + 1)
     } else {
         println!("guard exit: {:?}", &i.toks());
         Ok((i, (r, t)))
@@ -576,8 +591,11 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
 }
 
 pub fn parse_expr<'a>(i: Tokens) -> RNode {
-    let (i, (mut node, end)) = sequence::pair(parse_expr1, multi::many0(tag_token(Tok::SemiColon)))(i)?;
-    node.context.s.append(end.into_iter().map(|t| t.expand_toks()).flatten().collect());
+    let (i, (mut node, end)) =
+        sequence::pair(parse_expr1, multi::many0(tag_token(Tok::SemiColon)))(i)?;
+    node.context
+        .s
+        .append(end.into_iter().map(|t| t.expand_toks()).flatten().collect());
     Ok((i, node))
 }
 
@@ -607,8 +625,8 @@ pub fn parse<'a>(i: Tokens) -> RNode {
 mod tests {
     use super::*;
     use crate::lexer::*;
-    use nom::{InputLength, InputIter};
-    use crate::sexpr::{SExpr};
+    use crate::sexpr::SExpr;
+    use nom::{InputIter, InputLength};
 
     #[test]
     fn expressions() {
@@ -635,7 +653,7 @@ mod tests {
             "(x)",
             "[x]",
             //"(1",
-            "x ?: y",  // elvis
+            "x ?: y",      // elvis
             "x ?: y ?: z", // chaining elvis
             "x ? y : z ",  // ternary conditional
             "a < b <= c",
@@ -682,7 +700,6 @@ mod tests {
             ("+ 1", "(+ 1)"),
             ("123", "123"),
             ("-123", "(- 123)"),
-
             ("- 1 / (2 - 5)", "(- (/ 1 (- 2 5)))"),
             ("+ 1 / (2 - 5)", "(+ (/ 1 (- 2 5)))"),
             // handle ambiguous div correctly
@@ -690,28 +707,23 @@ mod tests {
             ("a*-b", "(* a (- b))"),
             ("-a*b", "(- (* a b))"),
             ("-a/b", "(- (/ a b))"),
-
             // Not sure what's correct here
             // if the prefix has precedence over the infix
             //("-a-b", "(- (- a b))"),
             ("-a-b", "(- (- a) b)"),
             //("-a+b", "(- (+ a b))"),
             ("-a+b", "(+ (- a) b)"),
-
             // exponents
             ("5^2", "(^ 5 2)"),
             ("1-5^2+1", "(+ (- 1 (^ 5 2)) 1)"),
             ("1-5^2", "(- 1 (^ 5 2))"),
             //("-1-5^2", "(- (- 1 (^ 5 2)))"),
             ("-1-5^2", "(- (- 1) (^ 5 2))"),
-
             // handle prefix properly
             ("-5^2", "(- (^ 5 2))"),
             ("-x^y", "(- (^ x y))"),
-
             // make sure prefix works
             ("-a*-b", "(- (* a (- b)))"),
-
             ("(x+y)^(y+x)", "(^ (+ x y) (+ y x))"),
             // there are two ways to handle multiple-carets
             // https://en.wikipedia.org/wiki/Order_of_operations#Serial_exponentiation
@@ -742,11 +754,10 @@ mod tests {
                 // assignment is right associative
                 // comma is left associative
                 "x1=y2=z2,y+1,z^2,x1=y=z",
-                "(, (, (, (= x1 (= y2 z2)) (+ y 1)) (^ z 2)) (= x1 (= y z)))"
+                "(, (, (, (= x1 (= y2 z2)) (+ y 1)) (^ z 2)) (= x1 (= y z)))",
             ),
             // comma in ternary op
             ("a ? b, c : d", "(? a (, b c) d)"),
-
             ("a! ^ b", "(^ (! a) b)"),
         ];
 
@@ -782,7 +793,4 @@ mod tests {
             assert_eq!(0, i.input_len());
         });
     }
-
-
 }
-

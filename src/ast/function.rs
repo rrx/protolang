@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::interpreter::*;
-use crate::tokens::Tok;
 use crate::lexer::{Location, Surround};
+use crate::tokens::Tok;
 use std::{
     any::Any,
     fmt::{Debug, Display},
@@ -117,11 +117,7 @@ impl Callable for Lambda {
         self.params.value.len()
     }
 
-    fn call(
-        &self,
-        _: &mut Interpreter,
-        _: Vec<Value>,
-    ) -> Result<Value, InterpretError> {
+    fn call(&self, _: &mut Interpreter, _: Vec<Value>) -> Result<Value, InterpretError> {
         Ok(Value::Literal(Tok::IntLiteral(0)))
     }
 

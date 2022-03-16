@@ -18,7 +18,6 @@ impl fmt::Debug for Location {
     }
 }
 
-
 impl Default for Location {
     fn default() -> Self {
         Self {
@@ -67,10 +66,7 @@ impl Default for Surround {
 
 impl Surround {
     pub fn new(pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        Self {
-            pre,
-            post,
-        }
+        Self { pre, post }
     }
 
     pub fn prepend(&mut self, toks: Vec<Tok>) {
@@ -94,5 +90,3 @@ impl Surround {
             .collect()
     }
 }
-
-
