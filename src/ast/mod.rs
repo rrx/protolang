@@ -87,47 +87,6 @@ impl SExpr for StmtNode {
 }
 
 #[derive(Debug, Clone)]
-pub struct Program {
-    pub value: Vec<ExprNode>,
-    pub context: NodeContext,
-}
-impl Program {
-    pub fn new(value: Vec<ExprNode>) -> Self {
-        Self {
-            context: NodeContext::default(),
-            value,
-        }
-    }
-}
-
-impl Unparse for Program {
-    fn unparse(&self) -> Vec<Tok> {
-        self.context.s.unparse(
-            self.value
-                .clone()
-                .into_iter()
-                .map(|expr| expr.unparse())
-                .flatten()
-                .collect(),
-        )
-    }
-    fn unlex(&self) -> String {
-        self.unparse()
-            .iter()
-            .map(|t| t.unlex())
-            .collect::<Vec<_>>()
-            .join("")
-    }
-}
-
-impl SExpr for Program {
-    fn sexpr(&self) -> SResult<S> {
-        let results = self.value.iter().filter_map(|v| v.sexpr().ok()).collect();
-        Ok(S::Cons("program".into(), results))
-    }
-}
-
-#[derive(Debug, Clone)]
 pub enum Expr {
     Ident(String),
     LitExpr(Value),
@@ -144,6 +103,7 @@ pub enum Expr {
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<ExprNode>),
+    Program(Vec<ExprNode>),
     Invalid(String),
     Void,
 }
@@ -215,35 +175,6 @@ impl ExprNode {
     }
     */
 }
-/*
-
-impl TryFrom<&PrattValue> for Expr {
-    type Error = ();
-    fn try_from(value: &PrattValue) -> Result<Self, Self::Error> {
-        match value {
-            PrattValue::Prefix(tok, node) => {
-                Expr::Prefix(
-            }
-            PrattValue::Binary(Tok, Box<ASTNode>, Box<ASTNode>),
-            PrattValue::Ternary(Tok, Box<ASTNode>, Box<ASTNode>, Box<ASTNode>),
-            PrattValue::Postfix(Tok, Box<ASTNode>),
-            PrattValue::Ident(Tok),
-            PrattValue::Error(String),
-            PrattValue::List(Vec<ASTNode>),
-            PrattValue::Chain(Tok, Vec<ASTNode>),
-            PrattValue::Expr(Box<ASTNode>),
-            Tok::IntLiteral(_) => Ok(Value::Literal(value.clone())),
-            Tok::FloatLiteral(_) => Ok(Value::Literal(value.clone())),
-            Tok::StringLiteral(_) => Ok(Value::Literal(value.clone())),//s.clone())),
-            Tok::BoolLiteral(_) => Ok(Value::Literal(value.clone())),
-            Tok::Null => Ok(Value::Null),
-            //Tok::Invalid(s) => Some(Value::Invalid(s.clone())),
-            _ => Err(()),
-        }
-    }
-}
-
-*/
 
 /*
 impl From<ExprNode> for StmtNode {
@@ -308,8 +239,8 @@ impl Unparse for ExprNode {
                     out.append(&mut arg.unparse());
                 }
             }
-            Expr::Block(stmts) => {
-                out.append(&mut stmts.into_iter().map(|s| s.unparse()).flatten().collect());
+            Expr::Block(exprs) | Expr::Program(exprs) => {
+                out.append(&mut exprs.into_iter().map(|s| s.unparse()).flatten().collect());
             }
             Expr::Invalid(s) => {
                 out.push(Tok::Invalid(s.clone()));
@@ -368,9 +299,13 @@ impl SExpr for ExprNode {
                 v.append(&mut s_args);
                 Ok(S::Cons("apply".into(), v))
             }
-            Block(stmts) => Ok(S::Cons(
+            Block(exprs) => Ok(S::Cons(
                 "block".into(),
-                stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
+                exprs.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
+            )),
+            Program(exprs) => Ok(S::Cons(
+                "program".into(),
+                exprs.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
             )),
             Invalid(s) => Err(SError::Invalid(s.clone())),
             Void => Ok(S::Null),
@@ -459,14 +394,6 @@ impl OperatorNode {
             context,
         }
     }
-
-    /*
-    pub fn parse(i: Tokens) -> PResult<Tokens, Self> {
-        let (_, maybe_op) = infix_op(&token);
-        let operator = maybe_op.unwrap();
-        let op = OperatorNode::from_location(&i, operator);
-    }
-    */
 
     pub fn new(prefix: Operator) -> Self {
         Self {
@@ -567,94 +494,6 @@ impl Operator {
         }
     }
 }
-
-#[derive(PartialEq, PartialOrd, Debug, Clone)]
-pub enum Precedence {
-    PLowest, // Parens, Start
-    PAssign, // Assignment operator
-    //PMap,
-    PEquals, // Equality ==/!=
-    PLessGreater,
-    PSum,
-    PPrefix,
-    PProduct,
-    PModulus,
-    PExp,
-    PCall,
-    PIndex,
-    PBang,
-    PHighest,
-}
-
-pub fn infix_precedence(op: Operator) -> Precedence {
-    match op {
-        Operator::Equal => Precedence::PEquals,
-        Operator::NotEqual => Precedence::PEquals,
-        Operator::LessThanEqual => Precedence::PLessGreater,
-        Operator::GreaterThanEqual => Precedence::PLessGreater,
-        Operator::LessThan => Precedence::PLessGreater,
-        Operator::GreaterThan => Precedence::PLessGreater,
-        Operator::Plus => Precedence::PSum,
-        Operator::Not => Precedence::PLowest,
-        Operator::Minus => Precedence::PSum,
-        Operator::Multiply => Precedence::PProduct,
-        Operator::Divide => Precedence::PProduct,
-        Operator::Exp => Precedence::PExp,
-        Operator::Assign => Precedence::PAssign,
-        Operator::Modulus => Precedence::PModulus,
-        Operator::Bang => Precedence::PBang,
-        Operator::Index => Precedence::PIndex,
-        Operator::Call => Precedence::PCall,
-        Operator::Elvis => Precedence::PCall,
-        Operator::ConditionalElse => Precedence::PCall,
-        Operator::Conditional => Precedence::PCall,
-        Operator::End => Precedence::PLowest,
-        Operator::Comma => Precedence::PLowest,
-        //Operator::Map => Precedence::PMap,
-    }
-}
-
-pub fn prefix_op(t: &Tok) -> (Precedence, Option<Operator>) {
-    match *t {
-        Tok::Plus => (Precedence::PPrefix, Some(Operator::Plus)),
-        Tok::Minus => (Precedence::PPrefix, Some(Operator::Minus)),
-        Tok::Exclamation => (Precedence::PPrefix, Some(Operator::NotEqual)),
-        _ => (Precedence::PLowest, None),
-    }
-}
-
-pub fn postfix_op(t: &Tok) -> (Precedence, Option<Operator>) {
-    match *t {
-        Tok::Exclamation => (Precedence::PBang, Some(Operator::Bang)),
-        _ => (Precedence::PLowest, None),
-    }
-}
-
-pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
-    match *t {
-        Tok::Equals => (Precedence::PEquals, Some(Operator::Equal)),
-        Tok::NotEquals => (Precedence::PEquals, Some(Operator::NotEqual)),
-        //Tok::LeftArrow => (Precedence::PMap, Some(Operator::Map)),
-        Tok::LTE => (Precedence::PLessGreater, Some(Operator::LessThanEqual)),
-        Tok::GTE => (Precedence::PLessGreater, Some(Operator::GreaterThanEqual)),
-        Tok::LT => (Precedence::PLessGreater, Some(Operator::LessThan)),
-        Tok::GT => (Precedence::PLessGreater, Some(Operator::GreaterThan)),
-        Tok::Plus => (Precedence::PSum, Some(Operator::Plus)),
-        Tok::Minus => (Precedence::PSum, Some(Operator::Minus)),
-        Tok::Mul => (Precedence::PProduct, Some(Operator::Multiply)),
-        Tok::Div => (Precedence::PProduct, Some(Operator::Divide)),
-        Tok::Caret => (Precedence::PExp, Some(Operator::Exp)),
-        Tok::LParen => (Precedence::PCall, Some(Operator::Call)),
-        Tok::LBracket => (Precedence::PIndex, Some(Operator::Index)),
-        Tok::Assign => (Precedence::PAssign, Some(Operator::Assign)),
-        Tok::Percent => (Precedence::PModulus, Some(Operator::Modulus)),
-        Tok::SemiColon => (Precedence::PHighest, None),
-        Tok::Comma => (Precedence::PLowest, Some(Operator::Comma)),
-        Tok::Elvis => (Precedence::PLowest, Some(Operator::Elvis)),
-        _ => (Precedence::PLowest, None),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

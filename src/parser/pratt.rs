@@ -10,7 +10,7 @@ use crate::tokens::{Tok, Token, Tokens};
 use nom::error::{context, ErrorKind};
 use nom::{multi, sequence};
 
-use crate::ast::{infix_op, postfix_op, Expr, ExprNode, Operator, OperatorNode, Unparse};
+use crate::ast::{Expr, ExprNode, Operator, OperatorNode, Unparse};
 
 //type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
 type RNode<'a> = PResult<Tokens<'a>, ExprNode>;
@@ -236,7 +236,7 @@ impl Op {
                     println!("Binary: {:?} {:?} {:?}", &x, &token, &y);
                     println!("Binary: {:?}", &token);
 
-                    let (_, maybe_op) = infix_op(&self.op);
+                    let maybe_op = Operator::from_tok(&self.op);
                     let operator = maybe_op.unwrap();
                     //let op = Binary::from_location(&i, operator);
                     //let op = Binary::from_token(&token).unwrap();

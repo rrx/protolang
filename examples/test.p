@@ -40,12 +40,17 @@ f(x)^f2(x);
 };;
 \x -> y;;
 
-(1 > 2) ? x : y
+cond = ((1 > 2) ? x : y)
+assert(cond == y)
 
 // "x" + "y"
 
 asdf = 1 + 2
 asdf
 
+assert(asdf == 3)
+
 # more comments
+
+asdf
 

@@ -69,7 +69,7 @@ impl Value {
     pub fn new_float(f: f64) -> Self {
         Self::Literal(Tok::FloatLiteral(f))
     }
-    
+
     pub fn new_bool(b: bool) -> Self {
         Self::Literal(Tok::BoolLiteral(b))
     }
@@ -80,7 +80,7 @@ impl Value {
                 Tok::BoolLiteral(b) => Ok(*b),
                 _ => Err(InterpretError::Runtime {
                     message: format!("Expecting a bool: {}", self.unlex()),
-                    line: 0
+                    line: 0,
                 }),
             },
             _ => Err(InterpretError::Runtime {
@@ -168,6 +168,16 @@ impl Value {
         Ok(Self::new_bool(left > right))
     }
 
+    pub fn eq(&self, other: &Self) -> Result<Self, InterpretError> {
+        let (left, right) = Self::check_numbers(self, other)?;
+        Ok(Self::new_bool(left == right))
+    }
+
+    pub fn ne(&self, other: &Self) -> Result<Self, InterpretError> {
+        let (left, right) = Self::check_numbers(self, other)?;
+        Ok(Self::new_bool(left != right))
+    }
+
     pub fn postfix(&self, op: &Operator) -> Result<Self, InterpretError> {
         match op {
             Operator::Bang => {
@@ -236,6 +246,8 @@ impl Interpreter {
                     Operator::LessThanEqual => eval_left.lte(&eval_right),
                     Operator::GreaterThan => eval_left.gt(&eval_right),
                     Operator::LessThan => eval_left.lt(&eval_right),
+                    Operator::Equal => eval_left.eq(&eval_right),
+                    Operator::NotEqual => eval_left.ne(&eval_right),
                     _ => Err(InterpretError::Runtime {
                         message: format!("Unimplemented expression op: Operator::{:?}", op),
                         line: expr.context.loc.line,
@@ -283,7 +295,7 @@ impl Interpreter {
                         }
                         println!("Calling {:?}({:?})", c, eval_args);
                         let result = c.value.call(self, eval_args);
-                        println!("Result {:?}", &result);
+                        println!("Call Result {:?}", &result);
                         result
                     }
                     _ => Err(InterpretError::Runtime {
@@ -292,6 +304,7 @@ impl Interpreter {
                     }),
                 }
             }
+
             Expr::Block(exprs) => {
                 let mut result = Value::List(vec![]);
 
@@ -309,20 +322,35 @@ impl Interpreter {
                 Ok(result)
             }
 
-            Expr::Ternary(op, x, y, z) => {
-                match op {
-                    Operator::Conditional => {
-                        let r = self.evaluate(x)?;
-                        let b = Value::check_bool(&r)?;
-                        if b {
-                            self.evaluate(y)
-                        } else {
-                            self.evaluate(z)
+            Expr::Program(exprs) => {
+                let mut result = Value::List(vec![]);
+
+                for expr in exprs {
+                    let r = self.evaluate(expr);
+                    match r {
+                        Ok(v) => {
+                            result = v;
+                        }
+                        Err(e) => {
+                            return Err(e);
                         }
                     }
-                    _ => unimplemented!()
                 }
+                Ok(result)
             }
+
+            Expr::Ternary(op, x, y, z) => match op {
+                Operator::Conditional => {
+                    let r = self.evaluate(x)?;
+                    let b = Value::check_bool(&r)?;
+                    if b {
+                        self.evaluate(y)
+                    } else {
+                        self.evaluate(z)
+                    }
+                }
+                _ => unimplemented!(),
+            },
 
             Expr::Chain(_, _) => Ok(Value::Literal(Tok::IntLiteral(0))),
             Expr::Invalid(s) => Err(InterpretError::Runtime {
@@ -353,10 +381,13 @@ impl Interpreter {
         self.evaluate(&expr)
     }
 
-    pub fn interpret(&mut self, program: Program) {
-        for expr in program.value {
-            if let Err(error) = self.execute(expr) {
-                println!("ERROR: {:?}", error);
+    pub fn interpret(&mut self, program: ExprNode) {
+        match self.evaluate(&program) {
+            Ok(v) => {
+                println!("Result: {:?}", &v);
+            }
+            Err(error) => {
+                println!("ERROR: {:?}", &error);
                 return;
             }
         }

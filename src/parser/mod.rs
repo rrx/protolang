@@ -231,7 +231,7 @@ pub fn parse_expr_stmt(i: Tokens) -> PResult<Tokens, StmtNode> {
 }
 */
 
-pub fn parse_program_with_results(i: Tokens) -> (Option<Program>, Vec<Results>) {
+pub fn parse_program_with_results(i: Tokens) -> (Option<ExprNode>, Vec<Results>) {
     match parse_program(i) {
         Ok((prog_rest, prog)) => {
             let mut results = vec![];
@@ -259,12 +259,12 @@ pub fn parse_program_with_results(i: Tokens) -> (Option<Program>, Vec<Results>) 
     }
 }
 
-pub fn parse_program(i: Tokens) -> PResult<Tokens, Program> {
+pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (exprs, end)) = pair(
         many0(alt((parse_expr, parse_invalid))),
         many0(parse_whitespace_or_eof),
     )(i)?;
-    let mut value = Program::new(exprs);
+    let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
     value
         .context
         .s

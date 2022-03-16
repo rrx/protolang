@@ -351,6 +351,16 @@ mod tests {
                     Spaces(1),
                 ],
             ),
+            (
+                "#asdf\n//asdf\n1",
+                vec![
+                    Tok::Comment("#asdf".into()),
+                    Tok::NL(1),
+                    Tok::Comment("//asdf".into()),
+                    Tok::NL(1),
+                    Tok::IntLiteral(1),
+                ],
+            ),
         ];
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);

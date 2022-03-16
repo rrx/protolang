@@ -249,6 +249,93 @@ fn parse_postfix(i: Tokens) -> PResult<Tokens, OperatorNode> {
     ))
 }
 
+#[derive(PartialEq, PartialOrd, Debug, Clone)]
+pub enum Precedence {
+    PLowest, // Parens, Start
+    PAssign, // Assignment operator
+    //PMap,
+    PEquals, // Equality ==/!=
+    PLessGreater,
+    PSum,
+    PPrefix,
+    PProduct,
+    PModulus,
+    PExp,
+    PCall,
+    PIndex,
+    PBang,
+    PHighest,
+}
+
+pub fn infix_precedence(op: Operator) -> Precedence {
+    match op {
+        Operator::Equal => Precedence::PEquals,
+        Operator::NotEqual => Precedence::PEquals,
+        Operator::LessThanEqual => Precedence::PLessGreater,
+        Operator::GreaterThanEqual => Precedence::PLessGreater,
+        Operator::LessThan => Precedence::PLessGreater,
+        Operator::GreaterThan => Precedence::PLessGreater,
+        Operator::Plus => Precedence::PSum,
+        Operator::Not => Precedence::PLowest,
+        Operator::Minus => Precedence::PSum,
+        Operator::Multiply => Precedence::PProduct,
+        Operator::Divide => Precedence::PProduct,
+        Operator::Exp => Precedence::PExp,
+        Operator::Assign => Precedence::PAssign,
+        Operator::Modulus => Precedence::PModulus,
+        Operator::Bang => Precedence::PBang,
+        Operator::Index => Precedence::PIndex,
+        Operator::Call => Precedence::PCall,
+        Operator::Elvis => Precedence::PCall,
+        Operator::ConditionalElse => Precedence::PCall,
+        Operator::Conditional => Precedence::PCall,
+        Operator::End => Precedence::PLowest,
+        Operator::Comma => Precedence::PLowest,
+        //Operator::Map => Precedence::PMap,
+    }
+}
+
+pub fn prefix_op(t: &Tok) -> (Precedence, Option<Operator>) {
+    match *t {
+        Tok::Plus => (Precedence::PPrefix, Some(Operator::Plus)),
+        Tok::Minus => (Precedence::PPrefix, Some(Operator::Minus)),
+        Tok::Exclamation => (Precedence::PPrefix, Some(Operator::NotEqual)),
+        _ => (Precedence::PLowest, None),
+    }
+}
+
+pub fn postfix_op(t: &Tok) -> (Precedence, Option<Operator>) {
+    match *t {
+        Tok::Exclamation => (Precedence::PBang, Some(Operator::Bang)),
+        _ => (Precedence::PLowest, None),
+    }
+}
+
+pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
+    match *t {
+        Tok::Equals => (Precedence::PEquals, Some(Operator::Equal)),
+        Tok::NotEquals => (Precedence::PEquals, Some(Operator::NotEqual)),
+        //Tok::LeftArrow => (Precedence::PMap, Some(Operator::Map)),
+        Tok::LTE => (Precedence::PLessGreater, Some(Operator::LessThanEqual)),
+        Tok::GTE => (Precedence::PLessGreater, Some(Operator::GreaterThanEqual)),
+        Tok::LT => (Precedence::PLessGreater, Some(Operator::LessThan)),
+        Tok::GT => (Precedence::PLessGreater, Some(Operator::GreaterThan)),
+        Tok::Plus => (Precedence::PSum, Some(Operator::Plus)),
+        Tok::Minus => (Precedence::PSum, Some(Operator::Minus)),
+        Tok::Mul => (Precedence::PProduct, Some(Operator::Multiply)),
+        Tok::Div => (Precedence::PProduct, Some(Operator::Divide)),
+        Tok::Caret => (Precedence::PExp, Some(Operator::Exp)),
+        Tok::LParen => (Precedence::PCall, Some(Operator::Call)),
+        Tok::LBracket => (Precedence::PIndex, Some(Operator::Index)),
+        Tok::Assign => (Precedence::PAssign, Some(Operator::Assign)),
+        Tok::Percent => (Precedence::PModulus, Some(Operator::Modulus)),
+        Tok::SemiColon => (Precedence::PHighest, None),
+        Tok::Comma => (Precedence::PLowest, Some(Operator::Comma)),
+        Tok::Elvis => (Precedence::PLowest, Some(Operator::Elvis)),
+        _ => (Precedence::PLowest, None),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
