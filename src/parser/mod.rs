@@ -19,7 +19,9 @@ pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
 
 pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     let s = t.into();
-    context(s, verify(take_one_any, move |tokens: &Tokens<'a>| {
+    context(
+        s,
+        verify(take_one_any, move |tokens: &Tokens<'a>| {
             let v: &'static str = tokens.tok[0].tok.clone().into();
             v == s
         }),

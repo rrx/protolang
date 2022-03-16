@@ -5,14 +5,21 @@ use nom_locate::LocatedSpan;
 use std::fmt;
 use std::iter::Enumerate;
 use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
-use strum_macros;
 use strum::{EnumProperty, VariantNames};
+use strum_macros;
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
-#[derive(Debug, Clone, PartialEq, strum_macros::EnumProperty, strum_macros::ToString, strum_macros::IntoStaticStr)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    strum_macros::EnumProperty,
+    strum_macros::ToString,
+    strum_macros::IntoStaticStr,
+)]
 pub enum Tok {
-    #[strum(props(s=" "))]
+    #[strum(props(s = " "))]
     Spaces(usize),
     Tabs(usize),
     NL(usize),
