@@ -221,7 +221,7 @@ impl Interpreter {
             }
             Expr::Binary(op, left, right) => {
                 if op == &Operator::Assign {
-                    return if let Some(ident) = left.try_ident() {
+                    return if let Some(ident) = left.value.try_ident() {
                         let eval_right = self.evaluate(&right)?;
                         self.globals.define(&ident, &eval_right);
                         println!("Assign {:?} to {}", &eval_right, &ident);

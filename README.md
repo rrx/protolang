@@ -1,5 +1,7 @@
 # Overview
 
+DEX - an interpreter/compiler focused on Developer Experience
+
 This is a toy compiler used for experiments in programming language design.  It has the following features:
 
 - lossless compiler
@@ -32,13 +34,13 @@ TODO
 - [x] Pratt parser for arithmetic
 - [x] Lossless parser 
 - [x] sexpr transpiler
+- [ ] REPL
+- [ ] branching
+- [ ] functions
+- [ ] recursion
 - [ ] interpreter
 - [ ] module system
 - [ ] basic runtime
-- [ ] REPL
-- [ ] functions
-- [ ] branching
-- [ ] recursion
 - [ ] basic polymorphism
 - [ ] compile to machine code using LLVM
 - [ ] basic build and test tooling

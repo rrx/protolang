@@ -44,6 +44,32 @@ pub enum Expr {
     Void,
 }
 
+impl Expr {
+    pub fn is_void(&self) -> bool {
+        if let Expr::Void = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_ident(&self) -> bool {
+        if let Expr::Ident(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn try_ident(&self) -> Option<String> {
+        if let Expr::Ident(s) = self {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ExprNode {
     pub context: NodeContext,
@@ -68,22 +94,6 @@ impl ExprNode {
         Self {
             context: NodeContext::from_location(loc),
             value,
-        }
-    }
-
-    pub fn is_ident(&self) -> bool {
-        if let Expr::Ident(_) = self.value {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn try_ident(&self) -> Option<String> {
-        if let Expr::Ident(s) = &self.value {
-            Some(s.clone())
-        } else {
-            None
         }
     }
 

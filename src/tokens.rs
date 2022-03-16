@@ -259,6 +259,14 @@ pub fn token(tok: Tok, pos: Span) -> Token {
     Token::new(tok, pos)
 }
 
+pub trait TokensList {
+    fn is_eof(&self) -> bool;
+    fn to_location(&self) -> Location;
+    fn toks(&self) -> Vec<Tok>;
+    fn expand_toks(&self) -> Vec<Tok>; 
+}
+
+
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct Tokens<'a> {
@@ -266,6 +274,35 @@ pub struct Tokens<'a> {
     pub start: usize,
     pub end: usize,
     pub results: Vec<Results>,
+}
+
+impl<'a> TokensList for Tokens<'a> {
+    fn is_eof(&self) -> bool {
+        self.tok.len() == 0 || &self.tok[0].tok == &Tok::EOF
+    }
+
+    fn to_location(&self) -> Location {
+        if self.tok.len() > 0 {
+            self.tok[0].to_location()
+        } else {
+            Location::new(0, 0, 0, "EOF".into())
+        }
+    }
+
+    fn toks(&self) -> Vec<Tok> {
+        self.iter_elements()
+            .map(|v| v.toks())
+            .flatten()
+            .collect::<Vec<_>>()
+    }
+
+    fn expand_toks(&self) -> Vec<Tok> {
+        self.iter_elements()
+            .map(|v| v.expand_toks())
+            .flatten()
+            .collect::<Vec<_>>()
+    }
+
 }
 
 impl<'a> Tokens<'a> {
@@ -276,10 +313,6 @@ impl<'a> Tokens<'a> {
             end: vec.len(),
             results: vec![],
         }
-    }
-
-    pub fn is_eof(&self) -> bool {
-        self.tok.len() == 0 || &self.tok[0].tok == &Tok::EOF
     }
 
     pub fn peek(&self) -> Option<&Token> {
@@ -296,30 +329,8 @@ impl<'a> Tokens<'a> {
     //let (i, toks) = crate::lexer::lex_eof(i)?;
     //Ok((i, Tokens::new(&toks[..])))
     //}
-    pub fn to_location(&self) -> Location {
-        if self.tok.len() > 0 {
-            self.tok[0].to_location()
-        } else {
-            Location::new(0, 0, 0, "EOF".into())
-        }
-    }
-
     pub fn result(&mut self, result: Results) {
         self.results.push(result);
-    }
-
-    pub fn toks(&self) -> Vec<Tok> {
-        self.iter_elements()
-            .map(|v| v.toks())
-            .flatten()
-            .collect::<Vec<_>>()
-    }
-
-    pub fn expand_toks(&self) -> Vec<Tok> {
-        self.iter_elements()
-            .map(|v| v.expand_toks())
-            .flatten()
-            .collect::<Vec<_>>()
     }
 
     pub fn to_string(&self) -> String {

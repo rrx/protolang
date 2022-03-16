@@ -119,10 +119,13 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
             }
 
             if let Some(prog) = maybe_prog {
-                //println!("{:?}", (&prog));
+                println!("PROG: {:?}", (&prog));
                 let sexpr = prog.sexpr().unwrap();
-                println!("XXXsexpr {}", &sexpr);
-                interpreter.interpret(prog);
+                println!("SEXPR: {}", &sexpr);
+                match interpreter.evaluate(&prog) {
+                    Ok(r) => println!("R: {:?}", r),
+                    Err(e) => println!("E: {:?}", e)
+                }
             }
         }
         Err(e) => {
