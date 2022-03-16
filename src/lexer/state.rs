@@ -104,7 +104,6 @@ impl<'a> LexerState<'a> {
     }
 
     pub fn push_token(&mut self, mut token: Token<'a>) {
-        //println!("Push: {:?}", &token);
         token.indent = self.indent_size;
         token.s.prepend(
             self.whitespace
@@ -290,11 +289,8 @@ impl<'a> LexerState<'a> {
 
     pub fn lex(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
         let (i, tokens) = many0(lex_next)(span(i))?;
-        //println!("all: {:?}", (&tokens));
         tokens.into_iter().for_each(|token| {
-            //println!("Next: {:?}", (&token));
             self.push(token);
-            //println!("State: {:?}", (&self));
         });
         Ok((i, ()))
     }
@@ -312,7 +308,6 @@ impl<'a> LexerState<'a> {
         self.flush();
         self.push_token(token(Tok::EOF, pos));
         self.eof();
-        //println!("state: {:?}", self);
         Ok((i, ()))
     }
 }

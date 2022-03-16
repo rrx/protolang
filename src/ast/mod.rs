@@ -23,70 +23,6 @@ pub trait Unparse {
 }
 
 #[derive(Debug, Clone)]
-pub enum Stmt {
-    //Assign(ExprNode, ExprNode),
-    //Block(Vec<StmtNode>),
-    //Expr(ExprNode),
-    //Lit(Value),
-    Invalid(String),
-    Empty,
-}
-#[derive(Debug, Clone)]
-pub struct StmtNode {
-    pub s: Surround,
-    pub value: Stmt,
-    pub loc: Location,
-}
-impl StmtNode {
-    pub fn new(value: Stmt, loc: Location) -> Self {
-        Self {
-            s: Surround::default(),
-            value,
-            loc,
-        }
-    }
-}
-impl Unparse for StmtNode {
-    fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(match &self.value {
-            //Stmt::Expr(expr) => expr.unparse(),
-            //Stmt::Lit(lit) => lit.unparse(),
-            //
-            /*
-            Stmt::Assign(ident, expr) => vec![ident.unparse(), vec![Tok::Assign], expr.unparse()]
-                .into_iter()
-                .flatten()
-                .collect(),
-            */
-            //Stmt::Block(stmts) => stmts.iter().map(|s| s.unparse()).flatten().collect(),
-            Stmt::Invalid(s) => vec![Tok::Invalid(s.clone())],
-            Stmt::Empty => vec![],
-        })
-    }
-}
-impl SExpr for StmtNode {
-    fn sexpr(&self) -> SResult<S> {
-        match &self.value {
-            //Stmt::Lit(x) => x.sexpr(),
-            //Stmt::Expr(x) => x.sexpr(),
-            /*
-            Stmt::Assign(ident, expr) => {
-                let sident = ident.sexpr()?;
-                let sexpr = expr.sexpr()?;
-                Ok(S::Cons("def".into(), vec![sident, sexpr]))
-            }
-            */
-            //            Stmt::Block(stmts) => Ok(S::Cons(
-            //               "block".into(),
-            //              stmts.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
-            //         )),
-            Stmt::Invalid(s) => Err(SError::Invalid(s.clone())),
-            Stmt::Empty => Ok(S::Null),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub enum Expr {
     Ident(String),
     LitExpr(Value),
@@ -176,15 +112,6 @@ impl ExprNode {
     */
 }
 
-/*
-impl From<ExprNode> for StmtNode {
-    fn from(item: ExprNode) -> Self {
-        let loc = item.context.loc.clone();
-        Self::new(Stmt::Expr(item), loc)
-    }
-}
-*/
-
 impl From<Lambda> for ExprNode {
     fn from(item: Lambda) -> Self {
         let loc = item.loc.clone();
@@ -208,13 +135,13 @@ impl Unparse for ExprNode {
             Expr::LitExpr(x) => {
                 out.append(&mut x.unparse());
             }
-            Expr::Prefix(unary, expr) => {
+            Expr::Prefix(_unary, expr) => {
                 out.append(&mut expr.unparse());
             }
-            Expr::Postfix(unary, expr) => {
+            Expr::Postfix(_unary, expr) => {
                 out.append(&mut expr.unparse());
             }
-            Expr::Binary(op, left, right) => {
+            Expr::Binary(_op, left, right) => {
                 out.append(&mut left.unparse());
                 out.append(&mut right.unparse());
             }

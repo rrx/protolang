@@ -3,16 +3,13 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-//use crate::ast::*;
 use crate::parser::{tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens};
-//use nom::{error_position, IResult};
 use nom::error::{context, ErrorKind};
 use nom::{multi, sequence};
 
 use crate::ast::{Expr, ExprNode, Operator, OperatorNode, Unparse};
 
-//type RNode<'a> = PResult<Tokens<'a>, ASTNode>;
 type RNode<'a> = PResult<Tokens<'a>, ExprNode>;
 
 type Prec = Option<i8>;
@@ -429,7 +426,6 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let mut node = i.node(t);
             node.context.s.prepend(left.expand_toks());
             node.context.s.append(right.expand_toks());
-            //i.node_success(t)
             Ok((i, node))
         }
 
@@ -442,22 +438,11 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // consume anything inside the parents, bp = 0
             let (i, mut node) = i.E(Some(0), depth + 1)?;
 
-            //let (i, maybe_node) = Eopt(i, Some(0), depth+1)?;
-
-            //let nodes = match maybe_node {
-            //Some(node) => vec![node],
-            //None => vec![]
-            //};
-
-            //let (i, mut maybe_node) = i.E(Some(0), depth+1)?;
-
             //let mut node = ExprNode::new(Expr::List(nodes), &i.to_location());
             println!("prefix paren2: {:?}", (&i.toks(), &node));
             let (i, right) = context("r-paren", tag_token(Tok::RParen))(i)?;
             node.context.s.prepend(left.expand_toks());
             node.context.s.append(right.expand_toks());
-            //node_success(i, t)
-            //let node = i.node(t);
             Ok((i, node))
         }
 
@@ -471,7 +456,6 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         _ => {
             println!("got unexpected token {:?}", &n);
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Tag)))
-            //unreachable!()
         }
     }
 }
