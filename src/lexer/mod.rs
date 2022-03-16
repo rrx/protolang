@@ -349,7 +349,7 @@ mod tests {
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let tokens = lexer.tokens();
             let toks = tokens.expand_toks();
-            assert_eq!(toks, a);//vec![Tok::Comment("// asdf ".into()), Tok::EOF]);
+            assert_eq!(toks, a);
             assert!(lexer_losslessness(q));
         });
     }
@@ -419,67 +419,6 @@ f +
             let toks = tokens.toks();
             a.push(EOF);
             assert_eq!(toks, *a);
-        });
-    }
-
-    #[test]
-    fn surround() {
-        use crate::lexer::surround::Linespace;
-        let r = vec![
-            (".1234", Linespace(0, 0)),
-            (".1234\n", Linespace(0, 0)),
-            ("\n.1234\n", Linespace(0, 0)),
-            ("\n .1234 \n", Linespace(1, 1)),
-            (" \n .1234 \n ", Linespace(1, 1)),
-            (" \n.1234\n ", Linespace(0, 0)),
-            (" \n     \n.1234\n    x    ", Linespace(0, 0)),
-            ("\n.1234 + \n  x\n  y \n", Linespace(0, 1)),
-        ];
-        r.into_iter().for_each(|(q, ls)| {
-            let mut lexer = LexerState::from_str(q).unwrap();
-            let tokens = lexer.tokens();
-            let tok = tokens.tok.get(0).unwrap();
-            println!("q: {:?}", q);
-            println!("tokens: {:?}", tokens);
-            assert_eq!(tok.s.linespace, ls);
-        });
-    }
-
-    #[test]
-    fn indent() {
-        use crate::lexer::surround::Linespace;
-        let r = vec![
-            (".1234", Linespace(0, 0)),
-            (".1234\n", Linespace(0, 0)),
-            //("\n.1234 + \n\t1 + \n\t2\n\t\t+3", Linespace(0, 0)),
-            ("\
-x = 1 ; y = 2;
-
-x =
-    5 +
-
-    1 +
-    2 / (
-        x/y
-    )
-
-y + 1
-    + 5
-", Linespace(0,0)),
-            //("\n .1234 \n", Linespace(1, 1)),
-            //(" \n .1234 \n ", Linespace(1, 1)),
-            //(" \n.1234\n ", Linespace(0, 0)),
-            //(" \n     \n.1234\n    x    ", Linespace(0, 0)),
-            //("\n.1234 + \n  x\n  y \n", Linespace(0, 1)),
-        ];
-        r.into_iter().for_each(|(q, ls)| {
-            let mut lexer = LexerState::from_str(q).unwrap();
-            let tokens = lexer.tokens();
-            let tok = tokens.tok.get(0).unwrap();
-            println!("q: {:?}", q);
-            println!("tokens: {:?}", tokens);
-            //assert_eq!(tok.s.linespace, ls);
-            //assert_eq!(0, lexer.indent_size.len());
         });
     }
 }
