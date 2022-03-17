@@ -117,8 +117,8 @@ impl Callable for Lambda {
         self.params.value.len()
     }
 
-    fn call(&self, _: &mut Interpreter, _: Vec<Value>) -> Result<Value, InterpretError> {
-        Ok(Value::Literal(Tok::IntLiteral(0)))
+    fn call(&self, interp: &mut Interpreter, args: Vec<Value>) -> Result<Value, InterpretError> {
+        interp.call(self, &self.params, &args, &self.expr)
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {

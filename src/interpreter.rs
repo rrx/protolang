@@ -205,6 +205,68 @@ impl Value {
 }
 
 impl Interpreter {
+    pub fn call(&mut self, f: &dyn Callable, params: &Params, args: &Vec<Value>, expr: &ExprNode) -> Result<Value, InterpretError> {
+        if args.len() != f.arity() {
+            return Err(InterpretError::Runtime {
+                message: format!("Mismatched params on function. Expecting {}, got {}", f.arity(), args.len()),
+                line: 0, //name.line(),
+            });
+        }
+
+        let params = params.value.iter().map(|param| {
+            match param.value.try_ident() {
+                Some(ident) => Ok(ident),
+                None => {
+                    Err(InterpretError::Runtime {
+                        message: format!("Invalid Argument on Lambda, got {:?}", param),
+                        line: 0, //name.line(),
+                    })
+                }
+            }
+        }).collect::<Vec<_>>();
+
+        let (p, e): (Vec<Result<_, InterpretError>>, Vec<Result<_, InterpretError>>) = params
+                     .into_iter()
+                     .partition(|p| p.is_ok());//value.try_ident().ok());
+        
+        if e.len() > 0 {
+            return Err(InterpretError::Runtime {
+                message: format!("Invalid Argument on Lambda, got {:?}", e),
+                line: 0, //name.line(),
+            });
+        }
+   
+        // push variables into scope
+        for (p, v) in p.iter().zip(args) {
+            self.globals.define(p.as_ref().unwrap(), &v);
+        }
+
+        // evaluate the result
+        let r = self.evaluate(expr);
+        
+        // pop scope, TODO
+        r
+
+/*
+        match &expr.value {
+            Expr::Callable(c) => {
+                self.interpret(
+                Ok(Value::Literal(Tok::IntLiteral(0)))
+                    
+            }
+            Expr::Lambda(lam) => {
+                Ok(Value::Literal(Tok::IntLiteral(0)))
+            }
+            _ => {
+                Err(InterpretError::Runtime {
+                    message: format!("Invalid Argument on Lambda, got {:?}", e),
+                    line: 0, //name.line(),
+                })
+            }
+        }
+*/
+
+    }
     pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Value, InterpretError> {
         match &expr.value {
             Expr::LitExpr(lit) => Ok(lit.clone()),

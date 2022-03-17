@@ -34,11 +34,11 @@ TODO
 - [x] Pratt parser for arithmetic
 - [x] Lossless parser 
 - [x] sexpr transpiler
-- [ ] REPL
-- [ ] branching
-- [ ] functions
+- [x] interpreter
+- [x] REPL
+- [x] branching
+- [x] functions
 - [ ] recursion
-- [ ] interpreter
 - [ ] module system
 - [ ] basic runtime
 - [ ] basic polymorphism
