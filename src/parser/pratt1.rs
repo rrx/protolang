@@ -6,19 +6,17 @@ use crate::tokens::*;
 use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::{self, into, opt, verify};
-use nom::error::{context, ErrorKind, VerboseError};
+use nom::error::{context, ErrorKind};
 use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
-//use super::{parse_atom, parse_prefix, take_one_any, tag_token};
 use super::*;
-
-//pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("expr", _parse_expr)(i)
 }
+
 pub fn _parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     parse_pratt_expr(i, Precedence::PLowest)
 }
@@ -44,7 +42,7 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
             let (i1, left) = parse_atom(i0)?;
             println!("pratt atom: {:?}", &left.value);
             let (i2, r) = go_parse_pratt_expr(i1, precedence, left)?;
-            println!("pratt rest: {:?}", (&i2, &r));
+            println!("pratt rest: {:?}", (&i2.toks(), &r));
             (i2, r)
         }
     };
@@ -336,6 +334,7 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,20 +476,25 @@ mod tests {
             let (_, _) = lexer.lex_eof(q).unwrap();
             let tokens = lexer.tokens();
             println!("{:?}", (&tokens.toks()));
-            let (i, expr) = parse_expr(tokens).unwrap();
-            println!("EXPR {:?}", (&expr));
-            match expr.sexpr() {
-                Ok(sexpr) => {
-                    println!("sexpr {}", &sexpr);
-                    let rendered = format!("{}", &sexpr);
-                    println!("sexpr {:?}", (&q, &sexpr, &rendered, a));
-                    assert_eq!(rendered, a.to_string());
+            let r = parse_expr(tokens);
+            print_result(&r);
+            match r {
+                Ok((i, expr)) => {
+                    match expr.sexpr() {
+                        Ok(sexpr) => {
+                            let rendered = format!("{}", &sexpr);
+                            assert_eq!(rendered, a.to_string());
+                        }
+                        Err(e) => {
+                            assert!(false);
+                        }
+                    }
                 }
                 Err(e) => {
-                    println!("Error: {:?}", e);
                     assert!(false);
                 }
             }
+
         });
     }
 }

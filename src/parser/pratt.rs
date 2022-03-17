@@ -3,10 +3,10 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::parser::{tag_token, take_one_any, PResult};
+use crate::parser::{tag_token, take_one_any, PResult, print_result};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use nom::error::{context, ErrorKind};
-use nom::{multi, sequence};
+use nom::{branch, multi, sequence};
 
 use crate::ast::{Expr, ExprNode, Operator, OperatorNode, Unparse};
 
@@ -110,7 +110,7 @@ impl Op {
 
         // parse the RHS, making sure the expression we are getting stops when we reach
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
-        let (i, y) = E(i, Some(self.rbp.unwrap() + 1), depth + 1)?;
+        let (i, y) = extra(i, Some(self.rbp.unwrap() + 1), depth + 1)?;
 
         println!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
 
@@ -175,12 +175,12 @@ impl Op {
                 // Ternary operator (x ? y : z)
 
                 // match any precedence
-                let (i, mut y) = E(i, Some(0), depth + 1)?;
+                let (i, mut y) = extra(i, Some(0), depth + 1)?;
 
                 let (i, sep) = tag_token(Tok::Colon)(i)?;
 
                 // match any precedence
-                let (i, z) = E(i, Some(0), depth + 1)?;
+                let (i, z) = extra(i, Some(0), depth + 1)?;
 
                 //let op = Binary::from_location(&i, Operator::Conditional);
                 y.context.s.prepend(token.expand_toks());
@@ -197,7 +197,7 @@ impl Op {
             /*
             Tok::Elvis =>{
                 // match any precedence
-                let (i, y) = E(i, Some(0), depth + 1)?;
+                let (i, y) = extra(i, Some(0), depth + 1)?;
                 let op = Binary::from_location(&i, Operator::Elvis);
                 let value = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
                 let node = i.node(value);
@@ -212,7 +212,7 @@ impl Op {
                 let (i, (nodes, end)) =
                     sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
                 println!("nodes: {:?}", (&nodes, &end));
-                //let (i, maybe_node) = Eopt(i, Some(0), depth+1)?;
+                //let (i, maybe_node) = extra_opt(i, Some(0), depth+1)?;
                 //let nodes = match maybe_node {
                 //Some(node) => vec![node],
                 //None => vec![]
@@ -229,7 +229,7 @@ impl Op {
             _ => {
                 if token.tok.isBinary() {
                     // binary parses the RHS, and returns a binary node
-                    let (i, y) = E(i, self.rbp, depth + 1)?;
+                    let (i, y) = extra(i, self.rbp, depth + 1)?;
                     println!("Binary: {:?} {:?} {:?}", &x, &token, &y);
                     println!("Binary: {:?}", &token);
 
@@ -340,12 +340,12 @@ impl<'a> Tokens<'a> {
         Ok((self, node))
     }
 
-    fn P(self, depth: usize) -> RNode<'a> {
-        P(self, depth)
+    fn primary(self, depth: usize) -> RNode<'a> {
+        primary(self, depth)
     }
 
-    fn E(self, prec: Prec, depth: usize) -> RNode<'a> {
-        E(self, prec, depth)
+    fn extra(self, prec: Prec, depth: usize) -> RNode<'a> {
+        extra(self, prec, depth)
     }
 
     fn G(self, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens<'a>, (i8, ASTNode)> {
@@ -359,7 +359,7 @@ impl<'a> Tokens<'a> {
 
 // Parse a prefix token, and return a full node
 // Could be -(...), or (...), or a variable
-fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
+fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
     // P branch
     // peek
     let n = i.tok[0].tok.clone();
@@ -376,7 +376,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let (i, op_tokens) = take_one_any(i)?;
 
             // parse RHS of prefix operation
-            let (i, t) = i.E(rbp, depth + 1)?;
+            let (i, t) = i.extra(rbp, depth + 1)?;
 
             //let op = n.op().unwrap().op.clone();
             let op = OperatorNode::from_prefix_token(token).unwrap();
@@ -402,7 +402,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // consume LBrace
             let (i, left) = take_one_any(i)?;
             println!("prefix brace1: {:?}", (&i, &n, &left));
-            let (i, t) = i.E(Some(0), depth + 1)?;
+            let (i, t) = i.extra(Some(0), depth + 1)?;
             println!("prefix brace2: {:?}", (&i, &t));
             // consume RBrace
             let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
@@ -418,7 +418,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // consume LBracket
             let (i, left) = take_one_any(i)?;
             println!("prefix bracket1: {:?}", (&i, &n, &left));
-            let (i, t) = i.E(Some(0), depth + 1)?;
+            let (i, t) = i.extra(Some(0), depth + 1)?;
             println!("prefix bracket2: {:?}", (&i, &t));
             // consume RBracket
             let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
@@ -436,7 +436,7 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             println!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
 
             // consume anything inside the parents, bp = 0
-            let (i, mut node) = i.E(Some(0), depth + 1)?;
+            let (i, mut node) = i.extra(Some(0), depth + 1)?;
 
             //let mut node = ExprNode::new(Expr::List(nodes), &i.to_location());
             println!("prefix paren2: {:?}", (&i.toks(), &node));
@@ -453,6 +453,17 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)))
         }
 
+        /*
+        Some(Tok::Invalid(s)) => {
+            // consume invalid
+            let (i, left) = take_one_any(i)?;
+            println!("invalid: {:?}", (&s, left.toks(), i.toks()));
+            let node = i.node(Expr::Invalid(s.clone()));
+            Ok((i, node))
+        }
+        */
+
+
         _ => {
             println!("got unexpected token {:?}", &n);
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Tag)))
@@ -461,16 +472,18 @@ fn P<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 }
 
 // Optional E
-fn Eopt<'a>(i: Tokens<'a>, prec: Prec, depth: usize) -> PResult<Tokens<'a>, Option<ExprNode>> {
-    match E(i.clone(), Some(0), depth + 1) {
+/*
+fn extra_opt<'a>(i: Tokens<'a>, prec: Prec, depth: usize) -> PResult<Tokens<'a>, Option<ExprNode>> {
+    match extra(i.clone(), Some(0), depth + 1) {
         Ok((i, node)) => Ok((i, Some(node))),
         Err(nom::Err::Error(_)) => Ok((i, None)),
         Err(e) => Err(e),
     }
 }
+*/
 
 // Parse an expression, it will return a Node
-fn E<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
+fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     if i.is_eof() {
         return Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)));
     }
@@ -485,7 +498,12 @@ fn E<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
 
     // The P parser starts with an N token, and goes with it, returning a Node
     // This is the first element of the expression
-    let (i, p) = i.P(depth)?;
+    let (i, p) = i.primary(depth)?;
+
+    if i.is_eof() {
+        return Ok((i, p));
+    }
+
     println!(
         "E1 {:?}, prec: {:?}, P:{:?}, depth:{}",
         i.toks(),
@@ -574,20 +592,48 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     }
 }
 
+pub fn peek_eof<'a>(i: Tokens) -> PResult<Tokens, Tokens> {
+    if i.is_eof() {
+        Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)))
+    } else {
+        Ok((i.clone(), i))
+    }
+}
+
 pub fn parse_expr<'a>(i: Tokens) -> RNode {
+    // if we try to parse an expression, and we get EOF, then the response is void
+    //if i.is_eof() {
+        //let loc = i.to_location();
+        //return Ok((i, ExprNode::new(Expr::Void, &loc)));
+    //}
+
     let (i, (mut node, end)) =
-        sequence::pair(parse_expr1, multi::many0(tag_token(Tok::SemiColon)))(i)?;
+        sequence::pair(parse_expr_extra, multi::many0(tag_token(Tok::SemiColon)))(i)?;
     node.context
         .s
         .append(end.into_iter().map(|t| t.expand_toks()).flatten().collect());
-    Ok((i, node))
+
+    // don't consume EOF
+    //if i.is_eof() {
+        //let (i, t) = take_one_any(i)?;
+        //node.context.s.append(t.expand_toks());
+        Ok((i, node))
+    //} else {
+        //Ok((i, node))
+    //}
 }
 
-pub fn parse_expr1<'a>(i: Tokens) -> RNode {
-    i.E(Some(0), 0)
+pub fn parse_expr_extra<'a>(i: Tokens) -> RNode {
+    i.extra(Some(0), 0)
 }
 
 pub fn parse<'a>(i: Tokens) -> RNode {
+    // if we try to parse an expression, and we get EOF, then the response is void
+    if i.is_eof() {
+        let loc = i.to_location();
+        return Ok((i, ExprNode::new(Expr::Void, &loc)));
+    }
+
     match parse_expr(i) {
         Ok((i, node)) => {
             println!("EXPR {:?}", (&node, &i.toks()));
@@ -664,17 +710,43 @@ mod tests {
             i.iter_elements().for_each(|t| {
                 println!("{:?}", t);
             });
-            let (i, node) = i.parse().unwrap();
-            let r = node.unlex();
-            println!("v {:?}", (&v));
-            //println!("NODE {:?}", (&node));
-            println!("NODE {:?}", (&node.unparse()));
-            println!("REM {:?}", (&i.toks()));
-            println!("S {}", &node.sexpr().unwrap());
-            println!("R {}", &r);
-            assert_eq!(v, &r);
-            assert_eq!(0, i.input_len());
+            let r = parse_expr(i);
+            match r {
+                Ok((i, node)) => {
+                    let r = node.unlex();
+                    println!("v {:?}", (&v));
+                    //println!("NODE {:?}", (&node));
+                    println!("NODE {:?}", (&node.unparse()));
+                    println!("REM {:?}", (&i.toks()));
+                    println!("S {}", &node.sexpr().unwrap());
+                    println!("R {}", &r);
+                    assert_eq!(v, &r);
+                    assert_eq!(i.toks(), vec![Tok::EOF]);//i.input_len());
+                    //assert_eq!(0, i.input_len());
+                }
+                _ => assert!(false)
+            }
         });
+    }
+
+    #[test]
+    fn eof() {
+        let pos = crate::tokens::Span::new("".into());
+        let toks = vec![Token::new(Tok::EOF, pos)];
+        let i = Tokens::new(&toks[..]);
+        let (i, node) = parse(i).unwrap();
+        println!("NODE {:?}", (&node));
+        println!("NODE {:?}", (&node.unparse()));
+        println!("rest {:?}", (&i.toks()));
+        assert_eq!(i.toks(), vec![Tok::EOF]);
+        //assert_eq!(i.input_len(), 0);
+
+        // check for void
+        assert!(node.value.is_void());
+        //if let Expr::Void = node.value {
+        //} else {
+            //assert!(false);
+        //}
     }
 
     #[test]
@@ -757,24 +829,29 @@ mod tests {
                 println!("{:?}", t);
             });
 
-            let (i, node) = i.parse().unwrap();
-            println!("NODE {:?}", (&node.unparse()));
-            println!("REM {:?}", (&i.toks()));
-            //println!("S {}", &node.sexpr().unwrap());
-
-            match node.sexpr() {
-                Ok(sexpr) => {
-                    let rendered = format!("{}", &sexpr);
-                    println!("sexpr {:?}", (&q, &sexpr, a));
-                    println!("S {}", &rendered);
-                    assert_eq!(rendered, a.to_string());
+            let r = parse_expr(i);
+            print_result(&r);
+            match r {
+                Ok((i, expr)) => {
+                    println!("NODE {:?}", (&expr.unparse()));
+                    println!("REM {:?}", (&i.toks()));
+                    match expr.sexpr() {
+                        Ok(sexpr) => {
+                            let rendered = format!("{}", &sexpr);
+                            println!("sexpr {:?}", (&q, &sexpr, &rendered, a));
+                            assert_eq!(rendered, a.to_string());
+                            assert_eq!(i.toks(), vec![Tok::EOF]);//i.input_len());
+                            //assert_eq!(0, i.input_len());
+                        }
+                        Err(_) => {
+                            assert!(false);
+                        }
+                    }
                 }
-                Err(e) => {
-                    println!("Error: {:?}", e);
+                Err(_) => {
                     assert!(false);
                 }
             }
-            assert_eq!(0, i.input_len());
         });
     }
 }

@@ -258,6 +258,8 @@ mod tests {
         let r = vec![
             ("$", vec![Invalid("$".into()), EOF]),
             (" $\t", vec![Invalid("$".into()), EOF]),
+            (" $\nasdf", vec![Invalid("$".into()), Ident("asdf".into()), EOF]),
+            ("$\nasdf", vec![Invalid("$".into()), Ident("asdf".into()), EOF]),
         ];
         r.iter().for_each(|(q, a)| {
             let mut lexer = LexerState::from_str_eof(q).unwrap();

@@ -6,16 +6,123 @@ use crate::tokens::*;
 use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::verify;
-use nom::error::{context, ErrorKind, VerboseError};
+use nom::error::{context, ErrorKind, VerboseError, VerboseErrorKind, ContextError};
 use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
+use crate::tokens::TokensList;
 
 mod pratt;
 mod pratt1;
 
-pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
+#[derive(Debug)]
+pub struct DebugError<I> {
+    pub message: String,
+    pub errors: Vec<(I, VerboseErrorKind)>,
+}
+
+
+impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I> {
+    /*
+  fn from_error_kind(input: I, kind: ErrorKind) -> Self {
+    VerboseError {
+      errors: vec![(input, VerboseErrorKind::Nom(kind))],
+    }
+  }
+
+  fn append(input: I, kind: ErrorKind, mut other: Self) -> Self {
+    other.errors.push((input, VerboseErrorKind::Nom(kind)));
+    other
+  }
+
+  fn from_char(input: I, c: char) -> Self {
+    VerboseError {
+      errors: vec![(input, VerboseErrorKind::Char(c))],
+    }
+  }
+  */
+    // on one line, we show the error code and the input that caused it
+    fn from_error_kind(input: I, kind: ErrorKind) -> Self {
+        let message = format!("kind {:?}:\t{:?}\n", kind, input.toks());
+        println!("{}", message);
+        DebugError { message, errors: vec![] }
+    }
+
+    // if combining multiple errors, we show them one after the other
+    fn append(input: I, kind: ErrorKind, other: Self) -> Self {
+        let message = format!("{}kind {:?}:\t{:?}\n", other.message, kind, input.toks());
+        println!("{}", message);
+        DebugError { message, errors: vec![] }
+    }
+
+    fn from_char(input: I, c: char) -> Self {
+        let message = format!("'{}':\t{:?}\n", c, input.toks());
+        println!("{}", message);
+        DebugError { message, errors: vec![] }
+    }
+
+    fn or(self, other: Self) -> Self {
+        let message = format!("{}\tOR\n{}\n", self.message, other.message);
+        println!("{}", message);
+        DebugError { message, errors: vec![] }
+    }
+}
+
+impl<I: std::fmt::Debug + TokensList> ContextError<I> for DebugError<I> {
+    fn add_context(input: I, ctx: &'static str, other: Self) -> Self {
+        let message = format!("{}\"context-{}\":\t{:?}\n", other.message, ctx, input.toks());
+        println!("{}", message);
+        DebugError { message, errors: vec![] }
+    }
+}
+
+pub(crate) type PResult<I, O> = IResult<I, O, DebugError<I>>;
+
+pub fn print_result<I: std::fmt::Debug + crate::tokens::TokensList, O: std::fmt::Debug + crate::sexpr::SExpr>(r: &PResult<I,O>) {
+    match r {
+        Ok((i, expr)) => {
+            println!("Ok({:?})", (&expr));
+            match expr.sexpr() {
+                Ok(sexpr) => {
+                    println!("sexpr {}", &sexpr);
+                    let rendered = format!("{}", &sexpr);
+                    println!("sexpr {:?}", (&sexpr, &rendered));
+                }
+                Err(e) => {
+                    println!("Error: {:?}", e);
+                }
+            }
+        }
+        Err(nom::Err::Error(e)) => {
+            println!("err: {:?}", e);//nom::error::convert_error(*q, e));
+            for (tokens, err) in &e.errors {
+                println!("error {:?}", (&err, tokens.toks()));
+            }
+            //Err(nom::Err::Error(e))
+        }
+        Err(e) => {
+            println!("err: {:?}", e);
+        }
+    }
+}
+
+//pub(crate) fn eof_ok<'a, I, O>(r: PResult<I, O) -> PResult<I,O> {
+    //if i.is_eof() {
+        //return Ok((i.clone(), i));
+    //}
+//}
+
+/*
+pub(crate) fn eof_ok<'a, I: TokensList + Clone, O>(mut f: impl FnMut(I) -> PResult<I, O>) -> impl FnMut(I) -> PResult<I, O> {
+    move |i| {
+        if i.is_eof() {
+            return Ok((i.clone(), i));
+        }
+        f(i)
+    }
+}
+*/
 
 pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     let s = t.into();
@@ -36,9 +143,13 @@ fn parse_whitespace<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
 }
 
 fn parse_whitespace_or_eof<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
+    if i.is_eof() {
+        //return Ok((i.clone(), i));
+    }
     context(
         "parse-whitespace-or-eof",
         alt((parse_whitespace, tag_token(Tok::EOF))),
+        //parse_whitespace,
     )(i)
 }
 
@@ -58,6 +169,11 @@ pub(crate) fn take_one_any(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 fn parse_not_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
+    // don't consume EOF, but return Ok
+    //if i.is_eof() {
+        //return Ok((i.clone(), i));
+    //}
+
     context(
         "not-stmt-end",
         // take anything, even invalid tokens
@@ -69,6 +185,11 @@ fn parse_not_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
+    // don't consume EOF, but return Ok
+    //if i.is_eof() {
+        //return Ok((i.clone(), i));
+    //}
+
     context(
         "parse-stmt-end",
         alt((
@@ -81,10 +202,19 @@ fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 pub fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
+    context("parse-invalid", _parse_invalid)(i)
+}
+pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
+    // Don't return invalid if we have EOF
+    if i.is_eof() {
+        //return Err(Err::Error(error_position!(i, ErrorKind::Eof)));
+    }
+
     let loc = i.to_location().clone();
     let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
     i1.result(Results::Error(format!("Invalid Expr: {}", s), 0));
+    println!("Invalidx: {:?}", &s);
     let mut expr = ExprNode::new(Expr::Invalid(s), &loc);
     // handle trailing newline
     expr.context.s.append(end.expand_toks());
@@ -140,19 +270,20 @@ pub fn parse_program_with_results(i: Tokens) -> (Option<ExprNode>, Vec<Results>)
 
 pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (exprs, end)) = pair(
-        many0(alt((parse_expr, parse_invalid))),
-        many0(parse_whitespace_or_eof),
+        context("program-start", many0(alt((parse_expr, parse_invalid)))),
+        context("program-end", many0(parse_whitespace_or_eof)),
     )(i)?;
+    println!("program has {} expressions", exprs.len());
     let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
     value
         .context
         .s
-        .append(end.iter().map(|v| v.expand_toks()).flatten().collect());
+        .append(end.iter().map(|v| v.expand_toks()).flatten().collect());//filter(|t| t != &Tok::EOF).collect());
     Ok((i, value))
 }
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    context("expr", alt((pratt::parse_expr, ExprNode::parse_lambda)))(i)
+    context("parse-expr", alt((pratt::parse_expr, ExprNode::parse_lambda)))(i)
 }
 
 impl ExprNode {
@@ -299,6 +430,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_whitespace_or_eof() {
+        let pos = crate::tokens::Span::new("".into());
+        let toks = vec![Token::new(Tok::EOF, pos)];
+        let i = Tokens::new(&toks[..]);
+        assert_eq!(parse_whitespace_or_eof(i).unwrap().1.toks(), vec![Tok::EOF]);
+    }
+
+    #[test]
     fn expressions() {
         let r = vec![
             "\n1",
@@ -422,6 +561,38 @@ mod tests {
     }
 
     #[test]
+    fn invalid() {
+        let mut r = vec![
+            ("$", vec![Tok::Invalid("$".into())]),
+            //("$\nasdf", vec![Tok::Invalid("$".into())])
+        ];
+        r.iter_mut().for_each(|(q, a)| {
+            println!("q {:?}", (&q));
+            a.push(Tok::EOF);
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
+            let tokens = lexer.tokens();
+            println!("tokens: {:?}", (&tokens.toks()));
+            let r = parse_program(tokens);
+            //print_result(&r);
+            match r {
+                Ok((rest, prog)) => {
+                    println!("x{:?}", (&rest.toks(), &prog));
+                    assert_eq!(&prog.unparse(), a);
+                    assert!(rest.input_len() == 0);
+                }
+                Err(nom::Err::Error(e)) => {
+                    for (tokens, err) in e.errors {
+                        println!("error {:?}", (&err, tokens.toks()));
+                    }
+                    assert!(false);
+                }
+                _ => unreachable!(),
+            }
+            assert!(parser_losslessness(q));
+        });
+    }
+
+    #[test]
     fn unparse() {
         let r = vec![
             "",
@@ -493,7 +664,7 @@ mod tests {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
             println!("tokens: {:?}", (&tokens.toks()));
-            match parse_assignment_expr(tokens) {
+            match parse_program(tokens) {
                 Ok((rest, prog)) => {
                     println!("x{:?}", (&rest.toks(), &prog));
                     assert!(rest.input_len() == 0);
@@ -502,6 +673,7 @@ mod tests {
                     for (tokens, err) in e.errors {
                         println!("error {:?}", (&err, tokens.toks()));
                     }
+                    assert!(false);
                 }
                 _ => unreachable!(),
             }
