@@ -15,7 +15,7 @@ pub struct Clock;
 
 impl Clock {
     pub fn value() -> Expr {
-        Expr::Callable(Box::new(Self))//Box::new(CallableNode::new(Box::new(Self), Location::new(0, 0, 0, "".into()))))
+        Expr::Callable(Box::new(Self))
     }
 }
 
@@ -53,8 +53,7 @@ pub struct Assert;
 
 impl Assert {
     pub fn value() -> Expr {
-        Expr::Callable(Box::new(Self))//Box::new(CallableNode::new(Box::new(Self), Location::new(0, 0, 0, "".into()))))
-        //Expr::Callable(Box::new(CallableNode::new(Box::new(Self), Location::new(0, 0, 0, "".into()))))
+        Expr::Callable(Box::new(Self))
     }
 }
 

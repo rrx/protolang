@@ -212,7 +212,6 @@ impl SExpr for ExprNode {
                 vec![x.sexpr()?, y.sexpr()?, z.sexpr()?],
             )),
             Chain(_, _) => Ok(S::Cons("chain".into(), vec![])),
-            //Literal(x) => x.sexpr(),
             Literal(x) => Ok(S::Atom(x.unlex())),
             Ident(x) => Ok(S::Atom(x.clone())),
             Binary(op, left, right) => {

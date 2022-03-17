@@ -44,35 +44,36 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
     // on one line, we show the error code and the input that caused it
     fn from_error_kind(input: I, kind: ErrorKind) -> Self {
         let message = format!("kind {:?}:\t{:?}\n", kind, input.toks());
-        println!("{}", message);
+        //println!("{}", message);
         DebugError {
             message,
-            errors: vec![],
+            errors: vec![(input, VerboseErrorKind::Nom(kind))],
         }
     }
 
     // if combining multiple errors, we show them one after the other
-    fn append(input: I, kind: ErrorKind, other: Self) -> Self {
-        let message = format!("{}kind {:?}:\t{:?}\n", other.message, kind, input.toks());
-        println!("{}", message);
-        DebugError {
-            message,
-            errors: vec![],
-        }
+    fn append(input: I, kind: ErrorKind, mut other: Self) -> Self {
+        other.message = format!("{}kind {:?}:\t{:?}\n", other.message, kind, input.toks());
+        //println!("{}", message);
+        //DebugError {
+            //message,
+        other.errors.push((input, VerboseErrorKind::Nom(kind)));
+        //}
+        other
     }
 
     fn from_char(input: I, c: char) -> Self {
         let message = format!("'{}':\t{:?}\n", c, input.toks());
-        println!("{}", message);
+        //println!("{}", message);
         DebugError {
             message,
-            errors: vec![],
+            errors: vec![(input, VerboseErrorKind::Char(c))],
         }
     }
 
     fn or(self, other: Self) -> Self {
         let message = format!("{}\tOR\n{}\n", self.message, other.message);
-        println!("{}", message);
+        //println!("{}", message);
         DebugError {
             message,
             errors: vec![],
@@ -167,9 +168,9 @@ fn parse_whitespace<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
 }
 
 fn parse_whitespace_or_eof<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
-    if i.is_eof() {
+    //if i.is_eof() {
         //return Ok((i.clone(), i));
-    }
+    //}
     context(
         "parse-whitespace-or-eof",
         alt((parse_whitespace, tag_token(Tok::EOF))),
@@ -295,7 +296,7 @@ pub fn parse_program_with_results(i: Tokens) -> (Option<ExprNode>, Vec<Results>)
 pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (exprs, end)) = pair(
         context("program-start", many0(alt((parse_expr, parse_invalid)))),
-        context("program-end", many0(parse_whitespace_or_eof)),
+        context("program-end", combinator::rest),//many0(parse_whitespace_or_eof)),
     )(i)?;
     println!("program has {} expressions", exprs.len());
     println!("program rest {:?}", end); //.expand_toks());
@@ -304,7 +305,7 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     value
         .context
         .s
-        .append(end.iter().map(|v| v.expand_toks()).flatten().collect()); //filter(|t| t != &Tok::EOF).collect());
+        .append(end.expand_toks());//iter().map(|v| v.expand_toks()).flatten().collect()); //filter(|t| t != &Tok::EOF).collect());
     Ok((i, value))
 }
 

@@ -116,13 +116,8 @@ impl Op {
 
         let maybe_op = Operator::from_tok(&token.tok);
         let op = maybe_op.unwrap();
-        //let op = OperatorNode::from_location(&i, operator);
-        //let t = Expr::Binary(op, Box::new(x.clone()), Box::new(y));
-
-        //let op = Binary::from_token(&i.tok[0]).unwrap();
         let (left_op, c) = match &x.value {
             Expr::Chain(op, chain) => {
-                //if false && op == token => {
                 let mut c = chain.clone();
                 c.push(y.clone());
                 (op, c)
@@ -131,14 +126,12 @@ impl Op {
         };
 
         let n = i.peek().unwrap();
-        //let next_tok = n.clone();//.tok.clone();
         println!("chain_LeD2: {:?}", (&left_op, &c, &n));
 
-        //println!("chain: {:?}", (&i.toks()));
         if n.tok == Tok::EOF {
             println!("chain: got eof");
             let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            return i.node_success(t); //Ok((i, t));
+            return i.node_success(t);
         }
 
         let next_op = n.tok.op().unwrap();
@@ -149,7 +142,7 @@ impl Op {
             let (i, t) = self.chain_LeD(i, &y, &n, depth)?;
             println!("chain consume: {:?}", (self.lbp, next_op, &t));
             let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            let op = Operator::End; //Operator::from_tok(&Tok::End);
+            let op = Operator::End;
             let t = Expr::Chain(op, vec![i.node(t0), t]);
             i.node_success(t)
         } else {
@@ -212,11 +205,6 @@ impl Op {
                 let (i, (nodes, end)) =
                     sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
                 println!("nodes: {:?}", (&nodes, &end));
-                //let (i, maybe_node) = extra_opt(i, Some(0), depth+1)?;
-                //let nodes = match maybe_node {
-                //Some(node) => vec![node],
-                //None => vec![]
-                //};
                 let op = Operator::Call;
                 let mut f = x.clone();
                 f.context.s.append(token.expand_toks());
@@ -235,8 +223,6 @@ impl Op {
 
                     let maybe_op = Operator::from_tok(&self.op);
                     let operator = maybe_op.unwrap();
-                    //let op = Binary::from_location(&i, operator);
-                    //let op = Binary::from_token(&token).unwrap();
                     let op = Operator::from_tok(&token.tok).unwrap();
                     let mut left = x.clone();
                     left.context.s.append(token.expand_toks()); //op.unparse());
@@ -248,9 +234,6 @@ impl Op {
                 } else {
                     // postfix just returns, there's no RHS
                     println!("Postfix: {:?}", (&x, &token));
-                    //let (_, maybe_op) = postfix_op(&self.op);
-                    //let operator = maybe_op.unwrap();
-                    //let op = OperatorNode::new(Operator::Bang);
                     let op = OperatorNode::from_postfix_token(token.clone()).unwrap();
                     let t = Expr::Postfix(op, Box::new(x.clone()));
                     let mut node = i.node(t);
@@ -376,7 +359,6 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // parse RHS of prefix operation
             let (i, t) = i.extra(rbp, depth + 1)?;
 
-            //let op = n.op().unwrap().op.clone();
             let op = OperatorNode::from_prefix_token(token).unwrap();
             let value = Expr::Prefix(op, Box::new(t));
             let mut node = i.node(value);
@@ -436,7 +418,6 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // consume anything inside the parents, bp = 0
             let (i, mut node) = i.extra(Some(0), depth + 1)?;
 
-            //let mut node = ExprNode::new(Expr::List(nodes), &i.to_location());
             println!("prefix paren2: {:?}", (&i.toks(), &node));
             let (i, right) = context("r-paren", tag_token(Tok::RParen))(i)?;
             node.context.s.prepend(left.expand_toks());
@@ -454,10 +435,6 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::Invalid(s)) => {
             // consume invalid
             ExprNode::parse_invalid(i)
-            //let (i, left) = take_one_any(i)?;
-            //println!("invalid: {:?}", (&s, left.toks(), i.toks()));
-            //let node = i.node(Expr::Invalid(s.clone()));
-            //Ok((i, node))
         }
 
         _ => {
@@ -466,17 +443,6 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         }
     }
 }
-
-// Optional E
-/*
-fn extra_opt<'a>(i: Tokens<'a>, prec: Prec, depth: usize) -> PResult<Tokens<'a>, Option<ExprNode>> {
-    match extra(i.clone(), Some(0), depth + 1) {
-        Ok((i, node)) => Ok((i, Some(node))),
-        Err(nom::Err::Error(_)) => Ok((i, None)),
-        Err(e) => Err(e),
-    }
-}
-*/
 
 // Parse an expression, it will return a Node
 fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
@@ -536,11 +502,7 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     if i.is_eof() {
         return Ok((i, (r, t)));
     }
-    let token = &i.tok[0]; //.tok.clone();
-                           //if token.tok == Tok::EOF {
-                           //println!("got eof");
-                           //return Ok((i, (r, t)));
-                           //}
+    let token = &i.tok[0]; 
 
     // get op from left
     // it could be any token
@@ -597,26 +559,13 @@ pub fn peek_eof<'a>(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 pub fn parse_expr<'a>(i: Tokens) -> RNode {
-    // if we try to parse an expression, and we get EOF, then the response is void
-    //if i.is_eof() {
-    //let loc = i.to_location();
-    //return Ok((i, ExprNode::new(Expr::Void, &loc)));
-    //}
-
     let (i, (mut node, end)) =
         sequence::pair(parse_expr_extra, multi::many0(tag_token(Tok::SemiColon)))(i)?;
     node.context
         .s
         .append(end.into_iter().map(|t| t.expand_toks()).flatten().collect());
 
-    // don't consume EOF
-    //if i.is_eof() {
-    //let (i, t) = take_one_any(i)?;
-    //node.context.s.append(t.expand_toks());
     Ok((i, node))
-    //} else {
-    //Ok((i, node))
-    //}
 }
 
 pub fn parse_expr_extra<'a>(i: Tokens) -> RNode {
