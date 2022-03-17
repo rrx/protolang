@@ -350,7 +350,7 @@ impl ExprNode {
         let tok = &token.tok;
 
         if let Ok(lit) = tok.try_into() {
-            let mut litnode = ExprNode::new(Expr::Literal(lit), &token.to_location());
+            let mut litnode = ExprNode::new(lit, &token.to_location());
             litnode.context.s.prepend(token.s.pre.clone());
             litnode.context.s.append(token.s.post.clone());
             Ok((i1, litnode))

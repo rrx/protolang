@@ -117,11 +117,11 @@ impl Op {
         let maybe_op = Operator::from_tok(&token.tok);
         let op = maybe_op.unwrap();
         //let op = OperatorNode::from_location(&i, operator);
-        //let t = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
+        //let t = Expr::Binary(op, Box::new(x.clone()), Box::new(y));
 
         //let op = Binary::from_token(&i.tok[0]).unwrap();
         let (left_op, c) = match &x.value {
-            PrattValue::Chain(op, chain) => {
+            Expr::Chain(op, chain) => {
                 //if false && op == token => {
                 let mut c = chain.clone();
                 c.push(y.clone());
@@ -137,7 +137,7 @@ impl Op {
         //println!("chain: {:?}", (&i.toks()));
         if n.tok == Tok::EOF {
             println!("chain: got eof");
-            let t = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+            let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             return i.node_success(t); //Ok((i, t));
         }
 
@@ -148,12 +148,12 @@ impl Op {
             let (i, _) = take_one_any(i.clone())?;
             let (i, t) = self.chain_LeD(i, &y, &n, depth)?;
             println!("chain consume: {:?}", (self.lbp, next_op, &t));
-            let t0 = PrattValue::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+            let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             let op = Operator::End; //Operator::from_tok(&Tok::End);
-            let t = PrattValue::Chain(op, vec![i.node(t0), t]);
+            let t = Expr::Chain(op, vec![i.node(t0), t]);
             i.node_success(t)
         } else {
-            let t = PrattValue::Chain(left_op.clone(), c);
+            let t = Expr::Chain(left_op.clone(), c);
             println!("chain drop: {:?}", (self.lbp, next_op, &t));
             i.node_success(t)
         }
@@ -185,7 +185,7 @@ impl Op {
                 //let op = Binary::from_location(&i, Operator::Conditional);
                 y.context.s.prepend(token.expand_toks());
                 y.context.s.append(sep.expand_toks());
-                let value = PrattValue::Ternary(
+                let value = Expr::Ternary(
                     Operator::Conditional,
                     Box::new(x.clone()),
                     Box::new(y),
@@ -199,7 +199,7 @@ impl Op {
                 // match any precedence
                 let (i, y) = extra(i, Some(0), depth + 1)?;
                 let op = Binary::from_location(&i, Operator::Elvis);
-                let value = PrattValue::Binary(op, Box::new(x.clone()), Box::new(y));
+                let value = Expr::Binary(op, Box::new(x.clone()), Box::new(y));
                 let node = i.node(value);
                 (i, node)
             }
@@ -242,7 +242,7 @@ impl Op {
                     left.context.s.append(token.expand_toks()); //op.unparse());
                     let right = y;
 
-                    let t = PrattValue::Binary(op, Box::new(left), Box::new(right));
+                    let t = Expr::Binary(op, Box::new(left), Box::new(right));
                     let node = i.node(t);
                     (i, node)
                 } else {
@@ -252,7 +252,7 @@ impl Op {
                     //let operator = maybe_op.unwrap();
                     //let op = OperatorNode::new(Operator::Bang);
                     let op = OperatorNode::from_postfix_token(token.clone()).unwrap();
-                    let t = PrattValue::Postfix(op, Box::new(x.clone()));
+                    let t = Expr::Postfix(op, Box::new(x.clone()));
                     let mut node = i.node(t);
                     node.context.s.append(token.expand_toks());
 
@@ -326,16 +326,14 @@ impl Tok {
     }
 }
 
-pub type PrattValue = Expr;
-
 pub type ASTNode = ExprNode;
 
 impl<'a> Tokens<'a> {
-    fn node(&self, value: PrattValue) -> ASTNode {
+    fn node(&self, value: Expr) -> ASTNode {
         ASTNode::new(value, &self.to_location())
     }
 
-    fn node_success(self, value: PrattValue) -> RNode<'a> {
+    fn node_success(self, value: Expr) -> RNode<'a> {
         let node = ASTNode::new(value, &self.to_location());
         Ok((self, node))
     }
@@ -380,7 +378,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
             //let op = n.op().unwrap().op.clone();
             let op = OperatorNode::from_prefix_token(token).unwrap();
-            let value = PrattValue::Prefix(op, Box::new(t));
+            let value = Expr::Prefix(op, Box::new(t));
             let mut node = i.node(value);
             node.context.s.prepend(op_tokens.expand_toks());
             Ok((i, node))
@@ -406,7 +404,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             println!("prefix brace2: {:?}", (&i, &t));
             // consume RBrace
             let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
-            let t = PrattValue::Block(vec![t]);
+            let t = Expr::Block(vec![t]);
             let mut node = i.node(t);
             node.context.s.prepend(left.expand_toks());
             node.context.s.append(right.expand_toks());
@@ -422,7 +420,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             println!("prefix bracket2: {:?}", (&i, &t));
             // consume RBracket
             let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
-            let t = PrattValue::List(vec![t]);
+            let t = Expr::List(vec![t]);
             let mut node = i.node(t);
             node.context.s.prepend(left.expand_toks());
             node.context.s.append(right.expand_toks());

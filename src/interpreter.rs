@@ -283,7 +283,7 @@ impl Interpreter {
     }
     pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Value, InterpretError> {
         match &expr.value {
-            Expr::Literal(lit) => Ok(lit.clone()),
+            Expr::Literal(lit) => Ok(Value::Literal(lit.clone())),//lit.try_into()?.clone()),
             Expr::Ident(ident) => self.globals.get(ident),
             Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
