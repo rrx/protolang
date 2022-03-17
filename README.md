@@ -36,8 +36,8 @@ TODO
 - [x] sexpr transpiler
 - [x] interpreter
 - [x] REPL
-- [x] branching
 - [x] functions
+- [ ] branching and control flow
 - [ ] recursion
 - [ ] module system
 - [ ] basic runtime

@@ -60,4 +60,5 @@ asdf
 
 f = \x -> x^2
 assert(4 == f(2))
-
+f2 = \x -> f(x)
+f2(3)
