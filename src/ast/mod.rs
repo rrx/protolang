@@ -5,9 +5,6 @@ use std::fmt;
 mod function;
 pub use function::{Callable, CallableNode, Lambda, Params};
 
-mod value;
-pub use value::Value;
-
 mod node;
 pub use node::{Context, NodeContext};
 
