@@ -259,7 +259,7 @@ impl Interpreter {
         }
 
         // evaluate the result
-        let r = self.evaluate(expr)?;
+        let r = self.evaluate(&expr.value)?;
 
         // pop scope, TODO
         let mut out = expr.clone();
@@ -286,37 +286,37 @@ impl Interpreter {
                 }
         */
     }
-    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Expr, InterpretError> {
-        match expr.value.clone() {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Expr, InterpretError> {
+        match expr.clone() {
             Expr::Literal(lit) => Ok(Expr::Literal(lit)),//ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
             Expr::Ident(ident) => self.globals.get(&ident),
             Expr::Prefix(prefix, expr) => {
-                let eval = self.evaluate(&expr)?;
+                let eval = self.evaluate(&expr.value)?;
                 let eval = eval.prefix(&prefix.value)?;
                 Ok(eval)
             }
             Expr::Postfix(op, expr) => {
-                let eval = self.evaluate(&expr)?;
+                let eval = self.evaluate(&expr.value)?;
                 let eval = eval.postfix(&op.value)?;
                 Ok(eval)
             }
             Expr::Binary(op, left, right) => {
                 if op == Operator::Assign {
                     return if let Some(ident) = left.value.try_ident() {
-                        let eval_right = self.evaluate(&right)?;
+                        let eval_right = self.evaluate(&right.value)?;
                         self.globals.define(&ident, &eval_right);
                         println!("Assign {:?} to {}", &eval_right, &ident);
                         Ok(eval_right)
                     } else {
                         Err(InterpretError::Runtime {
                             message: format!("Invalid Assignment, LHS must be identifier"),
-                            line: expr.context.loc.line,
+                            line: left.context.loc.line,
                         })
                     };
                 }
 
-                let eval_left = self.evaluate(&left)?;
-                let eval_right = self.evaluate(&right)?;
+                let eval_left = self.evaluate(&left.value)?;
+                let eval_right = self.evaluate(&right.value)?;
                 match op {
                     Operator::Plus => eval_left.plus(&eval_right),
                     Operator::Minus => eval_left.minus(&eval_right),
@@ -331,14 +331,14 @@ impl Interpreter {
                     Operator::NotEqual => eval_left.ne(&eval_right),
                     _ => Err(InterpretError::Runtime {
                         message: format!("Unimplemented expression op: Operator::{:?}", op),
-                        line: expr.context.loc.line,
+                        line: left.context.loc.line,
                     }),
                 }
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 for mut e in elements.clone() {
-                    e.value = self.evaluate(&e)?;
+                    e.value = self.evaluate(&e.value)?;
                     eval_elements.push(e);//self.evaluate(&e)?);
                 }
                 Ok(Expr::List(eval_elements))
@@ -348,7 +348,7 @@ impl Interpreter {
                 println!("Callable({:?})", &e);
                 Err(InterpretError::Runtime {
                     message: format!("Unimplemented callable::{:?}", &e),
-                    line: expr.context.loc.line,
+                    line: 0,//expr.context.loc.line,
                 })
             }
 
@@ -373,7 +373,7 @@ impl Interpreter {
                     Some(Expr::Callable(c)) => {
                         let mut eval_args = vec![];
                         for arg in args {
-                            eval_args.push(self.evaluate(&arg)?);
+                            eval_args.push(self.evaluate(&arg.value)?);
                         }
                         println!("Calling {:?}({:?})", c, eval_args);
                         let result = c.call(self, eval_args);
@@ -391,7 +391,7 @@ impl Interpreter {
                 let mut result = Expr::List(vec![]);
 
                 for expr in exprs {
-                    let r = self.evaluate(&expr);
+                    let r = self.evaluate(&expr.value);
                     match r {
                         Ok(v) => {
                             result = v;
@@ -408,7 +408,7 @@ impl Interpreter {
                 let mut result = Expr::List(vec![]);
 
                 for expr in exprs {
-                    let r = self.evaluate(&expr);
+                    let r = self.evaluate(&expr.value);
                     match r {
                         Ok(v) => {
                             result = v;
@@ -423,12 +423,12 @@ impl Interpreter {
 
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
-                    let r = self.evaluate(&x)?;
+                    let r = self.evaluate(&x.value)?;
                     let b = Expr::check_bool(&r)?;
                     if b {
-                        self.evaluate(&y)
+                        self.evaluate(&y.value)
                     } else {
-                        self.evaluate(&z)
+                        self.evaluate(&z.value)
                     }
                 }
                 _ => unimplemented!(),
@@ -460,11 +460,11 @@ impl Interpreter {
             }
         }
 
-        self.evaluate(&expr)
+        self.evaluate(&expr.value)
     }
 
     pub fn interpret(&mut self, program: ExprNode) {
-        match self.evaluate(&program) {
+        match self.evaluate(&program.value) {
             Ok(v) => {
                 println!("Result: {:?}", &v);
             }

@@ -122,7 +122,7 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
                 println!("PROG: {:?}", (&prog));
                 let sexpr = prog.sexpr().unwrap();
                 println!("SEXPR: {}", &sexpr);
-                match interpreter.evaluate(&prog) {
+                match interpreter.evaluate(&prog.value) {
                     Ok(r) => println!("R: {:?}", r),
                     Err(e) => println!("E: {:?}", e),
                 }
