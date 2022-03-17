@@ -25,7 +25,7 @@ pub trait Unparse {
 #[derive(Debug, Clone)]
 pub enum Expr {
     Ident(String),
-    Literal(Value),
+    Literal(Tok),
     Prefix(OperatorNode, Box<ExprNode>),
     Postfix(OperatorNode, Box<ExprNode>),
     Binary(Operator, Box<ExprNode>, Box<ExprNode>),
@@ -130,6 +130,21 @@ impl From<Lambda> for ExprNode {
     }
 }
 
+impl TryFrom<&Tok> for Expr {
+    type Error = ();
+    fn try_from(value: &Tok) -> Result<Self, Self::Error> {
+        match value {
+            Tok::IntLiteral(_) => Ok(Expr::Literal(value.clone())),
+            Tok::FloatLiteral(_) => Ok(Expr::Literal(value.clone())),
+            Tok::StringLiteral(_) => Ok(Expr::Literal(value.clone())),
+            Tok::BoolLiteral(_) => Ok(Expr::Literal(value.clone())),
+            Tok::Null => Ok(Expr::Void),
+            //Tok::Invalid(s) => Some(Expr::Invalid(s.clone())),
+            _ => Err(()),
+        }
+    }
+}
+
 impl Unparse for ExprNode {
     fn unparse(&self) -> Vec<Tok> {
         let mut out = vec![];
@@ -144,7 +159,8 @@ impl Unparse for ExprNode {
                 out.push(Tok::Ident(x.clone()));
             }
             Expr::Literal(x) => {
-                out.append(&mut x.unparse());
+                out.push(x.clone());
+                //out.append(&mut x.unparse());
             }
             Expr::Prefix(_unary, expr) => {
                 out.append(&mut expr.unparse());
@@ -199,7 +215,8 @@ impl SExpr for ExprNode {
                 vec![x.sexpr()?, y.sexpr()?, z.sexpr()?],
             )),
             Chain(_, _) => Ok(S::Cons("chain".into(), vec![])),
-            Literal(x) => x.sexpr(),
+            //Literal(x) => x.sexpr(),
+            Literal(x) => Ok(S::Atom(x.unlex())),
             Ident(x) => Ok(S::Atom(x.clone())),
             Binary(op, left, right) => {
                 let sleft = left.sexpr()?;

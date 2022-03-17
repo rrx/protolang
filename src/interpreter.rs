@@ -6,7 +6,7 @@ use std::result::Result;
 
 #[derive(Debug)]
 pub struct Environment {
-    values: HashMap<String, Value>,
+    values: HashMap<String, Expr>,
 }
 impl Default for Environment {
     fn default() -> Self {
@@ -16,10 +16,10 @@ impl Default for Environment {
     }
 }
 impl Environment {
-    pub fn define(&mut self, name: &str, value: &Value) {
+    pub fn define(&mut self, name: &str, value: &Expr) {
         self.values.insert(name.to_string(), value.clone());
     }
-    pub fn get(&self, name: &str) -> Result<Value, InterpretError> {
+    pub fn get(&self, name: &str) -> Result<Expr, InterpretError> {
         if let Some(value) = self.values.get(name) {
             return Ok(value.clone());
         }
@@ -53,7 +53,7 @@ pub enum InterpretError {
     Runtime { message: String, line: usize },
 }
 
-impl Value {
+impl Expr {
     pub fn is_number(&self) -> bool {
         if let Self::Literal(tok) = self {
             match tok {
@@ -79,12 +79,12 @@ impl Value {
             Self::Literal(t) => match t {
                 Tok::BoolLiteral(b) => Ok(*b),
                 _ => Err(InterpretError::Runtime {
-                    message: format!("Expecting a bool: {}", self.unlex()),
+                    message: format!("Expecting a bool: {}", t.unlex()),
                     line: 0,
                 }),
             },
             _ => Err(InterpretError::Runtime {
-                message: format!("Expecting a literal: {}", self.unlex()),
+                message: format!("Expecting a literal: {:?}", self),
                 line: 0,
             }),
         }
@@ -96,28 +96,30 @@ impl Value {
                 Tok::IntLiteral(u) => Ok(*u as f64),
                 Tok::FloatLiteral(f) => Ok(*f),
                 _ => Err(InterpretError::Runtime {
-                    message: format!("Expecting a number: {}", self.unlex()),
+                    message: format!("Expecting a number: {:?}", self),
                     line: 0,
                 }),
             },
             Self::Callable(e) => Err(InterpretError::Runtime {
-                message: format!(
-                    "Expecting a number, got a lambda: {} on line:{}, column:{}, fragment:{}",
-                    self.unlex(),
-                    e.loc.line,
-                    e.loc.col,
-                    e.loc.fragment
-                ),
-                line: e.loc.line,
+                message: format!("Expecting a callable: {:?}", self),
+                line: 0,
+                //message: format!(
+                    //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
+                    //self,
+                    //e.loc.line,
+                    //e.loc.col,
+                    //e.loc.fragment
+                //),
+                //line: e.loc.line,
             }),
             _ => Err(InterpretError::Runtime {
-                message: format!("Expecting a number: {}", self.unlex()),
+                message: format!("Expecting a number: {:?}", self),
                 line: 0,
             }),
         }
     }
 
-    fn check_numbers(a: &Value, b: &Value) -> Result<(f64, f64), InterpretError> {
+    fn check_numbers(a: &Expr, b: &Expr) -> Result<(f64, f64), InterpretError> {
         let a = a.check_number()?;
         let b = b.check_number()?;
         Ok((a, b))
@@ -209,9 +211,9 @@ impl Interpreter {
         &mut self,
         f: &dyn Callable,
         params: &Params,
-        args: &Vec<Value>,
+        args: &Vec<Expr>,
         expr: &ExprNode,
-    ) -> Result<Value, InterpretError> {
+    ) -> Result<ExprNode, InterpretError> {
         if args.len() != f.arity() {
             return Err(InterpretError::Runtime {
                 message: format!(
@@ -257,20 +259,23 @@ impl Interpreter {
         }
 
         // evaluate the result
-        let r = self.evaluate(expr);
+        let r = self.evaluate(expr)?;
 
         // pop scope, TODO
-        r
+        let mut out = expr.clone();
+        out.value = r;
+        Ok(out)
+        //r
 
         /*
                 match &expr.value {
                     Expr::Callable(c) => {
                         self.interpret(
-                        Ok(Value::Literal(Tok::IntLiteral(0)))
+                        Ok(ExprNode::Literal(Tok::IntLiteral(0)))
 
                     }
                     Expr::Lambda(lam) => {
-                        Ok(Value::Literal(Tok::IntLiteral(0)))
+                        Ok(ExprNode::Literal(Tok::IntLiteral(0)))
                     }
                     _ => {
                         Err(InterpretError::Runtime {
@@ -281,10 +286,10 @@ impl Interpreter {
                 }
         */
     }
-    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Value, InterpretError> {
-        match &expr.value {
-            Expr::Literal(lit) => Ok(Value::Literal(lit.clone())),//lit.try_into()?.clone()),
-            Expr::Ident(ident) => self.globals.get(ident),
+    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Expr, InterpretError> {
+        match expr.value.clone() {
+            Expr::Literal(lit) => Ok(Expr::Literal(lit)),//ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
+            Expr::Ident(ident) => self.globals.get(&ident),
             Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
                 let eval = eval.prefix(&prefix.value)?;
@@ -296,7 +301,7 @@ impl Interpreter {
                 Ok(eval)
             }
             Expr::Binary(op, left, right) => {
-                if op == &Operator::Assign {
+                if op == Operator::Assign {
                     return if let Some(ident) = left.value.try_ident() {
                         let eval_right = self.evaluate(&right)?;
                         self.globals.define(&ident, &eval_right);
@@ -332,10 +337,11 @@ impl Interpreter {
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
-                for e in elements {
-                    eval_elements.push(self.evaluate(&e)?);
+                for mut e in elements.clone() {
+                    e.value = self.evaluate(&e)?;
+                    eval_elements.push(e);//self.evaluate(&e)?);
                 }
-                Ok(Value::List(eval_elements))
+                Ok(Expr::List(eval_elements))
             }
 
             Expr::Callable(e) => {
@@ -348,12 +354,12 @@ impl Interpreter {
 
             Expr::Lambda(e) => {
                 println!("Lambda({:?})", &e);
-                Ok(Value::Callable(e.node()))
+                Ok(Expr::Callable(Box::new(e)))//.node()))
             }
 
             Expr::Index(_ident, _args) => {
                 // TODO: not yet implemented
-                Ok(Value::Literal(Tok::IntLiteral(0)))
+                Ok(Expr::Literal(Tok::IntLiteral(0)))
             }
 
             Expr::Apply(expr, args) => {
@@ -364,13 +370,13 @@ impl Interpreter {
 
                 //let env = Environment::default();
                 match f {
-                    Some(Value::Callable(c)) => {
+                    Some(Expr::Callable(c)) => {
                         let mut eval_args = vec![];
                         for arg in args {
-                            eval_args.push(self.evaluate(arg)?);
+                            eval_args.push(self.evaluate(&arg)?);
                         }
                         println!("Calling {:?}({:?})", c, eval_args);
-                        let result = c.value.call(self, eval_args);
+                        let result = c.call(self, eval_args);
                         println!("Call Result {:?}", &result);
                         result
                     }
@@ -382,10 +388,10 @@ impl Interpreter {
             }
 
             Expr::Block(exprs) => {
-                let mut result = Value::List(vec![]);
+                let mut result = Expr::List(vec![]);
 
                 for expr in exprs {
-                    let r = self.evaluate(expr);
+                    let r = self.evaluate(&expr);
                     match r {
                         Ok(v) => {
                             result = v;
@@ -399,10 +405,10 @@ impl Interpreter {
             }
 
             Expr::Program(exprs) => {
-                let mut result = Value::List(vec![]);
+                let mut result = Expr::List(vec![]);
 
                 for expr in exprs {
-                    let r = self.evaluate(expr);
+                    let r = self.evaluate(&expr);
                     match r {
                         Ok(v) => {
                             result = v;
@@ -417,27 +423,27 @@ impl Interpreter {
 
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
-                    let r = self.evaluate(x)?;
-                    let b = Value::check_bool(&r)?;
+                    let r = self.evaluate(&x)?;
+                    let b = Expr::check_bool(&r)?;
                     if b {
-                        self.evaluate(y)
+                        self.evaluate(&y)
                     } else {
-                        self.evaluate(z)
+                        self.evaluate(&z)
                     }
                 }
                 _ => unimplemented!(),
             },
 
-            Expr::Chain(_, _) => Ok(Value::Literal(Tok::IntLiteral(0))),
+            Expr::Chain(_, _) => Ok(Expr::Literal(Tok::IntLiteral(0))),
             Expr::Invalid(s) => Err(InterpretError::Runtime {
                 message: format!("Invalid expr: {:?}", s),
                 line: 0,
             }),
-            Expr::Void => Ok(Value::Null),
+            Expr::Void => Ok(Expr::Void),
         }
     }
 
-    pub fn execute(&mut self, expr: ExprNode) -> Result<Value, InterpretError> {
+    pub fn execute(&mut self, expr: ExprNode) -> Result<Expr, InterpretError> {
         println!("EXPR: {:?}", &expr);
         println!("EXPR-unparse: {:?}", expr.unparse());
         println!("EXPR-unlex: {:?}", expr.unlex());

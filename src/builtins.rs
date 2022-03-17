@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Callable, CallableNode, Value},
+    ast::{Callable, CallableNode, ExprNode, Expr},
     interpreter::{InterpretError, Interpreter},
     lexer::Location,
     tokens::Tok,
@@ -14,11 +14,8 @@ use std::{
 pub struct Clock;
 
 impl Clock {
-    pub fn value() -> Value {
-        Value::Callable(CallableNode::new(
-            Box::new(Self),
-            Location::new(0, 0, 0, "".into()),
-        ))
+    pub fn value() -> Expr {
+        Expr::Callable(Box::new(Self))//Box::new(CallableNode::new(Box::new(Self), Location::new(0, 0, 0, "".into()))))
     }
 }
 
@@ -33,13 +30,13 @@ impl Callable for Clock {
         0
     }
 
-    fn call(&self, _: &mut Interpreter, _: Vec<Value>) -> Result<Value, InterpretError> {
+    fn call(&self, _: &mut Interpreter, _: Vec<Expr>) -> Result<Expr, InterpretError> {
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("we mustn't travel back in time")
             .as_secs_f64();
 
-        Ok(Value::Literal(Tok::FloatLiteral(secs)))
+        Ok(Expr::Literal(Tok::FloatLiteral(secs)))
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {
@@ -55,11 +52,9 @@ impl Callable for Clock {
 pub struct Assert;
 
 impl Assert {
-    pub fn value() -> Value {
-        Value::Callable(CallableNode::new(
-            Box::new(Self),
-            Location::new(0, 0, 0, "".into()),
-        ))
+    pub fn value() -> Expr {
+        Expr::Callable(Box::new(Self))//Box::new(CallableNode::new(Box::new(Self), Location::new(0, 0, 0, "".into()))))
+        //Expr::Callable(Box::new(CallableNode::new(Box::new(Self), Location::new(0, 0, 0, "".into()))))
     }
 }
 
@@ -74,11 +69,11 @@ impl Callable for Assert {
         1
     }
 
-    fn call(&self, _: &mut Interpreter, args: Vec<Value>) -> Result<Value, InterpretError> {
+    fn call(&self, _: &mut Interpreter, args: Vec<Expr>) -> Result<Expr, InterpretError> {
         let v = args.get(0).unwrap();
-        if let Value::Literal(Tok::BoolLiteral(b)) = v {
+        if let Expr::Literal(Tok::BoolLiteral(b)) = v {
             if *b {
-                Ok(Value::Null)
+                Ok(Expr::Void)
             } else {
                 Err(InterpretError::Runtime {
                     message: format!("Assertion error"),
