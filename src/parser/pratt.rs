@@ -3,7 +3,7 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::parser::{tag_token, take_one_any, PResult, print_result};
+use crate::parser::{print_result, tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use nom::error::{context, ErrorKind};
 use nom::{branch, multi, sequence};
@@ -601,8 +601,8 @@ pub fn peek_eof<'a>(i: Tokens) -> PResult<Tokens, Tokens> {
 pub fn parse_expr<'a>(i: Tokens) -> RNode {
     // if we try to parse an expression, and we get EOF, then the response is void
     //if i.is_eof() {
-        //let loc = i.to_location();
-        //return Ok((i, ExprNode::new(Expr::Void, &loc)));
+    //let loc = i.to_location();
+    //return Ok((i, ExprNode::new(Expr::Void, &loc)));
     //}
 
     let (i, (mut node, end)) =
@@ -613,11 +613,11 @@ pub fn parse_expr<'a>(i: Tokens) -> RNode {
 
     // don't consume EOF
     //if i.is_eof() {
-        //let (i, t) = take_one_any(i)?;
-        //node.context.s.append(t.expand_toks());
-        Ok((i, node))
+    //let (i, t) = take_one_any(i)?;
+    //node.context.s.append(t.expand_toks());
+    Ok((i, node))
     //} else {
-        //Ok((i, node))
+    //Ok((i, node))
     //}
 }
 
@@ -719,10 +719,10 @@ mod tests {
                     println!("S {}", &node.sexpr().unwrap());
                     println!("R {}", &r);
                     assert_eq!(v, &r);
-                    assert_eq!(i.toks(), vec![Tok::EOF]);//i.input_len());
-                    //assert_eq!(0, i.input_len());
+                    assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
+                                                          //assert_eq!(0, i.input_len());
                 }
-                _ => assert!(false)
+                _ => assert!(false),
             }
         });
     }
@@ -743,7 +743,7 @@ mod tests {
         assert!(node.value.is_void());
         //if let Expr::Void = node.value {
         //} else {
-            //assert!(false);
+        //assert!(false);
         //}
     }
 
@@ -838,8 +838,8 @@ mod tests {
                             let rendered = format!("{}", &sexpr);
                             println!("sexpr {:?}", (&q, &sexpr, &rendered, a));
                             assert_eq!(rendered, a.to_string());
-                            assert_eq!(i.toks(), vec![Tok::EOF]);//i.input_len());
-                            //assert_eq!(0, i.input_len());
+                            assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
+                                                                  //assert_eq!(0, i.input_len());
                         }
                         Err(_) => {
                             assert!(false);

@@ -263,9 +263,8 @@ pub trait TokensList {
     fn is_eof(&self) -> bool;
     fn to_location(&self) -> Location;
     fn toks(&self) -> Vec<Tok>;
-    fn expand_toks(&self) -> Vec<Tok>; 
+    fn expand_toks(&self) -> Vec<Tok>;
 }
-
 
 #[derive(Clone, Debug)]
 #[repr(C)]
@@ -302,7 +301,6 @@ impl<'a> TokensList for Tokens<'a> {
             .flatten()
             .collect::<Vec<_>>()
     }
-
 }
 
 impl<'a> Tokens<'a> {

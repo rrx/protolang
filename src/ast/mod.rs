@@ -25,7 +25,7 @@ pub trait Unparse {
 #[derive(Debug, Clone)]
 pub enum Expr {
     Ident(String),
-    LitExpr(Value),
+    Literal(Value),
     Prefix(OperatorNode, Box<ExprNode>),
     Postfix(OperatorNode, Box<ExprNode>),
     Binary(Operator, Box<ExprNode>, Box<ExprNode>),
@@ -143,7 +143,7 @@ impl Unparse for ExprNode {
             Expr::Ident(x) => {
                 out.push(Tok::Ident(x.clone()));
             }
-            Expr::LitExpr(x) => {
+            Expr::Literal(x) => {
                 out.append(&mut x.unparse());
             }
             Expr::Prefix(_unary, expr) => {
@@ -199,7 +199,7 @@ impl SExpr for ExprNode {
                 vec![x.sexpr()?, y.sexpr()?, z.sexpr()?],
             )),
             Chain(_, _) => Ok(S::Cons("chain".into(), vec![])),
-            LitExpr(x) => x.sexpr(),
+            Literal(x) => x.sexpr(),
             Ident(x) => Ok(S::Atom(x.clone())),
             Binary(op, left, right) => {
                 let sleft = left.sexpr()?;

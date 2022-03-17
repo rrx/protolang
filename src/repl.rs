@@ -124,7 +124,7 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
                 println!("SEXPR: {}", &sexpr);
                 match interpreter.evaluate(&prog) {
                     Ok(r) => println!("R: {:?}", r),
-                    Err(e) => println!("E: {:?}", e)
+                    Err(e) => println!("E: {:?}", e),
                 }
             }
         }

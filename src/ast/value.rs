@@ -4,13 +4,9 @@ use crate::sexpr::*;
 use crate::tokens::Tok;
 use itertools::Itertools;
 use std::convert::TryFrom;
-//use crate::pratt::{PrattValue};
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    //IntLiteral(u64),
-    //FloatLiteral(f64),
-    //BoolLiteral(bool),
     Literal(Tok),
     List(Vec<Value>),
     Null,
@@ -30,7 +26,7 @@ impl Unparse for Value {
             //Self::IntLiteral(x) => vec![Tok::IntLiteral(*x)],
             //Self::FloatLiteral(x) => vec![Tok::FloatLiteral(*x)],
             //Self::BoolLiteral(x) => vec![Tok::BoolLiteral(*x)],
-            Self::Literal(x) => vec![x.clone()], //Tok::StringLiteral(x.clone())],
+            Self::Literal(x) => vec![x.clone()],
             Self::List(x) => {
                 let tokens_list = x
                     .clone()

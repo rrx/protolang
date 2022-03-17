@@ -1,5 +1,6 @@
 use nom::*;
 
+use super::*;
 use crate::ast::*;
 use crate::results::*;
 use crate::tokens::*;
@@ -11,7 +12,6 @@ use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
-use super::*;
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("expr", _parse_expr)(i)
@@ -334,7 +334,6 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -479,22 +478,19 @@ mod tests {
             let r = parse_expr(tokens);
             print_result(&r);
             match r {
-                Ok((i, expr)) => {
-                    match expr.sexpr() {
-                        Ok(sexpr) => {
-                            let rendered = format!("{}", &sexpr);
-                            assert_eq!(rendered, a.to_string());
-                        }
-                        Err(e) => {
-                            assert!(false);
-                        }
+                Ok((i, expr)) => match expr.sexpr() {
+                    Ok(sexpr) => {
+                        let rendered = format!("{}", &sexpr);
+                        assert_eq!(rendered, a.to_string());
                     }
-                }
+                    Err(e) => {
+                        assert!(false);
+                    }
+                },
                 Err(e) => {
                     assert!(false);
                 }
             }
-
         });
     }
 }
