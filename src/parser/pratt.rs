@@ -453,16 +453,14 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)))
         }
 
-        /*
         Some(Tok::Invalid(s)) => {
             // consume invalid
-            let (i, left) = take_one_any(i)?;
-            println!("invalid: {:?}", (&s, left.toks(), i.toks()));
-            let node = i.node(Expr::Invalid(s.clone()));
-            Ok((i, node))
+            ExprNode::parse_invalid(i)
+            //let (i, left) = take_one_any(i)?;
+            //println!("invalid: {:?}", (&s, left.toks(), i.toks()));
+            //let node = i.node(Expr::Invalid(s.clone()));
+            //Ok((i, node))
         }
-        */
-
 
         _ => {
             println!("got unexpected token {:?}", &n);

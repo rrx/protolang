@@ -207,7 +207,7 @@ pub fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
 pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     // Don't return invalid if we have EOF
     if i.is_eof() {
-        //return Err(Err::Error(error_position!(i, ErrorKind::Eof)));
+        return Err(Err::Error(error_position!(i, ErrorKind::Eof)));
     }
 
     let loc = i.to_location().clone();
@@ -274,6 +274,8 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
         context("program-end", many0(parse_whitespace_or_eof)),
     )(i)?;
     println!("program has {} expressions", exprs.len());
+    println!("program rest {:?}", end);//.expand_toks());
+
     let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
     value
         .context
@@ -287,6 +289,7 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 impl ExprNode {
+
     pub(crate) fn parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
         context("ident", Self::_parse_ident)(i)
     }
@@ -296,6 +299,18 @@ impl ExprNode {
         let token = &t1.tok[0];
         match &token.tok {
             Tok::Ident(_) => {
+                let expr = ExprNode::from_token(token).unwrap();
+                Ok((i1, expr))
+            }
+            _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
+        }
+    }
+
+    fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
+        let (i1, t1) = take_one_any(i)?;
+        let token = &t1.tok[0];
+        match &token.tok {
+            Tok::Invalid(_) => {
                 let expr = ExprNode::from_token(token).unwrap();
                 Ok((i1, expr))
             }
@@ -564,7 +579,7 @@ mod tests {
     fn invalid() {
         let mut r = vec![
             ("$", vec![Tok::Invalid("$".into())]),
-            //("$\nasdf", vec![Tok::Invalid("$".into())])
+            ("$\nasdf", vec![Tok::Invalid("$".into()), Tok::NL(1), Tok::Ident("asdf".into())])
         ];
         r.iter_mut().for_each(|(q, a)| {
             println!("q {:?}", (&q));

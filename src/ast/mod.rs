@@ -100,6 +100,7 @@ impl ExprNode {
     pub fn from_token(token: &Token) -> Option<Self> {
         let maybe = match &token.tok {
             Tok::Ident(s) => Some(Expr::Ident(s.clone())),
+            Tok::Invalid(s) => Some(Expr::Invalid(s.clone())),
             _ => None,
         };
         if let Some(value) = maybe {
