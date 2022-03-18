@@ -12,9 +12,7 @@ use nom::{
 
 use crate::tokens::*;
 use nom_locate::position;
-use log::debug;
 
-mod error;
 pub(crate) mod state;
 
 mod string;
@@ -207,6 +205,8 @@ mod tests {
     use super::*;
     use state::*;
     use Tok::*;
+    use log::debug;
+
 
     #[test]
     fn tokens() {

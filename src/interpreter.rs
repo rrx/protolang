@@ -101,7 +101,7 @@ impl Expr {
                     line: 0,
                 }),
             },
-            Self::Callable(e) => Err(InterpretError::Runtime {
+            Self::Callable(_) => Err(InterpretError::Runtime {
                 message: format!("Expecting a callable: {:?}", self),
                 line: 0,
                 //message: format!(

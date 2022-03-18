@@ -1,18 +1,12 @@
 use nom::*;
 
 use super::*;
-use crate::ast::*;
-use crate::results::*;
-use crate::tokens::*;
-use nom::branch::*;
-use nom::bytes::complete::take;
-use nom::combinator::{self, into, opt, verify};
+use nom::combinator::{into, opt};
 use nom::error::{context, ErrorKind};
 use nom::multi::many0;
-use nom::sequence::*;
 use nom::Err;
-use std::result::Result::*;
 
+#[allow(dead_code)]
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("expr", _parse_expr)(i)
 }
@@ -28,7 +22,6 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
     let (i1, expr) = match maybe_unary {
         Some(unary) => {
             println!("pratt unary: {:?}", &unary);
-            //let (_, _) = prefix_op(&unary.value.token());
             let (i1, expr) = parse_pratt_expr(i0, Precedence::PLessGreater)?;
             println!("pratt unary expr: {:?}", (&i1, &expr));
             let loc = unary.context.loc.clone();
@@ -47,18 +40,6 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
         }
     };
     Ok((i1, expr))
-
-    /*
-    let (i2, maybe_postfix) = opt(parse_postfix)(i1)?;
-    match maybe_postfix {
-        Some(unary) => {
-            let loc = unary.loc.clone();
-            let value = ExprNode::new(Expr::Prefix(unary, Box::new(expr)), &loc);
-            Ok((i2, value))
-        }
-        None => Ok((i2, expr))
-    }
-    */
 }
 
 fn go_parse_pratt_expr(
@@ -90,11 +71,6 @@ fn go_parse_pratt_expr(
                 go_parse_pratt_expr(i2, precedence, left2)
             }
 
-            (Precedence::PBang, _) if precedence < Precedence::PBang => {
-                let (i2, left2) = parse_index_expr(input, left)?;
-                go_parse_pratt_expr(i2, precedence, left2)
-            }
-
             // otherwise we just return the LHS
             (Precedence::PHighest, _) => {
                 println!("high: {:?}", &input);
@@ -122,13 +98,11 @@ fn go_parse_pratt_expr(
 
 fn parse_call_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
     let (i, open) = tag_token(Tok::LParen)(i)?;
-    //let (i2, args) = parse_pratt_expr(i, Precedence::PCall)?;//many0(parse_expr)(i)?;
     let (i2, args) = many0(parse_expr)(i)?;
     let (i3, close) = tag_token(Tok::RParen)(i2)?;
     left.context.s.append(open.expand_toks());
     let loc = open.to_location();
     let mut expr = ExprNode::new(Expr::Apply(Box::new(left), args), &loc);
-    //let mut expr = ExprNode::new(Expr::Lambda(Lambda::new(Box::new(left), args), loc);
     expr.context.s.append(close.expand_toks());
     Ok((i3, expr))
 }
@@ -193,39 +167,12 @@ fn parse_atom(i: Tokens) -> PResult<Tokens, ExprNode> {
     )(i)
 }
 
-fn parse_infix(i: Tokens) -> PResult<Tokens, Operator> {
-    let (i1, t1) = take_one_any(i)?;
-    let next = &t1.tok[0];
-    match Operator::from_tok(&next.tok) {
-        None => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
-        Some(op) => Ok((i1, op)),
-    }
-}
-
 fn parse_paren_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (left, mut expr, right)) =
         tuple((tag_token(Tok::LParen), parse_expr, tag_token(Tok::RParen)))(i)?;
     expr.context.s.prepend(left.expand_toks());
     expr.context.s.append(right.expand_toks());
     Ok((i, expr))
-}
-
-pub fn parse_assignment_expr(i: Tokens, mut left: ExprNode) -> PResult<Tokens, ExprNode> {
-    match &left.value {
-        Expr::Ident(_) => {
-            let (i, (assign, mut expr)) = tuple((tag_token(Tok::Assign), parse_expr))(i)?;
-
-            // transfer surround from assign to nodes we store
-            left.context.s.append(assign.tok[0].s.pre.clone());
-            expr.context.s.prepend(assign.tok[0].s.post.clone());
-
-            let op = Operator::from_tok(&assign.tok[0].tok).unwrap();
-            let value = Expr::Binary(op, Box::new(left), Box::new(expr));
-            let expr = ExprNode::new(value, &i.to_location());
-            Ok((i, expr))
-        }
-        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
-    }
 }
 
 fn parse_prefix(i: Tokens) -> PResult<Tokens, OperatorNode> {
@@ -238,15 +185,6 @@ fn parse_prefix(i: Tokens) -> PResult<Tokens, OperatorNode> {
     Ok((i, OperatorNode::from_prefix_token(&tokens.tok[0]).unwrap()))
 }
 
-fn parse_postfix(i: Tokens) -> PResult<Tokens, OperatorNode> {
-    let (i, tokens) = alt((tag_token(Tok::Percent), tag_token(Tok::Exclamation)))(i)?;
-
-    Ok((
-        i,
-        OperatorNode::from_postfix_token(tokens.tok[0].clone()).unwrap(),
-    ))
-}
-
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Precedence {
     PLowest, // Parens, Start
@@ -255,58 +193,12 @@ pub enum Precedence {
     PEquals, // Equality ==/!=
     PLessGreater,
     PSum,
-    PPrefix,
     PProduct,
     PModulus,
     PExp,
     PCall,
     PIndex,
-    PBang,
     PHighest,
-}
-
-pub fn infix_precedence(op: Operator) -> Precedence {
-    match op {
-        Operator::Equal => Precedence::PEquals,
-        Operator::NotEqual => Precedence::PEquals,
-        Operator::LessThanEqual => Precedence::PLessGreater,
-        Operator::GreaterThanEqual => Precedence::PLessGreater,
-        Operator::LessThan => Precedence::PLessGreater,
-        Operator::GreaterThan => Precedence::PLessGreater,
-        Operator::Plus => Precedence::PSum,
-        Operator::Not => Precedence::PLowest,
-        Operator::Minus => Precedence::PSum,
-        Operator::Multiply => Precedence::PProduct,
-        Operator::Divide => Precedence::PProduct,
-        Operator::Exp => Precedence::PExp,
-        Operator::Assign => Precedence::PAssign,
-        Operator::Modulus => Precedence::PModulus,
-        Operator::Bang => Precedence::PBang,
-        Operator::Index => Precedence::PIndex,
-        Operator::Call => Precedence::PCall,
-        Operator::Elvis => Precedence::PCall,
-        Operator::ConditionalElse => Precedence::PCall,
-        Operator::Conditional => Precedence::PCall,
-        Operator::End => Precedence::PLowest,
-        Operator::Comma => Precedence::PLowest,
-        //Operator::Map => Precedence::PMap,
-    }
-}
-
-pub fn prefix_op(t: &Tok) -> (Precedence, Option<Operator>) {
-    match *t {
-        Tok::Plus => (Precedence::PPrefix, Some(Operator::Plus)),
-        Tok::Minus => (Precedence::PPrefix, Some(Operator::Minus)),
-        Tok::Exclamation => (Precedence::PPrefix, Some(Operator::NotEqual)),
-        _ => (Precedence::PLowest, None),
-    }
-}
-
-pub fn postfix_op(t: &Tok) -> (Precedence, Option<Operator>) {
-    match *t {
-        Tok::Exclamation => (Precedence::PBang, Some(Operator::Bang)),
-        _ => (Precedence::PLowest, None),
-    }
 }
 
 pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
@@ -339,7 +231,6 @@ mod tests {
     use super::*;
     use crate::lexer::*;
     use crate::sexpr::SExpr;
-    use nom::multi::many1;
 
     use super::super::tests::parser_losslessness;
 
@@ -478,16 +369,16 @@ mod tests {
             let r = parse_expr(tokens);
             print_result(&r);
             match r {
-                Ok((i, expr)) => match expr.sexpr() {
+                Ok((_, expr)) => match expr.sexpr() {
                     Ok(sexpr) => {
                         let rendered = format!("{}", &sexpr);
                         assert_eq!(rendered, a.to_string());
                     }
-                    Err(e) => {
+                    Err(_) => {
                         assert!(false);
                     }
                 },
-                Err(e) => {
+                Err(_) => {
                     assert!(false);
                 }
             }

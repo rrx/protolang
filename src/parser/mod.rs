@@ -7,7 +7,7 @@ use crate::tokens::*;
 use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::verify;
-use nom::error::{context, ContextError, ErrorKind, VerboseError, VerboseErrorKind};
+use nom::error::{context, ContextError, ErrorKind, VerboseErrorKind};
 use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
@@ -89,7 +89,7 @@ pub fn print_result<
     r: &PResult<I, O>,
 ) {
     match r {
-        Ok((i, expr)) => {
+        Ok((_, expr)) => {
             debug!("Ok({:?})", (&expr));
             match expr.sexpr() {
                 Ok(sexpr) => {
@@ -126,17 +126,17 @@ pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<
     )
 }
 
-fn parse_whitespace<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
+fn _parse_whitespace<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     verify(take_one_any, move |tokens: &Tokens<'a>| {
         let tok = &tokens.tok[0].tok;
         tok.is_whitespace()
     })(i)
 }
 
-fn parse_whitespace_or_eof<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
+fn _parse_whitespace_or_eof<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     context(
         "parse-whitespace-or-eof",
-        alt((parse_whitespace, tag_token(Tok::EOF))),
+        alt((_parse_whitespace, tag_token(Tok::EOF))),
     )(i)
 }
 
@@ -428,7 +428,7 @@ mod tests {
         let pos = crate::tokens::Span::new("".into());
         let toks = vec![Token::new(Tok::EOF, pos)];
         let i = Tokens::new(&toks[..]);
-        assert_eq!(parse_whitespace_or_eof(i).unwrap().1.toks(), vec![Tok::EOF]);
+        assert_eq!(_parse_whitespace_or_eof(i).unwrap().1.toks(), vec![Tok::EOF]);
     }
 
     #[test]

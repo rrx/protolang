@@ -4,10 +4,8 @@ use crate::parser::{parse_program, parse_program_with_results};
 use crate::results::*;
 use crate::ast::ExprNode;
 use crate::sexpr::SExpr;
-use nom::InputLength;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-use std::{env, io::Write, process};
 use log::debug;
 
 pub fn cli() -> anyhow::Result<()> {
