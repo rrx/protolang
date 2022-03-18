@@ -41,13 +41,6 @@ pub trait ExprVisitorMut {
 }
 
 pub struct Unparser {
-    //toks: Vec<Tok>
-}
-
-impl Default for Unparser {
-    fn default() -> Self {
-        Self { } //.toks: vec![] }
-    }
 }
 
 impl ExprVisitor<Vec<Tok>> for Unparser {

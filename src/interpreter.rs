@@ -3,6 +3,7 @@ use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use std::collections::HashMap;
 use std::result::Result;
+use log::debug;
 
 #[derive(Debug)]
 pub struct Environment {
@@ -305,7 +306,7 @@ impl Interpreter {
                     return if let Some(ident) = left.value.try_ident() {
                         let eval_right = self.evaluate(&right.value)?;
                         self.globals.define(&ident, &eval_right);
-                        println!("Assign {:?} to {}", &eval_right, &ident);
+                        debug!("Assign {:?} to {}", &eval_right, &ident);
                         Ok(eval_right)
                     } else {
                         Err(InterpretError::Runtime {
@@ -345,7 +346,7 @@ impl Interpreter {
             }
 
             Expr::Callable(e) => {
-                println!("Callable({:?})", &e);
+                debug!("Callable({:?})", &e);
                 Err(InterpretError::Runtime {
                     message: format!("Unimplemented callable::{:?}", &e),
                     line: 0,//expr.context.loc.line,
@@ -353,7 +354,7 @@ impl Interpreter {
             }
 
             Expr::Lambda(e) => {
-                println!("Lambda({:?})", &e);
+                debug!("Lambda({:?})", &e);
                 Ok(Expr::Callable(Box::new(e)))//.node()))
             }
 
@@ -375,9 +376,9 @@ impl Interpreter {
                         for arg in args {
                             eval_args.push(self.evaluate(&arg.value)?);
                         }
-                        println!("Calling {:?}({:?})", c, eval_args);
+                        debug!("Calling {:?}({:?})", c, eval_args);
                         let result = c.call(self, eval_args);
-                        println!("Call Result {:?}", &result);
+                        debug!("Call Result {:?}", &result);
                         result
                     }
                     _ => Err(InterpretError::Runtime {
@@ -444,15 +445,15 @@ impl Interpreter {
     }
 
     pub fn execute(&mut self, expr: ExprNode) -> Result<Expr, InterpretError> {
-        println!("EXPR: {:?}", &expr);
-        println!("EXPR-unparse: {:?}", expr.unparse());
-        println!("EXPR-unlex: {:?}", expr.unlex());
+        debug!("EXPR: {:?}", &expr);
+        debug!("EXPR-unparse: {:?}", expr.unparse());
+        debug!("EXPR-unlex: {:?}", expr.unlex());
         match expr.sexpr() {
             Ok(s) => {
-                println!("EXPR-sexpr: {}", s);
+                debug!("EXPR-sexpr: {}", s);
             }
             Err(e) => {
-                println!("ERROR: {:?}", e);
+                debug!("ERROR: {:?}", e);
                 return Err(InterpretError::Runtime {
                     message: "Unable to parse sexpr".into(),
                     line: 0,
@@ -466,10 +467,10 @@ impl Interpreter {
     pub fn interpret(&mut self, program: ExprNode) {
         match self.evaluate(&program.value) {
             Ok(v) => {
-                println!("Result: {:?}", &v);
+                debug!("Result: {:?}", &v);
             }
             Err(error) => {
-                println!("ERROR: {:?}", &error);
+                debug!("ERROR: {:?}", &error);
                 return;
             }
         }
