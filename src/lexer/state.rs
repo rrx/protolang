@@ -168,6 +168,12 @@ impl<'a> LexerState<'a> {
         Tokens::new(&self.acc[..])
     }
 
+    pub fn tokens2(&mut self) -> Tokens {
+        self.flush();
+        self.dump();
+        Tokens::new(&self.acc[..]).clone()
+    }
+
     pub fn _token_vec(&mut self) -> Vec<Token<'a>> {
         if self.acc.len() == 0 {
             self.whitespace.clone()

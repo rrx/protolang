@@ -19,7 +19,7 @@ fn parse(c: &mut Criterion) {
 
     let (_, expr) = parse_program(tokens.clone()).unwrap();
     c.bench_function("unparse1", |b| b.iter(|| {
-        unparse_expr(&expr);
+        unparse_expr(&expr, true);
     }));
 
     c.bench_function("unparse2", |b| b.iter(|| {
@@ -33,7 +33,7 @@ fn interpret(c: &mut Criterion) {
     let (_,_) = lexer.lex(contents.as_str()).unwrap();
     let tokens = lexer.tokens().clone();
     let (_, expr) = parse_program(tokens.clone()).unwrap();
-    unparse_expr(&expr);
+    unparse_expr(&expr, true);
     c.bench_function("interpret", |b| b.iter(|| {
         let mut interp = Interpreter::default();
         interp.interpret(expr.clone());

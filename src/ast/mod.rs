@@ -23,11 +23,14 @@ pub trait Unparse {
 }
 
 pub struct Unparser {
+    expand: bool
 }
 
 impl ExprVisitor<Vec<Tok>> for Unparser {
     fn enter(&mut self, e: &ExprNode, n: &mut Vec<Tok>) -> VResult {
-        n.append(&mut e.context.s.pre.clone());
+        if self.expand {
+            n.append(&mut e.context.s.pre.clone());
+        }
         match &e.value {
             Expr::Ident(x) => {
                 n.push(Tok::Ident(x.clone()));
@@ -47,13 +50,15 @@ impl ExprVisitor<Vec<Tok>> for Unparser {
     }
 
     fn exit(&mut self, e: &ExprNode, n: &mut Vec<Tok>) -> VResult {
-        n.append(&mut e.context.s.post.clone());
+        if self.expand {
+            n.append(&mut e.context.s.post.clone());
+        }
         Ok(())
     }
 }
 
-pub fn unparse_expr(e: &ExprNode) -> Vec<Tok> {
-    let mut v = Unparser {};
+pub fn unparse_expr(e: &ExprNode, expand: bool) -> Vec<Tok> {
+    let mut v = Unparser { expand };
     let mut out = vec![];
     let _ = visit_expr(e, &mut v, &mut out).unwrap();
     out

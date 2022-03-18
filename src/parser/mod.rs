@@ -349,6 +349,17 @@ impl ExprNode {
     }
 }
 
+/*
+impl ExprNode {
+    pub fn parse_program<'a>(s: &'a str) -> PResult<Tokens<'a>, ExprNode> {
+        let mut lexer = crate::lexer::LexerState::from_str_eof(s).unwrap();
+        let tokens = lexer.tokens2().clone();
+        parse_program(tokens)
+    }
+}
+*/
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,7 +397,7 @@ mod tests {
     fn dump_expr(expr: &ExprNode) {
         debug!("Expr: {}", expr.unlex());
         debug!("\tSurround: {:?}", expr.context.s);
-        for token in unparse_expr(expr) {
+        for token in unparse_expr(expr, true) {
             debug!("\tToken:: {:?}", token);
         }
     }
@@ -578,7 +589,7 @@ mod tests {
             match r {
                 Ok((rest, prog)) => {
                     debug!("x{:?}", (&rest.toks(), &prog));
-                    assert_eq!(unparse_expr(&prog), *a);
+                    assert_eq!(unparse_expr(&prog, true), *a);
                     assert!(rest.input_len() == 0);
                 }
                 Err(nom::Err::Error(e)) => {
