@@ -12,6 +12,7 @@ use nom::{
 
 use crate::tokens::*;
 use nom_locate::position;
+use log::debug;
 
 mod error;
 pub(crate) mod state;
@@ -19,7 +20,7 @@ pub(crate) mod state;
 mod string;
 use string::lex_string;
 
-pub(crate) use state::LexerState;
+pub use state::LexerState;
 mod surround;
 pub(crate) use surround::{Location, Surround};
 
@@ -228,9 +229,9 @@ mod tests {
         ];
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);
-            println!("q: {:?}", q);
+            debug!("q: {:?}", q);
             let mut lexer = LexerState::from_str_eof(q).unwrap();
-            println!("state: {:?}", &lexer);
+            debug!("state: {:?}", &lexer);
             assert_eq!(lexer.final_toks(), *a);
         });
     }
@@ -246,9 +247,9 @@ mod tests {
         ];
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);
-            println!("q: {:?}", q);
+            debug!("q: {:?}", q);
             let mut lexer = LexerState::from_str_eof(q).unwrap();
-            println!("state: {:?}", &lexer);
+            debug!("state: {:?}", &lexer);
             assert_eq!(lexer.expand_toks(), *a);
         });
     }
@@ -282,14 +283,14 @@ mod tests {
     }
 
     fn lexer_losslessness(s: &str) -> bool {
-        println!("{:?}", &s);
+        debug!("{:?}", &s);
         match LexerState::from_str_eof(s) {
             Some(mut lexer) => {
                 let tokens = lexer.tokens();
                 let toks = tokens.toks();
-                println!("{:?}", &toks);
+                debug!("{:?}", &toks);
                 let restored = tokens.unlex();
-                println!("{:?} ?= {:?}", s, &toks);
+                debug!("{:?} ?= {:?}", s, &toks);
                 restored == s
             }
             _ => false,
@@ -307,7 +308,7 @@ mod tests {
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let tokens = lexer.tokens();
             let toks = tokens.toks();
-            println!("{:?}", (&toks));
+            debug!("{:?}", (&toks));
             a.push(EOF);
             assert_eq!(toks, a);
             let restored = tokens.unlex();

@@ -1,5 +1,6 @@
 use super::*;
 use crate::tokens::Token;
+use log::debug;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LexNext<'a> {
@@ -71,13 +72,13 @@ impl<'a> LexerState<'a> {
         match lexer.lex_eof(s.into()) {
             Ok((rest, _)) => {
                 if rest.len() > 0 {
-                    println!("remaining {:?}", (&rest));
+                    debug!("remaining {:?}", (&rest));
                 }
                 Some(lexer)
             }
             Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors {
-                    println!("error {:?}", (&err, tokens));
+                    debug!("error {:?}", (&err, tokens));
                 }
                 None
             }
@@ -89,13 +90,13 @@ impl<'a> LexerState<'a> {
         match lexer.lex(s.into()) {
             Ok((rest, _)) => {
                 if rest.len() > 0 {
-                    println!("remaining {:?}", (&rest));
+                    debug!("remaining {:?}", (&rest));
                 }
                 Some(lexer)
             }
             Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors {
-                    println!("error {:?}", (&err, tokens));
+                    debug!("error {:?}", (&err, tokens));
                 }
                 None
             }
@@ -184,12 +185,12 @@ impl<'a> LexerState<'a> {
     }
 
     pub fn dump(&self) {
-        println!("State");
-        println!("\tStack: {:?}", self.indent_stack);
+        debug!("State");
+        debug!("\tStack: {:?}", self.indent_stack);
         for token in &self.acc {
-            println!("\tToken: {:?}", token);
+            debug!("\tToken: {:?}", token);
         }
-        println!("\tIndentState: {:?}", self.indent_state);
+        debug!("\tIndentState: {:?}", self.indent_state);
     }
 
     pub fn push(&mut self, next: LexNext<'a>) {

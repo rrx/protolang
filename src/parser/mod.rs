@@ -12,6 +12,7 @@ use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
+use log::debug;
 
 mod pratt;
 mod pratt1;
@@ -23,28 +24,10 @@ pub struct DebugError<I> {
 }
 
 impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I> {
-    /*
-    fn from_error_kind(input: I, kind: ErrorKind) -> Self {
-      VerboseError {
-        errors: vec![(input, VerboseErrorKind::Nom(kind))],
-      }
-    }
-
-    fn append(input: I, kind: ErrorKind, mut other: Self) -> Self {
-      other.errors.push((input, VerboseErrorKind::Nom(kind)));
-      other
-    }
-
-    fn from_char(input: I, c: char) -> Self {
-      VerboseError {
-        errors: vec![(input, VerboseErrorKind::Char(c))],
-      }
-    }
-    */
     // on one line, we show the error code and the input that caused it
     fn from_error_kind(input: I, kind: ErrorKind) -> Self {
         let message = format!("kind {:?}:\t{:?}\n", kind, input.toks());
-        //println!("{}", message);
+        //debug!("{}", message);
         DebugError {
             message,
             errors: vec![(input, VerboseErrorKind::Nom(kind))],
@@ -54,7 +37,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
     // if combining multiple errors, we show them one after the other
     fn append(input: I, kind: ErrorKind, mut other: Self) -> Self {
         other.message = format!("{}kind {:?}:\t{:?}\n", other.message, kind, input.toks());
-        //println!("{}", message);
+        //debug!("{}", message);
         //DebugError {
             //message,
         other.errors.push((input, VerboseErrorKind::Nom(kind)));
@@ -64,7 +47,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
 
     fn from_char(input: I, c: char) -> Self {
         let message = format!("'{}':\t{:?}\n", c, input.toks());
-        //println!("{}", message);
+        //debug!("{}", message);
         DebugError {
             message,
             errors: vec![(input, VerboseErrorKind::Char(c))],
@@ -73,7 +56,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
 
     fn or(self, other: Self) -> Self {
         let message = format!("{}\tOR\n{}\n", self.message, other.message);
-        //println!("{}", message);
+        //debug!("{}", message);
         DebugError {
             message,
             errors: vec![],
@@ -89,7 +72,7 @@ impl<I: std::fmt::Debug + TokensList> ContextError<I> for DebugError<I> {
             ctx,
             input.toks()
         );
-        println!("{}", message);
+        //debug!("{}", message);
         DebugError {
             message,
             errors: vec![],
@@ -107,47 +90,30 @@ pub fn print_result<
 ) {
     match r {
         Ok((i, expr)) => {
-            println!("Ok({:?})", (&expr));
+            debug!("Ok({:?})", (&expr));
             match expr.sexpr() {
                 Ok(sexpr) => {
-                    println!("sexpr {}", &sexpr);
+                    debug!("sexpr {}", &sexpr);
                     let rendered = format!("{}", &sexpr);
-                    println!("sexpr {:?}", (&sexpr, &rendered));
+                    debug!("sexpr {:?}", (&sexpr, &rendered));
                 }
                 Err(e) => {
-                    println!("Error: {:?}", e);
+                    debug!("Error: {:?}", e);
                 }
             }
         }
         Err(nom::Err::Error(e)) => {
-            println!("err: {:?}", e); //nom::error::convert_error(*q, e));
+            debug!("err: {:?}", e); //nom::error::convert_error(*q, e));
             for (tokens, err) in &e.errors {
-                println!("error {:?}", (&err, tokens.toks()));
+                debug!("error {:?}", (&err, tokens.toks()));
             }
             //Err(nom::Err::Error(e))
         }
         Err(e) => {
-            println!("err: {:?}", e);
+            debug!("err: {:?}", e);
         }
     }
 }
-
-//pub(crate) fn eof_ok<'a, I, O>(r: PResult<I, O) -> PResult<I,O> {
-//if i.is_eof() {
-//return Ok((i.clone(), i));
-//}
-//}
-
-/*
-pub(crate) fn eof_ok<'a, I: TokensList + Clone, O>(mut f: impl FnMut(I) -> PResult<I, O>) -> impl FnMut(I) -> PResult<I, O> {
-    move |i| {
-        if i.is_eof() {
-            return Ok((i.clone(), i));
-        }
-        f(i)
-    }
-}
-*/
 
 pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     let s = t.into();
@@ -168,13 +134,9 @@ fn parse_whitespace<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
 }
 
 fn parse_whitespace_or_eof<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
-    //if i.is_eof() {
-        //return Ok((i.clone(), i));
-    //}
     context(
         "parse-whitespace-or-eof",
         alt((parse_whitespace, tag_token(Tok::EOF))),
-        //parse_whitespace,
     )(i)
 }
 
@@ -194,11 +156,6 @@ pub(crate) fn take_one_any(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 fn parse_not_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
-    // don't consume EOF, but return Ok
-    //if i.is_eof() {
-    //return Ok((i.clone(), i));
-    //}
-
     context(
         "not-stmt-end",
         // take anything, even invalid tokens
@@ -210,11 +167,6 @@ fn parse_not_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
-    // don't consume EOF, but return Ok
-    //if i.is_eof() {
-    //return Ok((i.clone(), i));
-    //}
-
     context(
         "parse-stmt-end",
         alt((
@@ -239,11 +191,11 @@ pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
     i1.result(Results::Error(format!("Invalid Expr: {}", s), 0));
-    println!("Invalidx: {:?}", &s);
+    debug!("Invalidx: {:?}", &s);
     let mut expr = ExprNode::new(Expr::Invalid(s), &loc);
     // handle trailing newline
     expr.context.s.append(end.expand_toks());
-    //println!("invalid: {:?}", (&i.toks(), &stmt, r, end));
+    //debug!("invalid: {:?}", (&i.toks(), &stmt, r, end));
     Ok((i1, expr))
 }
 
@@ -298,14 +250,14 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
         context("program-start", many0(alt((parse_expr, parse_invalid)))),
         context("program-end", combinator::rest),//many0(parse_whitespace_or_eof)),
     )(i)?;
-    println!("program has {} expressions", exprs.len());
-    println!("program rest {:?}", end); //.expand_toks());
+    debug!("program has {} expressions", exprs.len());
+    debug!("program rest {:?}", end); //.expand_toks());
 
     let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
     value
         .context
         .s
-        .append(end.expand_toks());//iter().map(|v| v.expand_toks()).flatten().collect()); //filter(|t| t != &Tok::EOF).collect());
+        .append(end.expand_toks());
     Ok((i, value))
 }
 
@@ -371,9 +323,9 @@ impl ExprNode {
         ))(i)?;
 
         let (i, mut body) = parse_expr(i)?;
-        println!("slash: {:?}", &slash);
-        println!("idents: {:?}", &idents);
-        println!("body: {:?}", &body);
+        debug!("slash: {:?}", &slash);
+        debug!("idents: {:?}", &idents);
+        debug!("body: {:?}", &body);
         let mut params = Params::new(idents);
         params.s.prepend(slash.tok[0].toks_post());
         params.s.append(arrow.tok[0].toks_pre());
@@ -405,25 +357,25 @@ mod tests {
     use nom::multi::many1;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
-        println!("{:?}", &s);
+        debug!("{:?}", &s);
         let mut lexer = LexerState::from_str_eof(s).unwrap();
         let tokens = lexer.tokens();
         //let toks = tokens.toks();
-        //println!("tokens {:?}", tokens);
+        //debug!("tokens {:?}", tokens);
         match parse_program(tokens) {
             Ok((prog_rest, prog)) => {
                 if prog_rest.input_len() > 0 {
-                    println!("prog_rest {:?}", prog_rest.toks());
+                    debug!("prog_rest {:?}", prog_rest.toks());
                 }
-                println!("prog {:?}", (&prog));
+                debug!("prog {:?}", (&prog));
                 let s2 = prog.unlex();
-                println!("test {:?}", (s, &s2));
+                debug!("test {:?}", (s, &s2));
                 s == s2
             }
             Err(nom::Err::Error(e)) => {
-                //println!("Error: {:?}", e);
+                //debug!("Error: {:?}", e);
                 for (tokens, err) in e.errors {
-                    println!("error {:?}", (&err, tokens.toks()));
+                    debug!("error {:?}", (&err, tokens.toks()));
                 }
                 false
             }
@@ -432,10 +384,10 @@ mod tests {
     }
 
     fn dump_expr(expr: &ExprNode) {
-        println!("Expr: {}", expr.unlex());
-        println!("\tSurround: {:?}", expr.context.s);
-        for token in expr.unparse() {
-            println!("\tToken:: {:?}", token);
+        debug!("Expr: {}", expr.unlex());
+        debug!("\tSurround: {:?}", expr.context.s);
+        for token in unparse_expr(expr) {
+            debug!("\tToken:: {:?}", token);
         }
     }
 
@@ -446,11 +398,11 @@ mod tests {
             let mut lexer = LexerState::from_str(v).unwrap();
             let tokens = lexer.tokens();
             //let toks = tokens.toks();
-            println!("{:?}", (&tokens.toks()));
+            debug!("{:?}", (&tokens.toks()));
             let (rest, result) = ExprNode::parse_literal(tokens).unwrap();
-            println!("lit {:?}", (&result, rest.toks()));
+            debug!("lit {:?}", (&result, rest.toks()));
             let restored = result.unlex();
-            println!("restored {:?}", (&restored));
+            debug!("restored {:?}", (&restored));
             assert_eq!(v, &restored);
         });
     }
@@ -462,11 +414,11 @@ mod tests {
             let mut lexer = LexerState::from_str(v).unwrap();
             let tokens = lexer.tokens();
             //let toks = tokens.toks();
-            println!("{:?}", (&tokens.toks()));
+            debug!("{:?}", (&tokens.toks()));
             let (_, result) = ExprNode::parse_ident(tokens).unwrap();
-            println!("ident {:?}", (&result));
+            debug!("ident {:?}", (&result));
             let restored = result.unlex();
-            println!("restored {:?}", (&restored));
+            debug!("restored {:?}", (&restored));
             assert_eq!(v, &restored);
         });
     }
@@ -508,28 +460,28 @@ mod tests {
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
-            println!("v {:?}", (&v));
-            //println!("tokens: {:?}", (&tokens));
+            debug!("v {:?}", (&v));
+            //debug!("tokens: {:?}", (&tokens));
 
             let mut p = many1(parse_expr);
             match p(tokens) {
                 Ok((rest, result)) => {
-                    println!("p {:?}", (&result));
-                    println!("rest {:?}", (&rest));
+                    debug!("p {:?}", (&result));
+                    debug!("rest {:?}", (&rest));
                     result.iter().for_each(|v| {
-                        println!("S: {}", (&v.sexpr().unwrap()));
+                        debug!("S: {}", (&v.sexpr().unwrap()));
                     });
                     let restored = result
                         .into_iter()
                         .map(|v| v.unlex())
                         .collect::<Vec<_>>()
                         .join("");
-                    println!("{:?}", (&v, &restored));
+                    debug!("{:?}", (&v, &restored));
                     assert_eq!(v, &restored);
                 }
                 Err(nom::Err::Error(e)) => {
                     for (tokens, err) in e.errors {
-                        println!("error {:?}", (&err, tokens.toks()));
+                        debug!("error {:?}", (&err, tokens.toks()));
                     }
                     assert!(false);
                 }
@@ -561,14 +513,14 @@ mod tests {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
             //let toks = tokens.toks();
-            println!("q: {}", v);
-            //println!("toks: {:?}", (&toks));
+            debug!("q: {}", v);
+            //debug!("toks: {:?}", (&toks));
             let mut p = many0(parse_expr);
 
             match p(tokens) {
                 Ok((rest, results)) => {
                     results.iter().for_each(|r| {
-                        println!("result {:?}", (&r));
+                        debug!("result {:?}", (&r));
                     });
 
                     for expr in &results {
@@ -580,12 +532,12 @@ mod tests {
                         .map(|s| s.unlex())
                         .collect::<Vec<_>>()
                         .join("");
-                    println!("cmp {:?}", (&v, &restored));
+                    debug!("cmp {:?}", (&v, &restored));
                     assert_eq!(v, &restored);
-                    //println!("remaining {:?}", (&rest.toks()));
+                    //debug!("remaining {:?}", (&rest.toks()));
 
                     if rest.input_len() > 0 {
-                        println!("ERROR tokens remaining {:?}", (&rest));
+                        debug!("ERROR tokens remaining {:?}", (&rest));
                     }
 
                     //assert_eq!(rest.toks().len(), 0);
@@ -593,7 +545,7 @@ mod tests {
                 }
                 Err(nom::Err::Error(e)) => {
                     for (tokens, err) in e.errors {
-                        println!("error {:?}", (&err, tokens.toks()));
+                        debug!("error {:?}", (&err, tokens.toks()));
                     }
                     assert!(false);
                 }
@@ -616,22 +568,22 @@ mod tests {
             ),
         ];
         r.iter_mut().for_each(|(q, a)| {
-            println!("q {:?}", (&q));
+            debug!("q {:?}", (&q));
             a.push(Tok::EOF);
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let tokens = lexer.tokens();
-            println!("tokens: {:?}", (&tokens.toks()));
+            debug!("tokens: {:?}", (&tokens.toks()));
             let r = parse_program(tokens);
             //print_result(&r);
             match r {
                 Ok((rest, prog)) => {
-                    println!("x{:?}", (&rest.toks(), &prog));
-                    assert_eq!(&prog.unparse(), a);
+                    debug!("x{:?}", (&rest.toks(), &prog));
+                    assert_eq!(unparse_expr(&prog), *a);
                     assert!(rest.input_len() == 0);
                 }
                 Err(nom::Err::Error(e)) => {
                     for (tokens, err) in e.errors {
-                        println!("error {:?}", (&err, tokens.toks()));
+                        debug!("error {:?}", (&err, tokens.toks()));
                     }
                     assert!(false);
                 }
@@ -709,18 +661,18 @@ mod tests {
     fn block() {
         let r = vec!["x = 1 + 2 ", "x = \\x -> { 0\n } \n", "{ }"];
         r.iter().for_each(|v| {
-            println!("q {:?}", (&v));
+            debug!("q {:?}", (&v));
             let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
-            println!("tokens: {:?}", (&tokens.toks()));
+            debug!("tokens: {:?}", (&tokens.toks()));
             match parse_program(tokens) {
                 Ok((rest, prog)) => {
-                    println!("x{:?}", (&rest.toks(), &prog));
+                    debug!("x{:?}", (&rest.toks(), &prog));
                     assert!(rest.input_len() == 0);
                 }
                 Err(nom::Err::Error(e)) => {
                     for (tokens, err) in e.errors {
-                        println!("error {:?}", (&err, tokens.toks()));
+                        debug!("error {:?}", (&err, tokens.toks()));
                     }
                     assert!(false);
                 }

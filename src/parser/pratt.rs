@@ -7,6 +7,7 @@ use crate::parser::{print_result, tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use nom::error::{context, ErrorKind};
 use nom::{branch, multi, sequence};
+use log::debug;
 
 use crate::ast::{Expr, ExprNode, Operator, OperatorNode, Unparse};
 
@@ -105,14 +106,14 @@ impl Op {
         }
     }
 
-    fn chain_LeD<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Token, depth: usize) -> RNode<'a> {
-        println!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
+    fn _chain_LeD<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Token, depth: usize) -> RNode<'a> {
+        debug!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
 
         // parse the RHS, making sure the expression we are getting stops when we reach
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
         let (i, y) = extra(i, Some(self.rbp.unwrap() + 1), depth + 1)?;
 
-        println!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
+        debug!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
 
         let maybe_op = Operator::from_tok(&token.tok);
         let op = maybe_op.unwrap();
@@ -126,28 +127,28 @@ impl Op {
         };
 
         let n = i.peek().unwrap();
-        println!("chain_LeD2: {:?}", (&left_op, &c, &n));
+        debug!("chain_LeD2: {:?}", (&left_op, &c, &n));
 
         if n.tok == Tok::EOF {
-            println!("chain: got eof");
+            debug!("chain: got eof");
             let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             return i.node_success(t);
         }
 
         let next_op = n.tok.op().unwrap();
-        println!("chain next: {:?}", (self, &n));
+        debug!("chain next: {:?}", (self, &n));
         if self.lbp == next_op.lbp {
             // consume
             let (i, _) = take_one_any(i.clone())?;
-            let (i, t) = self.chain_LeD(i, &y, &n, depth)?;
-            println!("chain consume: {:?}", (self.lbp, next_op, &t));
+            let (i, t) = self._chain_LeD(i, &y, &n, depth)?;
+            debug!("chain consume: {:?}", (self.lbp, next_op, &t));
             let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             let op = Operator::End;
             let t = Expr::Chain(op, vec![i.node(t0), t]);
             i.node_success(t)
         } else {
             let t = Expr::Chain(left_op.clone(), c);
-            println!("chain drop: {:?}", (self.lbp, next_op, &t));
+            debug!("chain drop: {:?}", (self.lbp, next_op, &t));
             i.node_success(t)
         }
     }
@@ -155,7 +156,7 @@ impl Op {
     fn LeD<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Token, depth: usize) -> RNode<'a> {
         // Given the LHS, and an op (token), return a Node
         //
-        //println!("LeD: {:?}", (&x, &token, &i.toks()));
+        //debug!("LeD: {:?}", (&x, &token, &i.toks()));
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
                 let mut x = x.clone();
@@ -204,7 +205,7 @@ impl Op {
             Tok::LParen => {
                 let (i, (nodes, end)) =
                     sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
-                println!("nodes: {:?}", (&nodes, &end));
+                debug!("nodes: {:?}", (&nodes, &end));
                 let op = Operator::Call;
                 let mut f = x.clone();
                 f.context.s.append(token.expand_toks());
@@ -218,8 +219,8 @@ impl Op {
                 if token.tok.isBinary() {
                     // binary parses the RHS, and returns a binary node
                     let (i, y) = extra(i, self.rbp, depth + 1)?;
-                    println!("Binary: {:?} {:?} {:?}", &x, &token, &y);
-                    println!("Binary: {:?}", &token);
+                    debug!("Binary: {:?} {:?} {:?}", &x, &token, &y);
+                    debug!("Binary: {:?}", &token);
 
                     let maybe_op = Operator::from_tok(&self.op);
                     let operator = maybe_op.unwrap();
@@ -233,7 +234,7 @@ impl Op {
                     (i, node)
                 } else {
                     // postfix just returns, there's no RHS
-                    println!("Postfix: {:?}", (&x, &token));
+                    debug!("Postfix: {:?}", (&x, &token));
                     let op = OperatorNode::from_postfix_token(token.clone()).unwrap();
                     let t = Expr::Postfix(op, Box::new(x.clone()));
                     let mut node = i.node(t);
@@ -346,7 +347,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
     let n = i.tok[0].tok.clone();
     let token = &i.tok[0];
 
-    println!("P {:?}", (&n));
+    debug!("P {:?}", (&n));
 
     let rbp = n.op().map_or(None, |t| t.rbp);
 
@@ -381,9 +382,9 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LBrace) => {
             // consume LBrace
             let (i, left) = take_one_any(i)?;
-            println!("prefix brace1: {:?}", (&i, &n, &left));
+            debug!("prefix brace1: {:?}", (&i, &n, &left));
             let (i, t) = i.extra(Some(0), depth + 1)?;
-            println!("prefix brace2: {:?}", (&i, &t));
+            debug!("prefix brace2: {:?}", (&i, &t));
             // consume RBrace
             let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
             let t = Expr::Block(vec![t]);
@@ -397,9 +398,9 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LBracket) => {
             // consume LBracket
             let (i, left) = take_one_any(i)?;
-            println!("prefix bracket1: {:?}", (&i, &n, &left));
+            debug!("prefix bracket1: {:?}", (&i, &n, &left));
             let (i, t) = i.extra(Some(0), depth + 1)?;
-            println!("prefix bracket2: {:?}", (&i, &t));
+            debug!("prefix bracket2: {:?}", (&i, &t));
             // consume RBracket
             let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
             let t = Expr::List(vec![t]);
@@ -413,12 +414,12 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LParen) => {
             // consume LParen
             let (i, left) = take_one_any(i)?;
-            println!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
+            debug!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
 
             // consume anything inside the parents, bp = 0
             let (i, mut node) = i.extra(Some(0), depth + 1)?;
 
-            println!("prefix paren2: {:?}", (&i.toks(), &node));
+            debug!("prefix paren2: {:?}", (&i.toks(), &node));
             let (i, right) = context("r-paren", tag_token(Tok::RParen))(i)?;
             node.context.s.prepend(left.expand_toks());
             node.context.s.append(right.expand_toks());
@@ -427,7 +428,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         // Non N-tokens, are handled as errors
         Some(Tok::EOF) | None => {
-            println!("got eof3");
+            debug!("got eof3");
             // we got an EOF when we were expecting an N token
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)))
         }
@@ -438,7 +439,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         }
 
         _ => {
-            println!("got unexpected token {:?}", &n);
+            debug!("got unexpected token {:?}", &n);
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Tag)))
         }
     }
@@ -456,7 +457,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // r = +inf
     let r = 127;
 
-    println!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
+    debug!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
 
     // The P parser starts with an N token, and goes with it, returning a Node
     // This is the first element of the expression
@@ -466,7 +467,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
         return Ok((i, p));
     }
 
-    println!(
+    debug!(
         "E1 {:?}, prec: {:?}, P:{:?}, depth:{}",
         i.toks(),
         prec,
@@ -482,7 +483,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // G will parse what's next recursively, until we find something that has a lower precedence
     let (i, (r, t)) = i.G(r, p, prec, 0)?;
 
-    println!("E2 {:?}", (&t, r, depth, i.toks()));
+    debug!("E2 {:?}", (&t, r, depth, i.toks()));
     Ok((i, t))
 }
 
@@ -497,7 +498,7 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
     //
     // peek
 
-    println!("G: {:?}", (&i.toks(), &r, &prec, &r, depth));
+    debug!("G: {:?}", (&i.toks(), &r, &prec, &r, depth));
 
     if i.is_eof() {
         return Ok((i, (r, t)));
@@ -513,10 +514,10 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
         (i, Op::new_default_left())
     };
 
-    println!("op: {:?}", (&token, &op));
+    debug!("op: {:?}", (&token, &op));
 
     let lbp = op.lbp.unwrap_or(-1);
-    println!(
+    debug!(
         "guard: prec:{} <= lbp:{} <= r:{}\n\tLHS: {:?}\n\t{:?}",
         prec.unwrap(),
         lbp,
@@ -537,7 +538,7 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
         // LeD, parse the RHS, and return the appropriate node
         let t1 = t.clone();
         let (i, t) = op.LeD(i, &t, &token, depth)?;
-        println!("LeD: {:?} -> {:?}", (&t1, &token), &t);
+        debug!("LeD: {:?} -> {:?}", (&t1, &token), &t);
 
         // set r = NBP of op
         let r = op.nbp.unwrap();
@@ -545,7 +546,7 @@ fn G<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Toke
         // loop recursively
         i.G(r, t, prec, depth + 1)
     } else {
-        println!("guard exit: {:?}", &i.toks());
+        debug!("guard exit: {:?}", &i.toks());
         Ok((i, (r, t)))
     }
 }
@@ -581,14 +582,14 @@ pub fn parse<'a>(i: Tokens) -> RNode {
 
     match parse_expr(i) {
         Ok((i, node)) => {
-            println!("EXPR {:?}", (&node, &i.toks()));
+            debug!("EXPR {:?}", (&node, &i.toks()));
             let (i, eof) = tag_token(Tok::EOF)(i)?;
-            println!("EOF {:?}", (eof));
+            debug!("EOF {:?}", (eof));
             Ok((i, node))
         }
         Err(nom::Err::Error(e)) => {
             for (tokens, err) in &e.errors {
-                println!("error {:?}", (&err, tokens.toks()));
+                debug!("error {:?}", (&err, tokens.toks()));
             }
             Err(nom::Err::Error(e))
         }
@@ -649,22 +650,22 @@ mod tests {
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
             let i = lexer.tokens();
-            println!("v {:?}", (&v));
-            println!("tokens: {:?}", (i));
+            debug!("v {:?}", (&v));
+            debug!("tokens: {:?}", (i));
 
             i.iter_elements().for_each(|t| {
-                println!("{:?}", t);
+                debug!("{:?}", t);
             });
             let r = parse_expr(i);
             match r {
                 Ok((i, node)) => {
                     let r = node.unlex();
-                    println!("v {:?}", (&v));
-                    //println!("NODE {:?}", (&node));
-                    println!("NODE {:?}", (&node.unparse()));
-                    println!("REM {:?}", (&i.toks()));
-                    println!("S {}", &node.sexpr().unwrap());
-                    println!("R {}", &r);
+                    debug!("v {:?}", (&v));
+                    //debug!("NODE {:?}", (&node));
+                    debug!("NODE {:?}", (&node.unparse()));
+                    debug!("REM {:?}", (&i.toks()));
+                    debug!("S {}", &node.sexpr().unwrap());
+                    debug!("R {}", &r);
                     assert_eq!(v, &r);
                     assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
                                                           //assert_eq!(0, i.input_len());
@@ -680,9 +681,9 @@ mod tests {
         let toks = vec![Token::new(Tok::EOF, pos)];
         let i = Tokens::new(&toks[..]);
         let (i, node) = parse(i).unwrap();
-        println!("NODE {:?}", (&node));
-        println!("NODE {:?}", (&node.unparse()));
-        println!("rest {:?}", (&i.toks()));
+        debug!("NODE {:?}", (&node));
+        debug!("NODE {:?}", (&node.unparse()));
+        debug!("rest {:?}", (&i.toks()));
         assert_eq!(i.toks(), vec![Tok::EOF]);
         //assert_eq!(i.input_len(), 0);
 
@@ -763,27 +764,27 @@ mod tests {
         ];
 
         r.iter().for_each(|(q, a)| {
-            println!("q {:?}", (&q));
+            debug!("q {:?}", (&q));
 
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let i = lexer.tokens();
 
-            println!("tokens: {:?}", (i.toks()));
+            debug!("tokens: {:?}", (i.toks()));
 
             i.iter_elements().for_each(|t| {
-                println!("{:?}", t);
+                debug!("{:?}", t);
             });
 
             let r = parse_expr(i);
             print_result(&r);
             match r {
                 Ok((i, expr)) => {
-                    println!("NODE {:?}", (&expr.unparse()));
-                    println!("REM {:?}", (&i.toks()));
+                    debug!("NODE {:?}", (&expr.unparse()));
+                    debug!("REM {:?}", (&i.toks()));
                     match expr.sexpr() {
                         Ok(sexpr) => {
                             let rendered = format!("{}", &sexpr);
-                            println!("sexpr {:?}", (&q, &sexpr, &rendered, a));
+                            debug!("sexpr {:?}", (&q, &sexpr, &rendered, a));
                             assert_eq!(rendered, a.to_string());
                             assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
                                                                   //assert_eq!(0, i.input_len());

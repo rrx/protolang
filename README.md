@@ -4,7 +4,7 @@ DEX - an interpreter/compiler focused on Developer Experience
 
 This is a toy compiler used for experiments in programming language design.  It has the following features:
 
-- lossless compiler
+- lossless parser
 
 
 A lossless compiler preserves whitespace and structure, allowing you to parse the code to an AST, and then covert it back to it's original form.
@@ -16,7 +16,7 @@ The goal is to create a simple compiler that can also be used for:
 - self-hosting embedded language similar to Emacs Lisp 
 - highly configurable parser that can be dynamically configured
 - code transformation and transpilation
-- more flexible type inference then Rust
+- more flexible type inference than Rust
 - more granular ownership checking for concurrent code than Rust
 - eliminate the need for Rust style macros, by being able to modify code at compile time, using the same language
 - a flexible solution for adhoc DSLs, similar to Racket
@@ -31,14 +31,19 @@ Ideas
 TODO
 
 - [x] Lossless Basic Lexer
-- [x] Pratt parser for arithmetic
+- [x] Pratt parser for operation precedence
 - [x] Lossless parser 
 - [x] sexpr transpiler
 - [x] interpreter
 - [x] REPL
-- [x] functions
+- [ ] closures
 - [ ] branching and control flow
 - [ ] recursion
+- [ ] integrated unit testing
+- [ ] syntax highlighter
+- [ ] code formatter
+- [ ] basic type inference
+- [ ] f-strings
 - [ ] module system
 - [ ] basic runtime
 - [ ] basic polymorphism

@@ -19,6 +19,128 @@ pub trait Unparse {
     }
 }
 
+#[derive(Debug)]
+pub enum VisitError {
+    Error
+}
+
+pub type VResult = Result<(), VisitError>;
+
+pub trait ExprVisitor<N> {
+    fn enter(&mut self, e: &ExprNode, extra: &mut N) -> VResult;
+    fn exit(&mut self, e: &ExprNode, extra: &mut N) -> VResult;
+    fn ident(&mut self, s: &String, extra: &mut N) -> VResult {Ok(())}
+    fn literal(&mut self, tok: &Tok, extra: &mut N) -> VResult {Ok(())}
+}
+
+pub trait ExprVisitorMut {
+    fn enter(&mut self, e: &mut ExprNode) -> bool;
+    fn exit(&mut self, e: &mut ExprNode) -> bool;
+    fn ident(&mut self, s: &mut String) -> bool {true}
+    fn literal(&mut self, tok: &mut Tok) -> bool {true}
+}
+
+pub struct Unparser {
+    //toks: Vec<Tok>
+}
+
+impl Default for Unparser {
+    fn default() -> Self {
+        Self { } //.toks: vec![] }
+    }
+}
+
+impl ExprVisitor<Vec<Tok>> for Unparser {
+    fn enter(&mut self, e: &ExprNode, n: &mut Vec<Tok>) -> VResult {
+        n.append(&mut e.context.s.pre.clone());
+        match &e.value {
+            Expr::Ident(x) => {
+                n.push(Tok::Ident(x.clone()));
+            }
+            Expr::Literal(x) => {
+                n.push(x.clone());
+            }
+            Expr::Lambda(e) => {
+                n.append(&mut e.unparse());
+            }
+            Expr::Invalid(s) => {
+                n.push(Tok::Invalid(s.clone()));
+            }
+            _ => ()
+        };
+        Ok(())
+    }
+
+    fn exit(&mut self, e: &ExprNode, n: &mut Vec<Tok>) -> VResult {
+        n.append(&mut e.context.s.post.clone());
+        Ok(())
+    }
+}
+
+pub fn unparse_expr(e: &ExprNode) -> Vec<Tok> {
+    let mut v = Unparser {};//::default();
+    let mut out = vec![];
+    let _ = visit(e, &mut v, &mut out).unwrap();
+    out
+}
+
+fn visit<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VResult {
+    f.enter(e, n)?;
+    match &e.value {
+        Expr::Ternary(_, x, y, z) => {
+            visit(&x, f, n)?;
+            visit(&y, f, n)?;
+            visit(&z, f, n)?;
+        }
+        Expr::Chain(_, _) => {}
+        Expr::Prefix(_unary, expr) => {
+            visit(&expr, f, n)?;
+        }
+        Expr::Postfix(_unary, expr) => {
+            visit(&expr, f, n)?;
+        }
+        Expr::Binary(_op, left, right) => {
+            visit(&left, f, n)?;
+            visit(&right, f, n)?;
+        }
+        Expr::List(elements) => {
+            for e in elements {
+                visit(&e, f, n)?;
+            }
+        }
+        Expr::Callable(_) => {
+            //out.append(&mut e.unparse());
+        }
+        Expr::Index(expr, arg) => {
+            visit(&expr, f, n)?;
+            visit(&arg, f, n)?;
+        }
+        Expr::Apply(ident, args) => {
+            visit(&ident, f, n)?;
+            for arg in args {
+                visit(&arg, f, n)?;
+            }
+        }
+        Expr::Block(exprs) | Expr::Program(exprs) => {
+            for e in exprs {
+                visit(&e, f, n)?;
+            }
+        }
+        Expr::Ident(x) => {
+            f.ident(x, n)?;
+        }
+        Expr::Literal(x) => {
+            f.literal(x, n)?;
+        }
+        Expr::Lambda(e) => {
+        }
+        Expr::Invalid(s) => {
+        }
+        _ => ()
+    };
+    f.exit(e, n)
+}
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     Ident(String),
@@ -27,6 +149,7 @@ pub enum Expr {
     Postfix(OperatorNode, Box<ExprNode>),
     Binary(Operator, Box<ExprNode>, Box<ExprNode>),
     Ternary(Operator, Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
+    //NAry(Operator, Vec<ExprNode>),
     Lambda(Lambda),
     Callable(Box<dyn Callable>),
     List(Vec<ExprNode>),
@@ -65,6 +188,21 @@ impl Expr {
             None
         }
     }
+
+    pub fn visit_mut(&mut self, mut f: impl FnMut(&Self) -> bool) -> bool {
+        match self {
+            Self::Ident(s) => true,
+            _ => f(self)
+        }
+    }
+
+    pub fn visit(&self, f: impl Fn(&Self) -> bool) -> bool {
+        match self {
+            Self::Ident(s) => true,
+            _ => f(self)
+        }
+    }
+
 }
 
 #[derive(Clone)]

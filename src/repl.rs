@@ -2,17 +2,27 @@ use crate::interpreter::Interpreter;
 use crate::lexer;
 use crate::parser::{parse_program, parse_program_with_results};
 use crate::results::*;
+use crate::ast::ExprNode;
 use crate::sexpr::SExpr;
 use nom::InputLength;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::{env, io::Write, process};
+use log::debug;
 
 pub fn cli() -> anyhow::Result<()> {
     for filename in std::env::args().skip(1) {
         run_file(filename.as_str())?;
     }
     Ok(())
+}
+
+pub fn parse_file(filename: &str) -> ExprNode {
+    let contents = std::fs::read_to_string(filename.clone()).unwrap().to_string();
+    let mut lexer = lexer::LexerState::default();
+    let (_,_) = lexer.lex(contents.as_str()).unwrap();
+    let (_, expr) = parse_program(lexer.tokens().clone()).unwrap();
+    expr
 }
 
 pub fn run_file(filename: &str) -> anyhow::Result<()> {
@@ -26,13 +36,13 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
             match parse_program(tokens.clone()) {
                 Ok((rest, prog)) => {
                     if rest.input_len() > 0 {
-                        println!("ERROR Not Parsed {:?}", rest.to_location());
+                        debug!("ERROR Not Parsed {:?}", rest.to_location());
                         return Ok(());
                     }
-                    println!("PROG: {:?}", prog.sexpr());
+                    debug!("PROG: {:?}", prog.sexpr());
                 }
                 Err(e) => {
-                    println!("ERROR {:?}", e);
+                    debug!("ERROR {:?}", e);
                     return Ok(());
                 }
             }
@@ -41,19 +51,19 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
             let (maybe_prog, results) = parse_program_with_results(tokens);
             for r in results {
                 match r {
-                    Results::Warning(msg, line) => println!("-W[{}] {}", line, msg),
-                    Results::Error(msg, line) => println!("*E[{}] {}", line, msg),
+                    Results::Warning(msg, line) => debug!("-W[{}] {}", line, msg),
+                    Results::Error(msg, line) => debug!("*E[{}] {}", line, msg),
                 }
             }
 
             if let Some(prog) = maybe_prog {
-                //println!("{:?}", (&prog));
+                //debug!("{:?}", (&prog));
                 match prog.sexpr() {
                     Ok(sexpr) => {
-                        println!("Ok expr {}", &sexpr);
+                        debug!("Ok expr {}", &sexpr);
                     }
                     Err(e) => {
-                        println!("Error sexpr {:?}", e);
+                        debug!("Error sexpr {:?}", e);
                     }
                 }
                 let mut interp = Interpreter::default();
@@ -62,7 +72,7 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
             Ok(())
         }
         Err(e) => {
-            println!("[{}] {:?}", filename, e);
+            debug!("[{}] {:?}", filename, e);
             Ok(())
             //Err(e.into())
         }
@@ -72,7 +82,7 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
 pub fn run_prompt() -> anyhow::Result<()> {
     let mut rl = Editor::<()>::new();
     if rl.load_history("history.txt").is_err() {
-        println!("No previous history");
+        debug!("No previous history");
     }
 
     let mut interpreter = Interpreter::default();
@@ -86,17 +96,17 @@ pub fn run_prompt() -> anyhow::Result<()> {
             }
 
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
+                debug!("CTRL-C");
                 break;
             }
 
             Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
+                debug!("CTRL-D");
                 break;
             }
 
             Err(err) => {
-                println!("Error: {:?}", err);
+                debug!("Error: {:?}", err);
                 break;
             }
         }
@@ -113,29 +123,33 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
             let (maybe_prog, results) = parse_program_with_results(tokens);
             for r in results {
                 match r {
-                    Results::Warning(msg, line) => println!("-W[{}] {}", line, msg),
-                    Results::Error(msg, line) => println!("*E[{}] {}", line, msg),
+                    Results::Warning(msg, line) => debug!("-W[{}] {}", line, msg),
+                    Results::Error(msg, line) => debug!("*E[{}] {}", line, msg),
                 }
             }
 
             if let Some(prog) = maybe_prog {
-                println!("PROG: {:?}", (&prog));
+                debug!("PROG: {:?}", (&prog));
                 let sexpr = prog.sexpr().unwrap();
-                println!("SEXPR: {}", &sexpr);
+                debug!("SEXPR: {}", &sexpr);
                 match interpreter.evaluate(&prog.value) {
-                    Ok(r) => println!("R: {:?}", r),
-                    Err(e) => println!("E: {:?}", e),
+                    Ok(r) => debug!("R: {:?}", r),
+                    Err(e) => debug!("E: {:?}", e),
                 }
             }
         }
         Err(e) => {
-            println!("{:?}", e);
+            debug!("{:?}", e);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parse() {
+        crate::repl::parse_file("examples/test.p");
+    }
     #[test]
     fn example() {
         crate::repl::run_file("examples/test.p").unwrap()
