@@ -1,4 +1,4 @@
-use super::{ExprNode, Unparse, Expr, unparse_expr};
+use super::{ExprNode, Expr};
 use crate::tokens::Tok;
 use std::collections::VecDeque;
 
@@ -185,7 +185,7 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse_program;
+    use crate::parser::{parse_program, unparse_expr};
     use crate::lexer::LexerState;
     use crate::sexpr::SExpr;
 

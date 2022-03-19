@@ -16,6 +16,8 @@ use log::debug;
 
 mod pratt;
 mod pratt1;
+mod unparse;
+pub use unparse::{{unparse_expr, Unparse}};
 
 #[derive(Debug)]
 pub struct DebugError<I> {

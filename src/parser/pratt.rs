@@ -8,6 +8,7 @@ use crate::tokens::{Tok, Token, Tokens, TokensList};
 use nom::error::{context, ErrorKind};
 use nom::{multi, sequence};
 use log::debug;
+use crate::parser::Unparse;
 
 use crate::ast::{Expr, ExprNode, Operator, OperatorNode};
 
@@ -604,7 +605,6 @@ mod tests {
     use super::*;
     use crate::parser::print_result;
     use crate::lexer::*;
-    use crate::ast::Unparse;
     use crate::sexpr::SExpr;
     use nom::{InputIter};
 
