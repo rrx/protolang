@@ -8,9 +8,16 @@ pub trait Context2: Debug + Display + Clone {
     fn from_token(token: &Token) -> Self where Self: Sized;
 }
 
-pub trait Context: Debug + Display + Clone {
+pub trait Context: Debug + Display {
     fn pre(&self) -> Vec<Tok>;
     fn post(&self) -> Vec<Tok>;
+    fn box_clone(&self) -> Box<dyn Context>;
+}
+
+impl Clone for Box<dyn Context> {
+    fn clone(&self) -> Self {
+        self.box_clone()
+    }
 }
 
 #[derive(PartialEq, Debug, Clone, Default)]
@@ -57,6 +64,9 @@ impl Context for NodeContextWithLocation {
     }
     fn post(&self) -> Vec<Tok> {
         self.s.post.clone()
+    }
+    fn box_clone(&self) -> Box<dyn Context> {
+        Box::new((*self).clone())
     }
 }
 
@@ -138,6 +148,9 @@ impl Context for MaybeNodeContext {
             None => vec![]
         }
     }
+    fn box_clone(&self) -> Box<dyn Context> {
+        Box::new((*self).clone())
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -158,6 +171,9 @@ impl Context for NodeContextNull {
     }
     fn post(&self) -> Vec<Tok> {
         vec![]
+    }
+    fn box_clone(&self) -> Box<dyn Context> {
+        Box::new((*self).clone())
     }
 }
 
