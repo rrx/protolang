@@ -1,14 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use protolang::ast::{unparse_expr, Unparse};
 use protolang::eval::Interpreter;
 use protolang::lexer;
-use protolang::parser::parse_program;
-use protolang::repl::parse_file;
+use protolang::parser::{unparse_expr, parse_program, Unparse};
+//use protolang::repl::parse_file;
 
-const filename: &str = "benches/test.p";
+const FILENAME: &str = "benches/test.p";
 
 fn parse(c: &mut Criterion) {
-    let contents = std::fs::read_to_string(filename.clone())
+    let contents = std::fs::read_to_string(FILENAME.clone())
         .unwrap()
         .to_string();
     let mut lexer = lexer::LexerState::default();
@@ -36,7 +35,7 @@ fn parse(c: &mut Criterion) {
 }
 
 fn interpret(c: &mut Criterion) {
-    let contents = std::fs::read_to_string(filename.clone())
+    let contents = std::fs::read_to_string(FILENAME.clone())
         .unwrap()
         .to_string();
     let mut lexer = lexer::LexerState::default();
