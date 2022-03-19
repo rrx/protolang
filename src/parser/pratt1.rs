@@ -24,7 +24,7 @@ fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, Ex
             println!("pratt unary: {:?}", &unary);
             let (i1, expr) = parse_pratt_expr(i0, Precedence::PLessGreater)?;
             println!("pratt unary expr: {:?}", (&i1, &expr));
-            let loc = unary.context.loc.clone();
+            let loc = unary.context.to_location();
             let mut node = ExprNode::new(Expr::Prefix(unary.clone(), Box::new(expr)), &loc);
             node.context.prepend(unary.unparse());
 
@@ -140,7 +140,7 @@ fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     use Expr::Prefix;
     let (i1, prefix) = parse_prefix(i)?;
     let (i2, expr1) = parse_atom(i1)?;
-    let mut node = ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.context.loc);
+    let mut node = ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.context.to_location());
     node.context.prepend(prefix.unparse()); //vec![prefix.token()]);
     Ok((i2, node))
 }

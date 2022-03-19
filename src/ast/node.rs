@@ -63,7 +63,17 @@ impl Context for NodeContextWithLocation {
 #[derive(PartialEq, Debug, Clone)]
 pub struct MaybeNodeContext(Option<NodeContext>);
 
+impl Default for MaybeNodeContext {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
 impl MaybeNodeContext {
+    pub fn move_token(token: Token) -> Self {
+        MaybeNodeContext(Some(NodeContext::move_token(token)))
+    }
+
     pub fn to_location(&self) -> Location {
         match &self.0 {
             Some(c) => c.loc.clone(),

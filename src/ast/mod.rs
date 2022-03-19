@@ -1,4 +1,4 @@
-use crate::lexer::{Location, Surround};
+use crate::lexer::{Location};
 use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
 use std::fmt;
@@ -327,8 +327,22 @@ impl SExpr for ExprNode {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct OperatorNode {
-    pub context: NodeContext,
+    pub context: MaybeNodeContext,
     pub value: Operator,
+}
+
+impl std::ops::Deref for OperatorNode {
+    type Target = Operator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl std::ops::DerefMut for OperatorNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
 }
 
 impl OperatorNode {
@@ -359,7 +373,7 @@ impl OperatorNode {
     pub fn from_postfix_token(token: Token) -> Option<Self> {
         match Self::from_postfix_tok(&token.tok) {
             Some(postfix) => Some(Self {
-                context: NodeContext::move_token(token),
+                context: MaybeNodeContext::move_token(token),
                 value: postfix,
             }),
             None => None,
@@ -377,7 +391,7 @@ impl OperatorNode {
     pub fn from_prefix_token(token: &Token) -> Option<Self> {
         match Self::from_prefix_tok(&token.tok) {
             Some(prefix) => Some(Self {
-                context: NodeContext::from_token(&token),
+                context: MaybeNodeContext::from_token(&token),
                 value: prefix,
             }),
             None => None,
@@ -387,7 +401,7 @@ impl OperatorNode {
     pub fn from_token(token: &Token) -> Option<Self> {
         match Operator::from_tok(&token.tok) {
             Some(prefix) => Some(Self {
-                context: NodeContext::from_token(&token),
+                context: MaybeNodeContext::from_token(&token),
                 value: prefix,
             }),
             None => None,
@@ -395,21 +409,18 @@ impl OperatorNode {
     }
 
     pub fn from_tokens(prefix: Operator, pre: Vec<Tok>, post: Vec<Tok>) -> Self {
-        let s = Surround::new(pre, post);
-
-        let context = NodeContext {
-            s,
-            loc: Location::default(),
-        };
+        let mut context = MaybeNodeContext::default();
+        context.prepend(pre);
+        context.append(post);
         Self {
             value: prefix,
-            context,
+            context
         }
     }
 
     pub fn new(prefix: Operator) -> Self {
         Self {
-            context: NodeContext::default(),
+            context: MaybeNodeContext::default(),
             value: prefix,
         }
     }
@@ -421,7 +432,7 @@ impl OperatorNode {
 
 impl Unparse for OperatorNode {
     fn unparse(&self) -> Vec<Tok> {
-        self.context.s.unparse(vec![self.value.token()])
+        self.context.unparse(vec![self.value.token()])
     }
 
     fn unlex(&self) -> String {
