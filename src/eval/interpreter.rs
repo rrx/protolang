@@ -5,32 +5,8 @@ use crate::tokens::Tok;
 use log::debug;
 use std::collections::HashMap;
 use std::result::Result;
+use super::*;
 
-#[derive(Debug)]
-pub struct Environment {
-    values: HashMap<String, Expr>,
-}
-impl Default for Environment {
-    fn default() -> Self {
-        Self {
-            values: HashMap::new(),
-        }
-    }
-}
-impl Environment {
-    pub fn define(&mut self, name: &str, value: &Expr) {
-        self.values.insert(name.to_string(), value.clone());
-    }
-    pub fn get(&self, name: &str) -> Result<Expr, InterpretError> {
-        if let Some(value) = self.values.get(name) {
-            return Ok(value.clone());
-        }
-        Err(InterpretError::Runtime {
-            message: format!("Undefined variable '{}'.", name),
-            line: 0, //name.line(),
-        })
-    }
-}
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -40,7 +16,7 @@ pub struct Interpreter {
 impl Default for Interpreter {
     fn default() -> Self {
         let mut globals = Environment::default();
-        use crate::builtins::*;
+        use super::builtins::*;
         globals.define("clock", &Clock::value());
         globals.define("assert", &Assert::value());
         Self { globals }
@@ -56,26 +32,6 @@ pub enum InterpretError {
 }
 
 impl Expr {
-    pub fn is_number(&self) -> bool {
-        if let Self::Literal(tok) = self {
-            match tok {
-                Tok::IntLiteral(_) => true,
-                Tok::FloatLiteral(_) => true,
-                _ => false,
-            }
-        } else {
-            false
-        }
-    }
-
-    pub fn new_float(f: f64) -> Self {
-        Self::Literal(Tok::FloatLiteral(f))
-    }
-
-    pub fn new_bool(b: bool) -> Self {
-        Self::Literal(Tok::BoolLiteral(b))
-    }
-
     fn check_bool(&self) -> Result<bool, InterpretError> {
         match self {
             Self::Literal(t) => match t {

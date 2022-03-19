@@ -56,6 +56,27 @@ impl Expr {
             None
         }
     }
+
+    pub fn is_number(&self) -> bool {
+        if let Self::Literal(tok) = self {
+            match tok {
+                Tok::IntLiteral(_) => true,
+                Tok::FloatLiteral(_) => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn new_float(f: f64) -> Self {
+        Self::Literal(Tok::FloatLiteral(f))
+    }
+
+    pub fn new_bool(b: bool) -> Self {
+        Self::Literal(Tok::BoolLiteral(b))
+    }
+
 }
 
 #[derive(Clone)]
