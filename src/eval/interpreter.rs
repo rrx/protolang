@@ -260,7 +260,7 @@ impl Interpreter {
         }
 
         // evaluate the result
-        let r = self.evaluate(&expr.value)?;
+        let r = self.evaluate(&expr)?;
 
         // pop scope, TODO
         let mut out = expr.clone();
@@ -292,19 +292,19 @@ impl Interpreter {
             Expr::Literal(lit) => Ok(Expr::Literal(lit)),//ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
             Expr::Ident(ident) => self.globals.get(&ident),
             Expr::Prefix(prefix, expr) => {
-                let eval = self.evaluate(&expr.value)?;
+                let eval = self.evaluate(&expr)?;
                 let eval = eval.prefix(&prefix.value)?;
                 Ok(eval)
             }
             Expr::Postfix(op, expr) => {
-                let eval = self.evaluate(&expr.value)?;
+                let eval = self.evaluate(&expr)?;
                 let eval = eval.postfix(&op.value)?;
                 Ok(eval)
             }
             Expr::Binary(op, left, right) => {
                 if op == Operator::Assign {
-                    return if let Some(ident) = left.value.try_ident() {
-                        let eval_right = self.evaluate(&right.value)?;
+                    return if let Some(ident) = left.try_ident() {
+                        let eval_right = self.evaluate(&right)?;
                         self.globals.define(&ident, &eval_right);
                         debug!("Assign {:?} to {}", &eval_right, &ident);
                         Ok(eval_right)
@@ -316,8 +316,8 @@ impl Interpreter {
                     };
                 }
 
-                let eval_left = self.evaluate(&left.value)?;
-                let eval_right = self.evaluate(&right.value)?;
+                let eval_left = self.evaluate(&left)?;
+                let eval_right = self.evaluate(&right)?;
                 match op {
                     Operator::Plus => eval_left.plus(&eval_right),
                     Operator::Minus => eval_left.minus(&eval_right),
@@ -339,7 +339,7 @@ impl Interpreter {
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 for mut e in elements.clone() {
-                    e.value = self.evaluate(&e.value)?;
+                    e.value = self.evaluate(&e)?;
                     eval_elements.push(e);//self.evaluate(&e)?);
                 }
                 Ok(Expr::List(eval_elements))
@@ -374,7 +374,7 @@ impl Interpreter {
                     Some(Expr::Callable(c)) => {
                         let mut eval_args = vec![];
                         for arg in args {
-                            eval_args.push(self.evaluate(&arg.value)?);
+                            eval_args.push(self.evaluate(&arg)?);
                         }
                         debug!("Calling {:?}({:?})", c, eval_args);
                         let result = c.call(self, eval_args);
@@ -392,7 +392,7 @@ impl Interpreter {
                 let mut result = Expr::List(vec![]);
 
                 for expr in exprs {
-                    let r = self.evaluate(&expr.value);
+                    let r = self.evaluate(&expr);
                     match r {
                         Ok(v) => {
                             result = v;
@@ -409,7 +409,7 @@ impl Interpreter {
                 let mut result = Expr::List(vec![]);
 
                 for expr in exprs {
-                    let r = self.evaluate(&expr.value);
+                    let r = self.evaluate(&expr);
                     match r {
                         Ok(v) => {
                             result = v;
@@ -424,12 +424,12 @@ impl Interpreter {
 
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
-                    let r = self.evaluate(&x.value)?;
+                    let r = self.evaluate(&x)?;
                     let b = Expr::check_bool(&r)?;
                     if b {
-                        self.evaluate(&y.value)
+                        self.evaluate(&y)
                     } else {
-                        self.evaluate(&z.value)
+                        self.evaluate(&z)
                     }
                 }
                 _ => unimplemented!(),
@@ -461,11 +461,11 @@ impl Interpreter {
             }
         }
 
-        self.evaluate(&expr.value)
+        self.evaluate(&expr)
     }
 
     pub fn interpret(&mut self, program: ExprNode) {
-        match self.evaluate(&program.value) {
+        match self.evaluate(&program) {
             Ok(v) => {
                 debug!("Result: {:?}", &v);
             }

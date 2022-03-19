@@ -120,6 +120,20 @@ pub struct ExprNode {
     pub value: Expr,
 }
 
+impl std::ops::Deref for ExprNode {
+    type Target = Expr;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl std::ops::DerefMut for ExprNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
 impl fmt::Debug for ExprNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ExprNode")
