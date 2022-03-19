@@ -103,9 +103,9 @@ impl Expr {
                     out.push(Box::new(e.clone()));
                 }
             }
-            Expr::Ident(x) => {
+            Expr::Ident(_) => {
             }
-            Expr::Literal(x) => {
+            Expr::Literal(_) => {
             }
             Expr::Lambda(_) => {
             }
@@ -209,7 +209,7 @@ mod tests {
         let (_, expr) = parse_program(tokens).unwrap();
         let mut bfs = BFS::new();
         let mut out = vec![];
-        let r = bfs.run(&expr, &mut out).unwrap();
+        let _ = bfs.run(&expr, &mut out).unwrap();
         println!("SEXPR: {}", expr.sexpr().unwrap());
         for v in out {
             println!("bfs {:?}", (unparse_expr(&v, true)));
