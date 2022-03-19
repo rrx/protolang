@@ -311,7 +311,7 @@ impl Interpreter {
                     } else {
                         Err(InterpretError::Runtime {
                             message: format!("Invalid Assignment, LHS must be identifier"),
-                            line: left.context.loc.line,
+                            line: left.context.line(),
                         })
                     };
                 }
@@ -332,7 +332,7 @@ impl Interpreter {
                     Operator::NotEqual => eval_left.ne(&eval_right),
                     _ => Err(InterpretError::Runtime {
                         message: format!("Unimplemented expression op: Operator::{:?}", op),
-                        line: left.context.loc.line,
+                        line: left.context.line(),
                     }),
                 }
             }

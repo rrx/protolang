@@ -65,7 +65,7 @@ Future
 - [ ] friendly compiler errors
 - [ ] c-library interop
 - [ ] rust interop (using stable_abi?)
-
+- [ ] use logos for lexing (https://docs.rs/logos/latest/logos/)
 
 References
 

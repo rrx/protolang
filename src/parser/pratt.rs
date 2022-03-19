@@ -161,7 +161,7 @@ impl Op {
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
                 let mut x = x.clone();
-                x.context.s.append(token.expand_toks()); //vec![token.clone()]);
+                x.context.append(token.expand_toks()); //vec![token.clone()]);
                 (i, x)
             }
 
@@ -178,8 +178,8 @@ impl Op {
                 let (i, z) = extra(i, Some(0), depth + 1)?;
 
                 //let op = Binary::from_location(&i, Operator::Conditional);
-                y.context.s.prepend(token.expand_toks());
-                y.context.s.append(sep.expand_toks());
+                y.context.prepend(token.expand_toks());
+                y.context.append(sep.expand_toks());
                 let value = Expr::Ternary(
                     Operator::Conditional,
                     Box::new(x.clone()),
@@ -209,9 +209,9 @@ impl Op {
                 debug!("nodes: {:?}", (&nodes, &end));
                 //let op = Operator::Call;
                 let mut f = x.clone();
-                f.context.s.append(token.expand_toks());
+                f.context.append(token.expand_toks());
                 let mut node = ExprNode::new(Expr::Apply(Box::new(f), nodes), &i.to_location());
-                node.context.s.append(end.expand_toks());
+                node.context.append(end.expand_toks());
                 (i, node)
 
                 // application is slightly different than binary.  The RHS is optional
@@ -227,7 +227,7 @@ impl Op {
                     //let _ = maybe_op.unwrap();
                     let op = Operator::from_tok(&token.tok).unwrap();
                     let mut left = x.clone();
-                    left.context.s.append(token.expand_toks()); //op.unparse());
+                    left.context.append(token.expand_toks()); //op.unparse());
                     let right = y;
 
                     let t = Expr::Binary(op, Box::new(left), Box::new(right));
@@ -239,7 +239,7 @@ impl Op {
                     let op = OperatorNode::from_postfix_token(token.clone()).unwrap();
                     let t = Expr::Postfix(op, Box::new(x.clone()));
                     let mut node = i.node(t);
-                    node.context.s.append(token.expand_toks());
+                    node.context.append(token.expand_toks());
 
                     (i, node)
                 }
@@ -260,7 +260,7 @@ impl Op {
             */
             Tok::LBracket => {
                 let (i, right) = tag_token(Tok::RBracket)(i)?;
-                t.context.s.append(right.expand_toks());
+                t.context.append(right.expand_toks());
                 i
             }
             _ => i,
@@ -363,7 +363,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let op = OperatorNode::from_prefix_token(token).unwrap();
             let value = Expr::Prefix(op, Box::new(t));
             let mut node = i.node(value);
-            node.context.s.prepend(op_tokens.expand_toks());
+            node.context.prepend(op_tokens.expand_toks());
             Ok((i, node))
         }
 
@@ -389,8 +389,8 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
             let t = Expr::Block(vec![t]);
             let mut node = i.node(t);
-            node.context.s.prepend(left.expand_toks());
-            node.context.s.append(right.expand_toks());
+            node.context.prepend(left.expand_toks());
+            node.context.append(right.expand_toks());
             Ok((i, node))
         }
 
@@ -405,8 +405,8 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
             let t = Expr::List(vec![t]);
             let mut node = i.node(t);
-            node.context.s.prepend(left.expand_toks());
-            node.context.s.append(right.expand_toks());
+            node.context.prepend(left.expand_toks());
+            node.context.append(right.expand_toks());
             Ok((i, node))
         }
 
@@ -421,8 +421,8 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
             debug!("prefix paren2: {:?}", (&i.toks(), &node));
             let (i, right) = context("r-paren", tag_token(Tok::RParen))(i)?;
-            node.context.s.prepend(left.expand_toks());
-            node.context.s.append(right.expand_toks());
+            node.context.prepend(left.expand_toks());
+            node.context.append(right.expand_toks());
             Ok((i, node))
         }
 
@@ -564,7 +564,6 @@ pub fn parse_expr<'a>(i: Tokens) -> RNode {
     let (i, (mut node, end)) =
         sequence::pair(parse_expr_extra, multi::many0(tag_token(Tok::SemiColon)))(i)?;
     node.context
-        .s
         .append(end.into_iter().map(|t| t.expand_toks()).flatten().collect());
 
     Ok((i, node))

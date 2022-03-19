@@ -1,4 +1,4 @@
-use crate::interpreter::Interpreter;
+use crate::eval::Interpreter;
 use crate::lexer;
 use crate::parser::{parse_program, parse_program_with_results};
 use crate::results::*;

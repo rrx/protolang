@@ -1,6 +1,6 @@
 use crate::{
     ast::{Callable, Expr},
-    interpreter::{InterpretError, Interpreter},
+    eval::{InterpretError, Interpreter},
     tokens::Tok,
 };
 use std::{

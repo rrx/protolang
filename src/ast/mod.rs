@@ -6,7 +6,7 @@ mod function;
 pub use function::{Callable, CallableNode, Lambda, Params};
 
 mod node;
-pub use node::{Context, NodeContext};
+pub use node::{Context, Context2, NodeContext, NodeContextNull, MaybeNodeContext};
 
 mod visitor;
 pub use visitor::{VResult, VisitError, ExprVisitor, visit_expr};
@@ -29,7 +29,7 @@ pub struct Unparser {
 impl ExprVisitor<Vec<Tok>> for Unparser {
     fn enter(&mut self, e: &ExprNode, n: &mut Vec<Tok>) -> VResult {
         if self.expand {
-            n.append(&mut e.context.s.pre.clone());
+            n.append(&mut e.context.pre());
         }
         match &e.value {
             Expr::Ident(x) => {
@@ -51,7 +51,7 @@ impl ExprVisitor<Vec<Tok>> for Unparser {
 
     fn exit(&mut self, e: &ExprNode, n: &mut Vec<Tok>) -> VResult {
         if self.expand {
-            n.append(&mut e.context.s.post.clone());
+            n.append(&mut e.context.post());
         }
         Ok(())
     }
@@ -116,7 +116,7 @@ impl Expr {
 
 #[derive(Clone)]
 pub struct ExprNode {
-    pub context: NodeContext,
+    pub context: MaybeNodeContext,
     pub value: Expr,
 }
 
@@ -126,9 +126,9 @@ impl fmt::Debug for ExprNode {
             //.field("s", &self.context.s)
             //.field("loc", &self.context.loc)
             //
-            .field("pre", &self.context.s.pre)
+            .field("pre", &self.context.pre())
             .field("v", &self.value)
-            .field("post", &self.context.s.post)
+            .field("post", &self.context.post())
             .finish()
     }
 }
@@ -136,7 +136,7 @@ impl fmt::Debug for ExprNode {
 impl ExprNode {
     pub fn new(value: Expr, loc: &Location) -> Self {
         Self {
-            context: NodeContext::from_location(loc),
+            context: MaybeNodeContext::from_location(loc),
             value,
         }
     }
@@ -148,7 +148,7 @@ impl ExprNode {
             _ => None,
         };
         if let Some(value) = maybe {
-            let context = NodeContext::from_token(token);
+            let context = MaybeNodeContext::from_token(token);
             Some(Self { context, value })
         } else {
             None
@@ -247,7 +247,7 @@ impl Unparse for ExprNode {
             // void returns nothing
             Expr::Void => (),
         };
-        self.context.s.unparse(out)
+        self.context.unparse(out)
     }
 }
 impl SExpr for ExprNode {
@@ -363,7 +363,7 @@ impl OperatorNode {
     pub fn from_prefix_token(token: &Token) -> Option<Self> {
         match Self::from_prefix_tok(&token.tok) {
             Some(prefix) => Some(Self {
-                context: Context::from_token(&token),
+                context: NodeContext::from_token(&token),
                 value: prefix,
             }),
             None => None,
@@ -373,7 +373,7 @@ impl OperatorNode {
     pub fn from_token(token: &Token) -> Option<Self> {
         match Operator::from_tok(&token.tok) {
             Some(prefix) => Some(Self {
-                context: Context::from_token(&token),
+                context: NodeContext::from_token(&token),
                 value: prefix,
             }),
             None => None,

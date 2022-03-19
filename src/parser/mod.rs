@@ -194,7 +194,7 @@ pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     debug!("Invalidx: {:?}", &s);
     let mut expr = ExprNode::new(Expr::Invalid(s), &loc);
     // handle trailing newline
-    expr.context.s.append(end.expand_toks());
+    expr.context.append(end.expand_toks());
     //debug!("invalid: {:?}", (&i.toks(), &stmt, r, end));
     Ok((i1, expr))
 }
@@ -208,11 +208,11 @@ pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     ))(i)?;
 
     // transfer surround from assign to nodes we store
-    ident.context.s.append(assign.tok[0].s.pre.clone());
-    expr.context.s.prepend(assign.tok[0].s.post.clone());
+    ident.context.append(assign.tok[0].s.pre.clone());
+    expr.context.prepend(assign.tok[0].s.post.clone());
 
     // handle trailing newline
-    expr.context.s.append(nl.expand_toks());
+    expr.context.append(nl.expand_toks());
 
     Ok((i, expr))
 }
@@ -256,7 +256,6 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
     value
         .context
-        .s
         .append(end.expand_toks());
     Ok((i, value))
 }
@@ -304,8 +303,8 @@ impl ExprNode {
 
         if let Ok(lit) = tok.try_into() {
             let mut litnode = ExprNode::new(lit, &token.to_location());
-            litnode.context.s.prepend(token.s.pre.clone());
-            litnode.context.s.append(token.s.post.clone());
+            litnode.context.prepend(token.s.pre.clone());
+            litnode.context.append(token.s.post.clone());
             Ok((i1, litnode))
         } else {
             Err(Err::Error(error_position!(i1, ErrorKind::Tag)))
@@ -329,10 +328,10 @@ impl ExprNode {
         let mut params = Params::new(idents);
         params.s.prepend(slash.tok[0].toks_post());
         params.s.append(arrow.tok[0].toks_pre());
-        body.context.s.prepend(arrow.tok[0].toks_post());
+        body.context.prepend(arrow.tok[0].toks_post());
         let loc = slash.tok[0].to_location();
         let mut lambda: ExprNode = Lambda::new(params, body, loc.clone()).into();
-        lambda.context.s.prepend(slash.tok[0].toks_pre());
+        lambda.context.prepend(slash.tok[0].toks_pre());
         Ok((i, lambda))
     }
 
@@ -343,8 +342,8 @@ impl ExprNode {
             tag_token(Tok::RBrace),
         ))(i)?;
         let mut node = Self::new(Expr::Block(expressions), &i.to_location());
-        node.context.s.prepend(left.tok[0].expand_toks());
-        node.context.s.append(right.tok[0].expand_toks());
+        node.context.prepend(left.tok[0].expand_toks());
+        node.context.append(right.tok[0].expand_toks());
         Ok((i, node))
     }
 }
@@ -396,7 +395,7 @@ mod tests {
 
     fn dump_expr(expr: &ExprNode) {
         debug!("Expr: {}", expr.unlex());
-        debug!("\tSurround: {:?}", expr.context.s);
+        debug!("\tSurround: {:?}", expr.context);
         for token in unparse_expr(expr, true) {
             debug!("\tToken:: {:?}", token);
         }

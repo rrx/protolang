@@ -3,7 +3,7 @@ use protolang::lexer;
 use protolang::ast::{unparse_expr, Unparse};
 use protolang::parser::parse_program;
 use protolang::repl::parse_file;
-use protolang::interpreter::Interpreter;
+use protolang::eval::Interpreter;
 
 const filename: &str = "benches/test.p";
 
