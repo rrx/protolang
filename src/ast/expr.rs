@@ -127,7 +127,7 @@ impl ExprNode {
 
 impl From<Lambda> for ExprNode {
     fn from(item: Lambda) -> Self {
-        let loc = item.loc.clone();
+        let loc = item.context.to_location();
         Self::new(Expr::Lambda(item), &loc)
     }
 }

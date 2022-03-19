@@ -327,12 +327,12 @@ impl ExprNode {
         debug!("slash: {:?}", &slash);
         debug!("idents: {:?}", &idents);
         debug!("body: {:?}", &body);
-        let mut params = Params::new(idents);
-        params.s.prepend(slash.tok[0].toks_post());
-        params.s.append(arrow.tok[0].toks_pre());
-        body.context.prepend(arrow.tok[0].toks_post());
         let loc = slash.tok[0].to_location();
-        let mut lambda: ExprNode = Lambda::new(params, body, loc.clone()).into();
+        let mut params = Params::new(idents, &loc);
+        params.context.prepend(slash.tok[0].toks_post());
+        params.context.append(arrow.tok[0].toks_pre());
+        body.context.prepend(arrow.tok[0].toks_post());
+        let mut lambda: ExprNode = Lambda::new(params, body, &loc).into();
         lambda.context.prepend(slash.tok[0].toks_pre());
         Ok((i, lambda))
     }

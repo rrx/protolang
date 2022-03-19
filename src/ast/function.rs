@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::sexpr::*;
 use crate::eval::*;
-use crate::lexer::{Location, Surround};
+use crate::lexer::{Location};
 use crate::tokens::Tok;
 use std::{
     any::Any,
@@ -12,16 +12,14 @@ use crate::parser::Unparse;
 #[derive(Debug, Clone)]
 pub struct CallableNode {
     pub value: Box<dyn Callable>,
-    pub s: Surround,
-    pub loc: Location,
+    pub context: MaybeNodeContext,
 }
 
 impl CallableNode {
     pub fn new(value: Box<dyn Callable>, loc: Location) -> Self {
         Self {
             value,
-            s: Surround::default(),
-            loc,
+            context: MaybeNodeContext::from_location(&loc)
         }
     }
 }
@@ -41,20 +39,20 @@ impl Clone for Box<dyn Callable> {
 
 #[derive(Debug, Clone)]
 pub struct Params {
-    pub s: Surround,
+    pub context: MaybeNodeContext,
     pub value: Vec<ExprNode>,
 }
 impl Params {
-    pub fn new(value: Vec<ExprNode>) -> Self {
+    pub fn new(value: Vec<ExprNode>, loc: &Location) -> Self {
         Self {
-            s: Surround::default(),
+            context: MaybeNodeContext::from_location(loc),
             value,
         }
     }
 }
 impl Unparse for Params {
     fn unparse(&self) -> Vec<Tok> {
-        self.s.unparse(
+        self.context.unparse(
             self.value
                 .iter()
                 .map(|s| s.unparse())
@@ -88,23 +86,21 @@ impl SExpr for Params {
 
 #[derive(Debug, Clone)]
 pub struct Lambda {
-    pub s: Surround,
+    pub context: MaybeNodeContext,
     pub params: Params,
     pub expr: Box<ExprNode>,
-    pub loc: Location,
 }
 impl Lambda {
-    pub fn new(params: Params, expr: ExprNode, loc: Location) -> Self {
+    pub fn new(params: Params, expr: ExprNode, loc: &Location) -> Self {
         Self {
-            s: Surround::default(),
+            context: MaybeNodeContext::from_location(loc),
             params,
             expr: Box::new(expr),
-            loc,
         }
     }
     pub fn node(&self) -> CallableNode {
         let c = self.box_clone();
-        CallableNode::new(c, self.loc.clone())
+        CallableNode::new(c, self.context.to_location())
     }
 }
 
