@@ -1,27 +1,41 @@
-use super::{ExprNode, Expr};
+use super::{Expr, ExprNode};
 use crate::tokens::Tok;
 use std::collections::VecDeque;
 
 #[derive(Debug)]
 pub enum VisitError {
-    Error
+    Error,
 }
 
 pub type VResult = Result<(), VisitError>;
 
 pub trait ExprVisitor<N> {
-    fn enter(&mut self, _: &ExprNode, _: &mut N) -> VResult { Ok(()) }
-    fn exit(&mut self, _: &ExprNode, _: &mut N) -> VResult { Ok(()) }
-    fn leaf(&mut self, _: &ExprNode, _: &mut N) -> VResult { Ok(()) }
-    fn ident(&mut self, _: &String, _: &mut N) -> VResult {Ok(())}
-    fn literal(&mut self, _ok: &Tok, _: &mut N) -> VResult {Ok(())}
+    fn enter(&mut self, _: &ExprNode, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn exit(&mut self, _: &ExprNode, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn leaf(&mut self, _: &ExprNode, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn ident(&mut self, _: &String, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn literal(&mut self, _ok: &Tok, _: &mut N) -> VResult {
+        Ok(())
+    }
 }
 
 pub trait ExprVisitorMut {
     fn enter(&mut self, _: &mut ExprNode) -> bool;
     fn exit(&mut self, _: &mut ExprNode) -> bool;
-    fn ident(&mut self, _: &mut String) -> bool {true}
-    fn literal(&mut self, _: &mut Tok) -> bool {true}
+    fn ident(&mut self, _: &mut String) -> bool {
+        true
+    }
+    fn literal(&mut self, _: &mut Tok) -> bool {
+        true
+    }
 }
 
 pub struct DFS {}
@@ -33,10 +47,14 @@ impl ExprVisitor<Vec<ExprNode>> for DFS {
     }
 }
 
-pub struct BFS { queue: VecDeque<ExprNode> }
+pub struct BFS {
+    queue: VecDeque<ExprNode>,
+}
 impl BFS {
     pub fn new() -> Self {
-        Self { queue: VecDeque::new() }
+        Self {
+            queue: VecDeque::new(),
+        }
     }
 
     fn run(&mut self, e: &ExprNode, n: &mut Vec<ExprNode>) -> VResult {
@@ -46,7 +64,8 @@ impl BFS {
     }
 
     fn visit(&mut self, e: &ExprNode, n: &mut Vec<ExprNode>) -> VResult {
-        self.queue.append(&mut e.value.children().into_iter().collect());
+        self.queue
+            .append(&mut e.value.children().into_iter().collect());
         for c in e.value.children() {
             self.visit(&c, n)?;
         }
@@ -71,8 +90,7 @@ impl Expr {
                 out.push(y.clone());
                 out.push(z.clone());
             }
-            Expr::Chain(_, _) => {
-            }
+            Expr::Chain(_, _) => {}
             Expr::Prefix(_unary, expr) => {
                 out.push(expr.clone());
             }
@@ -84,10 +102,14 @@ impl Expr {
                 out.push(right.clone());
             }
             Expr::List(elements) => {
-                out.append(&mut elements.into_iter().map(|e| Box::new(e.clone())).collect::<Vec<_>>());
+                out.append(
+                    &mut elements
+                        .into_iter()
+                        .map(|e| Box::new(e.clone()))
+                        .collect::<Vec<_>>(),
+                );
             }
-            Expr::Callable(_) => {
-            }
+            Expr::Callable(_) => {}
             Expr::Index(expr, arg) => {
                 out.push(expr.clone());
                 out.push(arg.clone());
@@ -103,16 +125,11 @@ impl Expr {
                     out.push(Box::new(e.clone()));
                 }
             }
-            Expr::Ident(_) => {
-            }
-            Expr::Literal(_) => {
-            }
-            Expr::Lambda(_) => {
-            }
-            Expr::Invalid(_) => {
-            }
-            Expr::Void => {
-            }
+            Expr::Ident(_) => {}
+            Expr::Literal(_) => {}
+            Expr::Lambda(_) => {}
+            Expr::Invalid(_) => {}
+            Expr::Void => {}
         }
         out.into_iter().map(|v| *v).collect::<Vec<_>>()
     }
@@ -177,7 +194,7 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
         Expr::Invalid(_) => {
             f.leaf(e, n)?;
         }
-        _ => ()
+        _ => (),
     };
     f.exit(e, n)
 }
@@ -185,8 +202,8 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{parse_program, unparse_expr};
     use crate::lexer::LexerState;
+    use crate::parser::{parse_program, unparse_expr};
     use crate::sexpr::SExpr;
 
     #[test]
@@ -216,4 +233,3 @@ mod tests {
         }
     }
 }
-

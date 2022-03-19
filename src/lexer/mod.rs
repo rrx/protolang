@@ -203,10 +203,9 @@ pub fn span<'a>(s: &'a str) -> Span<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use log::debug;
     use state::*;
     use Tok::*;
-    use log::debug;
-
 
     #[test]
     fn tokens() {

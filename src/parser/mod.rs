@@ -4,6 +4,7 @@ use crate::ast::*;
 use crate::results::*;
 use crate::tokens::TokensList;
 use crate::tokens::*;
+use log::debug;
 use nom::branch::*;
 use nom::bytes::complete::take;
 use nom::combinator::verify;
@@ -12,12 +13,11 @@ use nom::multi::many0;
 use nom::sequence::*;
 use nom::Err;
 use std::result::Result::*;
-use log::debug;
 
 mod pratt;
 mod pratt1;
 mod unparse;
-pub use unparse::{{unparse_expr, Unparse}};
+pub use unparse::{unparse_expr, Unparse};
 
 #[derive(Debug)]
 pub struct DebugError<I> {
@@ -41,7 +41,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
         other.message = format!("{}kind {:?}:\t{:?}\n", other.message, kind, input.toks());
         //debug!("{}", message);
         //DebugError {
-            //message,
+        //message,
         other.errors.push((input, VerboseErrorKind::Nom(kind)));
         //}
         other
@@ -250,15 +250,13 @@ pub fn parse_program_with_results(i: Tokens) -> (Option<ExprNode>, Vec<Results>)
 pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (exprs, end)) = pair(
         context("program-start", many0(alt((parse_expr, parse_invalid)))),
-        context("program-end", combinator::rest),//many0(parse_whitespace_or_eof)),
+        context("program-end", combinator::rest), //many0(parse_whitespace_or_eof)),
     )(i)?;
     debug!("program has {} expressions", exprs.len());
     debug!("program rest {:?}", end); //.expand_toks());
 
     let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
-    value
-        .context
-        .append(end.expand_toks());
+    value.context.append(end.expand_toks());
     Ok((i, value))
 }
 
@@ -360,7 +358,6 @@ impl ExprNode {
 }
 */
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,7 +437,10 @@ mod tests {
         let pos = crate::tokens::Span::new("".into());
         let toks = vec![Token::new(Tok::EOF, pos)];
         let i = Tokens::new(&toks[..]);
-        assert_eq!(_parse_whitespace_or_eof(i).unwrap().1.toks(), vec![Tok::EOF]);
+        assert_eq!(
+            _parse_whitespace_or_eof(i).unwrap().1.toks(),
+            vec![Tok::EOF]
+        );
     }
 
     #[test]

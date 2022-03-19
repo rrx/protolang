@@ -1,7 +1,7 @@
+use crate::ast::{visit_expr, ExprVisitor, VResult, VisitError};
+use crate::ast::{Context, Context2, MaybeNodeContext, NodeContext, NodeContextNull};
+use crate::ast::{Expr, ExprNode};
 use crate::tokens::{Tok, Token};
-use crate::ast::{VResult, VisitError, ExprVisitor, visit_expr};
-use crate::ast::{ExprNode, Expr};
-use crate::ast::{Context, Context2, NodeContext, NodeContextNull, MaybeNodeContext};
 
 pub trait Unparse {
     fn unparse(&self) -> Vec<Tok>;
@@ -15,7 +15,7 @@ pub trait Unparse {
 }
 
 pub struct Unparser {
-    expand: bool
+    expand: bool,
 }
 
 impl ExprVisitor<Vec<Tok>> for Unparser {
@@ -36,7 +36,7 @@ impl ExprVisitor<Vec<Tok>> for Unparser {
             Expr::Invalid(s) => {
                 n.push(Tok::Invalid(s.clone()));
             }
-            _ => ()
+            _ => (),
         };
         Ok(())
     }
@@ -55,5 +55,3 @@ pub fn unparse_expr(e: &ExprNode, expand: bool) -> Vec<Tok> {
     let _ = visit_expr(e, &mut v, &mut out).unwrap();
     out
 }
-
-

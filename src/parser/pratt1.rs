@@ -140,7 +140,10 @@ fn parse_prefix_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     use Expr::Prefix;
     let (i1, prefix) = parse_prefix(i)?;
     let (i2, expr1) = parse_atom(i1)?;
-    let mut node = ExprNode::new(Prefix(prefix.clone(), Box::new(expr1)), &prefix.context.to_location());
+    let mut node = ExprNode::new(
+        Prefix(prefix.clone(), Box::new(expr1)),
+        &prefix.context.to_location(),
+    );
     node.context.prepend(prefix.unparse()); //vec![prefix.token()]);
     Ok((i2, node))
 }

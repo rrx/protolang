@@ -3,12 +3,12 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
+use crate::parser::Unparse;
 use crate::parser::{tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
+use log::debug;
 use nom::error::{context, ErrorKind};
 use nom::{multi, sequence};
-use log::debug;
-use crate::parser::Unparse;
 
 use crate::ast::{Expr, ExprNode, Operator, OperatorNode};
 
@@ -108,7 +108,13 @@ impl Op {
         }
     }
 
-    fn _chain_left_denotation<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Token, depth: usize) -> RNode<'a> {
+    fn _chain_left_denotation<'a>(
+        &self,
+        i: Tokens<'a>,
+        x: &ASTNode,
+        token: &Token,
+        depth: usize,
+    ) -> RNode<'a> {
         debug!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
 
         // parse the RHS, making sure the expression we are getting stops when we reach
@@ -155,7 +161,13 @@ impl Op {
         }
     }
 
-    fn left_denotation<'a>(&self, i: Tokens<'a>, x: &ASTNode, token: &Token, depth: usize) -> RNode<'a> {
+    fn left_denotation<'a>(
+        &self,
+        i: Tokens<'a>,
+        x: &ASTNode,
+        token: &Token,
+        depth: usize,
+    ) -> RNode<'a> {
         // Given the LHS, and an op (token), return a Node
         //
         //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
@@ -336,7 +348,7 @@ impl<'a> Tokens<'a> {
     }
 
     //fn G(self, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens<'a>, (i8, ASTNode)> {
-        //G(self, r, t, prec, depth)
+    //G(self, r, t, prec, depth)
     //}
 }
 
@@ -488,7 +500,13 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     Ok((i, t))
 }
 
-fn extra_recursive<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens, (i8, ASTNode)> {
+fn extra_recursive<'a>(
+    i: Tokens,
+    r: i8,
+    t: ASTNode,
+    prec: Prec,
+    depth: usize,
+) -> PResult<Tokens, (i8, ASTNode)> {
     // Here we are going to take a look at the L token
     // A L token is a token that has a left operand (t)
     // An L token can never start an expression
@@ -504,7 +522,7 @@ fn extra_recursive<'a>(i: Tokens, r: i8, t: ASTNode, prec: Prec, depth: usize) -
     if i.is_eof() {
         return Ok((i, (r, t)));
     }
-    let token = &i.tok[0]; 
+    let token = &i.tok[0];
 
     // get op from left
     // it could be any token
@@ -603,10 +621,10 @@ pub fn parse<'a>(i: Tokens) -> RNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::print_result;
     use crate::lexer::*;
+    use crate::parser::print_result;
     use crate::sexpr::SExpr;
-    use nom::{InputIter};
+    use nom::InputIter;
 
     #[test]
     fn expressions() {
@@ -700,7 +718,6 @@ mod tests {
         //}
     }
     */
-
 
     #[test]
     fn sexpr() {

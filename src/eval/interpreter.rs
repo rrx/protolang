@@ -1,10 +1,10 @@
 use crate::ast::*;
+use crate::parser::Unparse;
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
-use crate::parser::Unparse;
+use log::debug;
 use std::collections::HashMap;
 use std::result::Result;
-use log::debug;
 
 #[derive(Debug)]
 pub struct Environment {
@@ -106,11 +106,11 @@ impl Expr {
                 message: format!("Expecting a callable: {:?}", self),
                 line: 0,
                 //message: format!(
-                    //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
-                    //self,
-                    //e.loc.line,
-                    //e.loc.col,
-                    //e.loc.fragment
+                //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
+                //self,
+                //e.loc.line,
+                //e.loc.col,
+                //e.loc.fragment
                 //),
                 //line: e.loc.line,
             }),
@@ -290,7 +290,7 @@ impl Interpreter {
     }
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Expr, InterpretError> {
         match expr.clone() {
-            Expr::Literal(lit) => Ok(Expr::Literal(lit)),//ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
+            Expr::Literal(lit) => Ok(Expr::Literal(lit)), //ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
             Expr::Ident(ident) => self.globals.get(&ident),
             Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
@@ -341,7 +341,7 @@ impl Interpreter {
                 let mut eval_elements = vec![];
                 for mut e in elements.clone() {
                     e.value = self.evaluate(&e)?;
-                    eval_elements.push(e);//self.evaluate(&e)?);
+                    eval_elements.push(e); //self.evaluate(&e)?);
                 }
                 Ok(Expr::List(eval_elements))
             }
@@ -350,13 +350,13 @@ impl Interpreter {
                 debug!("Callable({:?})", &e);
                 Err(InterpretError::Runtime {
                     message: format!("Unimplemented callable::{:?}", &e),
-                    line: 0,//expr.context.loc.line,
+                    line: 0, //expr.context.loc.line,
                 })
             }
 
             Expr::Lambda(e) => {
                 debug!("Lambda({:?})", &e);
-                Ok(Expr::Callable(Box::new(e)))//.node()))
+                Ok(Expr::Callable(Box::new(e))) //.node()))
             }
 
             Expr::Index(_ident, _args) => {

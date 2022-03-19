@@ -11,12 +11,7 @@ use strum_macros;
 pub type Span<'a> = LocatedSpan<&'a str>;
 
 #[derive(
-    Debug,
-    strum::Display,
-    Clone,
-    PartialEq,
-    strum_macros::EnumProperty,
-    strum_macros::IntoStaticStr,
+    Debug, strum::Display, Clone, PartialEq, strum_macros::EnumProperty, strum_macros::IntoStaticStr,
 )]
 pub enum Tok {
     #[strum(props(s = " "))]

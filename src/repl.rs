@@ -1,12 +1,12 @@
+use crate::ast::ExprNode;
 use crate::eval::Interpreter;
 use crate::lexer;
 use crate::parser::{parse_program, parse_program_with_results};
 use crate::results::*;
-use crate::ast::ExprNode;
 use crate::sexpr::SExpr;
+use log::debug;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-use log::debug;
 
 pub fn cli() -> anyhow::Result<()> {
     for filename in std::env::args().skip(1) {
@@ -16,9 +16,11 @@ pub fn cli() -> anyhow::Result<()> {
 }
 
 pub fn parse_file(filename: &str) -> ExprNode {
-    let contents = std::fs::read_to_string(filename.clone()).unwrap().to_string();
+    let contents = std::fs::read_to_string(filename.clone())
+        .unwrap()
+        .to_string();
     let mut lexer = lexer::LexerState::default();
-    let (_,_) = lexer.lex(contents.as_str()).unwrap();
+    let (_, _) = lexer.lex(contents.as_str()).unwrap();
     let (_, expr) = parse_program(lexer.tokens().clone()).unwrap();
     expr
 }

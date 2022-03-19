@@ -4,8 +4,12 @@ use std::fmt::{Debug, Display};
 use std::marker::Sized;
 
 pub trait Context2: Debug + Display + Clone {
-    fn from_location(loc: &Location) -> Self where Self: Sized;
-    fn from_token(token: &Token) -> Self where Self: Sized;
+    fn from_location(loc: &Location) -> Self
+    where
+        Self: Sized;
+    fn from_token(token: &Token) -> Self
+    where
+        Self: Sized;
 }
 
 pub trait Context: Debug + Display {
@@ -87,35 +91,35 @@ impl MaybeNodeContext {
     pub fn to_location(&self) -> Location {
         match &self.0 {
             Some(c) => c.loc.clone(),
-            None => Location::default()
+            None => Location::default(),
         }
     }
 
     pub fn unparse(&self, tokens: Vec<Tok>) -> Vec<Tok> {
         match &self.0 {
             Some(c) => c.s.unparse(tokens),
-            None => vec![]
+            None => vec![],
         }
     }
 
     pub fn append(&mut self, tokens: Vec<Tok>) {
         match &mut self.0 {
             Some(c) => c.s.append(tokens),
-            None => ()
+            None => (),
         }
     }
 
     pub fn prepend(&mut self, tokens: Vec<Tok>) {
         match &mut self.0 {
             Some(c) => c.s.prepend(tokens),
-            None => ()
+            None => (),
         }
     }
 
     pub fn line(&self) -> usize {
         match &self.0 {
             Some(c) => c.loc.line,
-            None => 0
+            None => 0,
         }
     }
 }
@@ -139,13 +143,13 @@ impl Context for MaybeNodeContext {
     fn pre(&self) -> Vec<Tok> {
         match &self.0 {
             Some(c) => c.s.pre.clone(),
-            None => vec![]
+            None => vec![],
         }
     }
     fn post(&self) -> Vec<Tok> {
         match &self.0 {
             Some(c) => c.s.post.clone(),
-            None => vec![]
+            None => vec![],
         }
     }
     fn box_clone(&self) -> Box<dyn Context> {

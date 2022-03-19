@@ -2,14 +2,13 @@ mod function;
 pub use function::{Callable, CallableNode, Lambda, Params};
 
 mod node;
-pub use node::{Context, Context2, NodeContext, NodeContextNull, MaybeNodeContext};
+pub use node::{Context, Context2, MaybeNodeContext, NodeContext, NodeContextNull};
 
 mod visitor;
-pub use visitor::{VResult, VisitError, ExprVisitor, visit_expr};
+pub use visitor::{visit_expr, ExprVisitor, VResult, VisitError};
 
 mod expr;
-pub use expr::{ExprNode, Expr};
+pub use expr::{Expr, ExprNode};
 
 mod op;
 pub use op::{Operator, OperatorNode};
-

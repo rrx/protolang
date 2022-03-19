@@ -1,13 +1,13 @@
-use crate::lexer::{Location};
+use crate::lexer::Location;
+use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
-use crate::parser::Unparse;
 
-use std::fmt;
 use super::function::{Callable, CallableNode, Lambda, Params};
-use super::node::{Context, Context2, NodeContext, NodeContextNull, MaybeNodeContext};
-use super::visitor::{VResult, VisitError, ExprVisitor, visit_expr};
-use super::{OperatorNode, Operator};
+use super::node::{Context, Context2, MaybeNodeContext, NodeContext, NodeContextNull};
+use super::visitor::{visit_expr, ExprVisitor, VResult, VisitError};
+use super::{Operator, OperatorNode};
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -268,5 +268,3 @@ impl SExpr for ExprNode {
         }
     }
 }
-
-

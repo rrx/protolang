@@ -1,13 +1,7 @@
-use crate::tokens::{Tok, Token};
 use crate::parser::Unparse;
+use crate::tokens::{Tok, Token};
 
-//pub use function::{Callable, CallableNode, Lambda, Params};
-
-use super::{Context, Context2, NodeContext, NodeContextNull, MaybeNodeContext};
-
-//pub use visitor::{VResult, VisitError, ExprVisitor, visit_expr};
-
-//pub use expr::{ExprNode, Expr};
+use super::{Context2, MaybeNodeContext};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct OperatorNode {
@@ -98,7 +92,7 @@ impl OperatorNode {
         context.append(post);
         Self {
             value: prefix,
-            context
+            context,
         }
     }
 
@@ -211,4 +205,3 @@ mod tests {
         assert_eq!(p.unlex(), "-");
     }
 }
-

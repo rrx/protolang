@@ -1,13 +1,13 @@
 use crate::ast::*;
-use crate::sexpr::*;
 use crate::eval::*;
-use crate::lexer::{Location};
+use crate::lexer::Location;
+use crate::parser::Unparse;
+use crate::sexpr::*;
 use crate::tokens::Tok;
 use std::{
     any::Any,
     fmt::{Debug, Display},
 };
-use crate::parser::Unparse;
 
 #[derive(Debug, Clone)]
 pub struct CallableNode {
@@ -19,7 +19,7 @@ impl CallableNode {
     pub fn new(value: Box<dyn Callable>, loc: Location) -> Self {
         Self {
             value,
-            context: MaybeNodeContext::from_location(&loc)
+            context: MaybeNodeContext::from_location(&loc),
         }
     }
 }
@@ -116,7 +116,9 @@ impl Callable for Lambda {
     }
 
     fn call(&self, interp: &mut Interpreter, args: Vec<Expr>) -> Result<Expr, InterpretError> {
-        interp.call(self, &self.params, &args, &self.expr).map(|v| v.value)
+        interp
+            .call(self, &self.params, &args, &self.expr)
+            .map(|v| v.value)
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {
