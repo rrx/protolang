@@ -8,6 +8,8 @@ use super::*;
 use super::ExprRef;
 use std::convert::From;
 use std::rc::Rc;
+use std::ops::Deref;
+use std::borrow::Borrow;
 
 
 #[derive(Debug)]
@@ -19,8 +21,8 @@ impl Default for Interpreter {
     fn default() -> Self {
         let mut globals = Environment::default();
         use super::builtins::*;
-        globals.define("clock", &Clock::value());
-        globals.define("assert", &Assert::value());
+        globals.define("clock", ExprRef::new(Clock::value()));
+        globals.define("assert", ExprRef::new(Assert::value()));
         Self { globals }
     }
 }
@@ -215,7 +217,7 @@ impl Interpreter {
 
         // push variables into scope
         for (p, v) in p.iter().zip(args) {
-            self.globals.define(p.as_ref().unwrap(), &v);
+            self.globals.define(p.as_ref().unwrap(), v.clone());
         }
 
         // evaluate the result
@@ -223,7 +225,7 @@ impl Interpreter {
 
         // pop scope, TODO
         let mut out = expr.clone();
-        out.value = (*r.0).clone();
+        out.value = r.as_ref().borrow().clone();//deref().clone();//(*r.0).clone();
         Ok(out)
         //r
 
@@ -252,20 +254,20 @@ impl Interpreter {
             Expr::Ident(ident) => self.globals.get(&ident),
             Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
-                let eval = eval.prefix(&prefix.value)?.into();
+                let eval = eval.as_ref().borrow().prefix(&prefix.value)?.into();
                 Ok(eval)
             }
             Expr::Postfix(op, expr) => {
                 let eval = self.evaluate(&expr)?;
-                let eval = eval.postfix(&op.value)?;
+                let eval = eval.as_ref().borrow().postfix(&op.value)?;
                 Ok(eval.into())
             }
             Expr::Binary(op, left, right) => {
                 if op == Operator::Assign {
                     return if let Some(ident) = left.try_ident() {
                         let eval_right = self.evaluate(&right)?;
-                        self.globals.define(&ident, &eval_right);
                         debug!("Assign {:?} to {}", &eval_right, &ident);
+                        self.globals.define(&ident, eval_right.clone());
                         Ok(eval_right)
                     } else {
                         Err(InterpretError::Runtime {
@@ -275,8 +277,11 @@ impl Interpreter {
                     };
                 }
 
-                let eval_left = self.evaluate(&left)?;
-                let eval_right = self.evaluate(&right)?;
+                let v_left = self.evaluate(&left)?;
+                let v_right = self.evaluate(&right)?;
+
+                let eval_left = v_left.as_ref().borrow();
+                let eval_right = v_right.as_ref().borrow();
                 match op {
                     Operator::Plus => eval_left.plus(&eval_right),
                     Operator::Minus => eval_left.minus(&eval_right),
@@ -299,7 +304,7 @@ impl Interpreter {
                 let mut eval_elements = vec![];
                 for mut e in elements.clone() {
                     let eref = self.evaluate(&e)?;
-                    e.value = Rc::try_unwrap(eref.0).unwrap();
+                    e.value = eref.as_ref().borrow().deref().clone();//Rc::try_unwrap(eref.0).unwrap();
                     eval_elements.push(e); //self.evaluate(&e)?);
                 }
                 Ok(Expr::List(eval_elements).into())
@@ -328,7 +333,8 @@ impl Interpreter {
                     Expr::Ident(ident) => {
                         let x: ExprRef = self.globals.get(ident)?.clone();
 
-                        match x.try_callable() {
+                        let expr = x.as_ref().borrow();
+                        match expr.try_callable() {
                             Some(c) => {
                                 let mut eval_args = vec![];
                                 for arg in args {
@@ -393,7 +399,7 @@ impl Interpreter {
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
                     let r = self.evaluate(&x)?;
-                    let b = Expr::check_bool(&r)?;
+                    let b = Expr::check_bool(&r.as_ref().borrow())?;
                     if b {
                         self.evaluate(&y)
                     } else {

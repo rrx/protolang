@@ -68,7 +68,7 @@ impl Callable for Assert {
     }
 
     fn call(&self, _: &mut Interpreter, args: Vec<ExprRef>) -> Result<ExprRef, InterpretError> {
-        let v = args.get(0).unwrap().try_literal();
+        let v = args.get(0).unwrap().borrow().try_literal();
         if let Some(Tok::BoolLiteral(b)) = v {
             if b {
                 Ok(Expr::Void.into())
