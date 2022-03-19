@@ -3,9 +3,11 @@ use crate::parser::Unparse;
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use log::debug;
-use std::collections::HashMap;
 use std::result::Result;
 use super::*;
+use super::ExprRef;
+use std::convert::From;
+use std::rc::Rc;
 
 
 #[derive(Debug)]
@@ -169,7 +171,7 @@ impl Interpreter {
         &mut self,
         f: &dyn Callable,
         params: &Params,
-        args: &Vec<Expr>,
+        args: &Vec<ExprRef>,
         expr: &ExprNode,
     ) -> Result<ExprNode, InterpretError> {
         if args.len() != f.arity() {
@@ -221,7 +223,7 @@ impl Interpreter {
 
         // pop scope, TODO
         let mut out = expr.clone();
-        out.value = r;
+        out.value = (*r.0).clone();
         Ok(out)
         //r
 
@@ -244,19 +246,19 @@ impl Interpreter {
                 }
         */
     }
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Expr, InterpretError> {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<ExprRef, InterpretError> {
         match expr.clone() {
-            Expr::Literal(lit) => Ok(Expr::Literal(lit)), //ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
+            Expr::Literal(lit) => Ok(Expr::Literal(lit).into()), //ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
             Expr::Ident(ident) => self.globals.get(&ident),
             Expr::Prefix(prefix, expr) => {
                 let eval = self.evaluate(&expr)?;
-                let eval = eval.prefix(&prefix.value)?;
+                let eval = eval.prefix(&prefix.value)?.into();
                 Ok(eval)
             }
             Expr::Postfix(op, expr) => {
                 let eval = self.evaluate(&expr)?;
                 let eval = eval.postfix(&op.value)?;
-                Ok(eval)
+                Ok(eval.into())
             }
             Expr::Binary(op, left, right) => {
                 if op == Operator::Assign {
@@ -291,15 +293,16 @@ impl Interpreter {
                         message: format!("Unimplemented expression op: Operator::{:?}", op),
                         line: left.context.line(),
                     }),
-                }
+                }.map(|v| v.into())
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 for mut e in elements.clone() {
-                    e.value = self.evaluate(&e)?;
+                    let eref = self.evaluate(&e)?;
+                    e.value = Rc::try_unwrap(eref.0).unwrap();
                     eval_elements.push(e); //self.evaluate(&e)?);
                 }
-                Ok(Expr::List(eval_elements))
+                Ok(Expr::List(eval_elements).into())
             }
 
             Expr::Callable(e) => {
@@ -312,41 +315,49 @@ impl Interpreter {
 
             Expr::Lambda(e) => {
                 debug!("Lambda({:?})", &e);
-                Ok(Expr::Callable(Box::new(e))) //.node()))
+                Ok(Expr::Callable(Box::new(e)).into())
             }
 
             Expr::Index(_ident, _args) => {
                 // TODO: not yet implemented
-                Ok(Expr::Literal(Tok::IntLiteral(0)))
+                Ok(Expr::Literal(Tok::IntLiteral(0)).into())
             }
 
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
-                    Expr::Ident(ident) => Some(self.globals.get(ident)?),
+                    Expr::Ident(ident) => {
+                        let x: ExprRef = self.globals.get(ident)?.clone();
+
+                        match x.try_callable() {
+                            Some(c) => {
+                                let mut eval_args = vec![];
+                                for arg in args {
+                                    eval_args.push(self.evaluate(&arg)?);
+                                }
+                                debug!("Calling {:?}({:?})", c, eval_args);
+                                let result = c.call(self, eval_args);
+                                debug!("Call Result {:?}", &result);
+                                Some(result.map(|v| v.into()))
+                            }
+                            _ => None
+                        }
+                    }
                     _ => None,
                 };
 
                 //let env = Environment::default();
-                match f {
-                    Some(Expr::Callable(c)) => {
-                        let mut eval_args = vec![];
-                        for arg in args {
-                            eval_args.push(self.evaluate(&arg)?);
-                        }
-                        debug!("Calling {:?}({:?})", c, eval_args);
-                        let result = c.call(self, eval_args);
-                        debug!("Call Result {:?}", &result);
-                        result
-                    }
-                    _ => Err(InterpretError::Runtime {
+                if let Some(r) = f {
+                    r
+                } else {
+                    Err(InterpretError::Runtime {
                         message: format!("Not a function: {:?}", f),
                         line: 0,
-                    }),
+                    })
                 }
             }
 
             Expr::Block(exprs) => {
-                let mut result = Expr::List(vec![]);
+                let mut result = Expr::List(vec![]).into();
 
                 for expr in exprs {
                     let r = self.evaluate(&expr);
@@ -359,11 +370,11 @@ impl Interpreter {
                         }
                     }
                 }
-                Ok(result)
+                Ok(result.into())
             }
 
             Expr::Program(exprs) => {
-                let mut result = Expr::List(vec![]);
+                let mut result = Expr::List(vec![]).into();
 
                 for expr in exprs {
                     let r = self.evaluate(&expr);
@@ -376,7 +387,7 @@ impl Interpreter {
                         }
                     }
                 }
-                Ok(result)
+                Ok(result.into())
             }
 
             Expr::Ternary(op, x, y, z) => match op {
@@ -392,16 +403,16 @@ impl Interpreter {
                 _ => unimplemented!(),
             },
 
-            Expr::Chain(_, _) => Ok(Expr::Literal(Tok::IntLiteral(0))),
+            Expr::Chain(_, _) => Ok(Expr::Literal(Tok::IntLiteral(0)).into()),
             Expr::Invalid(s) => Err(InterpretError::Runtime {
                 message: format!("Invalid expr: {:?}", s),
                 line: 0,
             }),
-            Expr::Void => Ok(Expr::Void),
+            Expr::Void => Ok(Expr::Void.into()),
         }
     }
 
-    pub fn execute(&mut self, expr: ExprNode) -> Result<Expr, InterpretError> {
+    pub fn execute(&mut self, expr: ExprNode) -> Result<ExprRef, InterpretError> {
         debug!("EXPR: {:?}", &expr);
         debug!("EXPR-unparse: {:?}", expr.unparse());
         debug!("EXPR-unlex: {:?}", expr.unlex());

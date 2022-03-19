@@ -430,6 +430,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "kaktus"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a1e242593f317a2cedd5e4ab2f8cc0311e3a109ca5e28c177f514a0adcfe494"
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -593,6 +599,7 @@ dependencies = [
  "criterion",
  "env_logger",
  "itertools",
+ "kaktus",
  "log",
  "nom",
  "nom_locate",

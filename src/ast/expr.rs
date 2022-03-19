@@ -3,9 +3,8 @@ use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
 
-use super::function::{Callable, CallableNode, Lambda, Params};
-use super::node::{Context, Context2, MaybeNodeContext, NodeContext, NodeContextNull};
-use super::visitor::{visit_expr, ExprVisitor, VResult, VisitError};
+use super::function::{Callable, Lambda};
+use super::node::{Context, Context2, MaybeNodeContext};
 use super::{Operator, OperatorNode};
 use std::fmt;
 
@@ -51,6 +50,22 @@ impl Expr {
 
     pub fn try_ident(&self) -> Option<String> {
         if let Expr::Ident(s) = self {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn try_literal(&self) -> Option<Tok> {
+        if let Expr::Literal(s) = self {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn try_callable(&self) -> Option<Box<dyn Callable>> {
+        if let Expr::Callable(s) = self {
             Some(s.clone())
         } else {
             None

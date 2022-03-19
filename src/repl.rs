@@ -57,7 +57,7 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
             }
 
             if let Some(prog) = maybe_prog {
-                //debug!("{:?}", (&prog));
+                debug!("{:?}", (&prog));
                 match prog.sexpr() {
                     Ok(sexpr) => {
                         debug!("Ok expr {}", &sexpr);
