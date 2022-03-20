@@ -1,6 +1,6 @@
 use crate::{
     ast::{Callable, Expr},
-    eval::{ExprRef, InterpretError, Interpreter},
+    eval::{ExprRef, InterpretError, Interpreter, Environment},
     tokens::Tok,
 };
 use std::{
@@ -29,13 +29,13 @@ impl Callable for Clock {
         0
     }
 
-    fn call(&self, _: &mut Interpreter, _: Vec<ExprRef>) -> Result<ExprRef, InterpretError> {
+    fn call(&self, _: &mut Interpreter, env: Environment, _: Vec<ExprRef>) -> Result<(Environment, ExprRef), InterpretError> {
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("we mustn't travel back in time")
             .as_secs_f64();
 
-        Ok(Expr::Literal(Tok::FloatLiteral(secs)).into())
+        Ok((env, Expr::Literal(Tok::FloatLiteral(secs)).into()))
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {
@@ -67,11 +67,11 @@ impl Callable for Assert {
         1
     }
 
-    fn call(&self, _: &mut Interpreter, args: Vec<ExprRef>) -> Result<ExprRef, InterpretError> {
+    fn call(&self, _: &mut Interpreter, env: Environment, args: Vec<ExprRef>) -> Result<(Environment, ExprRef), InterpretError> {
         let v = args.get(0).unwrap().borrow().try_literal();
         if let Some(Tok::BoolLiteral(b)) = v {
             if b {
-                Ok(Expr::Void.into())
+                Ok((env, Expr::Void.into()))
             } else {
                 Err(InterpretError::Runtime {
                     message: format!("Assertion error"),

@@ -115,7 +115,7 @@ impl Layer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Environment {
     stack: kaktus::Stack<Layer>,
 }
@@ -123,7 +123,11 @@ pub struct Environment {
 impl Default for Environment {
     fn default() -> Self {
         let stack: kaktus::Stack<Layer> = kaktus::Stack::root_default();
-        Self { stack }
+        let env = Self { stack };
+        use super::builtins::*;
+        env.define("clock", Clock::value().into());
+        env.define("assert", Assert::value().into());
+        env
     }
 }
 

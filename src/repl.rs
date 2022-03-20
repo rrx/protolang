@@ -1,5 +1,5 @@
 use crate::ast::ExprNode;
-use crate::eval::Interpreter;
+use crate::eval::{Environment, Interpreter, ExprRef, InterpretError};
 use crate::lexer;
 use crate::parser::{parse_program, parse_program_with_results};
 use crate::results::*;
@@ -68,7 +68,17 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
                     }
                 }
                 let mut interp = Interpreter::default();
-                interp.interpret(prog.into());
+                let env = Environment::default();
+                match interp.evaluate(prog.into(), env) {
+                    Ok((env, r)) => {
+                        debug!("R: {:?}", r);
+                        env.debug();
+                    }
+                    Err(e) => {
+                        debug!("E: {:?}", e);
+                        //env.debug();
+                    }
+                }
             }
             Ok(())
         }
@@ -87,13 +97,21 @@ pub fn run_prompt() -> anyhow::Result<()> {
     }
 
     let mut interpreter = Interpreter::default();
+    let mut env = Environment::default();
 
     loop {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                run(&mut interpreter, &line);
+                match run(&mut interpreter, env.clone(), &line) {
+                    Ok((newenv, r)) => {
+                        debug!("R: {:?}", r);
+                        env = newenv;
+                    }
+                    Err(e) => debug!("E: {:?}", e),
+                }
+                env.debug();
             }
 
             Err(ReadlineError::Interrupted) => {
@@ -116,7 +134,7 @@ pub fn run_prompt() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(interpreter: &mut Interpreter, source: &str) {
+pub fn run(interpreter: &mut Interpreter, env: Environment, source: &str) -> Result<(Environment, ExprRef), InterpretError> {
     let mut lexer = lexer::LexerState::default();
     match lexer.lex_eof(source) {
         Ok((_, _)) => {
@@ -134,26 +152,43 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
                 prog.debug();
                 let sexpr = prog.sexpr().unwrap();
                 debug!("SEXPR: {}", &sexpr);
-                match interpreter.evaluate(prog.into()) {
-                    Ok(r) => debug!("R: {:?}", r),
-                    Err(e) => debug!("E: {:?}", e),
-                }
+                interpreter.evaluate(prog.into(), env)
+            } else {
+                Err(InterpretError::Runtime {
+                    message: format!("Unable to parse"),
+                    line: 0,
+                })
             }
         }
         Err(e) => {
             debug!("{:?}", e);
+            Err(InterpretError::Runtime {
+                message: format!("Unable to lex"),
+                line: 0,
+            })
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use test_env_log::test;
     #[test]
     fn parse() {
-        crate::repl::parse_file("examples/test.p");
+        parse_file("examples/test.p");
     }
     #[test]
     fn example() {
-        crate::repl::run_file("examples/test.p").unwrap()
+        run_file("examples/test.p").unwrap()
+    }
+
+    #[test]
+    fn test() {
+        let mut interp = Interpreter::default();
+        let env = Environment::default();
+        let (env, v) = run(&mut interp, env, "a=1").unwrap();
+        env.debug();
+        assert!(env.resolve("a").is_some());
     }
 }
