@@ -173,8 +173,9 @@ impl Op {
         //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
+                println!("handle semicolon: {:?}", i.expand_toks());
                 let mut x = x.clone();
-                x.context.append(token.expand_toks()); //vec![token.clone()]);
+                x.context.append(token.expand_toks());
                 (i, x)
             }
 
@@ -392,15 +393,22 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         Some(Tok::Backslash) => ExprNode::parse_lambda(i),
 
+        // Expression Block
         Some(Tok::LBrace) => {
             // consume LBrace
             let (i, left) = take_one_any(i)?;
-            debug!("prefix brace1: {:?}", (&i, &n, &left));
-            let (i, t) = i.extra(Some(0), depth + 1)?;
-            debug!("prefix brace2: {:?}", (&i, &t));
+            println!("prefix brace1: {:?}", (&i.expand_toks(), &i.toks(), &n, &left));
+            let p = |i| extra(i, Some(0), 0);
+
+            let (i, (t, right)) = sequence::pair(
+                multi::many0(p),
+                context("r-brace", tag_token(Tok::RBrace))
+                )(i)?;
+            // let (i, t) = //extra(i, Some(0), depth + 1)?;
+            println!("prefix brace2: {:?}", (&i.expand_toks(), &t));
             // consume RBrace
-            let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
-            let t = Expr::Block(vec![t]);
+            //let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
+            let t = Expr::Block(t);//vec![t]);
             let mut node = i.node(t);
             node.context.prepend(left.expand_toks());
             node.context.append(right.expand_toks());
@@ -720,9 +728,13 @@ mod tests {
     */
 
     #[test]
-    fn sexpr() {
+    fn sexpr_expr() {
         let r = vec![
             ("+1", "(+ 1)"),
+            //("{-1;-2}", "(block (- 1) (- 2)"),
+            //("{+1;+2}", "(block (+ 1) (+ 2)"),
+            //("{+1\n\t+2}", "(block (+ 1) (+ 2)"),
+            //("{+1\n+2}", "(block (+ 1) (+ 2)"),
             ("+ 1", "(+ 1)"),
             ("123", "123"),
             ("-123", "(- 123)"),

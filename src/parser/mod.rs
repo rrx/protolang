@@ -92,27 +92,26 @@ pub fn print_result<
 ) {
     match r {
         Ok((_, expr)) => {
-            debug!("Ok({:?})", (&expr));
+            println!("Ok({:?})", (&expr));
             match expr.sexpr() {
                 Ok(sexpr) => {
-                    debug!("sexpr {}", &sexpr);
+                    println!("sexpr {}", &sexpr);
                     let rendered = format!("{}", &sexpr);
-                    debug!("sexpr {:?}", (&sexpr, &rendered));
+                    println!("sexpr {:?}", (&sexpr, &rendered));
                 }
                 Err(e) => {
-                    debug!("Error: {:?}", e);
+                    println!("Error: {:?}", e);
                 }
             }
         }
         Err(nom::Err::Error(e)) => {
-            debug!("err: {:?}", e); //nom::error::convert_error(*q, e));
+            println!("err: {:?}", e);
             for (tokens, err) in &e.errors {
-                debug!("error {:?}", (&err, tokens.toks()));
+                println!("error {:?}", (&err, tokens.toks()));
             }
-            //Err(nom::Err::Error(e))
         }
         Err(e) => {
-            debug!("err: {:?}", e);
+            println!("err: {}", e);
         }
     }
 }
@@ -691,6 +690,52 @@ mod tests {
                 _ => unreachable!(),
             }
             assert!(parser_losslessness(v));
+        });
+    }
+
+
+    #[test]
+    fn sexpr_prog() {
+        let r = vec![
+            ("+1", "(program (+ 1))")
+            //("+1\n+1", "(program (+ 1) (+ 1)"),
+        ];
+
+        r.iter().for_each(|(q, a)| {
+            println!("q {:?}", (&q));
+
+            let mut lexer = LexerState::from_str_eof(q).unwrap();
+            let i = lexer.tokens();
+
+            println!("tokens: {:?}", (i.toks()));
+
+            i.iter_elements().for_each(|t| {
+                println!("{:?}", t);
+            });
+
+            let r = parse_program(i);
+            print_result(&r);
+            match r {
+                Ok((i, expr)) => {
+                    println!("NODE {:?}", (&expr.unparse()));
+                    println!("REM {:?}", (&i.toks()));
+                    match expr.sexpr() {
+                        Ok(sexpr) => {
+                            let rendered = format!("{}", &sexpr);
+                            println!("sexpr {:?}", (&q, &sexpr, &rendered, a));
+                            assert_eq!(rendered, a.to_string());
+                            //assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
+                                                                  //assert_eq!(0, i.input_len());
+                        }
+                        Err(_) => {
+                            assert!(false);
+                        }
+                    }
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
         });
     }
 }
