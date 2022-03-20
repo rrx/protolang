@@ -95,3 +95,8 @@ super_local
 }
 # asdf should be freed up now
 asdf
+
+# recursion
+f1 = \x -> (x < 10) ? f1(x+1): false
+f1(1)
+

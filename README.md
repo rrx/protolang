@@ -36,6 +36,7 @@ TODO
 - [x] sexpr transpiler
 - [x] interpreter
 - [x] REPL
+- [x] lazy evaluation
 - [ ] closures
 - [ ] branching and control flow
 - [ ] recursion

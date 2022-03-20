@@ -400,7 +400,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             ExprNode::parse_ident(i)
         }
 
-        Some(Tok::IntLiteral(_) | Tok::StringLiteral(_) | Tok::FloatLiteral(_)) => {
+        Some(Tok::IntLiteral(_) | Tok::StringLiteral(_) | Tok::FloatLiteral(_) | Tok::BoolLiteral(_)) => {
             // consume literal
             ExprNode::parse_literal(i)
         }
