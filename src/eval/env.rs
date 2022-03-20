@@ -4,7 +4,6 @@ use kaktus::PushPop;
 use log::debug;
 use rpds::HashTrieMap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
 use std::rc::Rc;
@@ -14,6 +13,7 @@ use std::result::Result;
 //pub struct ExprRef(pub RefCell<Rc<Expr>>);
 pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
 
+#[derive(Debug)]
 pub struct ExprRefWithEnv {
     pub expr: ExprRef,
     pub env: Environment
@@ -136,9 +136,8 @@ impl Default for Environment {
         let stack: kaktus::Stack<Layer> = kaktus::Stack::root_default();
         let env = Self { stack };
         use super::builtins::*;
-        env.define("clock", Clock::value().into());
-        env.define("assert", Assert::value().into());
-        env
+        env.define("clock", Clock::value().into())
+            .define("assert", Assert::value().into())
     }
 }
 

@@ -3,7 +3,6 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::parser::Unparse;
 use crate::parser::{tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use log::debug;
@@ -698,7 +697,8 @@ mod tests {
     use crate::parser::print_result;
     use crate::sexpr::SExpr;
     use nom::InputIter;
-    use test_env_log::test;
+    use test_log::test;
+    use crate::parser::Unparse;
 
     #[test]
     fn expressions() {

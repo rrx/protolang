@@ -363,7 +363,7 @@ mod tests {
     use crate::lexer::*;
     use crate::sexpr::SExpr;
     use nom::multi::many1;
-    use test_env_log::test;
+    use test_log::test;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);

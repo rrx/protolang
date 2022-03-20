@@ -22,7 +22,7 @@ rpds = "0.11"
 
 [dev-dependencies]
 criterion = "0.3"
-test-env-log = "0.2"
+test-log = "0.2"
 
 [[bench]]
 name = "start"

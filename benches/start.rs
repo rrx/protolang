@@ -1,5 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use protolang::eval::Interpreter;
+use criterion::{criterion_group, criterion_main, Criterion};
+use protolang::eval::{Environment, Interpreter};
 use protolang::lexer;
 use protolang::parser::{parse_program, unparse_expr, Unparse};
 //use protolang::repl::parse_file;
@@ -10,6 +10,14 @@ fn parse(c: &mut Criterion) {
     let contents = std::fs::read_to_string(FILENAME.clone())
         .unwrap()
         .to_string();
+
+    c.bench_function("lexer", |b| {
+        b.iter(|| {
+            let mut lexer = lexer::LexerState::default();
+            let (_, _) = lexer.lex(contents.as_str()).unwrap();
+        })
+    });
+
     let mut lexer = lexer::LexerState::default();
     let (_, _) = lexer.lex(contents.as_str()).unwrap();
     let tokens = lexer.tokens().clone();
@@ -46,7 +54,8 @@ fn interpret(c: &mut Criterion) {
     c.bench_function("interpret", |b| {
         b.iter(|| {
             let mut interp = Interpreter::default();
-            interp.interpret(expr.clone());
+            let env = Environment::default();
+            let _ = interp.evaluate(expr.clone().into(), env).unwrap();
         })
     });
 }

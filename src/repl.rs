@@ -1,5 +1,5 @@
 use crate::ast::ExprNode;
-use crate::eval::{Environment, Interpreter, ExprRef, InterpretError};
+use crate::eval::{Environment, Interpreter, InterpretError, ExprRefWithEnv};
 use crate::lexer;
 use crate::parser::{parse_program, parse_program_with_results};
 use crate::results::*;
@@ -70,9 +70,9 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
                 let mut interp = Interpreter::default();
                 let env = Environment::default();
                 match interp.evaluate(prog.into(), env) {
-                    Ok((env, r)) => {
+                    Ok(r) => {
                         debug!("R: {:?}", r);
-                        env.debug();
+                        r.env.debug();
                     }
                     Err(e) => {
                         debug!("E: {:?}", e);
@@ -105,9 +105,9 @@ pub fn run_prompt() -> anyhow::Result<()> {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
                 match run(&mut interpreter, env.clone(), &line) {
-                    Ok((newenv, r)) => {
+                    Ok(r) => {
                         debug!("R: {:?}", r);
-                        env = newenv;
+                        env = r.env;
                     }
                     Err(e) => debug!("E: {:?}", e),
                 }
@@ -134,7 +134,7 @@ pub fn run_prompt() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(interpreter: &mut Interpreter, env: Environment, source: &str) -> Result<(Environment, ExprRef), InterpretError> {
+pub fn run(interpreter: &mut Interpreter, env: Environment, source: &str) -> Result<ExprRefWithEnv, InterpretError> {
     let mut lexer = lexer::LexerState::default();
     match lexer.lex_eof(source) {
         Ok((_, _)) => {
@@ -173,7 +173,7 @@ pub fn run(interpreter: &mut Interpreter, env: Environment, source: &str) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_env_log::test;
+    use test_log::test;
     #[test]
     fn parse() {
         parse_file("examples/test.p");
@@ -187,8 +187,8 @@ mod tests {
     fn test() {
         let mut interp = Interpreter::default();
         let env = Environment::default();
-        let (env, v) = run(&mut interp, env, "a=1").unwrap();
-        env.debug();
-        assert!(env.resolve("a").is_some());
+        let v = run(&mut interp, env, "a=1").unwrap();
+        v.env.debug();
+        assert!(v.env.resolve("a").is_some());
     }
 }

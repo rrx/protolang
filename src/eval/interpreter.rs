@@ -5,10 +5,10 @@ use crate::parser::Unparse;
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use log::debug;
-use std::borrow::Borrow;
-use std::convert::From;
+//use std::borrow::Borrow;
+//use std::convert::From;
 use std::ops::Deref;
-use std::rc::Rc;
+//use std::rc::Rc;
 use std::result::Result;
 
 #[derive(Debug)]
@@ -216,9 +216,9 @@ impl Interpreter {
         }
 
         // evaluate the result
-        let (_, r) = self.evaluate(expr, env)?;
+        let r = self.evaluate(expr, env)?;
         // we drop the env, it's no longer needed
-        Ok(r)
+        Ok(r.expr)
 
         /*
                 match &expr.value {
@@ -239,31 +239,32 @@ impl Interpreter {
                 }
         */
     }
-    pub fn evaluate(&mut self, expr: ExprRef, env: Environment) -> Result<(Environment, ExprRef), InterpretError> {
+    pub fn evaluate(&mut self, expr: ExprRef, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
         let expr = &expr.as_ref().borrow().value;
         debug!("EVAL: {:?}", &expr);
         match expr {
-            Expr::Literal(lit) => Ok((env, Expr::Literal(lit.clone()).into())),
+            Expr::Literal(lit) => Ok(ExprRefWithEnv::new(Expr::Literal(lit.clone()).into(), env)),
             Expr::Ident(ident) => {
                 let v = env.get(&ident)?;
-                Ok((env, v))
+                Ok(ExprRefWithEnv::new(v, env))
             }
             Expr::Prefix(prefix, expr) => {
-                let (env, eval) = self.evaluate(expr.clone().into(), env)?;
-                let eval = eval.as_ref().borrow().prefix(&prefix.value)?.into();
-                Ok((env, eval))
+                let r = self.evaluate(expr.clone().into(), env)?;
+                let eval = r.expr.as_ref().borrow().prefix(&prefix.value)?.into();
+                Ok(ExprRefWithEnv::new(eval, r.env))
             }
             Expr::Postfix(op, expr) => {
-                let (env, eval) = self.evaluate(expr.clone().into(), env)?;
-                let eval = eval.as_ref().borrow().postfix(&op.value)?;
-                Ok((env, eval.into()))
+                let r = self.evaluate(expr.clone().into(), env)?;
+                let eval = r.expr.as_ref().borrow().postfix(&op.value)?;
+                Ok(ExprRefWithEnv::new(eval.into(), r.env))
             }
             Expr::Binary(op, left, right) => {
                 if op == &Operator::Assign {
                     return if let Some(ident) = left.try_ident() {
-                        let (env, eval_right) = self.evaluate(right.clone().into(), env)?;
+                        let eval_right = self.evaluate(right.clone().into(), env)?;
                         debug!("Assign {:?} to {}", &eval_right, &ident);
-                        Ok((env.define(&ident, eval_right.clone()), eval_right))
+                        let env = eval_right.env.define(&ident, eval_right.expr.clone());
+                        Ok(ExprRefWithEnv::new(eval_right.expr, env))//eval_right.env.define(&ident, eval_right.clone())))
                     } else {
                         Err(InterpretError::Runtime {
                             message: format!("Invalid Assignment, LHS must be identifier"),
@@ -273,11 +274,11 @@ impl Interpreter {
                 }
 
                 let line = left.context.line();
-                let (env, v_left) = self.evaluate(left.clone().into(), env)?;
-                let (env, v_right) = self.evaluate(right.clone().into(), env)?;
+                let v_left = self.evaluate(left.clone().into(), env)?;
+                let v_right = self.evaluate(right.clone().into(), v_left.env)?;
 
-                let eval_left = v_left.as_ref().borrow();
-                let eval_right = v_right.as_ref().borrow();
+                let eval_left = v_left.expr.as_ref().borrow();
+                let eval_right = v_right.expr.as_ref().borrow();
                 match op {
                     Operator::Plus => eval_left.plus(&eval_right),
                     Operator::Minus => eval_left.minus(&eval_right),
@@ -295,18 +296,18 @@ impl Interpreter {
                         line,
                     }),
                 }
-                .map(|v| (env, v.into()))
+                .map(|v| ExprRefWithEnv::new(v.into(), v_right.env))
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 let mut newenv = env;
                 for e in elements.clone() {
-                    let (env, eref) = self.evaluate(e.into(), newenv)?;
-                    newenv = env;
-                    let e = eref.as_ref().borrow().deref().clone(); //.into();//Rc::try_unwrap(eref.0).unwrap();
+                    let eref = self.evaluate(e.into(), newenv)?;
+                    newenv = eref.env;
+                    let e = eref.expr.as_ref().borrow().deref().clone();
                     eval_elements.push(e);
                 }
-                Ok((newenv, Expr::List(eval_elements).into()))
+                Ok(ExprRefWithEnv::new(Expr::List(eval_elements).into(), newenv))
             }
 
             Expr::Callable(e) => {
@@ -319,12 +320,12 @@ impl Interpreter {
 
             Expr::Lambda(e) => {
                 debug!("Lambda({:?})", &e);
-                Ok((env, Expr::Callable(Box::new(e.clone())).into()))
+                Ok(ExprRefWithEnv::new(Expr::Callable(Box::new(e.clone())).into(), env))
             }
 
             Expr::Index(_ident, _args) => {
                 // TODO: not yet implemented
-                Ok((env, Expr::Literal(Tok::IntLiteral(0)).into()))
+                Ok(ExprRefWithEnv::new(Expr::Literal(Tok::IntLiteral(0)).into(), env))
             }
 
             Expr::Apply(expr, args) => {
@@ -338,16 +339,16 @@ impl Interpreter {
                                 let mut eval_args = vec![];
                                 let mut newenv = env;
                                 for arg in args {
-                                    let (env, v) = self.evaluate(arg.clone().into(), newenv)?;
-                                    eval_args.push(v);
-                                    newenv = env;
+                                    let v = self.evaluate(arg.clone().into(), newenv)?;
+                                    eval_args.push(v.expr);
+                                    newenv = v.env;
                                 }
                                 debug!("Calling {:?}({:?})", c, eval_args);
 
                                 // newenv.clone here creates a stack branch
                                 let result = c.call(self, newenv.clone(), eval_args)?;
                                 debug!("Call Result {:?}", &result);
-                                Some(Ok((newenv, result.into())))
+                                Some(Ok(ExprRefWithEnv::new(result.into(), newenv)))
                             }
                             _ => None,
                         }
@@ -367,64 +368,65 @@ impl Interpreter {
             }
 
             Expr::Block(exprs) => {
-                let mut result = Expr::List(vec![]).into();
+                // default return value for a block is void
+                let mut result = Expr::Void.into();//List(vec![]).into();
                 let mut newenv = env;
                 for expr in exprs {
                     let r = self.evaluate(expr.clone().into(), newenv);
                     match r {
-                        Ok((env, v)) => {
-                            newenv = env;
-                            result = v;
+                        Ok(v) => {
+                            newenv = v.env;
+                            result = v.expr;
                         }
                         Err(e) => {
                             return Err(e);
                         }
                     }
                 }
-                Ok((newenv, result.into()))
+                Ok(ExprRefWithEnv::new(result.into(), newenv))
             }
 
             Expr::Program(exprs) => {
-                let mut result = Expr::List(vec![]).into();
+                let mut result = Expr::Void.into();//List(vec![]).into();
                 let mut newenv = env;
                 for expr in exprs {
                     let r = self.evaluate(expr.clone().into(), newenv);
                     match r {
-                        Ok((env, v)) => {
-                            newenv = env;
-                            result = v;
+                        Ok(v) => {
+                            newenv = v.env;
+                            result = v.expr;
                         }
                         Err(e) => {
                             return Err(e);
                         }
                     }
                 }
-                Ok((newenv, result.into()))
+                Ok(ExprRefWithEnv::new(result.into(), newenv))
             }
 
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
-                    let (env, v) = self.evaluate(x.clone().into(), env)?;
-                    let b = Expr::check_bool(&v.as_ref().borrow())?;
+                    let v = self.evaluate(x.clone().into(), env)?;
+                    let b = Expr::check_bool(&v.expr.as_ref().borrow())?;
                     if b {
-                        self.evaluate(y.clone().into(), env)
+                        self.evaluate(y.clone().into(), v.env)
                     } else {
-                        self.evaluate(z.clone().into(), env)
+                        self.evaluate(z.clone().into(), v.env)
                     }
                 }
                 _ => unimplemented!(),
             },
 
-            Expr::Chain(_, _) => Ok((env, Expr::Literal(Tok::IntLiteral(0)).into())),
+            Expr::Chain(_, _) => Ok(ExprRefWithEnv::new(Expr::new_int(0).into(), env)),
             Expr::Invalid(s) => Err(InterpretError::Runtime {
                 message: format!("Invalid expr: {:?}", s),
                 line: 0,
             }),
-            Expr::Void => Ok((env, Expr::Void.into()))
+            Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
         }
     }
 
-    pub fn execute(&mut self, e: ExprRef, env: Environment) -> Result<(Environment, ExprRef), InterpretError> {
+    pub fn execute(&mut self, e: ExprRef, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
         let expr = e.as_ref().borrow();
         debug!("EXPR: {:?}", &expr);
         debug!("EXPR-unparse: {:?}", expr.unparse());

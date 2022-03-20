@@ -136,53 +136,53 @@ impl ExprVisitor<String> for ExprFormatter {
     fn enter(&mut self, e: &ExprNode, f: &mut String) -> VResult {
         let indent: String = String::from_utf8(vec![b'\t'; self.depth]).unwrap();
         let s: &'static str = e.value.clone().into();
-        match &e.value {
+        let _ = match &e.value {
             Expr::Void => {
-                write!(f, "{}{}\n", indent, s);
+                write!(f, "{}{}\n", indent, s)
             }
             Expr::Ternary(op, _, _, _) => {
-                write!(f, "{}{}({:?})\n", indent, s, op);
+                write!(f, "{}{}({:?})\n", indent, s, op)
             }
             Expr::Chain(_, _) => {
-                write!(f, "{}{}\n", indent, s);
+                write!(f, "{}{}\n", indent, s)
             }
             Expr::Prefix(op, _) => {
-                write!(f, "{}{}({:?})\n", indent, s, op.value);
+                write!(f, "{}{}({:?})\n", indent, s, op.value)
             }
             Expr::Postfix(op, _) => {
-                write!(f, "{}{}({:?})\n", indent, s, op);
+                write!(f, "{}{}({:?})\n", indent, s, op)
             }
             Expr::Binary(op, _, _) => {
-                write!(f, "{}{}({:?})\n", indent, s, op);
+                write!(f, "{}{}({:?})\n", indent, s, op)
             }
             Expr::List(elements) => {
-                write!(f, "{}{}(len={})\n", indent, s, elements.len());
+                write!(f, "{}{}(len={})\n", indent, s, elements.len())
             }
             Expr::Callable(_) => {
-                write!(f, "{}{}\n", indent, s);
+                write!(f, "{}{}\n", indent, s)
             }
-            Expr::Index(expr, arg) => {
-                write!(f, "{}{}\n", indent, s);
+            Expr::Index(_, _) => {
+                write!(f, "{}{}\n", indent, s)
             }
-            Expr::Apply(ident, args) => {
-                write!(f, "{}{}\n", indent, s);
+            Expr::Apply(_, _) => {
+                write!(f, "{}{}\n", indent, s)
             }
             Expr::Block(exprs) | Expr::Program(exprs) => {
-                write!(f, "{}{}(len={})\n", indent, s, exprs.len());
+                write!(f, "{}{}(len={})\n", indent, s, exprs.len())
             }
             Expr::Ident(x) => {
-                write!(f, "{}{}({})\n", indent, s, x);
+                write!(f, "{}{}({})\n", indent, s, x)
             }
             Expr::Literal(x) => {
-                write!(f, "{}{}({:?})\n", indent, s, x);
+                write!(f, "{}{}({:?})\n", indent, s, x)
             }
             Expr::Lambda(x) => {
-                write!(f, "{}{}\n", indent, x.sexpr().unwrap());
+                write!(f, "{}{}\n", indent, x.sexpr().unwrap())
             }
             Expr::Invalid(v) => {
-                write!(f, "{}{}({})\n", indent, s, v);
+                write!(f, "{}{}({})\n", indent, s, v)
             }
-        }
+        };
         self.depth += 1;
         Ok(())
     }

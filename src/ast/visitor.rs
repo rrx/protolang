@@ -1,6 +1,5 @@
 use super::{Expr, ExprNode};
 use crate::tokens::Tok;
-use std::collections::VecDeque;
 
 #[derive(Debug)]
 pub enum VisitError {
@@ -41,51 +40,8 @@ pub trait ExprVisitorMut {
     }
 }
 
-pub struct DFS {}
-impl ExprVisitor<Vec<ExprNode>> for DFS {
-    fn exit(&mut self, e: &ExprNode, n: &mut Vec<ExprNode>) -> VResult {
-        n.push(e.clone());
-        //n.append(&mut unparse_expr(e, false));
-        Ok(())
-    }
-}
-
-pub struct BFS {
-    queue: VecDeque<ExprNode>,
-}
-impl BFS {
-    pub fn new() -> Self {
-        Self {
-            queue: VecDeque::new(),
-        }
-    }
-
-    fn run(&mut self, e: &ExprNode, n: &mut Vec<ExprNode>) -> VResult {
-        self.visit(e, &mut vec![])?;
-        n.append(&mut self.queue.drain(..).collect::<Vec<_>>());
-        Ok(())
-    }
-
-    fn visit(&mut self, e: &ExprNode, n: &mut Vec<ExprNode>) -> VResult {
-        self.queue
-            .append(&mut e.value.children().into_iter().collect());
-        for c in e.value.children() {
-            self.visit(&c, n)?;
-        }
-        Ok(())
-    }
-}
-
-impl ExprVisitor<Vec<ExprNode>> for BFS {
-    fn enter(&mut self, e: &ExprNode, n: &mut Vec<ExprNode>) -> VResult {
-        //self.queue.append(&mut e.value.children());
-        //n.push(*e);
-        Ok(())
-    }
-}
-
 impl Expr {
-    fn children(&self) -> Vec<ExprNode> {
+    pub fn children(&self) -> Vec<ExprNode> {
         let mut out = vec![];
         match self {
             Expr::Ternary(_, x, y, z) => {
@@ -204,38 +160,3 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
     f.exit(e, n)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lexer::LexerState;
-    use crate::parser::{parse_program, unparse_expr};
-    use crate::sexpr::SExpr;
-    use log::debug;
-
-    #[test]
-    fn dfs() {
-        let s = "1 + 2 * 3";
-        let mut lexer = LexerState::from_str_eof(s).unwrap();
-        let tokens = lexer.tokens2().clone();
-        let (_, expr) = parse_program(tokens).unwrap();
-        let mut dfs = DFS {};
-        let mut out = vec![];
-        let _ = visit_expr(&expr, &mut dfs, &mut out).unwrap();
-        debug!("out {:?}", (s, out));
-    }
-
-    #[test]
-    fn bfs() {
-        let s = "1 + 2 * 3";
-        let mut lexer = LexerState::from_str_eof(s).unwrap();
-        let tokens = lexer.tokens2().clone();
-        let (_, expr) = parse_program(tokens).unwrap();
-        let mut bfs = BFS::new();
-        let mut out = vec![];
-        let _ = bfs.run(&expr, &mut out).unwrap();
-        debug!("SEXPR: {}", expr.sexpr().unwrap());
-        for v in out {
-            debug!("bfs {:?}", (unparse_expr(&v, true)));
-        }
-    }
-}
