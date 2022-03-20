@@ -1,4 +1,4 @@
-use super::ExprRef;
+use super::{ExprRef, ExprRefWithEnv};
 use super::*;
 use crate::ast::*;
 use crate::parser::Unparse;
@@ -170,7 +170,7 @@ impl Interpreter {
         params: &Params,
         args: &Vec<ExprRef>,
         expr: ExprRef,
-    ) -> Result<(Environment, ExprRef), InterpretError> {
+    ) -> Result<ExprRef, InterpretError> {
         if args.len() != f.arity() {
             return Err(InterpretError::Runtime {
                 message: format!(
@@ -216,12 +216,8 @@ impl Interpreter {
         }
 
         // evaluate the result
-        let r = self.evaluate(expr, env)?;
-
-        // pop scope, TODO
-        //let mut out = expr.clone();
-        //out.value = r.as_ref().borrow().clone().into();
-        //Ok(out)
+        let (_, r) = self.evaluate(expr, env)?;
+        // we drop the env, it's no longer needed
         Ok(r)
 
         /*
@@ -347,9 +343,11 @@ impl Interpreter {
                                     newenv = env;
                                 }
                                 debug!("Calling {:?}({:?})", c, eval_args);
-                                let (env, result) = c.call(self, newenv, eval_args)?;
+
+                                // newenv.clone here creates a stack branch
+                                let result = c.call(self, newenv.clone(), eval_args)?;
                                 debug!("Call Result {:?}", &result);
-                                Some(Ok((env, result.into())))//result.map(|v| (env, result.into())))
+                                Some(Ok((newenv, result.into())))
                             }
                             _ => None,
                         }

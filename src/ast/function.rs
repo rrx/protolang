@@ -27,7 +27,7 @@ impl CallableNode {
 pub trait Callable: Debug + Display {
     fn arity(&self) -> usize;
     fn call(&self, interp: &mut Interpreter, env: Environment, args: Vec<ExprRef>)
-        -> Result<(Environment, ExprRef), InterpretError>;
+        -> Result<ExprRef, InterpretError>;
     fn box_clone(&self) -> Box<dyn Callable>;
     fn as_any(&self) -> &dyn Any;
 }
@@ -121,7 +121,7 @@ impl Callable for Lambda {
         interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
-    ) -> Result<(Environment, ExprRef), InterpretError> {
+    ) -> Result<ExprRef, InterpretError> {
         interp.call(env, self, &self.params, &args, self.expr.clone().into())
     }
 

@@ -14,6 +14,17 @@ use std::result::Result;
 //pub struct ExprRef(pub RefCell<Rc<Expr>>);
 pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
 
+pub struct ExprRefWithEnv {
+    pub expr: ExprRef,
+    pub env: Environment
+}
+
+impl ExprRefWithEnv {
+    pub fn new(expr: ExprRef, env: Environment) -> Self {
+        Self { expr, env }
+    }
+}
+
 impl fmt::Debug for ExprRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ExprRef")
