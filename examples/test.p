@@ -62,3 +62,36 @@ f = \x -> x^2
 assert(4 == f(2))
 f2 = \x -> f(x)
 f2(3)
+
+# verify that we can use non-local variables for calculationsa in a closure
+nonlocal_x = 1
+x = 2
+f = \x -> x + nonlocal_x
+assert(4 == f(3))
+
+# verify that we are able to modify non local variables from within the closure
+f = \x -> {
+        nonlocal_x = 2
+        x + 1
+}
+assert(2 == f(1))
+assert(nonlocal_x == 2)
+
+# check to make sure closures don't leak
+# TODO: it currently does
+
+f = \x -> {
+  # temporary variable created inside of the closure
+  super_local = 1
+  nonlocal_x = 2
+  x + 1
+}
+f(1)
+super_local
+
+# asdf should not be visible outside the block
+{
+        asdf = "sadf"
+}
+# asdf should be freed up now
+asdf

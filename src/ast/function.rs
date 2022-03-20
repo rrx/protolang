@@ -31,7 +31,7 @@ pub trait Callable: Debug + Display {
         interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRef, InterpretError>;
+    ) -> Result<ExprRefWithEnv, InterpretError>;
     fn box_clone(&self) -> Box<dyn Callable>;
     fn as_any(&self) -> &dyn Any;
 }
@@ -125,7 +125,7 @@ impl Callable for Lambda {
         interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRef, InterpretError> {
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         interp.call(env, self, &self.params, &args, self.expr.clone().into())
     }
 

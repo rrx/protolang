@@ -169,7 +169,7 @@ impl Interpreter {
         params: &Params,
         args: &Vec<ExprRef>,
         expr: ExprRef,
-    ) -> Result<ExprRef, InterpretError> {
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         if args.len() != f.arity() {
             return Err(InterpretError::Runtime {
                 message: format!(
@@ -216,8 +216,9 @@ impl Interpreter {
 
         // evaluate the result
         let r = self.evaluate(expr, env)?;
-        // we drop the env, it's no longer needed
-        Ok(r.expr)
+        // we drop any temporary variables, if they are no longer needed
+        // we aren't able to drop the env currently, in case the function mutated something outside
+        Ok(r)
 
         /*
                 match &expr.value {
@@ -360,7 +361,7 @@ impl Interpreter {
                                 // newenv.clone here creates a stack branch
                                 let result = c.call(self, newenv.clone(), eval_args)?;
                                 debug!("Call Result {:?}", &result);
-                                Some(Ok(ExprRefWithEnv::new(result.into(), newenv)))
+                                Some(Ok(result))//ExprRefWithEnv::new(result.into(), newenv)))
                             }
                             _ => None,
                         }
