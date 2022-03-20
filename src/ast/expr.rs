@@ -9,6 +9,7 @@ use super::{Operator, OperatorNode};
 use std::fmt;
 use super::{ExprVisitor, VResult, visit_expr};
 use std::fmt::Write;
+use log::debug;
 
 #[derive(
     Debug, strum::Display, Clone, strum_macros::EnumProperty, strum_macros::IntoStaticStr,
@@ -146,7 +147,7 @@ impl ExprVisitor<String> for ExprFormatter {
                 write!(f, "{}{}\n", indent, s);
             }
             Expr::Prefix(op, _) => {
-                write!(f, "{}{}({:?})\n", indent, s, op);
+                write!(f, "{}{}({:?})\n", indent, s, op.value);
             }
             Expr::Postfix(op, _) => {
                 write!(f, "{}{}({:?})\n", indent, s, op);
@@ -222,7 +223,7 @@ impl ExprNode {
         let mut p = ExprFormatter { depth: 0 };
         let mut s = String::new(); 
         let _ = visit_expr(&self, &mut p, &mut s).unwrap();
-        println!("{}", s);
+        debug!("{}", s);
     }
 
     pub fn from_token(token: &Token) -> Option<Self> {
@@ -241,12 +242,12 @@ impl ExprNode {
 
     /*
     pub fn dump(&self) {
-        println!("ExprNode");
-        println!("\tStack: {:?}", self.indent_stack);
+        debug!("ExprNode");
+        debug!("\tStack: {:?}", self.indent_stack);
         for token in &self.acc {
-            println!("\tToken: {:?}", token);
+            debug!("\tToken: {:?}", token);
         }
-        println!("\tIndentState: {:?}", self.indent_state);
+        debug!("\tIndentState: {:?}", self.indent_state);
     }
     */
 }

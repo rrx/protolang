@@ -140,7 +140,7 @@ impl Tok {
             IndentOpen => "".into(),
             IndentClose => "".into(),
             _ => {
-                println!("Panic: Unable to unlex token: {:?}", self);
+                log::error!("Panic: Unable to unlex token: {:?}", self);
                 unreachable!() //"[UNKNOWN]".into(),
             }
         })
@@ -203,6 +203,10 @@ impl<'a> Token<'a> {
             tok,
             pos,
         }
+    }
+
+    pub fn is_indent_open(&self) -> bool {
+        self.s.pre.iter().find(|t| *t == &Tok::IndentOpen).is_some()
     }
 
     pub fn toks_pre(&self) -> Vec<Tok> {

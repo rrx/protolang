@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         for filename in std::env::args().skip(1) {
             if let Err(e) = run_file(&filename) {
-                println!("[{}] {:?}", filename, e);
+                log::info!("[{}] {:?}", filename, e);
             }
         }
     }

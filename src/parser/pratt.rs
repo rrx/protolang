@@ -68,7 +68,8 @@ impl Op {
             Tok::Assign => Some(Self::new_right_assoc(op, 10)),
             Tok::Elvis => Some(Self::new_left_assoc(op, 35)),
             Tok::Comma => Some(Self::new_left_assoc(op, 1)),
-            Tok::SemiColon => Some(Self::new(op, Some(0), Some(127), None)),
+            //Tok::SemiColon => Some(Self::new(op, Some(0), Some(127), None)),
+            Tok::SemiColon => Some(Self::new(op, Some(0), None, None)),
 
             // Conditional
             Tok::Question => Some(Self::new_chaining(op, 35)),
@@ -88,6 +89,7 @@ impl Op {
             Tok::LBracket => Some(Self::new_right_assoc(op, 60)),
             // Call
             Tok::LParen => Some(Self::new_right_assoc(op, 70)),
+            //Tok::IndentOpen => Some(Self::new_left_assoc(op, 0)),
 
             // postfix ops, lack rbp
             // We bump up NBP, so that postfix operators are allowed to be left operands
@@ -173,10 +175,11 @@ impl Op {
         //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
-                println!("handle semicolon: {:?}", i.expand_toks());
+                debug!("handle semicolon: {:?}", i.expand_toks());
                 let mut x = x.clone();
                 x.context.append(token.expand_toks());
-                (i, x)
+                // escape, we are done
+                return Ok((i, x))
             }
 
             // chaining
@@ -217,6 +220,8 @@ impl Op {
                 //let (i, y) = self.chain_left_denotation(i, x, &token.tok, depth)?;
                 //(i, y)
             //}
+            //
+            // Call
             Tok::LParen => {
                 let (i, (nodes, end)) =
                     sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
@@ -230,6 +235,15 @@ impl Op {
 
                 // application is slightly different than binary.  The RHS is optional
             }
+
+            /*
+            Tok::IndentOpen => {
+                println!("handle open: {:?}", i.toks());
+                let (i, _) = take_one_any(i)?;
+                (i, x.clone())
+            }
+            */
+
             _ => {
                 if token.tok.is_binary() {
                     // binary parses the RHS, and returns a binary node
@@ -274,6 +288,12 @@ impl Op {
             */
             Tok::LBracket => {
                 let (i, right) = tag_token(Tok::RBracket)(i)?;
+                t.context.append(right.expand_toks());
+                i
+            }
+
+            Tok::IndentOpen => {
+                let (i, right) = take_one_any(i)?;
                 t.context.append(right.expand_toks());
                 i
             }
@@ -347,10 +367,6 @@ impl<'a> Tokens<'a> {
     fn extra(self, prec: Prec, depth: usize) -> RNode<'a> {
         extra(self, prec, depth)
     }
-
-    //fn G(self, r: i8, t: ASTNode, prec: Prec, depth: usize) -> PResult<Tokens<'a>, (i8, ASTNode)> {
-    //G(self, r, t, prec, depth)
-    //}
 }
 
 // Parse a prefix token, and return a full node
@@ -397,7 +413,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LBrace) => {
             // consume LBrace
             let (i, left) = take_one_any(i)?;
-            println!("prefix brace1: {:?}", (&i.expand_toks(), &i.toks(), &n, &left));
+            debug!("prefix brace1: {:?}", (&i.expand_toks(), &i.toks(), &n, &left));
             let p = |i| extra(i, Some(0), 0);
 
             let (i, (t, right)) = sequence::pair(
@@ -405,11 +421,13 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
                 context("r-brace", tag_token(Tok::RBrace))
                 )(i)?;
             // let (i, t) = //extra(i, Some(0), depth + 1)?;
-            println!("prefix brace2: {:?}", (&i.expand_toks(), &t));
-            // consume RBrace
-            //let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
             let t = Expr::Block(t);//vec![t]);
             let mut node = i.node(t);
+            node.debug();
+            //debug!("block: {:?}", (&t.debug()));
+            debug!("prefix brace2: {:?}", (&i.expand_toks()));
+            // consume RBrace
+            //let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
             node.context.prepend(left.expand_toks());
             node.context.append(right.expand_toks());
             Ok((i, node))
@@ -447,6 +465,24 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             Ok((i, node))
         }
 
+        /*
+        // Indent Open
+        Some(Tok::IndentOpen) => {
+            // consume LParen
+            let (i, left) = take_one_any(i)?;
+            debug!("prefix indent1: {:?}", (&i.toks(), &left.toks()));
+
+            // consume anything inside the parents, bp = 0
+            let (i, mut node) = i.extra(Some(0), depth + 1)?;
+
+            debug!("prefix indent2: {:?}", (&i.toks(), &node));
+            let (i, right) = context("r-close", tag_token(Tok::IndentClose))(i)?;
+            node.context.prepend(left.expand_toks());
+            node.context.append(right.expand_toks());
+            Ok((i, node))
+        }
+        */
+
         // Non N-tokens, are handled as errors
         Some(Tok::EOF) | None => {
             debug!("got eof3");
@@ -457,6 +493,21 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::Invalid(_)) => {
             // consume invalid
             ExprNode::parse_invalid(i)
+        }
+
+        Some(Tok::IndentOpen) => {
+            let (i, pre) = take_one_any(i)?;
+            let (i, mut p) = primary(i, depth + 1)?;
+            p.context.prepend(pre.expand_toks());
+            Ok((i, p))
+        }
+
+        Some(Tok::SemiColon) => {
+            //gobble up semicolons
+            let (i, pre) = take_one_any(i)?;
+            let mut node = ExprNode::new(Expr::Void, &i.to_location());
+            node.context.prepend(pre.expand_toks());
+            Ok((i, node))
         }
 
         _ => {
@@ -532,6 +583,14 @@ fn extra_recursive<'a>(
     }
     let token = &i.tok[0];
 
+
+    /*
+    if token.tok == Tok::SemiColon {
+        let (i, _) = take_one_any(i)?;
+        return Ok((i, (r, t)));
+    }
+    */
+
     // get op from left
     // it could be any token
     let maybe_op = token.tok.op();
@@ -568,10 +627,16 @@ fn extra_recursive<'a>(
         debug!("left_denotation: {:?} -> {:?}", (&t1, &token), &t);
 
         // set r = NBP of op
-        let r = op.nbp.unwrap();
-
-        // loop recursively
-        extra_recursive(i, r, t, prec, depth + 1)
+        match op.nbp {
+            Some(new_r) => {
+                // loop recursively
+                extra_recursive(i, new_r, t, prec, depth + 1)
+            }
+            None => {
+                debug!("r exit: {:?}", &i.toks());
+                Ok((i, (r, t)))
+            }
+        }
     } else {
         debug!("guard exit: {:?}", &i.toks());
         Ok((i, (r, t)))
@@ -633,6 +698,7 @@ mod tests {
     use crate::parser::print_result;
     use crate::sexpr::SExpr;
     use nom::InputIter;
+    use test_env_log::test;
 
     #[test]
     fn expressions() {
@@ -730,11 +796,13 @@ mod tests {
     #[test]
     fn sexpr_expr() {
         let r = vec![
-            ("+1", "(+ 1)"),
-            //("{-1;-2}", "(block (- 1) (- 2)"),
-            //("{+1;+2}", "(block (+ 1) (+ 2)"),
-            //("{+1\n\t+2}", "(block (+ 1) (+ 2)"),
+            ("{-1;-2}", "(block (- 1) (- 2))"),
+            ("{+1;+2}", "(block (+ 1) (+ 2))"),
+            ("{1;2}", "(block 1 2)"),
+            ("{1\n2}", "(block 1 2)"),
+            ("{+1\n\t+2}\n", "(block (+ 1) (+ 2))"),
             //("{+1\n+2}", "(block (+ 1) (+ 2)"),
+            ("+1", "(+ 1)"),
             ("+ 1", "(+ 1)"),
             ("123", "123"),
             ("-123", "(- 123)"),
@@ -805,7 +873,7 @@ mod tests {
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let i = lexer.tokens();
 
-            debug!("tokens: {:?}", (i.toks()));
+            debug!("tokens: {:?}", (i.expand_toks()));
 
             i.iter_elements().for_each(|t| {
                 debug!("{:?}", t);
@@ -815,7 +883,9 @@ mod tests {
             print_result(&r);
             match r {
                 Ok((i, expr)) => {
-                    debug!("NODE {:?}", (&expr.unparse()));
+                    //expr.debug();
+                    debug!("q {:?}", (&q));
+                    //debug!("NODE {:?}", (&expr.unparse()));
                     debug!("REM {:?}", (&i.toks()));
                     match expr.sexpr() {
                         Ok(sexpr) => {
@@ -836,4 +906,18 @@ mod tests {
             }
         });
     }
+
+    #[test]
+    fn asdf() {
+        let q = "{-1;+2}";
+        let mut lexer = LexerState::from_str_eof(q).unwrap();
+        let i = lexer.tokens();
+        debug!("tokens: {:?}", (i.toks()));
+        i.iter_elements().for_each(|t| {
+            debug!("{:?}", t);
+        });
+        let r = parse_expr(i);
+        print_result(&r);
+    }
+
 }

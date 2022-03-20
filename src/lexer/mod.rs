@@ -222,7 +222,7 @@ mod tests {
         let r = vec![
             ("", vec![]),
             (" ", vec![]),
-            ("\t  [] ", vec![LBracket, RBracket]),
+            ("\t  [] ", vec![IndentOpen, LBracket, RBracket]),
             ("\t\t", vec![]),
             ("\t", vec![]),
         ];
@@ -257,10 +257,10 @@ mod tests {
     fn test_invalid() {
         let r = vec![
             ("$", vec![Invalid("$".into()), EOF]),
-            (" $\t", vec![Invalid("$".into()), EOF]),
+            (" $\t", vec![IndentOpen, Invalid("$".into()), EOF]),
             (
                 " $\nasdf",
-                vec![Invalid("$".into()), Ident("asdf".into()), EOF],
+                vec![IndentOpen, Invalid("$".into()), Ident("asdf".into()), EOF],
             ),
             (
                 "$\nasdf",
@@ -278,7 +278,7 @@ mod tests {
         let s = " [ ] ";
         let mut lexer = LexerState::from_str_eof(s).unwrap();
         let toks = lexer.final_toks();
-        assert_eq!(vec![LBracket, RBracket, EOF], toks);
+        assert_eq!(vec![IndentOpen, LBracket, RBracket, EOF], toks);
     }
 
     fn lexer_losslessness(s: &str) -> bool {

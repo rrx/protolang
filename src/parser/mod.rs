@@ -92,26 +92,26 @@ pub fn print_result<
 ) {
     match r {
         Ok((_, expr)) => {
-            println!("Ok({:?})", (&expr));
+            //debug!("Ok({:?})", (&expr));
             match expr.sexpr() {
                 Ok(sexpr) => {
-                    println!("sexpr {}", &sexpr);
+                    debug!("sexpr {}", &sexpr);
                     let rendered = format!("{}", &sexpr);
-                    println!("sexpr {:?}", (&sexpr, &rendered));
+                    debug!("sexpr {:?}", (&sexpr, &rendered));
                 }
                 Err(e) => {
-                    println!("Error: {:?}", e);
+                    debug!("Error: {:?}", e);
                 }
             }
         }
         Err(nom::Err::Error(e)) => {
-            println!("err: {:?}", e);
+            debug!("err: {:?}", e);
             for (tokens, err) in &e.errors {
-                println!("error {:?}", (&err, tokens.toks()));
+                debug!("error {:?}", (&err, tokens.toks()));
             }
         }
         Err(e) => {
-            println!("err: {}", e);
+            debug!("err: {}", e);
         }
     }
 }
@@ -363,6 +363,7 @@ mod tests {
     use crate::lexer::*;
     use crate::sexpr::SExpr;
     use nom::multi::many1;
+    use test_env_log::test;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);
@@ -401,7 +402,7 @@ mod tests {
 
     #[test]
     fn literal() {
-        let r = vec!["1", " 2 ", "\n1", "1\n"];
+        let r = vec!["1", "2 ", "\n1", "1\n"];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str(v).unwrap();
             let tokens = lexer.tokens();
@@ -417,7 +418,7 @@ mod tests {
 
     #[test]
     fn ident() {
-        let r = vec!["x", " x "];
+        let r = vec!["x", "x "];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str(v).unwrap();
             let tokens = lexer.tokens();
@@ -548,7 +549,7 @@ mod tests {
                     //debug!("remaining {:?}", (&rest.toks()));
 
                     if rest.input_len() > 0 {
-                        debug!("ERROR tokens remaining {:?}", (&rest));
+                        debug!("tokens remaining {:?}", (&rest));
                     }
 
                     //assert_eq!(rest.toks().len(), 0);
@@ -702,27 +703,27 @@ mod tests {
         ];
 
         r.iter().for_each(|(q, a)| {
-            println!("q {:?}", (&q));
+            debug!("q {:?}", (&q));
 
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let i = lexer.tokens();
 
-            println!("tokens: {:?}", (i.toks()));
+            debug!("tokens: {:?}", (i.toks()));
 
             i.iter_elements().for_each(|t| {
-                println!("{:?}", t);
+                debug!("{:?}", t);
             });
 
             let r = parse_program(i);
             print_result(&r);
             match r {
                 Ok((i, expr)) => {
-                    println!("NODE {:?}", (&expr.unparse()));
-                    println!("REM {:?}", (&i.toks()));
+                    debug!("NODE {:?}", (&expr.unparse()));
+                    debug!("REM {:?}", (&i.toks()));
                     match expr.sexpr() {
                         Ok(sexpr) => {
                             let rendered = format!("{}", &sexpr);
-                            println!("sexpr {:?}", (&q, &sexpr, &rendered, a));
+                            debug!("sexpr {:?}", (&q, &sexpr, &rendered, a));
                             assert_eq!(rendered, a.to_string());
                             //assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
                                                                   //assert_eq!(0, i.input_len());

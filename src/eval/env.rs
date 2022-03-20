@@ -149,7 +149,7 @@ impl Environment {
 
     pub fn debug(&self) {
         self.stack.walk().for_each(|layer| {
-            println!("Layer: {:?}", layer);
+            debug!("Layer: {:?}", layer);
         })
     }
 
@@ -178,8 +178,8 @@ mod tests {
         let x2 = env.resolve("x").unwrap();
         env.debug();
         drop(env);
-        println!("1:{:?}", x1);
-        println!("2:{:?}", x2);
+        debug!("1:{:?}", x1);
+        debug!("2:{:?}", x2);
         assert_eq!(2, Rc::strong_count(&x1.0));
         assert_eq!(2, Rc::strong_count(&x2.0));
     }
