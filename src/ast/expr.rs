@@ -95,7 +95,6 @@ impl Expr {
     pub fn new_bool(b: bool) -> Self {
         Self::Literal(Tok::BoolLiteral(b))
     }
-
 }
 
 #[derive(Clone)]
@@ -106,7 +105,10 @@ pub struct ExprNode {
 
 impl Default for ExprNode {
     fn default() -> Self {
-        Self { context: MaybeNodeContext::default(), value: Expr::Void }
+        Self {
+            context: MaybeNodeContext::default(),
+            value: Expr::Void,
+        }
     }
 }
 
@@ -126,7 +128,7 @@ impl std::ops::DerefMut for ExprNode {
 
 impl fmt::Debug for ExprNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut out = f.debug_struct("ExprNode");
+        let mut out = f.debug_struct("ExprN");
         let pre = self.context.pre();
         let post = self.context.post();
         let mut out = if pre.len() > 0 {
@@ -178,7 +180,10 @@ impl ExprNode {
 
 impl From<Expr> for ExprNode {
     fn from(value: Expr) -> Self {
-        Self { context: MaybeNodeContext::default(), value }
+        Self {
+            context: MaybeNodeContext::default(),
+            value,
+        }
     }
 }
 

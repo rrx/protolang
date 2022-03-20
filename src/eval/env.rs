@@ -1,14 +1,14 @@
-use crate::ast::*;
-use log::debug;
-use std::collections::HashMap;
-use std::result::Result;
 use super::*;
+use crate::ast::*;
 use kaktus::PushPop;
-use std::rc::Rc;
-use std::convert::From;
-use std::cell::RefCell;
+use log::debug;
 use rpds::HashTrieMap;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::convert::From;
 use std::fmt;
+use std::rc::Rc;
+use std::result::Result;
 
 #[derive(Clone)]
 //pub struct ExprRef(pub RefCell<Rc<Expr>>);
@@ -16,7 +16,10 @@ pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
 
 impl fmt::Debug for ExprRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().borrow().fmt(f)
+        f.debug_struct("ExprRef")
+            .field("c", &Rc::strong_count(&self.0))
+            .field("v", &self.as_ref().borrow())
+            .finish()
     }
 }
 
@@ -69,10 +72,9 @@ impl From<ExprNode> for ExprRef {
 
 impl From<Box<ExprNode>> for ExprRef {
     fn from(item: Box<ExprNode>) -> Self {
-        Self::new(*item)//Box::into_inner(item))
+        Self::new(*item) //Box::into_inner(item))
     }
 }
-
 
 //#[derive(Debug)]
 pub struct Layer {
@@ -88,24 +90,27 @@ impl Default for Layer {
 
 impl fmt::Debug for Layer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map().entries(self.values.iter().map(|(k, v)| (k, v))).finish()
+        f.debug_map()
+            .entries(self.values.iter().map(|(k, v)| (k, v)))
+            .finish()
     }
 }
 
-
 impl Layer {
     pub fn define(&self, name: &str, value: ExprRef) -> Layer {
-        Layer { values: self.values.insert(name.to_string(), value) }
+        Layer {
+            values: self.values.insert(name.to_string(), value),
+        }
     }
 
-    pub fn contains(&self, name: &str) ->  bool {
+    pub fn contains(&self, name: &str) -> bool {
         self.values.contains_key(name)
     }
 
     pub fn get(&self, name: &str) -> Option<ExprRef> {
         match self.values.get(name) {
             Some(v) => Some(v.clone()),
-            None => None
+            None => None,
         }
     }
 }
@@ -118,9 +123,7 @@ pub struct Environment {
 impl Default for Environment {
     fn default() -> Self {
         let stack: kaktus::Stack<Layer> = kaktus::Stack::root_default();
-        Self {
-            stack
-        }
+        Self { stack }
     }
 }
 
@@ -138,9 +141,10 @@ impl Environment {
     }
 
     pub fn resolve(&self, name: &str) -> Option<ExprRef> {
-        self.stack.walk().find(|layer| layer.values.contains_key(name)).map(|layer| {
-            layer.get(name).unwrap()
-        })
+        self.stack
+            .walk()
+            .find(|layer| layer.values.contains_key(name))
+            .map(|layer| layer.get(name).unwrap())
     }
 
     pub fn debug(&self) {
@@ -160,7 +164,6 @@ impl Environment {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,12 +172,15 @@ mod tests {
         let env = Environment::default();
         let env = env.define("x", Expr::new_int(1).into());
         let x1 = env.resolve("x").unwrap();
-        println!("1:{:?}", x1);
         let env = env.define("x", Expr::new_int(2).into());
         let env = env.define("y", Expr::new_int(3).into());
+        let env = env.define("z", Expr::new_int(4).into());
         let x2 = env.resolve("x").unwrap();
-        println!("2:{:?}", x2);
         env.debug();
+        drop(env);
+        println!("1:{:?}", x1);
+        println!("2:{:?}", x2);
+        assert_eq!(2, Rc::strong_count(&x1.0));
+        assert_eq!(2, Rc::strong_count(&x2.0));
     }
 }
-

@@ -1,16 +1,15 @@
+use super::ExprRef;
+use super::*;
 use crate::ast::*;
 use crate::parser::Unparse;
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use log::debug;
-use std::result::Result;
-use super::*;
-use super::ExprRef;
-use std::convert::From;
-use std::rc::Rc;
-use std::ops::Deref;
 use std::borrow::Borrow;
-
+use std::convert::From;
+use std::ops::Deref;
+use std::rc::Rc;
+use std::result::Result;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -300,13 +299,14 @@ impl Interpreter {
                         message: format!("Unimplemented expression op: Operator::{:?}", op),
                         line,
                     }),
-                }.map(|v| v.into())
+                }
+                .map(|v| v.into())
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 for mut e in elements.clone() {
                     let eref = self.evaluate(e.into())?;
-                    let e = eref.as_ref().borrow().deref().clone();//.into();//Rc::try_unwrap(eref.0).unwrap();
+                    let e = eref.as_ref().borrow().deref().clone(); //.into();//Rc::try_unwrap(eref.0).unwrap();
                     eval_elements.push(e);
                 }
                 Ok(Expr::List(eval_elements).into())
@@ -347,7 +347,7 @@ impl Interpreter {
                                 debug!("Call Result {:?}", &result);
                                 Some(result.map(|v| v.into()))
                             }
-                            _ => None
+                            _ => None,
                         }
                     }
                     _ => None,

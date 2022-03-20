@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use protolang::eval::Interpreter;
 use protolang::lexer;
-use protolang::parser::{unparse_expr, parse_program, Unparse};
+use protolang::parser::{parse_program, unparse_expr, Unparse};
 //use protolang::repl::parse_file;
 
 const FILENAME: &str = "benches/test.p";
