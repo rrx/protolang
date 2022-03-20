@@ -7,13 +7,21 @@ use kaktus::PushPop;
 use std::rc::Rc;
 use std::convert::From;
 use std::cell::RefCell;
+use rpds::HashTrieMap;
+use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 //pub struct ExprRef(pub RefCell<Rc<Expr>>);
-pub struct ExprRef(pub Rc<RefCell<Expr>>);
+pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
+
+impl fmt::Debug for ExprRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_ref().borrow().fmt(f)
+    }
+}
 
 impl ExprRef {
-    pub fn new(v: Expr) -> Self {
+    pub fn new(v: ExprNode) -> Self {
         Self(Rc::new(RefCell::new(v)))
         //Self(RefCell::new(Rc::new(v)))
     }
@@ -33,7 +41,7 @@ impl ExprRef {
 
 impl std::ops::Deref for ExprRef {
     //type Target = Rc<Expr>;
-    type Target = Rc<RefCell<Expr>>;
+    type Target = Rc<RefCell<ExprNode>>;
     //type Target = RefCell<Rc<Expr>>;
 
     fn deref(&self) -> &Self::Target {
@@ -47,28 +55,51 @@ impl std::ops::DerefMut for ExprRef {
     }
 }
 
-
 impl From<Expr> for ExprRef {
     fn from(item: Expr) -> Self {
+        Self::new(item.into())
+    }
+}
+
+impl From<ExprNode> for ExprRef {
+    fn from(item: ExprNode) -> Self {
         Self::new(item)
     }
 }
 
-#[derive(Debug)]
+impl From<Box<ExprNode>> for ExprRef {
+    fn from(item: Box<ExprNode>) -> Self {
+        Self::new(*item)//Box::into_inner(item))
+    }
+}
+
+
+//#[derive(Debug)]
 pub struct Layer {
-    values: HashMap<String, ExprRef>,
+    values: HashTrieMap<String, ExprRef>,
 }
 impl Default for Layer {
     fn default() -> Self {
         Self {
-            values: HashMap::new(),
+            values: HashTrieMap::new(),
         }
     }
 }
 
+impl fmt::Debug for Layer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.values.iter().map(|(k, v)| (k, v))).finish()
+    }
+}
+
+
 impl Layer {
-    pub fn define(&mut self, name: &str, value: ExprRef) {
-        self.values.insert(name.to_string(), value);
+    pub fn define(&self, name: &str, value: ExprRef) -> Layer {
+        Layer { values: self.values.insert(name.to_string(), value) }
+    }
+
+    pub fn contains(&self, name: &str) ->  bool {
+        self.values.contains_key(name)
     }
 
     pub fn get(&self, name: &str) -> Option<ExprRef> {
@@ -82,32 +113,40 @@ impl Layer {
 #[derive(Debug)]
 pub struct Environment {
     stack: kaktus::Stack<Layer>,
-    base: Layer,
 }
 
 impl Default for Environment {
     fn default() -> Self {
+        let stack: kaktus::Stack<Layer> = kaktus::Stack::root_default();
         Self {
-            stack: kaktus::Stack::root_default(),
-            base: Layer::default()
+            stack
         }
     }
 }
 
 impl Environment {
-    pub fn define(&mut self, name: &str, value: ExprRef) {
-        // XXX
-        //self.stack.peek().unwrap().define(name, value);
-        self.base.define(name, value);
+    pub fn define(&self, name: &str, value: ExprRef) -> Self {
+        let stack = &self.stack;
+        let top = if stack.depth() == 0 || stack.peek().unwrap().contains(name) {
+            stack.push_default()
+        } else {
+            stack.clone()
+        };
+        let top = top.define(name, value);
+        let stack = stack.push(top);
+        Environment { stack }
     }
 
     pub fn resolve(&self, name: &str) -> Option<ExprRef> {
-        // XXX
-        self.base.get(name)
-        //self.stack.walk().find(|layer| layer.values.contains_key(name)).map(|layer| {
-            //layer.get(name).unwrap()
-        //});
-        //None
+        self.stack.walk().find(|layer| layer.values.contains_key(name)).map(|layer| {
+            layer.get(name).unwrap()
+        })
+    }
+
+    pub fn debug(&self) {
+        self.stack.walk().for_each(|layer| {
+            println!("Layer: {:?}", layer);
+        })
     }
 
     pub fn get(&self, name: &str) -> Result<ExprRef, InterpretError> {
@@ -118,6 +157,24 @@ impl Environment {
             message: format!("Undefined variable '{}'.", name),
             line: 0, //name.line(),
         })
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test() {
+        let env = Environment::default();
+        let env = env.define("x", Expr::new_int(1).into());
+        let x1 = env.resolve("x").unwrap();
+        println!("1:{:?}", x1);
+        let env = env.define("x", Expr::new_int(2).into());
+        let env = env.define("y", Expr::new_int(3).into());
+        let x2 = env.resolve("x").unwrap();
+        println!("2:{:?}", x2);
+        env.debug();
     }
 }
 

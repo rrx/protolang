@@ -132,7 +132,7 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
                 debug!("PROG: {:?}", (&prog));
                 let sexpr = prog.sexpr().unwrap();
                 debug!("SEXPR: {}", &sexpr);
-                match interpreter.evaluate(&prog.value) {
+                match interpreter.evaluate(prog.into()) {
                     Ok(r) => debug!("R: {:?}", r),
                     Err(e) => debug!("E: {:?}", e),
                 }

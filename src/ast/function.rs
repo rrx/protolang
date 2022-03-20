@@ -117,8 +117,8 @@ impl Callable for Lambda {
 
     fn call(&self, interp: &mut Interpreter, args: Vec<ExprRef>) -> Result<ExprRef, InterpretError> {
         interp
-            .call(self, &self.params, &args, &self.expr)
-            .map(|v| v.value.into())
+            .call(self, &self.params, &args, self.expr.clone().into())
+            //.map(|v| v.value.into())
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {

@@ -205,6 +205,7 @@ mod tests {
     use crate::lexer::LexerState;
     use crate::parser::{parse_program, unparse_expr};
     use crate::sexpr::SExpr;
+    use log::debug;
 
     #[test]
     fn dfs() {
@@ -215,7 +216,7 @@ mod tests {
         let mut dfs = DFS {};
         let mut out = vec![];
         let _ = visit_expr(&expr, &mut dfs, &mut out).unwrap();
-        println!("out {:?}", (s, out));
+        debug!("out {:?}", (s, out));
     }
 
     #[test]
@@ -227,9 +228,9 @@ mod tests {
         let mut bfs = BFS::new();
         let mut out = vec![];
         let _ = bfs.run(&expr, &mut out).unwrap();
-        println!("SEXPR: {}", expr.sexpr().unwrap());
+        debug!("SEXPR: {}", expr.sexpr().unwrap());
         for v in out {
-            println!("bfs {:?}", (unparse_expr(&v, true)));
+            debug!("bfs {:?}", (unparse_expr(&v, true)));
         }
     }
 }

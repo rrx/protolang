@@ -5,6 +5,7 @@ use nom::combinator::{into, opt};
 use nom::error::{context, ErrorKind};
 use nom::multi::many0;
 use nom::Err;
+use log::debug;
 
 #[allow(dead_code)]
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
@@ -17,25 +18,25 @@ pub fn _parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 
 fn parse_pratt_expr(input: Tokens, precedence: Precedence) -> PResult<Tokens, ExprNode> {
     // parse N token
-    println!("parse-pratt {:?}", (&precedence, &input.toks()));
+    debug!("parse-pratt {:?}", (&precedence, &input.toks()));
     let (i0, maybe_unary) = opt(parse_prefix)(input)?;
     let (i1, expr) = match maybe_unary {
         Some(unary) => {
-            println!("pratt unary: {:?}", &unary);
+            debug!("pratt unary: {:?}", &unary);
             let (i1, expr) = parse_pratt_expr(i0, Precedence::PLessGreater)?;
-            println!("pratt unary expr: {:?}", (&i1, &expr));
+            debug!("pratt unary expr: {:?}", (&i1, &expr));
             let loc = unary.context.to_location();
             let mut node = ExprNode::new(Expr::Prefix(unary.clone(), Box::new(expr)), &loc);
             node.context.prepend(unary.unparse());
 
-            println!("pratt unary result: {:?}", (&node));
+            debug!("pratt unary result: {:?}", (&node));
             (i1, node)
         }
         None => {
             let (i1, left) = parse_atom(i0)?;
-            println!("pratt atom: {:?}", &left.value);
+            debug!("pratt atom: {:?}", &left.value);
             let (i2, r) = go_parse_pratt_expr(i1, precedence, left)?;
-            println!("pratt rest: {:?}", (&i2.toks(), &r));
+            debug!("pratt rest: {:?}", (&i2.toks(), &r));
             (i2, r)
         }
     };
@@ -52,14 +53,14 @@ fn go_parse_pratt_expr(
 
     // if we have a LHS, and nothing remains, just return LHS
     if t1.tok.is_empty() {
-        println!("go-empty");
+        debug!("go-empty");
         Ok((i1, left))
     } else {
         // inspect the next element, if it's a valid op
         let preview = &t1.tok[0];
 
         let p = infix_op(&preview.tok);
-        println!("infix: {:?}", (&preview, &p));
+        debug!("infix: {:?}", (&preview, &p));
         match p {
             (Precedence::PCall, _) if precedence < Precedence::PCall => {
                 let (i2, left2) = parse_call_expr(input, left)?;
@@ -73,7 +74,7 @@ fn go_parse_pratt_expr(
 
             // otherwise we just return the LHS
             (Precedence::PHighest, _) => {
-                println!("high: {:?}", &input);
+                debug!("high: {:?}", &input);
                 let (i2, token) = tag_token(Tok::SemiColon)(input)?;
                 left.context.append(token.expand_toks());
                 Ok((i2, left))
@@ -82,14 +83,14 @@ fn go_parse_pratt_expr(
             // if the precedence of the next op is greater then the current precedence,
             // then we include it in this expr, and try to parse the RHS
             (ref peek_precedence, _) if precedence < *peek_precedence => {
-                println!("p nest");
+                debug!("p nest");
                 let (i2, left2) = parse_infix_expr(input, left)?;
                 let (i, node) = go_parse_pratt_expr(i2, precedence, left2.clone())?;
                 //node.context.s.prepend(left2.unparse());
                 Ok((i, node))
             }
             _ => {
-                println!("p exit");
+                debug!("p exit");
                 Ok((input, left))
             }
         }
@@ -123,7 +124,7 @@ fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
     let token = &t.tok[0];
     match infix_op(&token.tok) {
         (precedence, Some(infix)) => {
-            println!("{:?}", (&precedence, &infix, &i.toks()));
+            debug!("{:?}", (&precedence, &infix, &i.toks()));
             let (i2, mut right) = parse_pratt_expr(i, precedence)?;
             right.context.prepend(token.expand_toks());
             let node = ExprNode::new(
@@ -364,11 +365,11 @@ mod tests {
         ];
 
         r.iter().for_each(|(q, a)| {
-            println!("q {:?}", (&q));
+            debug!("q {:?}", (&q));
             let mut lexer = LexerState::default();
             let (_, _) = lexer.lex_eof(q).unwrap();
             let tokens = lexer.tokens();
-            println!("{:?}", (&tokens.toks()));
+            debug!("{:?}", (&tokens.toks()));
             let r = parse_expr(tokens);
             print_result(&r);
             match r {

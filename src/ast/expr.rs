@@ -88,6 +88,10 @@ impl Expr {
         Self::Literal(Tok::FloatLiteral(f))
     }
 
+    pub fn new_int(u: u64) -> Self {
+        Self::Literal(Tok::IntLiteral(u))
+    }
+
     pub fn new_bool(b: bool) -> Self {
         Self::Literal(Tok::BoolLiteral(b))
     }
@@ -98,6 +102,12 @@ impl Expr {
 pub struct ExprNode {
     pub context: MaybeNodeContext,
     pub value: Expr,
+}
+
+impl Default for ExprNode {
+    fn default() -> Self {
+        Self { context: MaybeNodeContext::default(), value: Expr::Void }
+    }
 }
 
 impl std::ops::Deref for ExprNode {
@@ -116,14 +126,19 @@ impl std::ops::DerefMut for ExprNode {
 
 impl fmt::Debug for ExprNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ExprNode")
-            //.field("s", &self.context.s)
-            //.field("loc", &self.context.loc)
-            //
-            .field("pre", &self.context.pre())
-            .field("v", &self.value)
-            .field("post", &self.context.post())
-            .finish()
+        let mut out = f.debug_struct("ExprNode");
+        let pre = self.context.pre();
+        let post = self.context.post();
+        let mut out = if pre.len() > 0 {
+            out.field("pre", &pre);
+            out.field("v", &self.value)
+        } else {
+            out.field("v", &self.value)
+        };
+        if post.len() > 0 {
+            out = out.field("post", &post);
+        }
+        out.finish()
     }
 }
 
@@ -159,6 +174,18 @@ impl ExprNode {
         println!("\tIndentState: {:?}", self.indent_state);
     }
     */
+}
+
+impl From<Expr> for ExprNode {
+    fn from(value: Expr) -> Self {
+        Self { context: MaybeNodeContext::default(), value }
+    }
+}
+
+impl From<ExprNode> for Expr {
+    fn from(expr: ExprNode) -> Self {
+        expr.value
+    }
 }
 
 impl From<Lambda> for ExprNode {

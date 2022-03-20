@@ -21,8 +21,8 @@ impl Default for Interpreter {
     fn default() -> Self {
         let mut globals = Environment::default();
         use super::builtins::*;
-        globals.define("clock", ExprRef::new(Clock::value()));
-        globals.define("assert", ExprRef::new(Assert::value()));
+        globals.define("clock", Clock::value().into());
+        globals.define("assert", Assert::value().into());
         Self { globals }
     }
 }
@@ -174,8 +174,8 @@ impl Interpreter {
         f: &dyn Callable,
         params: &Params,
         args: &Vec<ExprRef>,
-        expr: &ExprNode,
-    ) -> Result<ExprNode, InterpretError> {
+        expr: ExprRef,
+    ) -> Result<ExprRef, InterpretError> {
         if args.len() != f.arity() {
             return Err(InterpretError::Runtime {
                 message: format!(
@@ -221,13 +221,13 @@ impl Interpreter {
         }
 
         // evaluate the result
-        let r = self.evaluate(&expr)?;
+        let r = self.evaluate(expr)?;
 
         // pop scope, TODO
-        let mut out = expr.clone();
-        out.value = r.as_ref().borrow().clone();//deref().clone();//(*r.0).clone();
-        Ok(out)
-        //r
+        //let mut out = expr.clone();
+        //out.value = r.as_ref().borrow().clone().into();
+        //Ok(out)
+        Ok(r)
 
         /*
                 match &expr.value {
@@ -248,24 +248,25 @@ impl Interpreter {
                 }
         */
     }
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<ExprRef, InterpretError> {
-        match expr.clone() {
-            Expr::Literal(lit) => Ok(Expr::Literal(lit).into()), //ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
+    pub fn evaluate(&mut self, expr: ExprRef) -> Result<ExprRef, InterpretError> {
+        let expr = &expr.as_ref().borrow().value;
+        match expr {
+            Expr::Literal(lit) => Ok(Expr::Literal(lit.clone()).into()), //ExprNode::Literal(lit.clone())),//lit.try_into()?.clone()),
             Expr::Ident(ident) => self.globals.get(&ident),
             Expr::Prefix(prefix, expr) => {
-                let eval = self.evaluate(&expr)?;
+                let eval = self.evaluate(expr.clone().into())?;
                 let eval = eval.as_ref().borrow().prefix(&prefix.value)?.into();
                 Ok(eval)
             }
             Expr::Postfix(op, expr) => {
-                let eval = self.evaluate(&expr)?;
+                let eval = self.evaluate(expr.clone().into())?;
                 let eval = eval.as_ref().borrow().postfix(&op.value)?;
                 Ok(eval.into())
             }
             Expr::Binary(op, left, right) => {
-                if op == Operator::Assign {
+                if op == &Operator::Assign {
                     return if let Some(ident) = left.try_ident() {
-                        let eval_right = self.evaluate(&right)?;
+                        let eval_right = self.evaluate(right.clone().into())?;
                         debug!("Assign {:?} to {}", &eval_right, &ident);
                         self.globals.define(&ident, eval_right.clone());
                         Ok(eval_right)
@@ -277,8 +278,9 @@ impl Interpreter {
                     };
                 }
 
-                let v_left = self.evaluate(&left)?;
-                let v_right = self.evaluate(&right)?;
+                let line = left.context.line();
+                let v_left = self.evaluate(left.clone().into())?;
+                let v_right = self.evaluate(right.clone().into())?;
 
                 let eval_left = v_left.as_ref().borrow();
                 let eval_right = v_right.as_ref().borrow();
@@ -296,16 +298,16 @@ impl Interpreter {
                     Operator::NotEqual => eval_left.ne(&eval_right),
                     _ => Err(InterpretError::Runtime {
                         message: format!("Unimplemented expression op: Operator::{:?}", op),
-                        line: left.context.line(),
+                        line,
                     }),
                 }.map(|v| v.into())
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 for mut e in elements.clone() {
-                    let eref = self.evaluate(&e)?;
-                    e.value = eref.as_ref().borrow().deref().clone();//Rc::try_unwrap(eref.0).unwrap();
-                    eval_elements.push(e); //self.evaluate(&e)?);
+                    let eref = self.evaluate(e.into())?;
+                    let e = eref.as_ref().borrow().deref().clone();//.into();//Rc::try_unwrap(eref.0).unwrap();
+                    eval_elements.push(e);
                 }
                 Ok(Expr::List(eval_elements).into())
             }
@@ -320,7 +322,7 @@ impl Interpreter {
 
             Expr::Lambda(e) => {
                 debug!("Lambda({:?})", &e);
-                Ok(Expr::Callable(Box::new(e)).into())
+                Ok(Expr::Callable(Box::new(e.clone())).into())
             }
 
             Expr::Index(_ident, _args) => {
@@ -338,7 +340,7 @@ impl Interpreter {
                             Some(c) => {
                                 let mut eval_args = vec![];
                                 for arg in args {
-                                    eval_args.push(self.evaluate(&arg)?);
+                                    eval_args.push(self.evaluate(arg.clone().into())?);
                                 }
                                 debug!("Calling {:?}({:?})", c, eval_args);
                                 let result = c.call(self, eval_args);
@@ -366,7 +368,7 @@ impl Interpreter {
                 let mut result = Expr::List(vec![]).into();
 
                 for expr in exprs {
-                    let r = self.evaluate(&expr);
+                    let r = self.evaluate(expr.clone().into());
                     match r {
                         Ok(v) => {
                             result = v;
@@ -383,7 +385,7 @@ impl Interpreter {
                 let mut result = Expr::List(vec![]).into();
 
                 for expr in exprs {
-                    let r = self.evaluate(&expr);
+                    let r = self.evaluate(expr.clone().into());
                     match r {
                         Ok(v) => {
                             result = v;
@@ -398,12 +400,12 @@ impl Interpreter {
 
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
-                    let r = self.evaluate(&x)?;
+                    let r = self.evaluate(x.clone().into())?;
                     let b = Expr::check_bool(&r.as_ref().borrow())?;
                     if b {
-                        self.evaluate(&y)
+                        self.evaluate(y.clone().into())
                     } else {
-                        self.evaluate(&z)
+                        self.evaluate(z.clone().into())
                     }
                 }
                 _ => unimplemented!(),
@@ -435,11 +437,11 @@ impl Interpreter {
             }
         }
 
-        self.evaluate(&expr)
+        self.evaluate(expr.into())
     }
 
     pub fn interpret(&mut self, program: ExprNode) {
-        match self.evaluate(&program) {
+        match self.evaluate(program.into()) {
             Ok(v) => {
                 debug!("Result: {:?}", &v);
             }
