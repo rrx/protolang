@@ -698,8 +698,8 @@ mod tests {
     #[test]
     fn sexpr_prog() {
         let r = vec![
-            ("+1", "(program (+ 1))")
-            //("+1\n+1", "(program (+ 1) (+ 1)"),
+            ("+1", "(program (+ 1))"),
+            ("+1;\n+1", "(program (+ 1) (+ 1))"),
         ];
 
         r.iter().for_each(|(q, a)| {
