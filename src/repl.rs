@@ -57,7 +57,8 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
             }
 
             if let Some(prog) = maybe_prog {
-                debug!("{:?}", (&prog));
+                //debug!("{:?}", (&prog));
+                prog.debug();
                 match prog.sexpr() {
                     Ok(sexpr) => {
                         debug!("Ok expr {}", &sexpr);
@@ -67,7 +68,7 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
                     }
                 }
                 let mut interp = Interpreter::default();
-                interp.interpret(prog);
+                interp.interpret(prog.into());
             }
             Ok(())
         }
@@ -129,7 +130,8 @@ pub fn run(interpreter: &mut Interpreter, source: &str) {
             }
 
             if let Some(prog) = maybe_prog {
-                debug!("PROG: {:?}", (&prog));
+                //debug!("PROG: {:?}", (&prog));
+                prog.debug();
                 let sexpr = prog.sexpr().unwrap();
                 debug!("SEXPR: {}", &sexpr);
                 match interpreter.evaluate(prog.into()) {

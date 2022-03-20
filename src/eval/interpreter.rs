@@ -304,7 +304,7 @@ impl Interpreter {
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
-                for mut e in elements.clone() {
+                for e in elements.clone() {
                     let eref = self.evaluate(e.into())?;
                     let e = eref.as_ref().borrow().deref().clone(); //.into();//Rc::try_unwrap(eref.0).unwrap();
                     eval_elements.push(e);
@@ -420,7 +420,8 @@ impl Interpreter {
         }
     }
 
-    pub fn execute(&mut self, expr: ExprNode) -> Result<ExprRef, InterpretError> {
+    pub fn execute(&mut self, e: ExprRef) -> Result<ExprRef, InterpretError> {
+        let expr = e.as_ref().borrow();
         debug!("EXPR: {:?}", &expr);
         debug!("EXPR-unparse: {:?}", expr.unparse());
         debug!("EXPR-unlex: {:?}", expr.unlex());
@@ -436,11 +437,11 @@ impl Interpreter {
                 });
             }
         }
-
-        self.evaluate(expr.into())
+        drop(expr);
+        self.evaluate(e)
     }
 
-    pub fn interpret(&mut self, program: ExprNode) {
+    pub fn interpret(&mut self, program: ExprRef) {
         match self.evaluate(program.into()) {
             Ok(v) => {
                 debug!("Result: {:?}", &v);

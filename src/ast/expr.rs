@@ -7,8 +7,12 @@ use super::function::{Callable, Lambda};
 use super::node::{Context, Context2, MaybeNodeContext};
 use super::{Operator, OperatorNode};
 use std::fmt;
+use super::{ExprVisitor, VResult, visit_expr};
+use std::fmt::Write;
 
-#[derive(Debug, Clone)]
+#[derive(
+    Debug, strum::Display, Clone, strum_macros::EnumProperty, strum_macros::IntoStaticStr,
+)]
 pub enum Expr {
     Ident(String),
     Literal(Tok),
@@ -126,6 +130,68 @@ impl std::ops::DerefMut for ExprNode {
     }
 }
 
+pub struct ExprFormatter { depth: usize }
+impl ExprVisitor<String> for ExprFormatter {
+    fn enter(&mut self, e: &ExprNode, f: &mut String) -> VResult {
+        let indent: String = String::from_utf8(vec![b'\t'; self.depth]).unwrap();
+        let s: &'static str = e.value.clone().into();
+        match &e.value {
+            Expr::Void => {
+                write!(f, "{}{}\n", indent, s);
+            }
+            Expr::Ternary(op, _, _, _) => {
+                write!(f, "{}{}({:?})\n", indent, s, op);
+            }
+            Expr::Chain(_, _) => {
+                write!(f, "{}{}\n", indent, s);
+            }
+            Expr::Prefix(op, _) => {
+                write!(f, "{}{}({:?})\n", indent, s, op);
+            }
+            Expr::Postfix(op, _) => {
+                write!(f, "{}{}({:?})\n", indent, s, op);
+            }
+            Expr::Binary(op, _, _) => {
+                write!(f, "{}{}({:?})\n", indent, s, op);
+            }
+            Expr::List(elements) => {
+                write!(f, "{}{}(len={})\n", indent, s, elements.len());
+            }
+            Expr::Callable(_) => {
+                write!(f, "{}{}\n", indent, s);
+            }
+            Expr::Index(expr, arg) => {
+                write!(f, "{}{}\n", indent, s);
+            }
+            Expr::Apply(ident, args) => {
+                write!(f, "{}{}\n", indent, s);
+            }
+            Expr::Block(exprs) | Expr::Program(exprs) => {
+                write!(f, "{}{}(len={})\n", indent, s, exprs.len());
+            }
+            Expr::Ident(x) => {
+                write!(f, "{}{}({})\n", indent, s, x);
+            }
+            Expr::Literal(x) => {
+                write!(f, "{}{}({:?})\n", indent, s, x);
+            }
+            Expr::Lambda(x) => {
+                write!(f, "{}{}\n", indent, x.sexpr().unwrap());
+            }
+            Expr::Invalid(v) => {
+                write!(f, "{}{}({})\n", indent, s, v);
+            }
+        }
+        self.depth += 1;
+        Ok(())
+    }
+
+    fn exit(&mut self, _: &ExprNode, _: &mut String) -> VResult {
+        self.depth -= 1;
+        Ok(())
+    }
+}
+
 impl fmt::Debug for ExprNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut out = f.debug_struct("ExprN");
@@ -150,6 +216,13 @@ impl ExprNode {
             context: MaybeNodeContext::from_location(loc),
             value,
         }
+    }
+
+    pub fn debug(&self) {
+        let mut p = ExprFormatter { depth: 0 };
+        let mut s = String::new(); 
+        let _ = visit_expr(&self, &mut p, &mut s).unwrap();
+        println!("{}", s);
     }
 
     pub fn from_token(token: &Token) -> Option<Self> {

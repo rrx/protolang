@@ -22,7 +22,10 @@ pub trait ExprVisitor<N> {
     fn ident(&mut self, _: &String, _: &mut N) -> VResult {
         Ok(())
     }
-    fn literal(&mut self, _ok: &Tok, _: &mut N) -> VResult {
+    fn literal(&mut self, _: &Tok, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn void(&mut self, _: &ExprNode, _: &mut N) -> VResult {
         Ok(())
     }
 }
@@ -138,6 +141,9 @@ impl Expr {
 pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VResult {
     f.enter(e, n)?;
     match &e.value {
+        Expr::Void => {
+            f.void(e, n)?;
+        }
         Expr::Ternary(_, x, y, z) => {
             visit_expr(&x, f, n)?;
             visit_expr(&y, f, n)?;
@@ -194,7 +200,6 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
         Expr::Invalid(_) => {
             f.leaf(e, n)?;
         }
-        _ => (),
     };
     f.exit(e, n)
 }
