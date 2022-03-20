@@ -5,15 +5,13 @@ use crate::tokens::{Tok, Token};
 
 use super::function::{Callable, Lambda};
 use super::node::{Context, Context2, MaybeNodeContext};
+use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
-use std::fmt;
-use super::{ExprVisitor, VResult, visit_expr};
-use std::fmt::Write;
 use log::debug;
+use std::fmt;
+use std::fmt::Write;
 
-#[derive(
-    Debug, strum::Display, Clone, strum_macros::EnumProperty, strum_macros::IntoStaticStr,
-)]
+#[derive(Debug, strum::Display, Clone, strum_macros::EnumProperty, strum_macros::IntoStaticStr)]
 pub enum Expr {
     Ident(String),
     Literal(Tok),
@@ -131,7 +129,9 @@ impl std::ops::DerefMut for ExprNode {
     }
 }
 
-pub struct ExprFormatter { depth: usize }
+pub struct ExprFormatter {
+    depth: usize,
+}
 impl ExprVisitor<String> for ExprFormatter {
     fn enter(&mut self, e: &ExprNode, f: &mut String) -> VResult {
         let indent: String = String::from_utf8(vec![b'\t'; self.depth]).unwrap();
@@ -221,7 +221,7 @@ impl ExprNode {
 
     pub fn debug(&self) {
         let mut p = ExprFormatter { depth: 0 };
-        let mut s = String::new(); 
+        let mut s = String::new();
         let _ = visit_expr(&self, &mut p, &mut s).unwrap();
         debug!("{}", s);
     }

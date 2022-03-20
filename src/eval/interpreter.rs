@@ -1,5 +1,5 @@
-use super::{ExprRef, ExprRefWithEnv};
 use super::*;
+use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
 use crate::parser::Unparse;
 use crate::sexpr::SExpr;
@@ -12,8 +12,7 @@ use std::ops::Deref;
 use std::result::Result;
 
 #[derive(Debug)]
-pub struct Interpreter {
-}
+pub struct Interpreter {}
 
 impl Default for Interpreter {
     fn default() -> Self {
@@ -239,7 +238,11 @@ impl Interpreter {
                 }
         */
     }
-    pub fn evaluate(&mut self, expr: ExprRef, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+    pub fn evaluate(
+        &mut self,
+        expr: ExprRef,
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         let expr = &expr.as_ref().borrow().value;
         debug!("EVAL: {:?}", &expr);
         match expr {
@@ -264,7 +267,7 @@ impl Interpreter {
                         let eval_right = self.evaluate(right.clone().into(), env)?;
                         debug!("Assign {:?} to {}", &eval_right, &ident);
                         let env = eval_right.env.define(&ident, eval_right.expr.clone());
-                        Ok(ExprRefWithEnv::new(eval_right.expr, env))//eval_right.env.define(&ident, eval_right.clone())))
+                        Ok(ExprRefWithEnv::new(eval_right.expr, env)) //eval_right.env.define(&ident, eval_right.clone())))
                     } else {
                         Err(InterpretError::Runtime {
                             message: format!("Invalid Assignment, LHS must be identifier"),
@@ -307,7 +310,10 @@ impl Interpreter {
                     let e = eref.expr.as_ref().borrow().deref().clone();
                     eval_elements.push(e);
                 }
-                Ok(ExprRefWithEnv::new(Expr::List(eval_elements).into(), newenv))
+                Ok(ExprRefWithEnv::new(
+                    Expr::List(eval_elements).into(),
+                    newenv,
+                ))
             }
 
             Expr::Callable(e) => {
@@ -320,12 +326,18 @@ impl Interpreter {
 
             Expr::Lambda(e) => {
                 debug!("Lambda({:?})", &e);
-                Ok(ExprRefWithEnv::new(Expr::Callable(Box::new(e.clone())).into(), env))
+                Ok(ExprRefWithEnv::new(
+                    Expr::Callable(Box::new(e.clone())).into(),
+                    env,
+                ))
             }
 
             Expr::Index(_ident, _args) => {
                 // TODO: not yet implemented
-                Ok(ExprRefWithEnv::new(Expr::Literal(Tok::IntLiteral(0)).into(), env))
+                Ok(ExprRefWithEnv::new(
+                    Expr::Literal(Tok::IntLiteral(0)).into(),
+                    env,
+                ))
             }
 
             Expr::Apply(expr, args) => {
@@ -369,7 +381,7 @@ impl Interpreter {
 
             Expr::Block(exprs) => {
                 // default return value for a block is void
-                let mut result = Expr::Void.into();//List(vec![]).into();
+                let mut result = Expr::Void.into(); //List(vec![]).into();
                 let mut newenv = env;
                 for expr in exprs {
                     let r = self.evaluate(expr.clone().into(), newenv);
@@ -387,7 +399,7 @@ impl Interpreter {
             }
 
             Expr::Program(exprs) => {
-                let mut result = Expr::Void.into();//List(vec![]).into();
+                let mut result = Expr::Void.into(); //List(vec![]).into();
                 let mut newenv = env;
                 for expr in exprs {
                     let r = self.evaluate(expr.clone().into(), newenv);
@@ -422,11 +434,15 @@ impl Interpreter {
                 message: format!("Invalid expr: {:?}", s),
                 line: 0,
             }),
-            Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
+            Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
         }
     }
 
-    pub fn execute(&mut self, e: ExprRef, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+    pub fn execute(
+        &mut self,
+        e: ExprRef,
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         let expr = e.as_ref().borrow();
         debug!("EXPR: {:?}", &expr);
         debug!("EXPR-unparse: {:?}", expr.unparse());
@@ -448,16 +464,15 @@ impl Interpreter {
     }
 
     //pub fn interpret(&mut self, program: ExprRef, env: Environment) -> Result<(Environment, ExprRef), InterpretError> {
-        //match self.evaluate(program.into(), env) {
-            //Ok(v) => {
-                //debug!("Result: {:?}", &v);
-                //Ok(v)
-            //}
-            //Err(error) => {
-                //debug!("ERROR: {:?}", &error);
-                //Err(
-            //}
-        //}
+    //match self.evaluate(program.into(), env) {
+    //Ok(v) => {
+    //debug!("Result: {:?}", &v);
+    //Ok(v)
+    //}
+    //Err(error) => {
+    //debug!("ERROR: {:?}", &error);
+    //Err(
+    //}
+    //}
     //}
 }
-

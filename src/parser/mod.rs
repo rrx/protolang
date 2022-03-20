@@ -694,7 +694,6 @@ mod tests {
         });
     }
 
-
     #[test]
     fn sexpr_prog() {
         let r = vec![
@@ -726,7 +725,7 @@ mod tests {
                             debug!("sexpr {:?}", (&q, &sexpr, &rendered, a));
                             assert_eq!(rendered, a.to_string());
                             //assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
-                                                                  //assert_eq!(0, i.input_len());
+                            //assert_eq!(0, i.input_len());
                         }
                         Err(_) => {
                             assert!(false);

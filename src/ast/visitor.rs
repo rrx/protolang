@@ -159,4 +159,3 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
     };
     f.exit(e, n)
 }
-

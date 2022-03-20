@@ -1,5 +1,5 @@
 use crate::ast::ExprNode;
-use crate::eval::{Environment, Interpreter, InterpretError, ExprRefWithEnv};
+use crate::eval::{Environment, ExprRefWithEnv, InterpretError, Interpreter};
 use crate::lexer;
 use crate::parser::{parse_program, parse_program_with_results};
 use crate::results::*;
@@ -134,7 +134,11 @@ pub fn run_prompt() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(interpreter: &mut Interpreter, env: Environment, source: &str) -> Result<ExprRefWithEnv, InterpretError> {
+pub fn run(
+    interpreter: &mut Interpreter,
+    env: Environment,
+    source: &str,
+) -> Result<ExprRefWithEnv, InterpretError> {
     let mut lexer = lexer::LexerState::default();
     match lexer.lex_eof(source) {
         Ok((_, _)) => {

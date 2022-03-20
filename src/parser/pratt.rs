@@ -178,7 +178,7 @@ impl Op {
                 let mut x = x.clone();
                 x.context.append(token.expand_toks());
                 // escape, we are done
-                return Ok((i, x))
+                return Ok((i, x));
             }
 
             // chaining
@@ -242,7 +242,6 @@ impl Op {
                 (i, x.clone())
             }
             */
-
             _ => {
                 if token.tok.is_binary() {
                     // binary parses the RHS, and returns a binary node
@@ -412,15 +411,16 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LBrace) => {
             // consume LBrace
             let (i, left) = take_one_any(i)?;
-            debug!("prefix brace1: {:?}", (&i.expand_toks(), &i.toks(), &n, &left));
+            debug!(
+                "prefix brace1: {:?}",
+                (&i.expand_toks(), &i.toks(), &n, &left)
+            );
             let p = |i| extra(i, Some(0), 0);
 
-            let (i, (t, right)) = sequence::pair(
-                multi::many0(p),
-                context("r-brace", tag_token(Tok::RBrace))
-                )(i)?;
+            let (i, (t, right)) =
+                sequence::pair(multi::many0(p), context("r-brace", tag_token(Tok::RBrace)))(i)?;
             // let (i, t) = //extra(i, Some(0), depth + 1)?;
-            let t = Expr::Block(t);//vec![t]);
+            let t = Expr::Block(t); //vec![t]);
             let mut node = i.node(t);
             node.debug();
             //debug!("block: {:?}", (&t.debug()));
@@ -481,7 +481,6 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             Ok((i, node))
         }
         */
-
         // Non N-tokens, are handled as errors
         Some(Tok::EOF) | None => {
             debug!("got eof3");
@@ -581,7 +580,6 @@ fn extra_recursive<'a>(
         return Ok((i, (r, t)));
     }
     let token = &i.tok[0];
-
 
     /*
     if token.tok == Tok::SemiColon {
@@ -695,10 +693,10 @@ mod tests {
     use super::*;
     use crate::lexer::*;
     use crate::parser::print_result;
+    use crate::parser::Unparse;
     use crate::sexpr::SExpr;
     use nom::InputIter;
     use test_log::test;
-    use crate::parser::Unparse;
 
     #[test]
     fn expressions() {
@@ -919,5 +917,4 @@ mod tests {
         let r = parse_expr(i);
         print_result(&r);
     }
-
 }

@@ -1,6 +1,6 @@
 use crate::{
     ast::{Callable, Expr},
-    eval::{ExprRef, InterpretError, Interpreter, Environment},
+    eval::{Environment, ExprRef, InterpretError, Interpreter},
     tokens::Tok,
 };
 use std::{
@@ -29,7 +29,12 @@ impl Callable for Clock {
         0
     }
 
-    fn call(&self, _: &mut Interpreter, _: Environment, _: Vec<ExprRef>) -> Result<ExprRef, InterpretError> {
+    fn call(
+        &self,
+        _: &mut Interpreter,
+        _: Environment,
+        _: Vec<ExprRef>,
+    ) -> Result<ExprRef, InterpretError> {
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("we mustn't travel back in time")
@@ -67,7 +72,12 @@ impl Callable for Assert {
         1
     }
 
-    fn call(&self, _: &mut Interpreter, _: Environment, args: Vec<ExprRef>) -> Result<ExprRef, InterpretError> {
+    fn call(
+        &self,
+        _: &mut Interpreter,
+        _: Environment,
+        args: Vec<ExprRef>,
+    ) -> Result<ExprRef, InterpretError> {
         let v = args.get(0).unwrap().borrow().try_literal();
         if let Some(Tok::BoolLiteral(b)) = v {
             if b {

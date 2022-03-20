@@ -16,7 +16,7 @@ pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
 #[derive(Debug)]
 pub struct ExprRefWithEnv {
     pub expr: ExprRef,
-    pub env: Environment
+    pub env: Environment,
 }
 
 impl ExprRefWithEnv {

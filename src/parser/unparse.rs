@@ -1,7 +1,7 @@
+use crate::ast::Context;
 use crate::ast::{visit_expr, ExprVisitor, VResult};
-use crate::ast::{Context};
 use crate::ast::{Expr, ExprNode};
-use crate::tokens::{Tok};
+use crate::tokens::Tok;
 
 pub trait Unparse {
     fn unparse(&self) -> Vec<Tok>;

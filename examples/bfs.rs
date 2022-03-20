@@ -1,9 +1,9 @@
+use log::debug;
 use protolang::ast::{ExprNode, ExprVisitor, VResult};
 use protolang::lexer::LexerState;
 use protolang::parser::{parse_program, unparse_expr};
-use std::collections::VecDeque;
 use protolang::sexpr::SExpr;
-use log::debug;
+use std::collections::VecDeque;
 
 pub struct BFS {
     queue: VecDeque<ExprNode>,
@@ -52,4 +52,3 @@ fn main() {
         debug!("bfs {:?}", (unparse_expr(&v, true)));
     }
 }
-

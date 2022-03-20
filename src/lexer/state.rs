@@ -256,7 +256,7 @@ impl<'a> LexerState<'a> {
                             } else if self.indent_size > prev_indent {
                                 self.push_token(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
                                 //self.whitespace
-                                    //.push(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
+                                //.push(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
                                 //
                                 // update indentation before pushing
                                 let mut x = t.clone();
