@@ -28,6 +28,24 @@ pub enum InterpretError {
     Runtime { message: String, line: usize },
 }
 
+impl InterpretError {
+    pub fn runtime(m: &str) -> InterpretError {
+        InterpretError::Runtime {
+            message: m.to_string(),
+            line: 0,
+        }
+    }
+}
+
+impl MaybeNodeContext {
+    pub fn error(&self, m: &str) -> InterpretError {
+        InterpretError::Runtime {
+            message: m.to_string(),
+            line: self.line(),
+        }
+    }
+}
+
 impl Expr {
     fn check_bool(&self) -> Result<bool, InterpretError> {
         match self {
@@ -244,12 +262,13 @@ impl Interpreter {
         expr: ExprRef,
         env: Environment,
     ) -> Result<ExprRefWithEnv, InterpretError> {
-        let expr = &expr.as_ref().borrow().value;
+        let node = &expr.as_ref().borrow();
+        let expr = &node.value;
         debug!("EVAL: {:?}", &expr);
         match expr {
             Expr::Literal(lit) => Ok(ExprRefWithEnv::new(Expr::Literal(lit.clone()).into(), env)),
             Expr::Ident(ident) => {
-                let v = env.get(&ident.ident)?;
+                let v = env.get_at(&ident.ident, &node.context)?;
                 Ok(ExprRefWithEnv::new(v, env))
             }
             Expr::Prefix(prefix, expr) => {
@@ -263,18 +282,21 @@ impl Interpreter {
                 Ok(ExprRefWithEnv::new(eval.into(), r.env))
             }
             Expr::Binary(op, left, right) => {
-                if op == &Operator::Assign {
-                    return if let Some(ident) = left.try_ident() {
-                        let eval_right = self.evaluate(right.clone().into(), env)?;
-                        debug!("Assign {:?} to {}", &eval_right, &ident.ident);
-                        let env = eval_right.env.define(&ident.ident, eval_right.expr.clone());
-                        Ok(ExprRefWithEnv::new(eval_right.expr, env)) //eval_right.env.define(&ident, eval_right.clone())))
-                    } else {
-                        Err(InterpretError::Runtime {
-                            message: format!("Invalid Assignment, LHS must be identifier"),
-                            line: left.context.line(),
-                        })
-                    };
+                match op {
+                    Operator::Assign | Operator::Declare => {
+                        return if let Some(ident) = left.try_ident() {
+                            let eval_right = self.evaluate(right.clone().into(), env)?;
+                            debug!("Assign {:?} to {}", &eval_right, &ident.ident);
+                            let env = eval_right.env.define(&ident.ident, eval_right.expr.clone());
+                            Ok(ExprRefWithEnv::new(eval_right.expr, env)) //eval_right.env.define(&ident, eval_right.clone())))
+                        } else {
+                            Err(InterpretError::Runtime {
+                                message: format!("Invalid Assignment, LHS must be identifier"),
+                                line: left.context.line(),
+                            })
+                        };
+                    }
+                    _ => ()
                 }
 
                 let line = left.context.line();
@@ -344,7 +366,7 @@ impl Interpreter {
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
                     Expr::Ident(ident) => {
-                        let x: ExprRef = env.get(&ident.ident)?.clone();
+                        let x: ExprRef = env.get_at(&ident.ident, &node.context)?.clone();
 
                         let expr = x.as_ref().borrow();
                         match expr.try_callable() {

@@ -84,8 +84,9 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
         }
         Err(e) => {
             debug!("[{}] {:?}", filename, e);
-            Ok(())
+            //Ok(())
             //Err(e.into())
+            panic!();
         }
     }
 }
@@ -182,6 +183,7 @@ mod tests {
     fn parse() {
         parse_file("examples/test.p");
     }
+
     #[test]
     fn example() {
         run_file("examples/test.p").unwrap()

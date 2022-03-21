@@ -262,7 +262,11 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     context(
         "parse-expr",
-        alt((pratt::parse_expr, ExprNode::parse_lambda)),
+        alt((
+                ExprNode::parse_declaration,
+                ExprNode::parse_lambda,
+                pratt::parse_expr,
+                )),
     )(i)
 }
 

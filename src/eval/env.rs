@@ -167,14 +167,18 @@ impl Environment {
         })
     }
 
-    pub fn get(&self, name: &str) -> Result<ExprRef, InterpretError> {
+    pub fn get_at(&self, name: &str, context: &MaybeNodeContext) -> Result<ExprRef, InterpretError> {
         if let Some(value) = self.resolve(name) {
             return Ok(value);
         }
-        Err(InterpretError::Runtime {
-            message: format!("Undefined variable '{}'.", name),
-            line: 0, //name.line(),
-        })
+        Err(context.error(&format!("Undefined variable '{}'.", name)))
+    }
+
+    pub fn get_(&self, name: &str) -> Result<ExprRef, InterpretError> {
+        if let Some(value) = self.resolve(name) {
+            return Ok(value);
+        }
+        Err(InterpretError::runtime(&format!("Undefined variable '{}'.", name)))
     }
 }
 
