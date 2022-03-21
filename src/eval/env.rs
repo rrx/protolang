@@ -13,6 +13,17 @@ use std::result::Result;
 //pub struct ExprRef(pub RefCell<Rc<Expr>>);
 pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
 
+#[derive(Clone, Debug)]
+pub struct ExprAccessRef {
+    pub expr: ExprRef,
+    pub modifier: VarModifier
+}
+impl ExprAccessRef {
+    pub fn new(expr: ExprRef, modifier: VarModifier) -> Self {
+        Self { expr, modifier }
+    }
+}
+
 #[derive(Debug)]
 pub struct ExprRefWithEnv {
     pub expr: ExprRef,
@@ -39,18 +50,6 @@ impl ExprRef {
         Self(Rc::new(RefCell::new(v)))
         //Self(RefCell::new(Rc::new(v)))
     }
-
-    /*
-    pub fn _borrow<'a> (&'a self) -> &'a Rc<Expr> {
-        //&self.as_ref().borrow()
-        &self.borrow()
-    }
-
-    pub fn _borrow_mut<'a> (&'a mut self) -> &'a mut Rc<Expr> {
-        //&mut self.as_ref().borrow_mut()
-        &mut self.borrow_mut()
-    }
-    */
 }
 
 impl std::ops::Deref for ExprRef {
@@ -75,6 +74,18 @@ impl From<Expr> for ExprRef {
     }
 }
 
+impl From<Expr> for ExprAccessRef {
+    fn from(item: Expr) -> Self {
+        Self::new(item.into(), VarModifier::Default)
+    }
+}
+
+impl From<ExprAccessRef> for ExprRef {
+    fn from(item: ExprAccessRef) -> Self {
+        item.expr
+    }
+}
+
 impl From<ExprNode> for ExprRef {
     fn from(item: ExprNode) -> Self {
         Self::new(item)
@@ -83,13 +94,13 @@ impl From<ExprNode> for ExprRef {
 
 impl From<Box<ExprNode>> for ExprRef {
     fn from(item: Box<ExprNode>) -> Self {
-        Self::new(*item) //Box::into_inner(item))
+        Self::new(*item)
     }
 }
 
 //#[derive(Debug)]
 pub struct Layer {
-    values: HashTrieMap<String, ExprRef>,
+    values: HashTrieMap<String, ExprAccessRef>,
 }
 impl Default for Layer {
     fn default() -> Self {
@@ -108,9 +119,11 @@ impl fmt::Debug for Layer {
 }
 
 impl Layer {
-    pub fn define(&self, name: &str, value: ExprRef) -> Layer {
+    pub fn define(&self, identifier: Identifier, value: ExprRef) -> Layer {
+        let name = identifier.name.to_string();
+        let accessref = ExprAccessRef::new(value, identifier.modifier);
         Layer {
-            values: self.values.insert(name.to_string(), value),
+            values: self.values.insert(name, accessref)
         }
     }
 
@@ -118,9 +131,9 @@ impl Layer {
         self.values.contains_key(name)
     }
 
-    pub fn get(&self, name: &str) -> Option<ExprRef> {
+    pub fn get(&self, name: &str) -> Option<ExprAccessRef> {
         match self.values.get(name) {
-            Some(v) => Some(v.clone()),
+            Some(expr) => Some(expr.clone()),
             None => None,
         }
     }
@@ -136,25 +149,25 @@ impl Default for Environment {
         let stack: kaktus::Stack<Layer> = kaktus::Stack::root_default();
         let env = Self { stack };
         use super::builtins::*;
-        env.define("clock", Clock::value().into())
-            .define("assert", Assert::value().into())
+        env.define("clock".into(), Clock::value().into())
+            .define("assert".into(), Assert::value().into())
     }
 }
 
 impl Environment {
-    pub fn define(&self, name: &str, value: ExprRef) -> Self {
+    pub fn define(&self, identifier: Identifier, value: ExprRef) -> Self {
         let stack = &self.stack;
-        let top = if stack.depth() == 0 || stack.peek().unwrap().contains(name) {
+        let top = if stack.depth() == 0 || stack.peek().unwrap().contains(&identifier.name) {
             stack.push_default()
         } else {
             stack.clone()
         };
-        let top = top.define(name, value);
+        let top = top.define(identifier, value);
         let stack = stack.push(top);
         Environment { stack }
     }
 
-    pub fn resolve(&self, name: &str) -> Option<ExprRef> {
+    pub fn resolve(&self, name: &str) -> Option<ExprAccessRef> {
         self.stack
             .walk()
             .find(|layer| layer.values.contains_key(name))
@@ -167,14 +180,14 @@ impl Environment {
         })
     }
 
-    pub fn get_at(&self, name: &str, context: &MaybeNodeContext) -> Result<ExprRef, InterpretError> {
+    pub fn get_at(&self, name: &str, context: &MaybeNodeContext) -> Result<ExprAccessRef, InterpretError> {
         if let Some(value) = self.resolve(name) {
             return Ok(value);
         }
         Err(context.error(&format!("Undefined variable '{}'.", name)))
     }
 
-    pub fn get_(&self, name: &str) -> Result<ExprRef, InterpretError> {
+    pub fn get_(&self, name: &str) -> Result<ExprAccessRef, InterpretError> {
         if let Some(value) = self.resolve(name) {
             return Ok(value);
         }
@@ -188,17 +201,17 @@ mod tests {
     #[test]
     fn test() {
         let env = Environment::default();
-        let env = env.define("x", Expr::new_int(1).into());
-        let x1 = env.resolve("x").unwrap();
-        let env = env.define("x", Expr::new_int(2).into());
-        let env = env.define("y", Expr::new_int(3).into());
-        let env = env.define("z", Expr::new_int(4).into());
-        let x2 = env.resolve("x").unwrap();
+        let env = env.define("x".into(), Expr::new_int(1).into());
+        let x1 = env.resolve("x".into()).unwrap();
+        let env = env.define("x".into(), Expr::new_int(2).into());
+        let env = env.define("y".into(), Expr::new_int(3).into());
+        let env = env.define("z".into(), Expr::new_int(4).into());
+        let x2 = env.resolve("x".into()).unwrap();
         env.debug();
         drop(env);
         debug!("1:{:?}", x1);
         debug!("2:{:?}", x2);
-        assert_eq!(2, Rc::strong_count(&x1.0));
-        assert_eq!(2, Rc::strong_count(&x2.0));
+        assert_eq!(2, Rc::strong_count(&x1.expr.0));
+        assert_eq!(2, Rc::strong_count(&x2.expr.0));
     }
 }

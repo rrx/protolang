@@ -25,7 +25,7 @@ impl ExprVisitor<Vec<Tok>> for Unparser {
         }
         match &e.value {
             Expr::Ident(x) => {
-                n.push(Tok::Ident(x.ident.clone()));
+                n.push(Tok::Ident(x.name.clone()));
             }
             Expr::Literal(x) => {
                 n.push(x.clone());

@@ -19,12 +19,19 @@ pub enum VarModifier {
 
 #[derive(Debug, Clone)]
 pub struct Identifier {
-    pub ident: String,
+    pub name: String,
     pub modifier: VarModifier,
 }
+
 impl Identifier {
-    pub fn new(ident: String, modifier: VarModifier) -> Self {
-        Self { ident, modifier }
+    pub fn new(name: String, modifier: VarModifier) -> Self {
+        Self { name, modifier }
+    }
+}
+
+impl From<&str> for Identifier {
+    fn from(item: &str) -> Self {
+        Self::new(item.into(), VarModifier::Default)
     }
 }
 
@@ -297,7 +304,7 @@ impl Unparse for ExprNode {
             }
             Expr::Chain(_, _) => {}
             Expr::Ident(x) => {
-                out.push(Tok::Ident(x.ident.clone()));
+                out.push(Tok::Ident(x.name.clone()));
             }
             Expr::Literal(x) => {
                 out.push(x.clone());
@@ -357,7 +364,7 @@ impl SExpr for ExprNode {
             )),
             Chain(_, _) => Ok(S::Cons("chain".into(), vec![])),
             Literal(x) => Ok(S::Atom(x.unlex())),
-            Ident(x) => Ok(S::Atom(x.ident.clone())),
+            Ident(x) => Ok(S::Atom(x.name.clone())),
             Binary(op, left, right) => {
                 let sleft = left.sexpr()?;
                 let sright = right.sexpr()?;

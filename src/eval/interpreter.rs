@@ -208,7 +208,7 @@ impl Interpreter {
                     None => {
                         Err(InterpretError::Runtime {
                             message: format!("Invalid Argument on Lambda, got {:?}", param),
-                            line: 0, //name.line(),
+                            line: param.context.line(),
                         })
                     }
                 }
@@ -229,7 +229,7 @@ impl Interpreter {
 
         // push variables into scope
         for (p, v) in p.iter().zip(args) {
-            env = env.define(&p.as_ref().unwrap().ident, v.clone());
+            env = env.define(p.as_ref().unwrap().clone(), v.clone().into());
         }
 
         // evaluate the result
@@ -268,8 +268,8 @@ impl Interpreter {
         match expr {
             Expr::Literal(lit) => Ok(ExprRefWithEnv::new(Expr::Literal(lit.clone()).into(), env)),
             Expr::Ident(ident) => {
-                let v = env.get_at(&ident.ident, &node.context)?;
-                Ok(ExprRefWithEnv::new(v, env))
+                let v = env.get_at(&ident.name, &node.context)?;
+                Ok(ExprRefWithEnv::new(v.into(), env))
             }
             Expr::Prefix(prefix, expr) => {
                 let r = self.evaluate(expr.clone().into(), env)?;
@@ -286,9 +286,9 @@ impl Interpreter {
                     Operator::Assign | Operator::Declare => {
                         return if let Some(ident) = left.try_ident() {
                             let eval_right = self.evaluate(right.clone().into(), env)?;
-                            debug!("Assign {:?} to {}", &eval_right, &ident.ident);
-                            let env = eval_right.env.define(&ident.ident, eval_right.expr.clone());
-                            Ok(ExprRefWithEnv::new(eval_right.expr, env)) //eval_right.env.define(&ident, eval_right.clone())))
+                            debug!("Assign {:?} to {}", &eval_right, &ident.name);
+                            let env = eval_right.env.define(ident, eval_right.expr.clone());
+                            Ok(ExprRefWithEnv::new(eval_right.expr, env))
                         } else {
                             Err(InterpretError::Runtime {
                                 message: format!("Invalid Assignment, LHS must be identifier"),
@@ -366,9 +366,9 @@ impl Interpreter {
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
                     Expr::Ident(ident) => {
-                        let x: ExprRef = env.get_at(&ident.ident, &node.context)?.clone();
+                        let x: ExprAccessRef = env.get_at(&ident.name, &node.context)?.clone();
 
-                        let expr = x.as_ref().borrow();
+                        let expr = x.expr.as_ref().borrow();
                         match expr.try_callable() {
                             Some(c) => {
                                 let mut eval_args = vec![];
