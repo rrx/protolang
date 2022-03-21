@@ -63,6 +63,8 @@ fn lex_identifier_or_reserved(i: Span) -> PResult<Span, Token> {
         "else" => Else,
         "return" => Return,
         "yield" => Yield,
+        "let" => Let,
+        "mut" => Mut,
         "true" => BoolLiteral(true),
         "false" => BoolLiteral(false),
         _ => Ident(s.to_string()),

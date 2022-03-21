@@ -53,6 +53,8 @@ pub enum Tok {
     Else,
     Return,
     Yield,
+    Let,
+    Mut,
     Null,
 
     // Operators
@@ -135,13 +137,15 @@ impl Tok {
             DoubleSlash => "//".into(),
             Pound => "#".into(),
             Null => "null".into(),
+            Let => "let".into(),
+            Mut => "mut".into(),
             Comment(s) => s.to_string(),
             EOF => "".into(),
             IndentOpen => "".into(),
             IndentClose => "".into(),
             _ => {
                 log::error!("Panic: Unable to unlex token: {:?}", self);
-                unreachable!() //"[UNKNOWN]".into(),
+                unreachable!()
             }
         })
     }

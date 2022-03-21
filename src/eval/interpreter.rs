@@ -211,7 +211,7 @@ impl Interpreter {
 
         // push variables into scope
         for (p, v) in p.iter().zip(args) {
-            env = env.define(p.as_ref().unwrap(), v.clone());
+            env = env.define(&p.as_ref().unwrap().ident, v.clone());
         }
 
         // evaluate the result
@@ -249,7 +249,7 @@ impl Interpreter {
         match expr {
             Expr::Literal(lit) => Ok(ExprRefWithEnv::new(Expr::Literal(lit.clone()).into(), env)),
             Expr::Ident(ident) => {
-                let v = env.get(&ident)?;
+                let v = env.get(&ident.ident)?;
                 Ok(ExprRefWithEnv::new(v, env))
             }
             Expr::Prefix(prefix, expr) => {
@@ -266,8 +266,8 @@ impl Interpreter {
                 if op == &Operator::Assign {
                     return if let Some(ident) = left.try_ident() {
                         let eval_right = self.evaluate(right.clone().into(), env)?;
-                        debug!("Assign {:?} to {}", &eval_right, &ident);
-                        let env = eval_right.env.define(&ident, eval_right.expr.clone());
+                        debug!("Assign {:?} to {}", &eval_right, &ident.ident);
+                        let env = eval_right.env.define(&ident.ident, eval_right.expr.clone());
                         Ok(ExprRefWithEnv::new(eval_right.expr, env)) //eval_right.env.define(&ident, eval_right.clone())))
                     } else {
                         Err(InterpretError::Runtime {
@@ -344,7 +344,7 @@ impl Interpreter {
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
                     Expr::Ident(ident) => {
-                        let x: ExprRef = env.get(ident)?.clone();
+                        let x: ExprRef = env.get(&ident.ident)?.clone();
 
                         let expr = x.as_ref().borrow();
                         match expr.try_callable() {
@@ -361,7 +361,7 @@ impl Interpreter {
                                 // newenv.clone here creates a stack branch
                                 let result = c.call(self, newenv.clone(), eval_args)?;
                                 debug!("Call Result {:?}", &result);
-                                Some(Ok(result))//ExprRefWithEnv::new(result.into(), newenv)))
+                                Some(Ok(result)) //ExprRefWithEnv::new(result.into(), newenv)))
                             }
                             _ => None,
                         }

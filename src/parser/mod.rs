@@ -267,6 +267,33 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 impl ExprNode {
+    pub(crate) fn parse_declaration(i: Tokens) -> PResult<Tokens, ExprNode> {
+        let (i, tlet) = tag_token(Tok::Let)(i)?;
+
+        let token = &i.tok[0].tok;
+        let is_mutable = token == &Tok::Mut;
+        let mut m_toks = vec![];
+        let i = if is_mutable {
+            let (i, m) = take_one_any(i)?;
+            m_toks = m.expand_toks();
+            i
+        } else {
+            i
+        };
+
+        let (i, mut ident) = Self::parse_ident(i)?;
+        ident.context.prepend(m_toks);
+        ident.context.prepend(tlet.expand_toks());
+        let (i, assign) = tag_token(Tok::Assign)(i)?;
+        ident.context.append(assign.expand_toks());
+
+        let (i, rhs) = parse_expr(i)?;
+        //let op = OperatorNode::from_tokens(Operator::Declare, vec![], vec![]);
+        let expr = Expr::Binary(Operator::Declare, Box::new(ident), Box::new(rhs));
+        let node = ExprNode::new(expr, &i.to_location());
+        Ok((i, node))
+    }
+
     pub(crate) fn parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
         context("ident", Self::_parse_ident)(i)
     }
@@ -275,9 +302,10 @@ impl ExprNode {
         let (i1, t1) = take_one_any(i)?;
         let token = &t1.tok[0];
         match &token.tok {
-            Tok::Ident(_) => {
-                let expr = ExprNode::from_token(token).unwrap();
-                Ok((i1, expr))
+            Tok::Ident(s) => {
+                let expr = Expr::Ident(Identifier::new(s.clone(), VarModifier::Default));
+                let node = ExprNode::new_with_token(expr, &token);
+                Ok((i1, node))
             }
             _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
         }
@@ -287,9 +315,10 @@ impl ExprNode {
         let (i1, t1) = take_one_any(i)?;
         let token = &t1.tok[0];
         match &token.tok {
-            Tok::Invalid(_) => {
-                let expr = ExprNode::from_token(token).unwrap();
-                Ok((i1, expr))
+            Tok::Invalid(s) => {
+                let expr = Expr::Invalid(s.clone());
+                let node = ExprNode::new_with_token(expr, &token);
+                Ok((i1, node))
             }
             _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
         }
@@ -499,6 +528,24 @@ mod tests {
                 }
                 _ => unreachable!(),
             }
+        });
+    }
+
+    #[test]
+    fn declaration() {
+        // parse a single statement
+        let r = vec!["let x = 1", "let mut x = y", "let mut x = y\nlet x =2 "];
+        r.iter().for_each(|v| {
+            let mut lexer = LexerState::from_str_eof(v).unwrap();
+            let tokens = lexer.tokens();
+            debug!("q: {}", v);
+            let (i, exprs) = many1(ExprNode::parse_declaration)(tokens).unwrap();
+            exprs.iter().for_each(|expr| {
+                debug!("a: {:?}", &expr);
+                expr.debug();
+            });
+            debug!("rest: {:?}", &i.toks());
+            assert!(i.input_len() == 0 || i.toks() == vec![Tok::EOF]);
         });
     }
 

@@ -133,6 +133,7 @@ pub enum Operator {
     GreaterThan,
     LessThan,
     Assign,
+    Declare,
     Bang,
     Modulus,
     Index,
@@ -146,6 +147,7 @@ pub enum Operator {
 impl Operator {
     pub fn token(&self) -> Tok {
         match self {
+            Operator::Declare => Tok::Let,
             Operator::Plus => Tok::Plus,
             Operator::Minus => Tok::Minus,
             Operator::Not => Tok::Exclamation,

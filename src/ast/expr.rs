@@ -11,9 +11,26 @@ use log::debug;
 use std::fmt;
 use std::fmt::Write;
 
+#[derive(Debug, Clone)]
+pub enum VarModifier {
+    Mutable,
+    Default,
+}
+
+#[derive(Debug, Clone)]
+pub struct Identifier {
+    pub ident: String,
+    pub modifier: VarModifier,
+}
+impl Identifier {
+    pub fn new(ident: String, modifier: VarModifier) -> Self {
+        Self { ident, modifier }
+    }
+}
+
 #[derive(Debug, strum::Display, Clone, strum_macros::EnumProperty, strum_macros::IntoStaticStr)]
 pub enum Expr {
-    Ident(String),
+    Ident(Identifier),
     Literal(Tok),
     Prefix(OperatorNode, Box<ExprNode>),
     Postfix(OperatorNode, Box<ExprNode>),
@@ -51,7 +68,7 @@ impl Expr {
         }
     }
 
-    pub fn try_ident(&self) -> Option<String> {
+    pub fn try_ident(&self) -> Option<Identifier> {
         if let Expr::Ident(s) = self {
             Some(s.clone())
         } else {
@@ -171,7 +188,7 @@ impl ExprVisitor<String> for ExprFormatter {
                 write!(f, "{}{}(len={})\n", indent, s, exprs.len())
             }
             Expr::Ident(x) => {
-                write!(f, "{}{}({})\n", indent, s, x)
+                write!(f, "{}{}({:?})\n", indent, s, x)
             }
             Expr::Literal(x) => {
                 write!(f, "{}{}({:?})\n", indent, s, x)
@@ -219,37 +236,17 @@ impl ExprNode {
         }
     }
 
+    pub fn new_with_token(value: Expr, token: &Token) -> Self {
+        let context = MaybeNodeContext::from_token(token);
+        Self { context, value }
+    }
+
     pub fn debug(&self) {
         let mut p = ExprFormatter { depth: 0 };
         let mut s = String::new();
         let _ = visit_expr(&self, &mut p, &mut s).unwrap();
         debug!("{}", s);
     }
-
-    pub fn from_token(token: &Token) -> Option<Self> {
-        let maybe = match &token.tok {
-            Tok::Ident(s) => Some(Expr::Ident(s.clone())),
-            Tok::Invalid(s) => Some(Expr::Invalid(s.clone())),
-            _ => None,
-        };
-        if let Some(value) = maybe {
-            let context = MaybeNodeContext::from_token(token);
-            Some(Self { context, value })
-        } else {
-            None
-        }
-    }
-
-    /*
-    pub fn dump(&self) {
-        debug!("ExprNode");
-        debug!("\tStack: {:?}", self.indent_stack);
-        for token in &self.acc {
-            debug!("\tToken: {:?}", token);
-        }
-        debug!("\tIndentState: {:?}", self.indent_state);
-    }
-    */
 }
 
 impl From<Expr> for ExprNode {
@@ -300,7 +297,7 @@ impl Unparse for ExprNode {
             }
             Expr::Chain(_, _) => {}
             Expr::Ident(x) => {
-                out.push(Tok::Ident(x.clone()));
+                out.push(Tok::Ident(x.ident.clone()));
             }
             Expr::Literal(x) => {
                 out.push(x.clone());
@@ -360,7 +357,7 @@ impl SExpr for ExprNode {
             )),
             Chain(_, _) => Ok(S::Cons("chain".into(), vec![])),
             Literal(x) => Ok(S::Atom(x.unlex())),
-            Ident(x) => Ok(S::Atom(x.clone())),
+            Ident(x) => Ok(S::Atom(x.ident.clone())),
             Binary(op, left, right) => {
                 let sleft = left.sexpr()?;
                 let sright = right.sexpr()?;

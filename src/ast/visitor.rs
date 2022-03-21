@@ -1,4 +1,4 @@
-use super::{Expr, ExprNode};
+use super::{Expr, ExprNode, Identifier};
 use crate::tokens::Tok;
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub trait ExprVisitor<N> {
     fn leaf(&mut self, _: &ExprNode, _: &mut N) -> VResult {
         Ok(())
     }
-    fn ident(&mut self, _: &String, _: &mut N) -> VResult {
+    fn ident(&mut self, _: &Identifier, _: &mut N) -> VResult {
         Ok(())
     }
     fn literal(&mut self, _: &Tok, _: &mut N) -> VResult {
@@ -32,7 +32,7 @@ pub trait ExprVisitor<N> {
 pub trait ExprVisitorMut {
     fn enter(&mut self, _: &mut ExprNode) -> bool;
     fn exit(&mut self, _: &mut ExprNode) -> bool;
-    fn ident(&mut self, _: &mut String) -> bool {
+    fn ident(&mut self, _: &mut Identifier) -> bool {
         true
     }
     fn literal(&mut self, _: &mut Tok) -> bool {

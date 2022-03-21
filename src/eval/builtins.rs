@@ -40,7 +40,10 @@ impl Callable for Clock {
             .expect("we mustn't travel back in time")
             .as_secs_f64();
 
-        Ok(ExprRefWithEnv::new(Expr::Literal(Tok::FloatLiteral(secs)).into(), env))
+        Ok(ExprRefWithEnv::new(
+            Expr::Literal(Tok::FloatLiteral(secs)).into(),
+            env,
+        ))
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {
