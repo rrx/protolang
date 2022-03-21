@@ -50,10 +50,14 @@ impl ExprRef {
         Self(Rc::new(RefCell::new(v)))
         //Self(RefCell::new(Rc::new(v)))
     }
+
+    pub fn mutate(self, expr: ExprNode) -> Self {
+        self.replace(expr);
+        self
+    }
 }
 
 impl std::ops::Deref for ExprRef {
-    //type Target = Rc<Expr>;
     type Target = Rc<RefCell<ExprNode>>;
     //type Target = RefCell<Rc<Expr>>;
 
@@ -151,6 +155,7 @@ impl Default for Environment {
         use super::builtins::*;
         env.define("clock".into(), Clock::value().into())
             .define("assert".into(), Assert::value().into())
+            .define("showstack".into(), ShowStack::value().into())
     }
 }
 
@@ -177,6 +182,9 @@ impl Environment {
     pub fn debug(&self) {
         self.stack.walk().for_each(|layer| {
             debug!("Layer: {:?}", layer);
+            layer.values.iter().for_each(|(k,v)| {
+                debug!("\t{}: {:?}", k, v);
+            });
         })
     }
 

@@ -11,7 +11,7 @@ use log::debug;
 use std::fmt;
 use std::fmt::Write;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum VarModifier {
     Mutable,
     Default,
@@ -26,6 +26,10 @@ pub struct Identifier {
 impl Identifier {
     pub fn new(name: String, modifier: VarModifier) -> Self {
         Self { name, modifier }
+    }
+
+    pub fn is_mut(&self) -> bool {
+        self.modifier == VarModifier::Mutable
     }
 }
 

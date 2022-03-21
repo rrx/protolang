@@ -193,7 +193,7 @@ mod tests {
     fn test() {
         let mut interp = Interpreter::default();
         let env = Environment::default();
-        let v = run(&mut interp, env, "a=1").unwrap();
+        let v = run(&mut interp, env, "let a=1").unwrap();
         v.env.debug();
         assert!(v.env.resolve("a").is_some());
     }

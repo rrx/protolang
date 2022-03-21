@@ -397,7 +397,12 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         Some(Tok::Ident(_)) => {
             // consume variable
-            ExprNode::parse_ident(i)
+            ExprNode::parse_ident_expr(i)
+        }
+
+        Some(Tok::Let) => {
+            // consume variable
+            ExprNode::parse_declaration(i)
         }
 
         Some(

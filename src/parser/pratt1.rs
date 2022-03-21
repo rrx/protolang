@@ -158,7 +158,7 @@ fn parse_atom(i: Tokens) -> PResult<Tokens, ExprNode> {
             //parse_apply1_expr,
             //parse_caret_expr,
             into(ExprNode::parse_literal),
-            into(ExprNode::parse_ident),
+            into(ExprNode::parse_ident_expr),
             parse_prefix_expr,
             parse_paren_expr,
             ExprNode::parse_lambda,

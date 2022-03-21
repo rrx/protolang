@@ -25,7 +25,9 @@ impl CallableNode {
 }
 
 pub trait Callable: Debug + Display {
-    fn arity(&self) -> usize;
+    fn arity(&self) -> usize {
+        0
+    }
     fn call(
         &self,
         interp: &mut Interpreter,

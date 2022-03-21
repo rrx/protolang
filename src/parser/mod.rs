@@ -202,7 +202,7 @@ pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
 
 pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (mut ident, assign, mut expr, nl)) = tuple((
-        ExprNode::parse_ident,
+        ExprNode::parse_ident_expr,
         tag_token(Tok::Assign),
         parse_expr,
         parse_stmt_end,
@@ -284,25 +284,40 @@ impl ExprNode {
         } else {
             i
         };
-
+    
+        debug!("is_mut {}", is_mutable);
         let (i, mut ident) = Self::parse_ident(i)?;
-        ident.context.prepend(m_toks);
-        ident.context.prepend(tlet.expand_toks());
+        if is_mutable {
+            ident.modifier = VarModifier::Mutable;
+        }
+        let mut node = ExprNode::new_with_token(Expr::Ident(ident), &i.tok[0]);
+        node.context.prepend(m_toks);
+        node.context.prepend(tlet.expand_toks());
         let (i, assign) = tag_token(Tok::Assign)(i)?;
-        ident.context.append(assign.expand_toks());
+        node.context.append(assign.expand_toks());
 
         let (i, rhs) = parse_expr(i)?;
-        //let op = OperatorNode::from_tokens(Operator::Declare, vec![], vec![]);
-        let expr = Expr::Binary(Operator::Declare, Box::new(ident), Box::new(rhs));
+        let expr = Expr::Binary(Operator::Declare, Box::new(node), Box::new(rhs));
         let node = ExprNode::new(expr, &i.to_location());
         Ok((i, node))
     }
 
-    pub(crate) fn parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
-        context("ident", Self::_parse_ident)(i)
+    fn parse_ident(i: Tokens) -> PResult<Tokens, Identifier> {
+        let (i1, t1) = take_one_any(i)?;
+        let token = &t1.tok[0];
+        match &token.tok {
+            Tok::Ident(s) => {
+                Ok((i1, Identifier::new(s.clone(), VarModifier::Default)))
+            }
+            _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
+        }
     }
 
-    fn _parse_ident(i: Tokens) -> PResult<Tokens, ExprNode> {
+    pub(crate) fn parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+        context("ident", Self::_parse_ident_expr)(i)
+    }
+
+    fn _parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
         let (i1, t1) = take_one_any(i)?;
         let token = &t1.tok[0];
         match &token.tok {
@@ -349,7 +364,7 @@ impl ExprNode {
     fn _parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
         let (i, (slash, idents, arrow)) = tuple((
             tag_token(Tok::Backslash),
-            many0(Self::parse_ident),
+            many0(Self::parse_ident_expr),
             tag_token(Tok::LeftArrow),
         ))(i)?;
 
@@ -457,7 +472,7 @@ mod tests {
             let tokens = lexer.tokens();
             //let toks = tokens.toks();
             debug!("{:?}", (&tokens.toks()));
-            let (_, result) = ExprNode::parse_ident(tokens).unwrap();
+            let (_, result) = ExprNode::parse_ident_expr(tokens).unwrap();
             debug!("ident {:?}", (&result));
             let restored = result.unlex();
             debug!("restored {:?}", (&restored));
@@ -538,12 +553,24 @@ mod tests {
     #[test]
     fn declaration() {
         // parse a single statement
-        let r = vec!["let x = 1", "let mut x = y", "let mut x = y\nlet x =2 "];
-        r.iter().for_each(|v| {
+        let r = vec![
+            ("let x = 1", false),
+            ("let mut x = y", true),
+            //("let mut x = y\nlet x =2 ", true)
+        ];
+        r.iter().for_each(|(v, is_mut)| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
             let tokens = lexer.tokens();
             debug!("q: {}", v);
             let (i, exprs) = many1(ExprNode::parse_declaration)(tokens).unwrap();
+            let expr = exprs.get(0).unwrap();
+            match &expr.value {
+                Expr::Binary(op, left, right) => {
+                    let ident = left.try_ident().unwrap();
+                    assert_eq!(ident.is_mut(), *is_mut);
+                }
+                _ => unreachable!()
+            }
             exprs.iter().for_each(|expr| {
                 debug!("a: {:?}", &expr);
                 expr.debug();

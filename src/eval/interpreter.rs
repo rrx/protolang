@@ -8,7 +8,7 @@ use log::debug;
 //use std::borrow::Borrow;
 //use std::convert::From;
 use std::ops::Deref;
-//use std::rc::Rc;
+use std::rc::Rc;
 use std::result::Result;
 
 #[derive(Debug)]
@@ -195,11 +195,11 @@ impl Interpreter {
                     f.arity(),
                     args.len()
                 ),
-                line: 0, //name.line(),
+                line: params.context.line()
             });
         }
 
-        let params = params
+        let param_idents = params
             .value
             .iter()
             .map(|param| {
@@ -218,12 +218,12 @@ impl Interpreter {
         let (p, e): (
             Vec<Result<_, InterpretError>>,
             Vec<Result<_, InterpretError>>,
-        ) = params.into_iter().partition(|p| p.is_ok()); //value.try_ident().ok());
+        ) = param_idents.into_iter().partition(|p| p.is_ok());
 
         if e.len() > 0 {
             return Err(InterpretError::Runtime {
                 message: format!("Invalid Argument on Lambda, got {:?}", e),
-                line: 0, //name.line(),
+                line: params.context.line()
             });
         }
 
@@ -283,12 +283,33 @@ impl Interpreter {
             }
             Expr::Binary(op, left, right) => {
                 match op {
-                    Operator::Assign | Operator::Declare => {
+                    Operator::Declare => {
                         return if let Some(ident) = left.try_ident() {
                             let eval_right = self.evaluate(right.clone().into(), env)?;
-                            debug!("Assign {:?} to {}", &eval_right, &ident.name);
+                            debug!("Declare {:?} to {}", &eval_right, &ident.name);
                             let env = eval_right.env.define(ident, eval_right.expr.clone());
                             Ok(ExprRefWithEnv::new(eval_right.expr, env))
+                        } else {
+                            Err(InterpretError::Runtime {
+                                message: format!("Invalid Assignment, LHS must be identifier"),
+                                line: left.context.line(),
+                            })
+                        };
+                    }
+                    Operator::Assign => {
+                        return if let Some(ident) = left.try_ident() {
+                            let mut access = env.get_at(&ident.name, &node.context)?;
+                            if access.modifier != VarModifier::Mutable {
+                                node.debug();
+                                env.debug();
+                                return Err(node.context.error(&format!("Invalid Assignment, '{}' Not mutable", &ident.name)));
+                            }
+
+                            let eval_right = self.evaluate(right.clone().into(), env)?;
+                            debug!("Assign {:?} to {}", &eval_right, &ident.name);
+                            let expr = access.expr.mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
+                            //env.define(ident, eval_right.expr.clone());
+                            Ok(ExprRefWithEnv::new(expr, eval_right.env))
                         } else {
                             Err(InterpretError::Runtime {
                                 message: format!("Invalid Assignment, LHS must be identifier"),
@@ -322,7 +343,9 @@ impl Interpreter {
                         line,
                     }),
                 }
-                .map(|v| ExprRefWithEnv::new(v.into(), v_right.env))
+                .map(|v| {
+                    ExprRefWithEnv::new(ExprNode::new(v.into(), &left.context.to_location()).into(), v_right.env)
+                })
             }
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
@@ -405,6 +428,7 @@ impl Interpreter {
             Expr::Block(exprs) => {
                 // default return value for a block is void
                 let mut result = Expr::Void.into(); //List(vec![]).into();
+                let original_env = env.clone();
                 let mut newenv = env;
                 for expr in exprs {
                     let r = self.evaluate(expr.clone().into(), newenv);
@@ -418,7 +442,9 @@ impl Interpreter {
                         }
                     }
                 }
-                Ok(ExprRefWithEnv::new(result.into(), newenv))
+
+                //return the original env
+                Ok(ExprRefWithEnv::new(result.into(), original_env))
             }
 
             Expr::Program(exprs) => {
