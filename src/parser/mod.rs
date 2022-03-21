@@ -263,10 +263,10 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     context(
         "parse-expr",
         alt((
-                ExprNode::parse_declaration,
-                ExprNode::parse_lambda,
-                pratt::parse_expr,
-                )),
+            pratt::parse_expr,
+            ExprNode::parse_declaration,
+            ExprNode::parse_lambda,
+        )),
     )(i)
 }
 
@@ -284,7 +284,7 @@ impl ExprNode {
         } else {
             i
         };
-    
+
         debug!("is_mut {}", is_mutable);
         let (i, mut ident) = Self::parse_ident(i)?;
         if is_mutable {
@@ -306,9 +306,7 @@ impl ExprNode {
         let (i1, t1) = take_one_any(i)?;
         let token = &t1.tok[0];
         match &token.tok {
-            Tok::Ident(s) => {
-                Ok((i1, Identifier::new(s.clone(), VarModifier::Default)))
-            }
+            Tok::Ident(s) => Ok((i1, Identifier::new(s.clone(), VarModifier::Default))),
             _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
         }
     }
@@ -569,7 +567,7 @@ mod tests {
                     let ident = left.try_ident().unwrap();
                     assert_eq!(ident.is_mut(), *is_mut);
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
             exprs.iter().for_each(|expr| {
                 debug!("a: {:?}", &expr);

@@ -18,6 +18,9 @@ mx = 9
 
 showstack()
 
+let x1 = 1
+let x2 = 2
+
 # what's in the block should no longer be visible
 assert(mx2 == 1)
 

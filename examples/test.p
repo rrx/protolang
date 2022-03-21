@@ -67,39 +67,6 @@ assert(4 == f(2))
 let f2 = \x -> f(x)
 f2(3)
 
-# verify that we can use non-local variables for calculationsa in a closure
-let nonlocal_x = 1
-let x = 2
-f = \x -> x + nonlocal_x
-assert(4 == f(3))
-
-# verify that we are able to modify non local variables from within the closure
-let f = \x -> {
-        nonlocal_x = 2
-        x + 1
-}
-assert(2 == f(1))
-assert(nonlocal_x == 2)
-
-# check to make sure closures don't leak
-# TODO: it currently does
-
-let f = \x -> {
-  # temporary variable created inside of the closure
-  super_local = 1
-  nonlocal_x = 2
-  x + 1
-}
-f(1)
-super_local
-
-# asdf should not be visible outside the block
-{
-        let asdf = "sadf"
-}
-# asdf should be freed up now
-asdf
-
 # recursion
 let f1 = \x -> (x < 10) ? f1(x+1): false
 f1(1)

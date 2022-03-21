@@ -119,28 +119,10 @@ impl Callable for Assert {
         let line = node.context.line();
         let v = node.try_literal();
         match v {
-            Some(Tok::BoolLiteral(b)) => {
-                if b {
-                    Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
-                } else {
-                    Err(InterpretError::Runtime {
-                        message: format!("Assertion error"),
-                        line,
-                    })
-                }
-            }
-            Some(expr) => {
-                Err(InterpretError::Runtime {
-                    message: format!("Invalid args, not a bool"),
-                    line,
-                })
-            }
-            _ => {
-                Err(InterpretError::Runtime {
-                    message: format!("Invalid Type: {:?}", args),
-                    line: 0,
-                })
-            }
+            Some(Tok::BoolLiteral(true)) => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
+            Some(Tok::BoolLiteral(false)) => Err(node.context.error("Assertion error")),
+            Some(expr) => Err(node.context.error(&format!("Invalid args, not a bool"))),
+            _ => Err(node.context.error(&format!("Invalid Type: {:?}", args))),
         }
     }
 

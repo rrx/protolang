@@ -31,6 +31,11 @@ impl Identifier {
     pub fn is_mut(&self) -> bool {
         self.modifier == VarModifier::Mutable
     }
+
+    pub fn into_mut(mut self) -> Self {
+        self.modifier = VarModifier::Mutable;
+        self
+    }
 }
 
 impl From<&str> for Identifier {
@@ -272,6 +277,12 @@ impl From<Expr> for ExprNode {
 impl From<ExprNode> for Expr {
     fn from(expr: ExprNode) -> Self {
         expr.value
+    }
+}
+
+impl From<u64> for Expr {
+    fn from(item: u64) -> Self {
+        Expr::new_int(item)
     }
 }
 

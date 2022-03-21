@@ -195,23 +195,19 @@ impl Interpreter {
                     f.arity(),
                     args.len()
                 ),
-                line: params.context.line()
+                line: params.context.line(),
             });
         }
 
         let param_idents = params
             .value
             .iter()
-            .map(|param| {
-                match param.value.try_ident() {
-                    Some(ident) => Ok(ident),
-                    None => {
-                        Err(InterpretError::Runtime {
-                            message: format!("Invalid Argument on Lambda, got {:?}", param),
-                            line: param.context.line(),
-                        })
-                    }
-                }
+            .map(|param| match param.value.try_ident() {
+                Some(ident) => Ok(ident),
+                None => Err(InterpretError::Runtime {
+                    message: format!("Invalid Argument on Lambda, got {:?}", param),
+                    line: param.context.line(),
+                }),
             })
             .collect::<Vec<_>>();
 
@@ -223,7 +219,7 @@ impl Interpreter {
         if e.len() > 0 {
             return Err(InterpretError::Runtime {
                 message: format!("Invalid Argument on Lambda, got {:?}", e),
-                line: params.context.line()
+                line: params.context.line(),
             });
         }
 
@@ -257,6 +253,26 @@ impl Interpreter {
                 }
         */
     }
+
+    pub fn eval(&mut self, v: &str, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+        use crate::ast::*;
+        use crate::lexer::LexerState;
+        use crate::parser::*;
+        use crate::tokens::*;
+        let mut lexer = LexerState::from_str_eof(v).unwrap();
+        let tokens = lexer.tokens();
+        match crate::parser::parse_program(tokens) {
+            Ok((i, expr)) => self.evaluate(expr.into(), env),
+            Err(nom::Err::Error(e)) => {
+                for (tokens, err) in e.errors {
+                    debug!("error {:?}", (&err, tokens.toks()));
+                }
+                Err(InterpretError::runtime("Error parsing"))
+            }
+            Err(e) => Err(InterpretError::runtime(&format!("Error parsing: {:?}", e))),
+        }
+    }
+
     pub fn evaluate(
         &mut self,
         expr: ExprRef,
@@ -302,12 +318,17 @@ impl Interpreter {
                             if access.modifier != VarModifier::Mutable {
                                 node.debug();
                                 env.debug();
-                                return Err(node.context.error(&format!("Invalid Assignment, '{}' Not mutable", &ident.name)));
+                                return Err(node.context.error(&format!(
+                                    "Invalid Assignment, '{}' Not mutable",
+                                    &ident.name
+                                )));
                             }
 
                             let eval_right = self.evaluate(right.clone().into(), env)?;
                             debug!("Assign {:?} to {}", &eval_right, &ident.name);
-                            let expr = access.expr.mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
+                            let expr = access
+                                .expr
+                                .mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
                             //env.define(ident, eval_right.expr.clone());
                             Ok(ExprRefWithEnv::new(expr, eval_right.env))
                         } else {
@@ -317,7 +338,7 @@ impl Interpreter {
                             })
                         };
                     }
-                    _ => ()
+                    _ => (),
                 }
 
                 let line = left.context.line();
@@ -344,7 +365,10 @@ impl Interpreter {
                     }),
                 }
                 .map(|v| {
-                    ExprRefWithEnv::new(ExprNode::new(v.into(), &left.context.to_location()).into(), v_right.env)
+                    ExprRefWithEnv::new(
+                        ExprNode::new(v.into(), &left.context.to_location()).into(),
+                        v_right.env,
+                    )
                 })
             }
             Expr::List(elements) => {
@@ -524,4 +548,85 @@ impl Interpreter {
     //}
     //}
     //}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_log::test;
+    #[test]
+    fn test() {
+        let env = Environment::default();
+        let mut interp = Interpreter::default();
+        let r = interp
+            .eval(
+                "
+        let x = 0;
+        let mut x = 1;
+        x = 2;
+        ",
+                env,
+            )
+            .unwrap();
+        assert!(r.env.resolve("x").unwrap().is_mut());
+
+        // blocks should hide visibility
+        let r = interp
+            .eval(
+                "
+        # asdf should not be visible outside the block
+        {
+                let asdf1 = 1
+        }
+        ",
+                r.env,
+            )
+            .unwrap();
+        assert!(r.env.resolve("asdf1").is_none());
+
+        let r = interp
+            .eval(
+                "
+        # verify that we can use non-local variables for calculationsa in a closure
+        let mut nonlocal_x = 1
+        let x = 2
+        let f = \\x -> x + nonlocal_x
+        assert(4 == f(3))
+        ",
+                r.env,
+            )
+            .unwrap();
+
+        let r = interp
+            .eval(
+                "
+        # verify that we are able to modify non local variables from within the closure
+        let f = \\x -> {
+                nonlocal_x = 2
+                x + 1
+        }
+        assert(2 == f(1))
+        assert(nonlocal_x == 2)
+        ",
+                r.env,
+            )
+            .unwrap();
+
+        let r = interp
+            .eval(
+                "
+        # check to make sure closures don't leak
+        let f = \\x -> {
+          # temporary variable created inside of the closure
+          let super_local = 1
+          nonlocal_x = 2
+          x + 1
+        }
+        f(1)
+        ",
+                r.env,
+            )
+            .unwrap();
+        assert!(r.env.resolve("super_local").is_none());
+    }
 }

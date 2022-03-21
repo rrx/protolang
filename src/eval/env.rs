@@ -1,6 +1,5 @@
 use super::*;
 use crate::ast::*;
-use kaktus::PushPop;
 use log::debug;
 use rpds::HashTrieMap;
 use std::cell::RefCell;
@@ -16,11 +15,14 @@ pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
 #[derive(Clone, Debug)]
 pub struct ExprAccessRef {
     pub expr: ExprRef,
-    pub modifier: VarModifier
+    pub modifier: VarModifier,
 }
 impl ExprAccessRef {
     pub fn new(expr: ExprRef, modifier: VarModifier) -> Self {
         Self { expr, modifier }
+    }
+    pub fn is_mut(&self) -> bool {
+        self.modifier == VarModifier::Mutable
     }
 }
 
@@ -102,7 +104,7 @@ impl From<Box<ExprNode>> for ExprRef {
     }
 }
 
-//#[derive(Debug)]
+#[derive(Clone)]
 pub struct Layer {
     values: HashTrieMap<String, ExprAccessRef>,
 }
@@ -127,7 +129,7 @@ impl Layer {
         let name = identifier.name.to_string();
         let accessref = ExprAccessRef::new(value, identifier.modifier);
         Layer {
-            values: self.values.insert(name, accessref)
+            values: self.values.insert(name, accessref),
         }
     }
 
@@ -145,12 +147,12 @@ impl Layer {
 
 #[derive(Debug, Clone)]
 pub struct Environment {
-    stack: kaktus::Stack<Layer>,
+    stack: im::vector::Vector<Layer>,
 }
 
 impl Default for Environment {
     fn default() -> Self {
-        let stack: kaktus::Stack<Layer> = kaktus::Stack::root_default();
+        let stack = im::Vector::new();
         let env = Self { stack };
         use super::builtins::*;
         env.define("clock".into(), Clock::value().into())
@@ -160,35 +162,55 @@ impl Default for Environment {
 }
 
 impl Environment {
-    pub fn define(&self, identifier: Identifier, value: ExprRef) -> Self {
-        let stack = &self.stack;
-        let top = if stack.depth() == 0 || stack.peek().unwrap().contains(&identifier.name) {
-            stack.push_default()
+    pub fn define(mut self, identifier: Identifier, value: ExprRef) -> Self {
+        let name = identifier.name.clone();
+        if self.stack.len() > 0 && self.stack.front().unwrap().contains(&identifier.name) {
+            let layer = Layer::default().define(identifier, value);
+            //println!("[{}]dup:{}", self.stack.len(), &name);
+            self.stack.push_front(layer);
+            self
+            //Environment { stack: self.stack.clone() }
         } else {
-            stack.clone()
-        };
-        let top = top.define(identifier, value);
-        let stack = stack.push(top);
-        Environment { stack }
+            match self.stack.pop_front() {
+                Some(layer) => {
+                    //println!("[{}]pop:{}", self.stack.len(), &name);
+                    let layer = layer.define(identifier, value);
+                    self.stack.push_front(layer);
+                    self
+                    //Environment { stack : stack.clone() }
+                }
+                None => {
+                    //println!("[{}]none:{}", self.stack.len(), &name);
+                    let layer = Layer::default().define(identifier, value);
+                    self.stack.push_front(layer);
+                    self
+                    //Environment { stack : stack.clone() }
+                }
+            }
+        }
     }
 
     pub fn resolve(&self, name: &str) -> Option<ExprAccessRef> {
         self.stack
-            .walk()
+            .iter()
             .find(|layer| layer.values.contains_key(name))
             .map(|layer| layer.get(name).unwrap())
     }
 
     pub fn debug(&self) {
-        self.stack.walk().for_each(|layer| {
-            debug!("Layer: {:?}", layer);
-            layer.values.iter().for_each(|(k,v)| {
+        self.stack.iter().enumerate().for_each(|(i, layer)| {
+            debug!("Layer: {:?}", i);
+            layer.values.iter().for_each(|(k, v)| {
                 debug!("\t{}: {:?}", k, v);
             });
         })
     }
 
-    pub fn get_at(&self, name: &str, context: &MaybeNodeContext) -> Result<ExprAccessRef, InterpretError> {
+    pub fn get_at(
+        &self,
+        name: &str,
+        context: &MaybeNodeContext,
+    ) -> Result<ExprAccessRef, InterpretError> {
         if let Some(value) = self.resolve(name) {
             return Ok(value);
         }
@@ -199,27 +221,48 @@ impl Environment {
         if let Some(value) = self.resolve(name) {
             return Ok(value);
         }
-        Err(InterpretError::runtime(&format!("Undefined variable '{}'.", name)))
+        Err(InterpretError::runtime(&format!(
+            "Undefined variable '{}'.",
+            name
+        )))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_log::test;
     #[test]
     fn test() {
         let env = Environment::default();
-        let env = env.define("x".into(), Expr::new_int(1).into());
+        let env = env.define("x".into(), Expr::from(1).into());
         let x1 = env.resolve("x".into()).unwrap();
-        let env = env.define("x".into(), Expr::new_int(2).into());
-        let env = env.define("y".into(), Expr::new_int(3).into());
-        let env = env.define("z".into(), Expr::new_int(4).into());
-        let x2 = env.resolve("x".into()).unwrap();
+
+        let env = env.define("x".into(), Expr::from(2).into());
+        let env = env.define("y".into(), Expr::from(3).into());
+        let env = env.define("y".into(), Expr::from(3).into());
+        let env_before_z = env.clone();
+        let env = env.define("z".into(), Expr::from(4).into());
         env.debug();
-        drop(env);
+        let x2 = env.resolve("x".into()).unwrap();
+        let y = env.resolve("y".into()).unwrap();
+        let _ = env.resolve("clock".into()).unwrap();
+
         debug!("1:{:?}", x1);
         debug!("2:{:?}", x2);
+        debug!("3:{:?}", y);
+
+        // make sure z isn't visible
+        assert!(env_before_z.resolve("z".into()).is_none());
+
         assert_eq!(2, Rc::strong_count(&x1.expr.0));
         assert_eq!(2, Rc::strong_count(&x2.expr.0));
+
+        // verify that the references are dropped after dropping env
+        drop(env);
+        drop(env_before_z);
+
+        assert_eq!(1, Rc::strong_count(&x1.expr.0));
+        assert_eq!(1, Rc::strong_count(&x2.expr.0));
     }
 }

@@ -17,8 +17,8 @@ strum_macros = "0.24"
 strum = { version = "0.24", features = ["derive"] }
 log = "0.4"
 env_logger = "0.9"
-kaktus = "0.1"
 rpds = "0.11"
+im = "15"
 
 [dev-dependencies]
 criterion = "0.3"
