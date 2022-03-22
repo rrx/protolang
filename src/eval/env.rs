@@ -5,47 +5,12 @@ use rpds::HashTrieMap;
 use std::cell::RefCell;
 use std::convert::From;
 use std::fmt;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::result::Result;
 
 #[derive(Clone)]
 //pub struct ExprRef(pub RefCell<Rc<Expr>>);
 pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
-
-#[derive(Clone, Debug)]
-pub struct ExprAccessRef {
-    pub expr: ExprRef,
-    pub modifier: VarModifier,
-}
-impl ExprAccessRef {
-    pub fn new(expr: ExprRef, modifier: VarModifier) -> Self {
-        Self { expr, modifier }
-    }
-    pub fn is_mut(&self) -> bool {
-        self.modifier == VarModifier::Mutable
-    }
-}
-
-#[derive(Debug)]
-pub struct ExprRefWithEnv {
-    pub expr: ExprRef,
-    pub env: Environment,
-}
-
-impl ExprRefWithEnv {
-    pub fn new(expr: ExprRef, env: Environment) -> Self {
-        Self { expr, env }
-    }
-}
-
-impl fmt::Debug for ExprRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ExprRef")
-            .field("c", &Rc::strong_count(&self.0))
-            .field("v", &self.as_ref().borrow())
-            .finish()
-    }
-}
 
 impl ExprRef {
     pub fn new(v: ExprNode) -> Self {
@@ -56,6 +21,10 @@ impl ExprRef {
     pub fn mutate(self, expr: ExprNode) -> Self {
         self.replace(expr);
         self
+    }
+
+    pub fn downgrade(&self) -> ExprWeakRef {
+        ExprWeakRef::new(self)
     }
 }
 
@@ -80,12 +49,6 @@ impl From<Expr> for ExprRef {
     }
 }
 
-impl From<Expr> for ExprAccessRef {
-    fn from(item: Expr) -> Self {
-        Self::new(item.into(), VarModifier::Default)
-    }
-}
-
 impl From<ExprAccessRef> for ExprRef {
     fn from(item: ExprAccessRef) -> Self {
         item.expr
@@ -104,14 +67,89 @@ impl From<Box<ExprNode>> for ExprRef {
     }
 }
 
+
+
+#[derive(Clone, Debug)]
+pub struct ExprWeakRef(pub Weak<RefCell<ExprNode>>);
+
+impl ExprWeakRef {
+    pub fn new(v: &ExprRef) -> Self {
+        Self(Rc::downgrade(v))
+    }
+}
+
+
+#[derive(Clone, Debug)]
+pub struct ExprAccessRef {
+    pub expr: ExprRef,
+    pub modifier: VarModifier,
+}
+
+impl ExprAccessRef {
+    pub fn new(expr: ExprRef, modifier: &VarModifier) -> Self {
+        Self { expr, modifier: modifier.clone() }
+    }
+    pub fn is_mut(&self) -> bool {
+        self.modifier == VarModifier::Mutable
+    }
+}
+
+impl From<Expr> for ExprAccessRef {
+    fn from(item: Expr) -> Self {
+        Self::new(item.into(), &VarModifier::Default)
+    }
+}
+
+
+#[derive(Clone, Debug)]
+pub struct ExprAccessWeakRef {
+    pub expr: ExprWeakRef,
+    pub modifier: VarModifier,
+}
+impl ExprAccessWeakRef {
+    pub fn new(expr: &ExprRef, modifier: VarModifier) -> Self {
+        Self { expr: ExprWeakRef::new(&expr), modifier }
+    }
+    pub fn is_mut(&self) -> bool {
+        self.modifier == VarModifier::Mutable
+    }
+    pub fn upgrade(&self) -> Option<ExprAccessRef> {
+        self.expr.0.upgrade().map(|e| ExprAccessRef::new(ExprRef(e), &self.modifier))
+    }
+}
+
+#[derive(Debug)]
+pub struct ExprRefWithEnv {
+    pub expr: ExprRef,
+    pub env: Environment,
+}
+
+impl ExprRefWithEnv {
+    pub fn new(expr: ExprRef, env: Environment) -> Self {
+        Self { expr, env }
+    }
+}
+
+impl fmt::Debug for ExprRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExprRef")
+            .field("c", &Rc::strong_count(&self.0))
+            .field("v", &self.as_ref().borrow())
+            .finish()
+    }
+}
+
 #[derive(Clone)]
 pub struct Layer {
     values: HashTrieMap<String, ExprAccessRef>,
+    weak: HashTrieMap<String, ExprAccessWeakRef>,
 }
+
 impl Default for Layer {
     fn default() -> Self {
         Self {
             values: HashTrieMap::new(),
+            weak: HashTrieMap::new(),
         }
     }
 }
@@ -127,9 +165,19 @@ impl fmt::Debug for Layer {
 impl Layer {
     pub fn define(&self, identifier: Identifier, value: ExprRef) -> Layer {
         let name = identifier.name.to_string();
-        let accessref = ExprAccessRef::new(value, identifier.modifier);
+        let accessref = ExprAccessRef::new(value, &identifier.modifier);
         Layer {
             values: self.values.insert(name, accessref),
+            weak: HashTrieMap::new()
+        }
+    }
+
+    pub fn define_weak(&self, identifier: Identifier, value: &ExprRef) -> Layer {
+        let name = identifier.name.to_string();
+        let accessref = ExprAccessWeakRef::new(&value, identifier.modifier);
+        Layer {
+            weak: self.weak.insert(name, accessref),
+            values: HashTrieMap::new()
         }
     }
 
@@ -140,7 +188,12 @@ impl Layer {
     pub fn get(&self, name: &str) -> Option<ExprAccessRef> {
         match self.values.get(name) {
             Some(expr) => Some(expr.clone()),
-            None => None,
+            None => {
+                match self.weak.get(name) {
+                    Some(expr) => expr.upgrade(),
+                    None => None,
+                }
+            }
         }
     }
 }
@@ -191,10 +244,11 @@ impl Environment {
     }
 
     pub fn resolve(&self, name: &str) -> Option<ExprAccessRef> {
+        self.debug();
         self.stack
             .iter()
             .find(|layer| layer.values.contains_key(name))
-            .map(|layer| layer.get(name).unwrap())
+            .map(|layer| layer.get(name)).flatten()
     }
 
     pub fn debug(&self) {
@@ -235,7 +289,8 @@ mod tests {
     #[test]
     fn test() {
         let env = Environment::default();
-        let env = env.define("x".into(), Expr::from(1).into());
+        let x1 = Expr::from(1).into();
+        let env = env.define("x".into(), x1);
         let x1 = env.resolve("x".into()).unwrap();
 
         let env = env.define("x".into(), Expr::from(2).into());
