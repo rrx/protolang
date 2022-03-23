@@ -143,6 +143,18 @@ impl Expr {
         Ok(Self::new_bool(left > right))
     }
 
+    /*
+    pub fn eq_chain(args: Vec<Self>) -> Result<Self, InterpretError> {
+        let mut numbers = vec![];
+        for arg in args {
+            numbers.push(arg.check_number()?);
+        }
+
+        let (left, right) = Self::check_numbers(self, other)?;
+        Ok(Self::new_bool(left == right))
+    }
+    */
+
     pub fn eq(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(Self::new_bool(left == right))
@@ -255,14 +267,17 @@ impl Interpreter {
     }
 
     pub fn eval(&mut self, v: &str, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
-        use crate::ast::*;
+        //use crate::ast::*;
         use crate::lexer::LexerState;
-        use crate::parser::*;
+        //use crate::parser::*;
         use crate::tokens::*;
         let mut lexer = LexerState::from_str_eof(v).unwrap();
         let tokens = lexer.tokens();
         match crate::parser::parse_program(tokens) {
-            Ok((i, expr)) => self.evaluate(expr.into(), env),
+            Ok((_, expr)) => {
+                debug!("SEXPR: {}", expr.sexpr().unwrap());
+                self.evaluate(expr.into(), env)
+            }
             Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors {
                     debug!("error {:?}", (&err, tokens.toks()));
@@ -297,80 +312,26 @@ impl Interpreter {
                 let eval = r.expr.as_ref().borrow().postfix(&op.value)?;
                 Ok(ExprRefWithEnv::new(eval.into(), r.env))
             }
-            Expr::Binary(op, left, right) => {
-                match op {
-                    Operator::Declare => {
-                        return if let Some(ident) = left.try_ident() {
-                            let eval_right = self.evaluate(right.clone().into(), env)?;
-                            debug!("Declare {:?} to {}", &eval_right, &ident.name);
-                            let env = eval_right.env.define(ident, eval_right.expr.clone());
-                            Ok(ExprRefWithEnv::new(eval_right.expr, env))
-                        } else {
-                            Err(InterpretError::Runtime {
-                                message: format!("Invalid Assignment, LHS must be identifier"),
-                                line: left.context.line(),
-                            })
-                        };
-                    }
-                    Operator::Assign => {
-                        return if let Some(ident) = left.try_ident() {
-                            let mut access = env.get_at(&ident.name, &node.context)?;
-                            if access.modifier != VarModifier::Mutable {
-                                node.debug();
-                                env.debug();
-                                return Err(node.context.error(&format!(
-                                    "Invalid Assignment, '{}' Not mutable",
-                                    &ident.name
-                                )));
-                            }
 
-                            let eval_right = self.evaluate(right.clone().into(), env)?;
-                            debug!("Assign {:?} to {}", &eval_right, &ident.name);
-                            let expr = access
-                                .expr
-                                .mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
-                            //env.define(ident, eval_right.expr.clone());
-                            Ok(ExprRefWithEnv::new(expr, eval_right.env))
-                        } else {
-                            Err(InterpretError::Runtime {
-                                message: format!("Invalid Assignment, LHS must be identifier"),
-                                line: left.context.line(),
-                            })
-                        };
-                    }
-                    _ => (),
+            Expr::And(exprs) => {
+                if exprs.len() < 2 {
+                    unreachable!();
                 }
-
-                let line = left.context.line();
-                let v_left = self.evaluate(left.clone().into(), env)?;
-                let v_right = self.evaluate(right.clone().into(), v_left.env)?;
-
-                let eval_left = v_left.expr.as_ref().borrow();
-                let eval_right = v_right.expr.as_ref().borrow();
-                match op {
-                    Operator::Plus => eval_left.plus(&eval_right),
-                    Operator::Minus => eval_left.minus(&eval_right),
-                    Operator::Exp => eval_left.exp(&eval_right),
-                    Operator::Multiply => eval_left.multiply(&eval_right),
-                    Operator::Divide => eval_left.divide(&eval_right),
-                    Operator::GreaterThanEqual => eval_left.gte(&eval_right),
-                    Operator::LessThanEqual => eval_left.lte(&eval_right),
-                    Operator::GreaterThan => eval_left.gt(&eval_right),
-                    Operator::LessThan => eval_left.lt(&eval_right),
-                    Operator::Equal => eval_left.eq(&eval_right),
-                    Operator::NotEqual => eval_left.ne(&eval_right),
-                    _ => Err(InterpretError::Runtime {
-                        message: format!("Unimplemented expression op: Operator::{:?}", op),
-                        line,
-                    }),
+                let mut eval_elements = vec![];
+                let mut newenv = env;
+                for e in exprs.clone() {
+                    let eref = self.evaluate(e.into(), newenv)?;
+                    newenv = eref.env;
+                    let e = eref.expr.as_ref().borrow().deref().clone();
+                    eval_elements.push(e);
                 }
-                .map(|v| {
-                    ExprRefWithEnv::new(
-                        ExprNode::new(v.into(), &left.context.to_location()).into(),
-                        v_right.env,
-                    )
-                })
+                Ok(ExprRefWithEnv::new(eval_elements.pop().unwrap().into(), newenv))
             }
+
+            Expr::Binary(op, left, right) => {
+                self.evaluate_binary(op, left, right, env)
+            }
+
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 let mut newenv = env;
@@ -502,13 +463,91 @@ impl Interpreter {
                 _ => unimplemented!(),
             },
 
-            Expr::Chain(_, _) => Ok(ExprRefWithEnv::new(Expr::new_int(0).into(), env)),
+            Expr::Chain(_, _) => {
+                Ok(ExprRefWithEnv::new(Expr::new_int(0).into(), env))
+            }
+
             Expr::Invalid(s) => Err(InterpretError::Runtime {
                 message: format!("Invalid expr: {:?}", s),
                 line: 0,
             }),
             Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
         }
+    }
+
+    fn evaluate_binary(&mut self, op: &Operator, left: &ExprNode, right: &ExprNode, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+        match op {
+            Operator::Declare => {
+                return if let Some(ident) = left.try_ident() {
+                    let eval_right = self.evaluate(right.clone().into(), env)?;
+                    debug!("Declare {:?} to {}", &eval_right, &ident.name);
+                    let env = eval_right.env.define(ident, eval_right.expr.clone());
+                    Ok(ExprRefWithEnv::new(eval_right.expr, env))
+                } else {
+                    Err(InterpretError::Runtime {
+                        message: format!("Invalid Assignment, LHS must be identifier"),
+                        line: left.context.line(),
+                    })
+                };
+            }
+            Operator::Assign => {
+                return if let Some(ident) = left.try_ident() {
+                    let mut access = env.get_at(&ident.name, &left.context)?;
+                    if access.modifier != VarModifier::Mutable {
+                        left.debug();
+                        env.debug();
+                        return Err(left.context.error(&format!(
+                                    "Invalid Assignment, '{}' Not mutable",
+                                    &ident.name
+                                    )));
+                    }
+
+                    let eval_right = self.evaluate(right.clone().into(), env)?;
+                    debug!("Assign {:?} to {}", &eval_right, &ident.name);
+                    let expr = access
+                        .expr
+                        .mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
+                    //env.define(ident, eval_right.expr.clone());
+                    Ok(ExprRefWithEnv::new(expr, eval_right.env))
+                } else {
+                    Err(InterpretError::Runtime {
+                        message: format!("Invalid Assignment, LHS must be identifier"),
+                        line: left.context.line(),
+                    })
+                };
+            }
+            _ => (),
+        }
+
+        let line = left.context.line();
+        let v_left = self.evaluate(left.clone().into(), env)?;
+        let v_right = self.evaluate(right.clone().into(), v_left.env)?;
+
+        let eval_left = v_left.expr.as_ref().borrow();
+        let eval_right = v_right.expr.as_ref().borrow();
+        match op {
+            Operator::Plus => eval_left.plus(&eval_right),
+            Operator::Minus => eval_left.minus(&eval_right),
+            Operator::Exp => eval_left.exp(&eval_right),
+            Operator::Multiply => eval_left.multiply(&eval_right),
+            Operator::Divide => eval_left.divide(&eval_right),
+            Operator::GreaterThanEqual => eval_left.gte(&eval_right),
+            Operator::LessThanEqual => eval_left.lte(&eval_right),
+            Operator::GreaterThan => eval_left.gt(&eval_right),
+            Operator::LessThan => eval_left.lt(&eval_right),
+            Operator::Equal => eval_left.eq(&eval_right),
+            Operator::NotEqual => eval_left.ne(&eval_right),
+            _ => Err(InterpretError::Runtime {
+                message: format!("Unimplemented expression op: Operator::{:?}", op),
+                line,
+            }),
+        }
+        .map(|v| {
+            ExprRefWithEnv::new(
+                ExprNode::new(v.into(), &left.context.to_location()).into(),
+                v_right.env,
+                )
+        })
     }
 
     pub fn execute(

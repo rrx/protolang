@@ -44,7 +44,7 @@ impl Op {
     }
 
     pub fn new_chaining(op: &Tok, p: i8) -> Self {
-        Self::new(op, Some(p + 1), Some(p), Some(p + 2))
+        Self::new(op, Some(p), Some(p+1), Some(p + 2))
     }
 
     pub fn new_left_assoc(op: &Tok, p: i8) -> Self {
@@ -96,13 +96,13 @@ impl Op {
             // operand of. 127, will allows to be the left operand for everything
             Tok::Exclamation => Some(Self::new(op, Some(40), Some(127), None)),
 
-            Tok::Equals => Some(Self::new(op, Some(10), Some(9), Some(20))),
-            Tok::NotEquals => Some(Self::new(op, Some(10), Some(9), Some(20))),
+            Tok::Equals => Some(Self::new_chaining(op, 10)),//(op, Some(10), Some(9), Some(20))),
+            Tok::NotEquals => Some(Self::new_left_assoc(op, 10)),// Some(9), Some(20))),
 
-            Tok::LTE => Some(Self::new_left_assoc(op, 10)),
-            Tok::LT => Some(Self::new_left_assoc(op, 10)),
-            Tok::GTE => Some(Self::new_left_assoc(op, 10)),
-            Tok::GT => Some(Self::new_left_assoc(op, 10)),
+            Tok::LTE => Some(Self::new_left_assoc(op, 15)),
+            Tok::LT => Some(Self::new_chaining(op, 15)),
+            Tok::GTE => Some(Self::new_left_assoc(op, 15)),
+            Tok::GT => Some(Self::new_left_assoc(op, 15)),
 
             Tok::Percent => Some(Self::new_right_assoc(op, 40)),
             _ => None,
@@ -165,12 +165,13 @@ impl Op {
     fn left_denotation<'a>(
         &self,
         i: Tokens<'a>,
-        x: &ASTNode,
+        x: &ExprNode,
         token: &Token,
         depth: usize,
     ) -> RNode<'a> {
         // Given the LHS, and an op (token), return a Node
         //
+        debug!("left_denotation x: {:?}", (&x));
         //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
@@ -246,19 +247,77 @@ impl Op {
                 if token.tok.is_binary() {
                     // binary parses the RHS, and returns a binary node
                     let (i, y) = extra(i, self.rbp, depth + 1)?;
-                    debug!("Binary: {:?} {:?} {:?}", &x, &token, &y);
-                    debug!("Binary: {:?}", &token);
-
-                    //let maybe_op = Operator::from_tok(&self.op);
-                    //let _ = maybe_op.unwrap();
                     let op = Operator::from_tok(&token.tok).unwrap();
-                    let mut left = x.clone();
-                    left.context.append(token.expand_toks()); //op.unparse());
-                    let right = y;
+                  
+                    debug!("Binary LHS: {:?}", &x);
+                    debug!("Binary Op: {:?}", &op);
+                    debug!("Binary RHS: {:?}", &y);
+                    //debug!("Binary: lbp:{:?}, nbp:{:?}", &lbp, &nbp);
 
-                    let t = Expr::Binary(op, Box::new(left), Box::new(right));
-                    let node = i.node(t);
-                    (i, node)
+                    let is_chain = token.tok.is_chain();
+
+                    match x.value.clone() {
+                        Expr::Binary(left_op, a, b) if left_op == op && is_chain => {
+                            debug!("chain binary");
+                            let mut right = y;
+                            right.context.prepend(token.expand_toks());
+                            let args = vec![*a, *b, right];
+                            let expr = Expr::Chain(left_op,  args);
+                            let node = i.node(expr);
+                            (i, node)
+                        }
+                        Expr::Chain(left_op, mut args) if left_op == op && is_chain => {
+                            debug!("chain chain");
+                            let mut right = y;
+                            right.context.prepend(token.expand_toks());
+                            args.push(right);
+                            let expr = Expr::Chain(left_op,  args);
+                            let node = i.node(expr);
+                            (i, node)
+                        }
+                        _ => {
+                            debug!("XXX binary");
+                            let left = x.clone();
+                            let mut right = y;
+
+                            // append to the right, so the operator is present in And
+                            right.context.prepend(token.expand_toks());
+
+                            let expr = Expr::Binary(op, Box::new(left), Box::new(right.clone()));
+                            let node = i.node(expr);
+                            // check if there's a chaining binary operator here
+                            let n = i.peek().unwrap();
+
+                            let maybe_next_op = n.tok.op();
+                            if n.tok == Tok::EOF {
+                                debug!("chain: got eof");
+                                (i, node)
+                            } else if let Some(next_op) = maybe_next_op {
+                                debug!("chain next: {:?}", (self, &n));
+                                if is_chain && self.lbp == next_op.lbp {
+                                    // consume
+                                    let (i, _) = take_one_any(i.clone())?;
+                                    let (i, t) = self.left_denotation(i, &right, &n, depth)?;
+                                    debug!("chain consume: {:?}", (self.lbp, next_op, &t));
+                                    //let op = OperatorNode::from_token(&n).unwrap();
+                                    //let prefix = Expr::Prefix(op, Box::new(t));
+                                    let expr = Expr::And(vec![node, t]);//vec![ExprNode::new_with_token(prefix, &n)]);
+                                        //Operator::from_tok(&Tok::And).unwrap(),
+                                        //Box::new(node),
+                                        //Box::new(t));
+                                    let node = i.node(expr);
+
+                                    (i, node)
+                                } else {
+                                    debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
+                                    (i, node)
+                                }
+                            } else {
+                                debug!("chain drop2: {:?}", (self.lbp, &n, &node));
+                                (i, node)
+                            }
+                        }
+                    }
                 } else {
                     // postfix just returns, there's no RHS
                     debug!("Postfix: {:?}", (&x, &token));
@@ -305,6 +364,14 @@ impl Op {
 impl Tok {
     fn op(&self) -> Option<Op> {
         Op::try_from(self)
+    }
+
+    fn is_chain(&self) -> bool {
+        if let Some(op) = self.op() {
+            op.lbp.unwrap_or(-1) < op.nbp.unwrap_or(-1)
+        } else {
+            false
+        }
     }
 
     fn is_binary(&self) -> bool {
@@ -870,6 +937,19 @@ mod tests {
             // comma in ternary op
             ("a ? b, c : d", "(? a (, b c) d)"),
             ("a! ^ b", "(^ (! a) b)"),
+
+            // ( a < b < c)
+            ("a < b < c", "(&& (< a b) (< b c))"),
+            ("a + b + c", "(+ (+ a b) c)"),
+            ("( a < b <= c)", "(&& (< a b) (<= b c))"),
+            ("( d = a < b <= c )", "(= d (&& (< a b) (<= b c)))"),
+            ("( a < b <= c == d)", "(== (&& (< a b) (<= b c)) d)"),
+
+            // TODO: this chaining operator needs to work better
+            // I think it should return (== 1 1 1), equality doesn't have to be binary
+            // Though it's parsed as binary, which is meaningless here
+            // == returns bool, which doesn't compare with 1
+            ("a == b == c", "(&& (== a b) (== b c))"),
         ];
 
         r.iter().for_each(|(q, a)| {
@@ -890,7 +970,7 @@ mod tests {
                 Ok((i, expr)) => {
                     //expr.debug();
                     debug!("q {:?}", (&q));
-                    //debug!("NODE {:?}", (&expr.unparse()));
+                    debug!("NODE {:?}", (&expr.unparse()));
                     debug!("REM {:?}", (&i.toks()));
                     match expr.sexpr() {
                         Ok(sexpr) => {

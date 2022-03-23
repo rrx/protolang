@@ -57,6 +57,7 @@ pub enum Expr {
     Callable(Box<dyn Callable>),
     List(Vec<ExprNode>),
     Chain(Operator, Vec<ExprNode>),
+    And(Vec<ExprNode>),
 
     // Function application (the function, the params)
     Apply(Box<ExprNode>, Vec<ExprNode>),
@@ -177,6 +178,9 @@ impl ExprVisitor<String> for ExprFormatter {
                 write!(f, "{}{}({:?})\n", indent, s, op)
             }
             Expr::Chain(_, _) => {
+                write!(f, "{}{}\n", indent, s)
+            }
+            Expr::And(exprs) => {
                 write!(f, "{}{}\n", indent, s)
             }
             Expr::Prefix(op, _) => {
@@ -317,7 +321,29 @@ impl Unparse for ExprNode {
                 out.append(&mut y.unparse());
                 out.append(&mut z.unparse());
             }
-            Expr::Chain(_, _) => {}
+            Expr::Chain(op, args) => {
+                use itertools::Itertools;
+                //let mut args: Vec<_> = args.iter().map(|v| v.unparse()).intersperse(vec![op.token()]).flatten().collect();
+                let mut args: Vec<_> = args.iter().map(|v| v.unparse()).flatten().collect();
+                out.append(&mut args);
+            }
+            Expr::And(exprs) => {
+                if exprs.len() < 2 {
+                    unreachable!();
+                } else {
+                    for v in exprs {
+                        if let Expr::Binary(op, left, right) = &v.value {
+                            if out.len() == 0 {
+                                out.append(&mut v.unparse());
+                            } else {
+                                out.append(&mut right.unparse());
+                            }
+                        } else {
+                            unreachable!();
+                        }
+                    }
+                }
+            }
             Expr::Ident(x) => {
                 out.push(Tok::Ident(x.name.clone()));
             }
@@ -377,7 +403,25 @@ impl SExpr for ExprNode {
                 op.token().unlex(),
                 vec![x.sexpr()?, y.sexpr()?, z.sexpr()?],
             )),
-            Chain(_, _) => Ok(S::Cons("chain".into(), vec![])),
+            And(exprs) => {
+                if exprs.len() < 2 {
+                    unreachable!();
+                }
+                let mut sexprs = vec![];
+                for e in exprs {
+                    let s = e.sexpr()?;
+                    sexprs.push(s);
+                }
+                Ok(S::Cons(Tok::And.unlex(), sexprs))
+            }
+
+            Chain(op, args) => {
+                let s_args = args
+                    .iter()
+                    .filter_map(|a| a.sexpr().ok())
+                    .collect::<Vec<_>>();
+                Ok(S::Cons(op.token().unlex(), s_args))
+            }
             Literal(x) => Ok(S::Atom(x.unlex())),
             Ident(x) => Ok(S::Atom(x.name.clone())),
             Binary(op, left, right) => {

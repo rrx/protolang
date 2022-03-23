@@ -48,6 +48,7 @@ TODO
 - [ ] module system
 - [ ] basic runtime
 - [ ] basic polymorphism
+- [ ] FFI (https://docs.rs/libffi/latest/libffi/)
 - [ ] compile to machine code using LLVM
 - [ ] basic build and test tooling
 - [ ] parser combinator library

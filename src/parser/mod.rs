@@ -775,6 +775,7 @@ mod tests {
         let r = vec![
             ("+1", "(program (+ 1))"),
             ("+1;\n+1", "(program (+ 1) (+ 1))"),
+            ("a < b < c", "(program (&& (< a b) (< b c)))"),
         ];
 
         r.iter().for_each(|(q, a)| {
@@ -814,4 +815,13 @@ mod tests {
             }
         });
     }
+
+    #[test]
+    fn interpret_expressions() {
+        let env = crate::eval::Environment::default();
+        let mut interp = crate::eval::Interpreter::default();
+
+        let r = interp.eval("assert(1 == 1 == 1)", env).unwrap();
+    }
+
 }

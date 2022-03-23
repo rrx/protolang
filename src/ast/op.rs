@@ -128,6 +128,7 @@ pub enum Operator {
     Exp,
     Equal,
     NotEqual,
+    And,
     GreaterThanEqual,
     LessThanEqual,
     GreaterThan,
@@ -147,6 +148,7 @@ pub enum Operator {
 impl Operator {
     pub fn token(&self) -> Tok {
         match self {
+            Operator::And => Tok::And,
             Operator::Declare => Tok::Let,
             Operator::Plus => Tok::Plus,
             Operator::Minus => Tok::Minus,
@@ -176,6 +178,7 @@ impl Operator {
 
     pub fn from_tok(token: &Tok) -> Option<Self> {
         match token {
+            Tok::And => Some(Operator::And),
             Tok::Equals => Some(Operator::Equal),
             Tok::NotEquals => Some(Operator::NotEqual),
             Tok::LTE => Some(Operator::LessThanEqual),

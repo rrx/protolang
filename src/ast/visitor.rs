@@ -49,6 +49,14 @@ impl Expr {
                 out.push(y.clone());
                 out.push(z.clone());
             }
+            Expr::And(elements) => {
+                out.append(
+                    &mut elements
+                        .into_iter()
+                        .map(|e| Box::new(e.clone()))
+                        .collect::<Vec<_>>(),
+                );
+            }
             Expr::Chain(_, _) => {}
             Expr::Prefix(_unary, expr) => {
                 out.push(expr.clone());
@@ -104,6 +112,11 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
             visit_expr(&x, f, n)?;
             visit_expr(&y, f, n)?;
             visit_expr(&z, f, n)?;
+        }
+        Expr::And(elements) => {
+            for e in elements {
+                visit_expr(&e, f, n)?;
+            }
         }
         Expr::Chain(_, _) => {
             f.leaf(e, n)?;

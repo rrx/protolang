@@ -112,6 +112,7 @@ impl Tok {
             Caret => "^".into(),
             Percent => "%".into(),
             Tok::Exclamation => "!".into(),
+            And => "&&".into(),
             LTE => "<=".into(),
             LT => "<".into(),
             GTE => ">=".into(),
