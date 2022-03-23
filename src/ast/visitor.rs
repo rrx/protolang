@@ -49,7 +49,7 @@ impl Expr {
                 out.push(y.clone());
                 out.push(z.clone());
             }
-            Expr::And(elements) => {
+            Expr::BinaryChain(elements) => {
                 out.append(
                     &mut elements
                         .into_iter()
@@ -113,7 +113,7 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
             visit_expr(&y, f, n)?;
             visit_expr(&z, f, n)?;
         }
-        Expr::And(elements) => {
+        Expr::BinaryChain(elements) => {
             for e in elements {
                 visit_expr(&e, f, n)?;
             }

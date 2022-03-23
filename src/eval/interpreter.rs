@@ -313,7 +313,7 @@ impl Interpreter {
                 Ok(ExprRefWithEnv::new(eval.into(), r.env))
             }
 
-            Expr::And(exprs) => {
+            Expr::BinaryChain(exprs) => {
                 if exprs.len() < 2 {
                     unreachable!();
                 }

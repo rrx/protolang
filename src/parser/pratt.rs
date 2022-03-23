@@ -31,47 +31,68 @@ struct Op {
     // If rbp is None, then no right operand is possible
     // Only applicable for binary, or ternary operators
     rbp: Prec,
+
+    op_type: OpType
+}
+
+#[derive(Clone, Debug)]
+pub enum OpType {
+    LeftChain,
+    RightChain,
+    LeftAssoc,
+    RightAssoc,
+    Default
 }
 
 impl Op {
-    pub fn new(op: &Tok, lbp: Prec, nbp: Prec, rbp: Prec) -> Self {
+    pub fn new(op: &Tok, lbp: Prec, nbp: Prec, rbp: Prec, op_type: OpType) -> Self {
         Self {
             op: op.clone(),
             lbp,
             nbp,
             rbp,
+            op_type
         }
     }
 
-    pub fn new_chaining(op: &Tok, p: i8) -> Self {
-        Self::new(op, Some(p), Some(p+1), Some(p + 2))
+    pub fn new_left_chain(op: &Tok, p: i8) -> Self {
+        Self::new(op, Some(p), Some(p+1), Some(p + 2), OpType::LeftChain)
+    }
+
+    pub fn new_right_chain(op: &Tok, p: i8) -> Self {
+        Self::new(op, Some(p), Some(p+1), Some(p + 2), OpType::RightChain)
     }
 
     pub fn new_left_assoc(op: &Tok, p: i8) -> Self {
         // NBP=LBP=RBP-1
-        Self::new(op, Some(p), Some(p), Some(p + 1))
+        Self::new(op, Some(p), Some(p), Some(p + 1), OpType::LeftAssoc)
     }
 
     pub fn new_right_assoc(op: &Tok, p: i8) -> Self {
         // NBP=LBP=RBP
-        Self::new(op, Some(p), Some(p), Some(p))
+        Self::new(op, Some(p), Some(p), Some(p), OpType::RightAssoc)
     }
 
     pub fn new_default_left() -> Self {
-        Self::new(&Tok::Assign, None, None, None)
+        Self::new(&Tok::Assign, None, None, None, OpType::Default)
     }
 
     pub fn try_from(op: &Tok) -> Option<Self> {
         match op {
             // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1
-            Tok::Assign => Some(Self::new_right_assoc(op, 10)),
+            
+            //Tok::Assign => Some(Self::new_right_assoc(op, 10)),
+            // With assign we want to bind more strongly with the LHS
+            // Alternatively, we can move assignment outside of the pratt parser
+            Tok::Assign => Some(Self::new(op, Some(20), Some(10), Some(10), OpType::RightAssoc)),
+
             Tok::Elvis => Some(Self::new_left_assoc(op, 35)),
             Tok::Comma => Some(Self::new_left_assoc(op, 1)),
             //Tok::SemiColon => Some(Self::new(op, Some(0), Some(127), None)),
-            Tok::SemiColon => Some(Self::new(op, Some(0), None, None)),
+            Tok::SemiColon => Some(Self::new(op, Some(0), None, None, OpType::Default)),
 
             // Conditional
-            Tok::Question => Some(Self::new_chaining(op, 35)),
+            Tok::Question => Some(Self::new_left_chain(op, 35)),
             // O token associated with Conditional
             Tok::Colon => Some(Self::new_default_left()),
 
@@ -94,15 +115,15 @@ impl Op {
             // We bump up NBP, so that postfix operators are allowed to be left operands
             // NBP defines the highest precedence of an operator that this operator can be a left
             // operand of. 127, will allows to be the left operand for everything
-            Tok::Exclamation => Some(Self::new(op, Some(40), Some(127), None)),
+            Tok::Exclamation => Some(Self::new(op, Some(40), Some(127), None, OpType::Default)),
 
-            Tok::Equals => Some(Self::new_chaining(op, 10)),//(op, Some(10), Some(9), Some(20))),
-            Tok::NotEquals => Some(Self::new_left_assoc(op, 10)),// Some(9), Some(20))),
+            Tok::Equals => Some(Self::new_left_chain(op, 10)),//(op, Some(10), Some(9), Some(20))),
+            Tok::NotEquals => Some(Self::new_left_chain(op, 10)),// Some(9), Some(20))),
 
-            Tok::LTE => Some(Self::new_left_assoc(op, 15)),
-            Tok::LT => Some(Self::new_chaining(op, 15)),
-            Tok::GTE => Some(Self::new_left_assoc(op, 15)),
-            Tok::GT => Some(Self::new_left_assoc(op, 15)),
+            Tok::LTE => Some(Self::new_left_chain(op, 15)),
+            Tok::LT => Some(Self::new_left_chain(op, 15)),
+            Tok::GTE => Some(Self::new_left_chain(op, 15)),
+            Tok::GT => Some(Self::new_left_chain(op, 15)),
 
             Tok::Percent => Some(Self::new_right_assoc(op, 40)),
             _ => None,
@@ -112,7 +133,7 @@ impl Op {
     fn _chain_left_denotation<'a>(
         &self,
         i: Tokens<'a>,
-        x: &ASTNode,
+        x: &ExprNode,
         token: &Token,
         depth: usize,
     ) -> RNode<'a> {
@@ -285,9 +306,9 @@ impl Op {
 
                             let expr = Expr::Binary(op, Box::new(left), Box::new(right.clone()));
                             let node = i.node(expr);
+
                             // check if there's a chaining binary operator here
                             let n = i.peek().unwrap();
-
                             let maybe_next_op = n.tok.op();
                             if n.tok == Tok::EOF {
                                 debug!("chain: got eof");
@@ -299,14 +320,22 @@ impl Op {
                                     let (i, _) = take_one_any(i.clone())?;
                                     let (i, t) = self.left_denotation(i, &right, &n, depth)?;
                                     debug!("chain consume: {:?}", (self.lbp, next_op, &t));
-                                    //let op = OperatorNode::from_token(&n).unwrap();
-                                    //let prefix = Expr::Prefix(op, Box::new(t));
-                                    let expr = Expr::And(vec![node, t]);//vec![ExprNode::new_with_token(prefix, &n)]);
-                                        //Operator::from_tok(&Tok::And).unwrap(),
-                                        //Box::new(node),
-                                        //Box::new(t));
-                                    let node = i.node(expr);
 
+
+                                    // merge node and t which can both be binary chains
+                                    let mut exprs = vec![];
+                                    if let Expr::BinaryChain(mut nexprs) = node.value.clone() {
+                                        exprs.append(&mut nexprs);
+                                    } else {
+                                        exprs.push(node);
+                                    }
+
+                                    if let Expr::BinaryChain(mut texprs) = t.value.clone() {
+                                        exprs.append(&mut texprs);
+                                    } else {
+                                        exprs.push(t);
+                                    }
+                                    let node = i.node(Expr::BinaryChain(exprs));
                                     (i, node)
                                 } else {
                                     debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
@@ -412,16 +441,14 @@ impl Tok {
     */
 }
 
-pub type ASTNode = ExprNode;
-
 impl<'a> Tokens<'a> {
-    fn node(&self, value: Expr) -> ASTNode {
-        ASTNode::new(value, &self.to_location())
+    fn node(&self, value: Expr) -> ExprNode {
+        ExprNode::new(value, &self.to_location())
     }
 
     #[allow(dead_code)]
     fn node_success(self, value: Expr) -> RNode<'a> {
-        let node = ASTNode::new(value, &self.to_location());
+        let node = ExprNode::new(value, &self.to_location());
         Ok((self, node))
     }
 
@@ -634,10 +661,10 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
 fn extra_recursive<'a>(
     i: Tokens,
     r: i8,
-    t: ASTNode,
+    t: ExprNode,
     prec: Prec,
     depth: usize,
-) -> PResult<Tokens, (i8, ASTNode)> {
+) -> PResult<Tokens, (i8, ExprNode)> {
     // Here we are going to take a look at the L token
     // A L token is a token that has a left operand (t)
     // An L token can never start an expression
@@ -939,17 +966,20 @@ mod tests {
             ("a! ^ b", "(^ (! a) b)"),
 
             // ( a < b < c)
-            ("a < b < c", "(&& (< a b) (< b c))"),
+            ("a < b < c", "(chain (< a b) (< b c))"),
+            ("a < b < c < d", "(chain (< a b) (< b c) (< c d))"),
             ("a + b + c", "(+ (+ a b) c)"),
-            ("( a < b <= c)", "(&& (< a b) (<= b c))"),
-            ("( d = a < b <= c )", "(= d (&& (< a b) (<= b c)))"),
-            ("( a < b <= c == d)", "(== (&& (< a b) (<= b c)) d)"),
+            ("( a < b <= c)", "(chain (< a b) (<= b c))"),
+            ("( a <= b <= c <= d )", "(chain (<= a b) (<= b c) (<= c d))"),
+            ("( d = a < b <= c )", "(= d (chain (< a b) (<= b c)))"),
+            ("( a < b <= c == d)", "(== (chain (< a b) (<= b c)) d)"),
+            ("a < b <= c = d = e = f", "(chain (< a b) (<= b (= c (= d (= e f)))))"),
+            ("a == b == c == d == e", "(chain (== a b) (== b c) (== c d) (== d e))"),
+            ("a != b != c != d != e", "(chain (!= a b) (!= b c) (!= c d) (!= d e))"),
 
-            // TODO: this chaining operator needs to work better
-            // I think it should return (== 1 1 1), equality doesn't have to be binary
-            // Though it's parsed as binary, which is meaningless here
-            // == returns bool, which doesn't compare with 1
-            ("a == b == c", "(&& (== a b) (== b c))"),
+            // this is sort of right, but we probably don't want to duplicate the inner expression?
+            // we might evaluate this twice
+            ("a == b < c == d", "(chain (== a (< b c)) (== (< b c) d))"),
         ];
 
         r.iter().for_each(|(q, a)| {
@@ -977,8 +1007,7 @@ mod tests {
                             let rendered = format!("{}", &sexpr);
                             debug!("sexpr {:?}", (&q, &sexpr, &rendered, a));
                             assert_eq!(rendered, a.to_string());
-                            assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
-                                                                  //assert_eq!(0, i.input_len());
+                            assert_eq!(i.toks(), vec![Tok::EOF]);
                         }
                         Err(_) => {
                             assert!(false);

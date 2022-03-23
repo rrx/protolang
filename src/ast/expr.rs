@@ -57,7 +57,7 @@ pub enum Expr {
     Callable(Box<dyn Callable>),
     List(Vec<ExprNode>),
     Chain(Operator, Vec<ExprNode>),
-    And(Vec<ExprNode>),
+    BinaryChain(Vec<ExprNode>),
 
     // Function application (the function, the params)
     Apply(Box<ExprNode>, Vec<ExprNode>),
@@ -180,7 +180,7 @@ impl ExprVisitor<String> for ExprFormatter {
             Expr::Chain(_, _) => {
                 write!(f, "{}{}\n", indent, s)
             }
-            Expr::And(exprs) => {
+            Expr::BinaryChain(exprs) => {
                 write!(f, "{}{}\n", indent, s)
             }
             Expr::Prefix(op, _) => {
@@ -327,7 +327,7 @@ impl Unparse for ExprNode {
                 let mut args: Vec<_> = args.iter().map(|v| v.unparse()).flatten().collect();
                 out.append(&mut args);
             }
-            Expr::And(exprs) => {
+            Expr::BinaryChain(exprs) => {
                 if exprs.len() < 2 {
                     unreachable!();
                 } else {
@@ -403,7 +403,7 @@ impl SExpr for ExprNode {
                 op.token().unlex(),
                 vec![x.sexpr()?, y.sexpr()?, z.sexpr()?],
             )),
-            And(exprs) => {
+            BinaryChain(exprs) => {
                 if exprs.len() < 2 {
                     unreachable!();
                 }
@@ -412,7 +412,7 @@ impl SExpr for ExprNode {
                     let s = e.sexpr()?;
                     sexprs.push(s);
                 }
-                Ok(S::Cons(Tok::And.unlex(), sexprs))
+                Ok(S::Cons("chain".into(), sexprs))
             }
 
             Chain(op, args) => {

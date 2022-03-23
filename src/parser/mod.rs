@@ -775,7 +775,7 @@ mod tests {
         let r = vec![
             ("+1", "(program (+ 1))"),
             ("+1;\n+1", "(program (+ 1) (+ 1))"),
-            ("a < b < c", "(program (&& (< a b) (< b c)))"),
+            ("a < b < c", "(program (chain (< a b) (< b c)))"),
         ];
 
         r.iter().for_each(|(q, a)| {
