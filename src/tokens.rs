@@ -113,6 +113,7 @@ impl Tok {
             Percent => "%".into(),
             Tok::Exclamation => "!".into(),
             And => "&&".into(),
+            Or => "||".into(),
             LTE => "<=".into(),
             LT => "<".into(),
             GTE => ">=".into(),

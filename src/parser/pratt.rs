@@ -124,6 +124,8 @@ impl Op {
             Tok::LT => Some(Self::new_left_chain(op, 15)),
             Tok::GTE => Some(Self::new_left_chain(op, 15)),
             Tok::GT => Some(Self::new_left_chain(op, 15)),
+            Tok::And => Some(Self::new_left_chain(op, 15)),
+            Tok::Or => Some(Self::new_left_chain(op, 15)),
 
             Tok::Percent => Some(Self::new_right_assoc(op, 40)),
             _ => None,
@@ -820,7 +822,7 @@ mod tests {
             "a!^b!^c!",
             "+1",
             "-x ?: y ",
-            //"x+1 ; y+2",
+            "x+1 && y+2",
             "(x)",
             "[x]",
             //"(1",
@@ -862,8 +864,7 @@ mod tests {
                     debug!("S {}", &node.sexpr().unwrap());
                     debug!("R {}", &r);
                     assert_eq!(v, &r);
-                    assert_eq!(i.toks(), vec![Tok::EOF]); //i.input_len());
-                                                          //assert_eq!(0, i.input_len());
+                    assert_eq!(i.toks(), vec![Tok::EOF]);
                 }
                 _ => assert!(false),
             }

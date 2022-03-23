@@ -821,7 +821,14 @@ mod tests {
         let env = crate::eval::Environment::default();
         let mut interp = crate::eval::Interpreter::default();
 
-        let r = interp.eval("assert(1 == 1 == 1)", env).unwrap();
+        let r = interp.eval("assert(1 == 1 == 1 == 1)", env).unwrap();
+        let r = interp.eval("
+            let a = 1
+            let b = 1
+            let c = 1
+            let d = 2
+            assert(a == b == c != d)
+        ", r.env).unwrap();
     }
 
 }
