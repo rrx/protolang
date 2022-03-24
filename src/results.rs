@@ -115,40 +115,53 @@ impl std::ops::DerefMut for Results {
 }
 
 #[derive(Debug, Error)]
-pub enum InterpretError {
+pub struct InterpretError {
+    pub context: MaybeNodeContext,
+    pub kind: InterpretErrorKind
+}
+
+impl std::fmt::Display for InterpretError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum InterpretErrorKind {
     #[error("Invalid error")]
     Invalid,
-    #[error("Runtime error: {message}")]
-    Runtime { message: String, context: MaybeNodeContext },
+    #[error("Runtime error: {0}")]
+    Runtime(String),
     #[error("Expecting boolean")]
     ExpectBool,
     #[error("Assertion")]
     Assertion,
-
+    #[error("Not Implemented")]
+    NotImplemented,
 }
 
 impl InterpretError {
-    pub fn runtime(m: &str) -> InterpretError {
-        InterpretError::Runtime {
-            message: m.to_string(),
+    pub fn runtime(m: &str) -> Self {
+        Self {
+            kind: InterpretErrorKind::Runtime(m.to_string()),
             context: MaybeNodeContext::default()
         }
     }
 
     pub fn diagnostic(&self, file_id: FileId) -> Diagnostic<FileId> {
-        match self {
-            Self::Runtime { message, context } => {
+        match &self.kind {
+            InterpretErrorKind::Runtime(message) => {
                 Diagnostic::error()
                     .with_message(message)
                     .with_labels(vec![
-                                 Label::primary(file_id, context.range())
+                                 Label::primary(file_id, self.context.range())
                     ])
             }
             _ => {
                 Diagnostic::error()
                     .with_message(format!("{}", self))
                     .with_labels(vec![
-                                 Label::primary(file_id, 0usize..0usize.into())//context.range())
+                                 Label::primary(file_id, self.context.range())
                     ])
             }
         }
@@ -156,11 +169,11 @@ impl InterpretError {
 }
 
 impl MaybeNodeContext {
-    pub fn error(&self, m: &str) -> InterpretError {
-        InterpretError::Runtime {
-            message: m.to_string(),
-            context: self.clone()
-        }
+    pub fn runtime_error(&self, m: &str) -> InterpretError {
+        InterpretError { kind: InterpretErrorKind::Runtime(m.to_string()), context: self.clone() }
+    }
+    pub fn error(&self, kind: InterpretErrorKind) -> InterpretError {
+        InterpretError { kind, context: self.clone() }
     }
 }
 

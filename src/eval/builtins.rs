@@ -8,7 +8,7 @@ use std::{
     fmt,
     time::{SystemTime, UNIX_EPOCH},
 };
-use thiserror::Error;
+//use thiserror::Error;
 
 #[derive(Clone, Debug)]
 pub struct ShowStack;
@@ -120,9 +120,9 @@ impl Callable for Assert {
         let v = node.try_literal();
         match v {
             Some(Tok::BoolLiteral(true)) => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
-            Some(Tok::BoolLiteral(false)) => Err(node.context.error("Assertion error")),
-            Some(expr) => Err(node.context.error(&format!("Invalid args, not a bool")).into()),
-            _ => Err(node.context.error(&format!("Invalid Type: {:?}", args)).into()),
+            Some(Tok::BoolLiteral(false)) => Err(node.context.runtime_error("Assertion error")),
+            Some(expr) => Err(node.context.runtime_error(&format!("Invalid args, not a bool")).into()),
+            _ => Err(node.context.runtime_error(&format!("Invalid Type: {:?}", args)).into()),
         }
     }
 

@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::parser::Unparse;
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
-use crate::results::InterpretError;
+use crate::results::{InterpretError, InterpretErrorKind};
 
 use log::debug;
 //use std::borrow::Borrow;
@@ -27,25 +27,25 @@ impl Default for Interpreter {
 
 impl Interpreter {}
 
-impl Expr {
+impl ExprNode {
     fn check_bool(&self) -> Result<bool, InterpretError> {
-        match self {
-            Self::Literal(t) => match t {
+        match &self.value {
+            Expr::Literal(t) => match t {
                 Tok::BoolLiteral(b) => Ok(*b),
-                _ => Err(InterpretError::ExpectBool)
+                _ => Err(self.context.error(InterpretErrorKind::ExpectBool))
             },
             _ => Err(InterpretError::runtime(&format!("Expecting a literal: {:?}", self))),
         }
     }
 
     fn check_number(&self) -> Result<f64, InterpretError> {
-        match self {
-            Self::Literal(t) => match t {
+        match &self.value {
+            Expr::Literal(t) => match t {
                 Tok::IntLiteral(u) => Ok(*u as f64),
                 Tok::FloatLiteral(f) => Ok(*f),
                 _ => Err(InterpretError::runtime(&format!("Expecting a number: {:?}", self)))
             },
-            Self::Callable(_) => Err(InterpretError::runtime(&format!("Expecting a callable: {:?}", self))),
+            Expr::Callable(_) => Err(InterpretError::runtime(&format!("Expecting a callable: {:?}", self))),
                 //message: format!(
                 //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
                 //self,
@@ -58,55 +58,59 @@ impl Expr {
         }
     }
 
-    fn check_numbers(a: &Expr, b: &Expr) -> Result<(f64, f64), InterpretError> {
+    fn check_numbers(a: &Self, b: &Self) -> Result<(f64, f64), InterpretError> {
         let a = a.check_number()?;
         let b = b.check_number()?;
         Ok((a, b))
     }
 
+    pub fn new_expr(&self, expr: Expr) -> Self {
+        ExprNode::new_with_context(expr, self.context.clone())
+    }
+
     pub fn plus(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_float(left + right))
+        Ok(self.new_expr(Expr::new_float(left + right)))
     }
 
     pub fn minus(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_float(left - right))
+        Ok(self.new_expr(Expr::new_float(left - right)))
     }
 
     pub fn exp(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_float(left.powf(right)))
+        Ok(self.new_expr(Expr::new_float(left.powf(right))))
     }
 
     pub fn multiply(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_float(left * right))
+        Ok(self.new_expr(Expr::new_float(left * right)))
     }
 
     pub fn divide(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_float(left / right))
+        Ok(self.new_expr(Expr::new_float(left / right)))
     }
 
     pub fn lte(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_bool(left <= right))
+        Ok(self.new_expr(Expr::new_bool(left <= right)))
     }
 
     pub fn lt(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_bool(left < right))
+        Ok(self.new_expr(Expr::new_bool(left < right)))
     }
 
     pub fn gte(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_bool(left >= right))
+        Ok(self.new_expr(Expr::new_bool(left >= right)))
     }
 
     pub fn gt(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_bool(left > right))
+        Ok(self.new_expr(Expr::new_bool(left > right)))
     }
 
     /*
@@ -123,22 +127,22 @@ impl Expr {
 
     pub fn eq(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_bool(left == right))
+        Ok(self.new_expr(Expr::new_bool(left == right)))
     }
 
     pub fn ne(&self, other: &Self) -> Result<Self, InterpretError> {
         let (left, right) = Self::check_numbers(self, other)?;
-        Ok(Self::new_bool(left != right))
+        Ok(self.new_expr(Expr::new_bool(left != right)))
     }
 
     pub fn postfix(&self, op: &Operator) -> Result<Self, InterpretError> {
         match op {
             Operator::Bang => {
-                let right = self.check_number()?;
+                let _ = self.check_number()?;
                 // TODO: Fib not yet implemented
-                Ok(Self::new_float(right))
+                Err(self.context.error(InterpretErrorKind::NotImplemented))
             }
-            _ => unimplemented!(),
+            _ => Err(self.context.error(InterpretErrorKind::NotImplemented)),
         }
     }
 
@@ -146,13 +150,13 @@ impl Expr {
         match prefix {
             Operator::Plus => {
                 let right = self.check_number()?;
-                Ok(Self::new_float(right))
+                Ok(self.new_expr(Expr::new_float(right)))
             }
             Operator::Minus => {
                 let right = self.check_number()?;
-                Ok(Self::new_float(right))
+                Ok(self.new_expr(Expr::new_float(right)))
             }
-            _ => unimplemented!(),
+            _ => Err(self.context.error(InterpretErrorKind::NotImplemented)),
         }
     }
 }
@@ -167,7 +171,7 @@ impl Interpreter {
         expr: ExprRef,
     ) -> Result<ExprRefWithEnv, InterpretError> {
         if args.len() != f.arity() {
-            return Err(params.context.error(&format!(
+            return Err(params.context.runtime_error(&format!(
                     "Mismatched params on function. Expecting {}, got {}",
                     f.arity(),
                     args.len()
@@ -179,7 +183,7 @@ impl Interpreter {
             .iter()
             .map(|param| match param.value.try_ident() {
                 Some(ident) => Ok(ident),
-                None => Err(param.context.error(&format!("Invalid Argument on Lambda, got {:?}", param))),
+                None => Err(param.context.runtime_error(&format!("Invalid Argument on Lambda, got {:?}", param))),
             })
             .collect::<Vec<_>>();
 
@@ -189,7 +193,7 @@ impl Interpreter {
         ) = param_idents.into_iter().partition(|p| p.is_ok());
 
         if e.len() > 0 {
-            return Err(params.context.error(&format!("Invalid Argument on Lambda, got {:?}", e)));
+            return Err(params.context.runtime_error(&format!("Invalid Argument on Lambda, got {:?}", e)));
         }
 
         // push variables into scope
@@ -308,7 +312,7 @@ impl Interpreter {
 
             Expr::Callable(e) => {
                 debug!("Callable({:?})", &e);
-                Err(node.context.error(&format!("Unimplemented callable::{:?}", &e)))
+                Err(node.context.runtime_error(&format!("Unimplemented callable::{:?}", &e)))
             }
 
             Expr::Lambda(e) => {
@@ -362,7 +366,7 @@ impl Interpreter {
                 if let Some(r) = f {
                     r
                 } else {
-                    Err(node.context.error(&format!("Not a function: {:?}", f)))
+                    Err(node.context.runtime_error(&format!("Not a function: {:?}", f)))
                 }
             }
 
@@ -409,7 +413,7 @@ impl Interpreter {
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
                     let v = self.evaluate(x.clone().into(), env)?;
-                    let b = Expr::check_bool(&v.expr.as_ref().borrow())?;
+                    let b = ExprNode::check_bool(&v.expr.as_ref().borrow())?;
                     if b {
                         self.evaluate(y.clone().into(), v.env)
                     } else {
@@ -420,10 +424,10 @@ impl Interpreter {
             },
 
             Expr::Chain(_, _) => {
-                Ok(ExprRefWithEnv::new(Expr::new_int(0).into(), env))
+                Err(node.context.runtime_error("Not implemented"))
             }
 
-            Expr::Invalid(s) => Err(node.context.error(&format!("Invalid expr: {:?}", s))),
+            Expr::Invalid(s) => Err(node.context.runtime_error(&format!("Invalid expr: {:?}", s))),
             Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
         }
     }
@@ -437,7 +441,7 @@ impl Interpreter {
                     let env = eval_right.env.define(ident, eval_right.expr.clone());
                     Ok(ExprRefWithEnv::new(eval_right.expr, env))
                 } else {
-                    Err(left.context.error(&format!("Invalid Assignment, LHS must be identifier")))
+                    Err(left.context.runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
                 };
             }
             Operator::Assign => {
@@ -446,7 +450,7 @@ impl Interpreter {
                     if access.modifier != VarModifier::Mutable {
                         left.debug();
                         env.debug();
-                        return Err(left.context.error(&format!(
+                        return Err(left.context.runtime_error(&format!(
                                     "Invalid Assignment, '{}' Not mutable",
                                     &ident.name
                                     )));
@@ -460,7 +464,7 @@ impl Interpreter {
                     //env.define(ident, eval_right.expr.clone());
                     Ok(ExprRefWithEnv::new(expr, eval_right.env))
                 } else {
-                    Err(left.context.error(&format!("Invalid Assignment, LHS must be identifier")))
+                    Err(left.context.runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
                 };
             }
             _ => (),
@@ -483,7 +487,7 @@ impl Interpreter {
             Operator::LessThan => eval_left.lt(&eval_right),
             Operator::Equal => eval_left.eq(&eval_right),
             Operator::NotEqual => eval_left.ne(&eval_right),
-            _ => Err(eval_left.context.error(&format!("Unimplemented expression op: Operator::{:?}", op)))
+            _ => Err(eval_left.context.runtime_error(&format!("Unimplemented expression op: Operator::{:?}", op)))
         }
         .map(|v| {
             ExprRefWithEnv::new(
@@ -508,7 +512,7 @@ impl Interpreter {
             }
             Err(e) => {
                 debug!("ERROR: {:?}", e);
-                return Err(expr.context.error("Unable to parse sexpr".into()));
+                return Err(expr.context.runtime_error("Unable to parse sexpr".into()));
             }
         }
         drop(expr);
@@ -611,8 +615,7 @@ mod tests {
         let r = interp
             .eval("assert(1)", r.env,
             );
-        println!("{:?}", r);
-        if let Err(InterpretError::Runtime { message, context }) = r {
+        if let Err(InterpretError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
             unreachable!();
@@ -620,8 +623,7 @@ mod tests {
 
         let env = Environment::default();
         let r = interp.eval("a", env);
-        println!("{:?}", r);
-        if let Err(InterpretError::Runtime { message, context }) = r {
+        if let Err(InterpretError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
             unreachable!();

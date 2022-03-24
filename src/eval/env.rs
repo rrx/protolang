@@ -273,7 +273,7 @@ impl Environment {
         if let Some(value) = self.resolve(name) {
             return Ok(value);
         }
-        Err(context.error(&format!("Undefined variable '{}'.", name)))
+        Err(context.runtime_error(&format!("Undefined variable '{}'.", name)))
     }
 
     pub fn get_(&self, name: &str) -> Result<ExprAccessRef, InterpretError> {

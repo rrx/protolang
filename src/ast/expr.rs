@@ -256,6 +256,10 @@ impl ExprNode {
         }
     }
 
+    pub fn new_with_context(value: Expr, context: MaybeNodeContext) -> Self {
+        Self { context, value }
+    }
+
     pub fn new_with_token(value: Expr, token: &Token) -> Self {
         let context = MaybeNodeContext::from_token(token);
         Self { context, value }
