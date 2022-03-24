@@ -1,4 +1,4 @@
-mod function;
+pub mod function;
 pub use function::{Callable, CallableNode, Lambda, Params};
 
 mod node;

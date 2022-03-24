@@ -8,6 +8,7 @@ use std::{
     any::Any,
     fmt::{Debug, Display},
 };
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct CallableNode {
@@ -169,3 +170,62 @@ impl SExpr for Lambda {
         ))
     }
 }
+
+
+use std::collections::HashMap;
+pub struct CallContainer {
+    funcs: HashMap<String, Callback>
+}
+
+impl CallContainer {
+    pub fn new() -> Self {
+        Self { funcs: HashMap::new() }
+    }
+
+    pub fn add(&mut self, name: String, cb: Callback) {
+        self.funcs.insert(name, cb);
+    }
+}
+
+pub type Callback = Box<dyn Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static>;
+
+//pub trait CallFunction: Clone + FnMut(&mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static {}
+
+//pub type GenericCallable = Generic<Box<dyn CallFunction>>;
+
+#[derive(Clone)]
+pub struct Generic<F> where F: Clone {
+    arity: usize,
+    cb: F,
+    //p: std::marker::PhantomData<&'a F>
+}
+
+impl<F> Generic<F> 
+where F: Clone + Fn(&mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> {
+    pub fn new(arity: usize, cb: F) -> Self {
+        Self { cb, arity } //, p: std::marker::PhantomData }
+    }
+
+    fn call(
+        &self,
+        interp: &mut Interpreter,
+        env: Environment,
+        args: Vec<ExprRef>,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
+        (self.cb)(interp, env, args)
+    }
+
+}
+
+impl<F> fmt::Debug for Generic<F> where F: Clone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<builtin fn generic>")
+    }
+}
+
+impl<F> fmt::Display for Generic<F> where F: Clone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<builtin fn generic>")
+    }
+}
+

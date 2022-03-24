@@ -5,7 +5,9 @@ use crate::parser::Unparse;
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use crate::results::{InterpretError, InterpretErrorKind};
-
+use crate::ast::function::Callback;
+use rpds::HashTrieMap;
+use std::fmt;
 use log::debug;
 //use std::borrow::Borrow;
 //use std::convert::From;
@@ -16,14 +18,30 @@ use std::rc::Rc;
 //use thiserror::Error;
 
 
-#[derive(Debug, Clone)]
-pub struct Interpreter {}
+#[derive(Clone)]
+pub struct Interpreter {
+    builtins: HashTrieMap<String, Callback>
+}
 
 impl Default for Interpreter {
     fn default() -> Self {
-        Self {}
+        let mut builtins: HashTrieMap<String,Callback> = HashTrieMap::new();
+        builtins = builtins.insert("asdf".into(), Box::new(|env,args| {
+            Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
+        }));
+
+        Self { builtins }
     }
 }
+
+impl fmt::Debug for Interpreter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map()
+            .entries(self.builtins.iter().map(|(k, v)| (k, "")))
+            .finish()
+    }
+}
+
 
 impl Interpreter {}
 
@@ -334,30 +352,44 @@ impl Interpreter {
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
                     Expr::Ident(ident) => {
-                        let x: ExprAccessRef = env.get_at(&ident.name, &node.context)?.clone();
+                        //match env.resolve_cb(&ident.name) {
+                        match self.builtins.get(&ident.name) {
+                            Some(cb) => {
+                                debug!("cb");
+                                let mut cb2 = cb.clone();
+                                let result = cb2(env, vec![])?;
+                                Some(Ok(result))
 
-                        let expr = x.expr.as_ref().borrow();
-                        match expr.try_callable() {
-                            Some(c) => {
-                                let mut eval_args = vec![];
-                                let mut newenv = env;
-                                for arg in args {
-                                    let v = self.evaluate(arg.clone().into(), newenv)?;
-                                    debug!("arg context {:?}", (&arg.context, &v.expr.borrow().context));
-                                    eval_args.push(v.expr);
-                                    newenv = v.env;
-                                }
-                                debug!("Calling context {:?}", (&node.context));
-                                debug!("Calling context {:?}", (&x, &expr));
-                                debug!("Calling {:?}({:?})", c, eval_args);
-
-                                // newenv.clone here creates a stack branch
-                                let result = c.call(self, newenv.clone(), eval_args)?;
-                                debug!("Call Result {:?}", &result);
-                                Some(Ok(result)) //ExprRefWithEnv::new(result.into(), newenv)))
+                                //Some(Ok(ExprRefWithEnv::new(Expr::Void.into(), env)))
                             }
-                            _ => None,
+                            _ => {
+                                let x: ExprAccessRef = env.get_at(&ident.name, &node.context)?.clone();
+                                let expr = x.expr.as_ref().borrow();
+                                match expr.try_callable() {
+                                    Some(c) => {
+                                        let mut eval_args = vec![];
+                                        let mut newenv = env;
+                                        for arg in args {
+                                            let v = self.evaluate(arg.clone().into(), newenv)?;
+                                            debug!("arg context {:?}", (&arg.context, &v.expr.borrow().context));
+                                            eval_args.push(v.expr);
+                                            newenv = v.env;
+                                        }
+                                        debug!("Calling context {:?}", (&node.context));
+                                        debug!("Calling context {:?}", (&x, &expr));
+                                        debug!("Calling {:?}({:?})", c, eval_args);
+
+                                        // newenv.clone here creates a stack branch
+                                        let result = c.call(self, newenv.clone(), eval_args)?;
+                                        debug!("Call Result {:?}", &result);
+                                        Some(Ok(result)) //ExprRefWithEnv::new(result.into(), newenv)))
+                                    }
+                                    _ => None,
+                                }
+                            }
+
                         }
+
                     }
                     _ => None,
                 };
@@ -593,5 +625,14 @@ mod tests {
         } else {
             unreachable!();
         }
+    }
+
+    #[test]
+    fn test2() {
+        println!("x");
+        let env = Environment::default();
+        let mut interp = Interpreter::default();
+        let r = interp.eval("asdf()", env).unwrap();
+        debug!("x {:?}", r);
     }
 }

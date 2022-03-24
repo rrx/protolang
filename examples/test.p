@@ -31,8 +31,8 @@ let result = f(2.0)^f(2.0);
 assert(result == 4.0^4.0)
 
 f;
-#let f2 = \x y -> (x^2 + y^2);;
-#f2;
+let f2 = \x y -> (x^2 + y^2);;
+f2;
 
 "";
 
@@ -70,3 +70,5 @@ f2(3)
 # recursion
 let f1 = \x -> (x < 10) ? f1(x+1): false
 f1(1)
+
+asdf()

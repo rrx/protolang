@@ -1,5 +1,6 @@
 use super::*;
 use crate::ast::*;
+use crate::ast::function::Callback;
 use crate::results::InterpretError;
 use log::debug;
 use rpds::HashTrieMap;
@@ -147,6 +148,7 @@ impl fmt::Debug for ExprRef {
 #[derive(Clone)]
 pub struct Layer {
     values: HashTrieMap<String, ExprAccessRef>,
+    builtins: HashTrieMap<String, Callback>,
     weak: HashTrieMap<String, ExprAccessWeakRef>,
 }
 
@@ -154,6 +156,7 @@ impl Default for Layer {
     fn default() -> Self {
         Self {
             values: HashTrieMap::new(),
+            builtins: HashTrieMap::new(),
             weak: HashTrieMap::new(),
         }
     }
@@ -163,6 +166,7 @@ impl fmt::Debug for Layer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(self.values.iter().map(|(k, v)| (k, v)))
+            .entries(self.builtins.iter().map(|(k, v)| (k, "")))
             .finish()
     }
 }
@@ -173,7 +177,8 @@ impl Layer {
         let accessref = ExprAccessRef::new(value, &identifier.modifier);
         Layer {
             values: self.values.insert(name, accessref),
-            weak: HashTrieMap::new()
+            weak: HashTrieMap::new(),
+            builtins: HashTrieMap::new(),
         }
     }
 
@@ -182,7 +187,8 @@ impl Layer {
         let accessref = ExprAccessWeakRef::new(&value, identifier.modifier);
         Layer {
             weak: self.weak.insert(name, accessref),
-            values: HashTrieMap::new()
+            values: HashTrieMap::new(),
+            builtins: HashTrieMap::new(),
         }
     }
 
@@ -210,7 +216,19 @@ pub struct Environment {
 
 impl Default for Environment {
     fn default() -> Self {
-        let stack = im::Vector::new();
+        let mut stack = im::Vector::new();
+
+        let mut builtins: HashTrieMap<String,Callback> = HashTrieMap::new();
+        builtins = builtins.insert("asdf".into(), Box::new(|env,args| {
+            Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
+        }));
+
+        let layer = Layer {
+            builtins, values: HashTrieMap::new(), weak: HashTrieMap::new()
+        };
+
+        println!("layer: {:?}", layer);//builtins.keys().collect::<Vec<_>>()); 
+        stack.push_front(layer);
         let env = Self { stack };
         use super::builtins::*;
         env.define("clock".into(), Clock::value().into())
@@ -224,25 +242,19 @@ impl Environment {
         let name = identifier.name.clone();
         if self.stack.len() > 0 && self.stack.front().unwrap().contains(&identifier.name) {
             let layer = Layer::default().define(identifier, value);
-            //println!("[{}]dup:{}", self.stack.len(), &name);
             self.stack.push_front(layer);
             self
-            //Environment { stack: self.stack.clone() }
         } else {
             match self.stack.pop_front() {
                 Some(layer) => {
-                    //println!("[{}]pop:{}", self.stack.len(), &name);
                     let layer = layer.define(identifier, value);
                     self.stack.push_front(layer);
                     self
-                    //Environment { stack : stack.clone() }
                 }
                 None => {
-                    //println!("[{}]none:{}", self.stack.len(), &name);
                     let layer = Layer::default().define(identifier, value);
                     self.stack.push_front(layer);
                     self
-                    //Environment { stack : stack.clone() }
                 }
             }
         }
@@ -256,11 +268,22 @@ impl Environment {
             .map(|layer| layer.get(name)).flatten()
     }
 
+    pub fn resolve_cb(&self, name: &str) -> Option<&Callback> {
+        self.debug();
+        self.stack
+            .iter()
+            .find(|layer| layer.builtins.contains_key(name))
+            .map(|layer| layer.builtins.get(name)).flatten()
+    }
+
     pub fn debug(&self) {
         self.stack.iter().enumerate().for_each(|(i, layer)| {
             debug!("Layer: {:?}", i);
             layer.values.iter().for_each(|(k, v)| {
                 debug!("\t{}: {:?}", k, v);
+            });
+            layer.builtins.iter().for_each(|(k, _)| {
+                debug!("\tbuiltin: {}", k);
             });
         })
     }
