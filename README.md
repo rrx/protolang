@@ -37,6 +37,7 @@ TODO
 - [x] interpreter
 - [x] REPL
 - [x] lazy evaluation
+- [ ] error handling
 - [ ] closures
 - [ ] branching and control flow
 - [ ] recursion

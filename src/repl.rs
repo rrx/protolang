@@ -8,6 +8,11 @@ use log::debug;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::files::SimpleFile;
+use codespan_reporting::term;
+use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+
 pub fn cli() -> anyhow::Result<()> {
     for filename in std::env::args().skip(1) {
         run_file(filename.as_str())?;
@@ -15,79 +20,27 @@ pub fn cli() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn parse_file(filename: &str) -> ExprNode {
+pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
     let contents = std::fs::read_to_string(filename.clone())
         .unwrap()
         .to_string();
     let mut lexer = lexer::LexerState::default();
     let (_, _) = lexer.lex(contents.as_str()).unwrap();
     let (_, expr) = parse_program(lexer.tokens().clone()).unwrap();
-    expr
+    Ok(expr)
 }
 
 pub fn run_file(filename: &str) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(filename.clone())?.to_string();
-    let mut lexer = lexer::LexerState::default();
-    let results = lexer.lex(contents.as_str());
-    match results {
-        Ok((_, _)) => {
-            let tokens = lexer.tokens();
-            /*
-            match parse_program(tokens.clone()) {
-                Ok((rest, prog)) => {
-                    if rest.input_len() > 0 {
-                        debug!("ERROR Not Parsed {:?}", rest.to_location());
-                        return Ok(());
-                    }
-                    debug!("PROG: {:?}", prog.sexpr());
-                }
-                Err(e) => {
-                    debug!("ERROR {:?}", e);
-                    return Ok(());
-                }
-            }
-            */
-
-            let (maybe_prog, results) = parse_program_with_results(tokens);
-            for r in results {
-                match r {
-                    Results::Warning(msg, line) => debug!("-W[{}] {}", line, msg),
-                    Results::Error(msg, line) => debug!("*E[{}] {}", line, msg),
-                }
-            }
-
-            if let Some(prog) = maybe_prog {
-                //debug!("{:?}", (&prog));
-                prog.debug();
-                match prog.sexpr() {
-                    Ok(sexpr) => {
-                        debug!("Ok expr {}", &sexpr);
-                    }
-                    Err(e) => {
-                        debug!("Error sexpr {:?}", e);
-                    }
-                }
-                let mut interp = Interpreter::default();
-                let env = Environment::default();
-                match interp.evaluate(prog.into(), env) {
-                    Ok(r) => {
-                        debug!("R: {:?}", r);
-                        r.env.debug();
-                    }
-                    Err(e) => {
-                        debug!("E: {:?}", e);
-                        //env.debug();
-                    }
-                }
-            }
+    let mut interpreter = Interpreter::default();
+    let env = Environment::default();
+    match run(&mut interpreter, env.clone(), filename.to_string(), &contents) {
+        Ok(r) => {
+            r.env.debug();
+            println!("> {:?}", r.expr);
             Ok(())
         }
-        Err(e) => {
-            debug!("[{}] {:?}", filename, e);
-            //Ok(())
-            //Err(e.into())
-            panic!();
-        }
+        Err(e) => Err(e)
     }
 }
 
@@ -105,14 +58,14 @@ pub fn run_prompt() -> anyhow::Result<()> {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                match run(&mut interpreter, env.clone(), &line) {
+                match run(&mut interpreter, env.clone(), "<repl>".into(), &line) {
                     Ok(r) => {
-                        debug!("R: {:?}", r);
+                        r.env.debug();
+                        println!("> {:?}", r.expr);
                         env = r.env;
                     }
-                    Err(e) => debug!("E: {:?}", e),
+                    _ => ()
                 }
-                env.debug();
             }
 
             Err(ReadlineError::Interrupted) => {
@@ -137,40 +90,79 @@ pub fn run_prompt() -> anyhow::Result<()> {
 
 pub fn run(
     interpreter: &mut Interpreter,
-    env: Environment,
+    mut env: Environment,
+    filename: String,
     source: &str,
-) -> Result<ExprRefWithEnv, InterpretError> {
+) -> anyhow::Result<ExprRefWithEnv> {
     let mut lexer = lexer::LexerState::default();
+    let file_id = SimpleFile::new(filename, source);
+
+    let writer = StandardStream::stderr(ColorChoice::Always);
+    let config = codespan_reporting::term::Config::default();
+
+    let mut diags = vec![];
     match lexer.lex_eof(source) {
         Ok((_, _)) => {
             let tokens = lexer.tokens();
-            let (maybe_prog, results) = parse_program_with_results(tokens);
+            let (maybe_prog, results) = parse_program_with_results("repl".to_string(), tokens);
             for r in results {
                 match r {
-                    Results::Warning(msg, line) => debug!("-W[{}] {}", line, msg),
-                    Results::Error(msg, line) => debug!("*E[{}] {}", line, msg),
+                    LangError::Warning(msg, context) => {
+                        diags.push(
+                            Diagnostic::error()
+                                .with_message(msg)
+                                .with_labels(vec![
+                                             Label::primary((), context.range())
+                                ]));
+                    }
+                    LangError::Error(msg, context) => {
+                        diags.push(Diagnostic::error()
+                            .with_message(msg)
+                            .with_labels(vec![
+                                         Label::primary((), context.range())
+                            ]));
+                    }
                 }
             }
 
+
             if let Some(prog) = maybe_prog {
-                //debug!("PROG: {:?}", (&prog));
                 prog.debug();
                 let sexpr = prog.sexpr().unwrap();
                 debug!("SEXPR: {}", &sexpr);
-                interpreter.evaluate(prog.into(), env)
+                match interpreter.evaluate(prog.into(), env) {
+                    Ok(r) => {
+                        for diagnostic in diags {
+                            term::emit(&mut writer.lock(), &config, &file_id, &diagnostic);
+                        }
+                        Ok(r)
+                    }
+                    Err(InterpretError::Runtime {message, context}) => {
+                        diags.push(Diagnostic::error()
+                            .with_message(message.clone())
+                            .with_labels(vec![
+                                         Label::primary((), context.range())
+                            ]));
+
+                        for diagnostic in diags {
+                            term::emit(&mut writer.lock(), &config, &file_id, &diagnostic);
+                        }
+
+                        Err(InterpretError::Runtime { message, context }.into())
+                    }
+                    Err(e) => {
+                        debug!("*E {:?}", e);
+                        Err(e.into())
+                    }
+                }
             } else {
-                Err(InterpretError::Runtime {
-                    message: format!("Unable to parse"),
-                    line: 0,
-                })
+                debug!("unable to parse");
+                Err(InterpretError::runtime(&format!("Unable to parse")).into())
             }
         }
         Err(e) => {
             debug!("{:?}", e);
-            Err(InterpretError::Runtime {
-                message: format!("Unable to lex"),
-                line: 0,
-            })
+            Err(InterpretError::runtime(&format!("Unable to lex")).into())
         }
     }
 }
@@ -193,8 +185,8 @@ mod tests {
     fn test() {
         let mut interp = Interpreter::default();
         let env = Environment::default();
-        let v = run(&mut interp, env, "let a=1").unwrap();
-        v.env.debug();
-        assert!(v.env.resolve("a").is_some());
+        let r = run(&mut interp, env, "".into(), "let a=1").unwrap();
+        r.env.debug();
+        assert!(r.env.resolve("a").is_some());
     }
 }

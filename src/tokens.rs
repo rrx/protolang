@@ -1,5 +1,6 @@
 use crate::lexer::{Location, Surround};
-use crate::results::Results;
+use crate::results::LangError;
+use crate::ast::{Context2, MaybeNodeContext};
 use nom::*;
 use nom_locate::LocatedSpan;
 use std::fmt;
@@ -243,6 +244,10 @@ impl<'a> Token<'a> {
         )
     }
 
+    pub fn to_context(&self) -> MaybeNodeContext {
+        MaybeNodeContext::from_location(&self.to_location())
+    }
+
     pub fn to_string(&self) -> String {
         self.tok.unlex()
     }
@@ -269,6 +274,9 @@ pub trait TokensList {
     fn to_location(&self) -> Location;
     fn toks(&self) -> Vec<Tok>;
     fn expand_toks(&self) -> Vec<Tok>;
+    fn to_context(&self) -> MaybeNodeContext {
+        MaybeNodeContext::from_location(&self.to_location())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -277,7 +285,7 @@ pub struct Tokens<'a> {
     pub tok: &'a [Token<'a>],
     pub start: usize,
     pub end: usize,
-    pub results: Vec<Results>,
+    //pub results: Vec<LangError>,
 }
 
 impl<'a> TokensList for Tokens<'a> {
@@ -314,7 +322,7 @@ impl<'a> Tokens<'a> {
             tok: vec,
             start: 0,
             end: vec.len(),
-            results: vec![],
+            //results: vec![],
         }
     }
 
@@ -332,9 +340,9 @@ impl<'a> Tokens<'a> {
     //let (i, toks) = crate::lexer::lex_eof(i)?;
     //Ok((i, Tokens::new(&toks[..])))
     //}
-    pub fn result(&mut self, result: Results) {
-        self.results.push(result);
-    }
+    //pub fn result(&mut self, result: LangError) {
+        //self.results.push(result);
+    //}
 
     pub fn to_string(&self) -> String {
         let mut s = String::new();
@@ -367,7 +375,7 @@ impl<'a> InputTake for Tokens<'a> {
             tok: &self.tok[0..count],
             start: 0,
             end: count,
-            results: vec![],
+            //results: vec![],
         }
     }
 
@@ -378,13 +386,13 @@ impl<'a> InputTake for Tokens<'a> {
             tok: prefix,
             start: 0,
             end: prefix.len(),
-            results: vec![],
+            //results: vec![],
         };
         let second = Tokens {
             tok: suffix,
             start: 0,
             end: suffix.len(),
-            results: vec![],
+            //results: vec![],
         };
         (second, first)
     }
@@ -404,7 +412,7 @@ impl<'a> Slice<Range<usize>> for Tokens<'a> {
             tok: self.tok.slice(range.clone()),
             start: self.start + range.start,
             end: self.start + range.end,
-            results: vec![],
+            //results: vec![],
         }
     }
 }
@@ -430,7 +438,7 @@ impl<'a> Slice<RangeFull> for Tokens<'a> {
             tok: self.tok,
             start: self.start,
             end: self.end,
-            results: vec![],
+            //results: vec![],
         }
     }
 }

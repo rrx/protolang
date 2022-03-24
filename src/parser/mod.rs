@@ -191,7 +191,7 @@ pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     let loc = i.to_location().clone();
     let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
-    i1.result(Results::Error(format!("Invalid Expr: {}", s), 0));
+    //i1.result(LangError::error(format!("Invalid Expr: {}", s), 0));
     debug!("Invalidx: {:?}", &s);
     let mut expr = ExprNode::new(Expr::Invalid(s), &loc);
     // handle trailing newline
@@ -218,15 +218,15 @@ pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, expr))
 }
 
-pub fn parse_program_with_results(i: Tokens) -> (Option<ExprNode>, Vec<Results>) {
+
+pub fn parse_program_with_results(filename: String, i: Tokens) -> (Option<ExprNode>, Vec<LangError>) {
+    let context = i.to_context();
     match parse_program(i) {
         Ok((prog_rest, prog)) => {
             let mut results = vec![];
             if prog_rest.tok.len() > 0 {
-                results.push(Results::Warning(
-                    format!("Not all tokens parsed: {:?}", prog_rest.toks()),
-                    prog_rest.to_location().line,
-                ));
+                results.push(
+                    LangError::Warning(format!("Not all tokens parsed: {:?}", prog_rest.toks()), prog_rest.to_context()));
                 (None, results)
             } else {
                 (Some(prog), results)
@@ -237,7 +237,7 @@ pub fn parse_program_with_results(i: Tokens) -> (Option<ExprNode>, Vec<Results>)
                 .errors
                 .iter()
                 .map(|(tokens, err)| {
-                    Results::Error(format!("Error: {:?}, {:?}", err, tokens.toks()), 0)
+                    LangError::Error( format!("Error: {:?}, {:?}", err, tokens.toks()), context.clone())
                 })
                 .collect();
             (None, results)

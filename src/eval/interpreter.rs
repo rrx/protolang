@@ -9,7 +9,10 @@ use log::debug;
 //use std::convert::From;
 use std::ops::Deref;
 use std::rc::Rc;
-use std::result::Result;
+//use std::result::Result;
+//use miette::{Diagnostic, SourceSpan, IntoDiagnostic, WrapErr, Result};
+use thiserror::Error;
+
 
 #[derive(Debug)]
 pub struct Interpreter {}
@@ -22,17 +25,28 @@ impl Default for Interpreter {
 
 impl Interpreter {}
 
-#[derive(Debug)]
+//#[derive(Error, Debug, Diagnostic)]
+//#[error(transparent)]//"oops")]
+//#[diagnostic()]
+#[derive(Debug, Error, strum::Display)]
 pub enum InterpretError {
+    //#[error("Invalid error")]
     Invalid,
-    Runtime { message: String, line: usize },
+    //#[error("Runtime error")]
+    //#[error(transparent)]
+    Runtime { message: String, context: MaybeNodeContext },
+    //#[error("Expecting boolean")]
+    ExpectBool,
+    //#[error("Assertion")]
+    Assertion,
+
 }
 
 impl InterpretError {
     pub fn runtime(m: &str) -> InterpretError {
         InterpretError::Runtime {
             message: m.to_string(),
-            line: 0,
+            context: MaybeNodeContext::default()
         }
     }
 }
@@ -41,7 +55,7 @@ impl MaybeNodeContext {
     pub fn error(&self, m: &str) -> InterpretError {
         InterpretError::Runtime {
             message: m.to_string(),
-            line: self.line(),
+            context: self.clone()
         }
     }
 }
@@ -51,15 +65,9 @@ impl Expr {
         match self {
             Self::Literal(t) => match t {
                 Tok::BoolLiteral(b) => Ok(*b),
-                _ => Err(InterpretError::Runtime {
-                    message: format!("Expecting a bool: {}", t.unlex()),
-                    line: 0,
-                }),
+                _ => Err(InterpretError::ExpectBool)
             },
-            _ => Err(InterpretError::Runtime {
-                message: format!("Expecting a literal: {:?}", self),
-                line: 0,
-            }),
+            _ => Err(InterpretError::runtime(&format!("Expecting a literal: {:?}", self))),
         }
     }
 
@@ -68,14 +76,9 @@ impl Expr {
             Self::Literal(t) => match t {
                 Tok::IntLiteral(u) => Ok(*u as f64),
                 Tok::FloatLiteral(f) => Ok(*f),
-                _ => Err(InterpretError::Runtime {
-                    message: format!("Expecting a number: {:?}", self),
-                    line: 0,
-                }),
+                _ => Err(InterpretError::runtime(&format!("Expecting a number: {:?}", self)))
             },
-            Self::Callable(_) => Err(InterpretError::Runtime {
-                message: format!("Expecting a callable: {:?}", self),
-                line: 0,
+            Self::Callable(_) => Err(InterpretError::runtime(&format!("Expecting a callable: {:?}", self))),
                 //message: format!(
                 //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
                 //self,
@@ -84,11 +87,7 @@ impl Expr {
                 //e.loc.fragment
                 //),
                 //line: e.loc.line,
-            }),
-            _ => Err(InterpretError::Runtime {
-                message: format!("Expecting a number: {:?}", self),
-                line: 0,
-            }),
+            _ => Err(InterpretError::runtime(&format!("Expecting a number: {:?}", self)))
         }
     }
 
@@ -201,14 +200,11 @@ impl Interpreter {
         expr: ExprRef,
     ) -> Result<ExprRefWithEnv, InterpretError> {
         if args.len() != f.arity() {
-            return Err(InterpretError::Runtime {
-                message: format!(
+            return Err(params.context.error(&format!(
                     "Mismatched params on function. Expecting {}, got {}",
                     f.arity(),
                     args.len()
-                ),
-                line: params.context.line(),
-            });
+                )));
         }
 
         let param_idents = params
@@ -216,10 +212,7 @@ impl Interpreter {
             .iter()
             .map(|param| match param.value.try_ident() {
                 Some(ident) => Ok(ident),
-                None => Err(InterpretError::Runtime {
-                    message: format!("Invalid Argument on Lambda, got {:?}", param),
-                    line: param.context.line(),
-                }),
+                None => Err(param.context.error(&format!("Invalid Argument on Lambda, got {:?}", param))),
             })
             .collect::<Vec<_>>();
 
@@ -229,10 +222,7 @@ impl Interpreter {
         ) = param_idents.into_iter().partition(|p| p.is_ok());
 
         if e.len() > 0 {
-            return Err(InterpretError::Runtime {
-                message: format!("Invalid Argument on Lambda, got {:?}", e),
-                line: params.context.line(),
-            });
+            return Err(params.context.error(&format!("Invalid Argument on Lambda, got {:?}", e)));
         }
 
         // push variables into scope
@@ -349,10 +339,7 @@ impl Interpreter {
 
             Expr::Callable(e) => {
                 debug!("Callable({:?})", &e);
-                Err(InterpretError::Runtime {
-                    message: format!("Unimplemented callable::{:?}", &e),
-                    line: 0, //expr.context.loc.line,
-                })
+                Err(node.context.error(&format!("Unimplemented callable::{:?}", &e)))
             }
 
             Expr::Lambda(e) => {
@@ -403,10 +390,7 @@ impl Interpreter {
                 if let Some(r) = f {
                     r
                 } else {
-                    Err(InterpretError::Runtime {
-                        message: format!("Not a function: {:?}", f),
-                        line: 0,
-                    })
+                    Err(node.context.error(&format!("Not a function: {:?}", f)))
                 }
             }
 
@@ -467,10 +451,7 @@ impl Interpreter {
                 Ok(ExprRefWithEnv::new(Expr::new_int(0).into(), env))
             }
 
-            Expr::Invalid(s) => Err(InterpretError::Runtime {
-                message: format!("Invalid expr: {:?}", s),
-                line: 0,
-            }),
+            Expr::Invalid(s) => Err(node.context.error(&format!("Invalid expr: {:?}", s))),
             Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
         }
     }
@@ -484,10 +465,7 @@ impl Interpreter {
                     let env = eval_right.env.define(ident, eval_right.expr.clone());
                     Ok(ExprRefWithEnv::new(eval_right.expr, env))
                 } else {
-                    Err(InterpretError::Runtime {
-                        message: format!("Invalid Assignment, LHS must be identifier"),
-                        line: left.context.line(),
-                    })
+                    Err(left.context.error(&format!("Invalid Assignment, LHS must be identifier")))
                 };
             }
             Operator::Assign => {
@@ -510,10 +488,7 @@ impl Interpreter {
                     //env.define(ident, eval_right.expr.clone());
                     Ok(ExprRefWithEnv::new(expr, eval_right.env))
                 } else {
-                    Err(InterpretError::Runtime {
-                        message: format!("Invalid Assignment, LHS must be identifier"),
-                        line: left.context.line(),
-                    })
+                    Err(left.context.error(&format!("Invalid Assignment, LHS must be identifier")))
                 };
             }
             _ => (),
@@ -537,10 +512,7 @@ impl Interpreter {
             Operator::LessThan => eval_left.lt(&eval_right),
             Operator::Equal => eval_left.eq(&eval_right),
             Operator::NotEqual => eval_left.ne(&eval_right),
-            _ => Err(InterpretError::Runtime {
-                message: format!("Unimplemented expression op: Operator::{:?}", op),
-                line,
-            }),
+            _ => Err(eval_left.context.error(&format!("Unimplemented expression op: Operator::{:?}", op)))
         }
         .map(|v| {
             ExprRefWithEnv::new(
@@ -565,10 +537,7 @@ impl Interpreter {
             }
             Err(e) => {
                 debug!("ERROR: {:?}", e);
-                return Err(InterpretError::Runtime {
-                    message: "Unable to parse sexpr".into(),
-                    line: 0,
-                });
+                return Err(expr.context.error("Unable to parse sexpr".into()));
             }
         }
         drop(expr);
@@ -667,5 +636,17 @@ mod tests {
             )
             .unwrap();
         assert!(r.env.resolve("super_local").is_none());
+
+        let r = interp
+            .eval(
+                "
+                assert(1)
+                $",
+                r.env,
+            );
+            //.into_diagnostic()
+            //.wrap_err("asdf2");
+        println!("{:?}", r);
+        //println!("{}", r);
     }
 }
