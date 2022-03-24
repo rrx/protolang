@@ -4,11 +4,60 @@ use crate::{
     tokens::Tok,
 };
 use std::{
-    any::Any,
+    //any::Any,
     fmt,
     time::{SystemTime, UNIX_EPOCH},
 };
 //use thiserror::Error;
+
+/*
+#[derive(Clone)]
+pub struct Generic<'a, F> where F: Clone {
+    arity: usize,
+    cb: F,
+    p: std::marker::PhantomData<&'a F>
+}
+
+impl<'a, F> Generic<'a, F> 
+where F: Clone + Fn(&'a mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> {
+    pub fn new(arity: usize, cb: F) -> Self {
+        Self { cb, arity, p: std::marker::PhantomData }
+    }
+}
+
+impl<'a, F> fmt::Debug for Generic<'a, F> where F: Clone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<builtin fn generic>")
+    }
+}
+
+impl<'a, F> fmt::Display for Generic<'a, F> where F: Clone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<builtin fn generic>")
+    }
+}
+
+impl<'a, F> Callable for Generic<'a, F> 
+where F: Clone + Fn(&'a mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> 
+{
+    fn call(
+        &'a self,
+        interp: &'a mut Interpreter,
+        env: Environment,
+        args: Vec<ExprRef>,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
+        (self.cb)(interp, env, args)
+    }
+
+    fn box_clone(&self) -> Box<dyn Callable> {
+        Box::new(Self { arity: self.arity, cb: self.cb.clone(), p: self.p.clone() })//(*self).clone())
+    }
+
+    //fn as_any(&self) -> &dyn Any {
+        //self
+    //}
+}
+*/
 
 #[derive(Clone, Debug)]
 pub struct ShowStack;
@@ -39,9 +88,9 @@ impl Callable for ShowStack {
         Box::new((*self).clone())
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    //fn as_any(&self) -> &dyn Any {
+        //self
+    //}
 }
 
 #[derive(Clone, Debug)]
@@ -85,9 +134,9 @@ impl Callable for Clock {
         Box::new((*self).clone())
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    //fn as_any(&self) -> &dyn Any {
+        //self
+    //}
 }
 
 #[derive(Clone, Debug)]
@@ -130,7 +179,7 @@ impl Callable for Assert {
         Box::new((*self).clone())
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    //fn as_any(&self) -> &dyn Any {
+        //self
+    //}
 }

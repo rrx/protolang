@@ -29,13 +29,13 @@ pub trait Callable: Debug + Display {
         0
     }
     fn call(
-        &self,
+        & self,
         interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError>;
     fn box_clone(&self) -> Box<dyn Callable>;
-    fn as_any(&self) -> &dyn Any;
+    //fn as_any(&self) -> &dyn Any;
 }
 
 impl Clone for Box<dyn Callable> {
@@ -81,7 +81,6 @@ impl SExpr for Params {
         let params = self
             .value
             .iter()
-            //.map(|v| S::Atom(v.clone()))
             .map_while(|v| v.sexpr().ok())
             .collect::<Vec<_>>();
         if params.len() < self.value.len() {
@@ -135,9 +134,9 @@ impl Callable for Lambda {
         Box::new((*self).clone())
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    //fn as_any(&self) -> &dyn Any {
+        //self
+    //}
 }
 
 impl Unparse for Lambda {

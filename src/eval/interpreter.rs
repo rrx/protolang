@@ -16,7 +16,7 @@ use std::rc::Rc;
 //use thiserror::Error;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Interpreter {}
 
 impl Default for Interpreter {
@@ -496,41 +496,6 @@ impl Interpreter {
                 )
         })
     }
-
-    pub fn execute(
-        &mut self,
-        e: ExprRef,
-        env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
-        let expr = e.as_ref().borrow();
-        debug!("EXPR: {:?}", &expr);
-        debug!("EXPR-unparse: {:?}", expr.unparse());
-        debug!("EXPR-unlex: {:?}", expr.unlex());
-        match expr.sexpr() {
-            Ok(s) => {
-                debug!("EXPR-sexpr: {}", s);
-            }
-            Err(e) => {
-                debug!("ERROR: {:?}", e);
-                return Err(expr.context.runtime_error("Unable to parse sexpr".into()));
-            }
-        }
-        drop(expr);
-        self.evaluate(e, env)
-    }
-
-    //pub fn interpret(&mut self, program: ExprRef, env: Environment) -> Result<(Environment, ExprRef), InterpretError> {
-    //match self.evaluate(program.into(), env) {
-    //Ok(v) => {
-    //debug!("Result: {:?}", &v);
-    //Ok(v)
-    //}
-    //Err(error) => {
-    //debug!("ERROR: {:?}", &error);
-    //Err(
-    //}
-    //}
-    //}
 }
 
 #[cfg(test)]

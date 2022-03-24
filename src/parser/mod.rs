@@ -393,16 +393,6 @@ impl ExprNode {
     }
 }
 
-/*
-impl ExprNode {
-    pub fn parse_program<'a>(s: &'a str) -> PResult<Tokens<'a>, ExprNode> {
-        let mut lexer = crate::lexer::LexerState::from_str_eof(s).unwrap();
-        let tokens = lexer.tokens2().clone();
-        parse_program(tokens)
-    }
-}
-*/
-
 #[cfg(test)]
 mod tests {
     use super::*;
