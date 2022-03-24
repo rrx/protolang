@@ -4,6 +4,8 @@ use crate::ast::*;
 use crate::parser::Unparse;
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
+use crate::results::InterpretError;
+
 use log::debug;
 //use std::borrow::Borrow;
 //use std::convert::From;
@@ -11,7 +13,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 //use std::result::Result;
 //use miette::{Diagnostic, SourceSpan, IntoDiagnostic, WrapErr, Result};
-use thiserror::Error;
+//use thiserror::Error;
 
 
 #[derive(Debug)]
@@ -24,41 +26,6 @@ impl Default for Interpreter {
 }
 
 impl Interpreter {}
-
-//#[derive(Error, Debug, Diagnostic)]
-//#[error(transparent)]//"oops")]
-//#[diagnostic()]
-#[derive(Debug, Error, strum::Display)]
-pub enum InterpretError {
-    //#[error("Invalid error")]
-    Invalid,
-    //#[error("Runtime error")]
-    //#[error(transparent)]
-    Runtime { message: String, context: MaybeNodeContext },
-    //#[error("Expecting boolean")]
-    ExpectBool,
-    //#[error("Assertion")]
-    Assertion,
-
-}
-
-impl InterpretError {
-    pub fn runtime(m: &str) -> InterpretError {
-        InterpretError::Runtime {
-            message: m.to_string(),
-            context: MaybeNodeContext::default()
-        }
-    }
-}
-
-impl MaybeNodeContext {
-    pub fn error(&self, m: &str) -> InterpretError {
-        InterpretError::Runtime {
-            message: m.to_string(),
-            context: self.clone()
-        }
-    }
-}
 
 impl Expr {
     fn check_bool(&self) -> Result<bool, InterpretError> {
@@ -280,14 +247,16 @@ impl Interpreter {
 
     pub fn evaluate(
         &mut self,
-        expr: ExprRef,
+        exprref: ExprRef,
         env: Environment,
     ) -> Result<ExprRefWithEnv, InterpretError> {
-        let node = &expr.as_ref().borrow();
+        let e = exprref.clone();
+        //let e1 = exprref.clone();
+        let node = exprref.borrow();
         let expr = &node.value;
         debug!("EVAL: {:?}", &expr);
         match expr {
-            Expr::Literal(lit) => Ok(ExprRefWithEnv::new(Expr::Literal(lit.clone()).into(), env)),
+            Expr::Literal(_) => Ok(ExprRefWithEnv::new(e, env)),
             Expr::Ident(ident) => {
                 let v = env.get_at(&ident.name, &node.context)?;
                 Ok(ExprRefWithEnv::new(v.into(), env))
@@ -370,9 +339,12 @@ impl Interpreter {
                                 let mut newenv = env;
                                 for arg in args {
                                     let v = self.evaluate(arg.clone().into(), newenv)?;
+                                    debug!("arg context {:?}", (&arg.context, &v.expr.borrow().context));
                                     eval_args.push(v.expr);
                                     newenv = v.env;
                                 }
+                                debug!("Calling context {:?}", (&node.context));
+                                debug!("Calling context {:?}", (&x, &expr));
                                 debug!("Calling {:?}({:?})", c, eval_args);
 
                                 // newenv.clone here creates a stack branch
@@ -470,7 +442,7 @@ impl Interpreter {
             }
             Operator::Assign => {
                 return if let Some(ident) = left.try_ident() {
-                    let mut access = env.get_at(&ident.name, &left.context)?;
+                    let access = env.get_at(&ident.name, &left.context)?;
                     if access.modifier != VarModifier::Mutable {
                         left.debug();
                         env.debug();
@@ -494,7 +466,6 @@ impl Interpreter {
             _ => (),
         }
 
-        let line = left.context.line();
         let v_left = self.evaluate(left.clone().into(), env)?;
         let v_right = self.evaluate(right.clone().into(), v_left.env)?;
 
@@ -638,15 +609,22 @@ mod tests {
         assert!(r.env.resolve("super_local").is_none());
 
         let r = interp
-            .eval(
-                "
-                assert(1)
-                $",
-                r.env,
+            .eval("assert(1)", r.env,
             );
-            //.into_diagnostic()
-            //.wrap_err("asdf2");
         println!("{:?}", r);
-        //println!("{}", r);
+        if let Err(InterpretError::Runtime { message, context }) = r {
+            assert!(context.has_location());
+        } else {
+            unreachable!();
+        }
+
+        let env = Environment::default();
+        let r = interp.eval("a", env);
+        println!("{:?}", r);
+        if let Err(InterpretError::Runtime { message, context }) = r {
+            assert!(context.has_location());
+        } else {
+            unreachable!();
+        }
     }
 }

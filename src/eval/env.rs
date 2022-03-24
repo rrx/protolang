@@ -1,8 +1,9 @@
 use super::*;
 use crate::ast::*;
+use crate::results::InterpretError;
 use log::debug;
 use rpds::HashTrieMap;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::convert::From;
 use std::fmt;
 use std::rc::{Rc, Weak};
@@ -25,6 +26,10 @@ impl ExprRef {
 
     pub fn downgrade(&self) -> ExprWeakRef {
         ExprWeakRef::new(self)
+    }
+
+    pub fn borrow(&self) -> Ref<ExprNode> {
+        self.as_ref().borrow()
     }
 }
 

@@ -8,11 +8,6 @@ use log::debug;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-use codespan_reporting::diagnostic::{Diagnostic, Label};
-use codespan_reporting::files::SimpleFile;
-use codespan_reporting::term;
-use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-
 pub fn cli() -> anyhow::Result<()> {
     for filename in std::env::args().skip(1) {
         run_file(filename.as_str())?;
@@ -60,7 +55,6 @@ pub fn run_prompt() -> anyhow::Result<()> {
                 rl.add_history_entry(line.as_str());
                 match run(&mut interpreter, env.clone(), "<repl>".into(), &line) {
                     Ok(r) => {
-                        r.env.debug();
                         println!("> {:?}", r.expr);
                         env = r.env;
                     }
@@ -95,36 +89,17 @@ pub fn run(
     source: &str,
 ) -> anyhow::Result<ExprRefWithEnv> {
     let mut lexer = lexer::LexerState::default();
-    let file_id = SimpleFile::new(filename, source);
 
-    let writer = StandardStream::stderr(ColorChoice::Always);
-    let config = codespan_reporting::term::Config::default();
+    let mut results = Results::new();
+    let file_id = results.add_source(filename, source.into());
 
-    let mut diags = vec![];
     match lexer.lex_eof(source) {
         Ok((_, _)) => {
             let tokens = lexer.tokens();
-            let (maybe_prog, results) = parse_program_with_results("repl".to_string(), tokens);
-            for r in results {
-                match r {
-                    LangError::Warning(msg, context) => {
-                        diags.push(
-                            Diagnostic::error()
-                                .with_message(msg)
-                                .with_labels(vec![
-                                             Label::primary((), context.range())
-                                ]));
-                    }
-                    LangError::Error(msg, context) => {
-                        diags.push(Diagnostic::error()
-                            .with_message(msg)
-                            .with_labels(vec![
-                                         Label::primary((), context.range())
-                            ]));
-                    }
-                }
+            let (maybe_prog, returns) = parse_program_with_results("repl".to_string(), tokens);
+            for r in returns {
+                results.push(r.diagnostic(file_id));
             }
-
 
             if let Some(prog) = maybe_prog {
                 prog.debug();
@@ -132,26 +107,12 @@ pub fn run(
                 debug!("SEXPR: {}", &sexpr);
                 match interpreter.evaluate(prog.into(), env) {
                     Ok(r) => {
-                        for diagnostic in diags {
-                            term::emit(&mut writer.lock(), &config, &file_id, &diagnostic);
-                        }
+                        results.print();
                         Ok(r)
                     }
-                    Err(InterpretError::Runtime {message, context}) => {
-                        diags.push(Diagnostic::error()
-                            .with_message(message.clone())
-                            .with_labels(vec![
-                                         Label::primary((), context.range())
-                            ]));
-
-                        for diagnostic in diags {
-                            term::emit(&mut writer.lock(), &config, &file_id, &diagnostic);
-                        }
-
-                        Err(InterpretError::Runtime { message, context }.into())
-                    }
                     Err(e) => {
-                        debug!("*E {:?}", e);
+                        results.push(e.diagnostic(file_id));
+                        results.print();
                         Err(e.into())
                     }
                 }

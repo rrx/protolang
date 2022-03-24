@@ -88,6 +88,10 @@ impl MaybeNodeContext {
         MaybeNodeContext(Some(NodeContext::move_token(token)))
     }
 
+    pub fn has_location(&self) -> bool {
+        self.0.is_some()
+    }
+
     pub fn to_location(&self) -> Location {
         match &self.0 {
             Some(c) => c.loc.clone(),
