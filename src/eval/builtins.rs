@@ -74,12 +74,12 @@ impl fmt::Display for ShowStack {
 }
 
 impl Callable for ShowStack {
-    fn call(
+    fn call<'a>(
         &self,
-        _: &mut Interpreter,
-        env: Environment,
+        _: &mut Interpreter<'a>,
+        env: Environment<'a>,
         _: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         env.debug();
         Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
     }
@@ -113,12 +113,12 @@ impl Callable for Clock {
         0
     }
 
-    fn call(
+    fn call<'a> (
         &self,
-        _: &mut Interpreter,
-        env: Environment,
+        _: &mut Interpreter<'a>,
+        env: Environment<'a>,
         _: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("we mustn't travel back in time")
@@ -159,18 +159,18 @@ impl Callable for Assert {
         1
     }
 
-    fn call(
+    fn call<'a>(
         &self,
-        _: &mut Interpreter,
-        env: Environment,
+        _: &mut Interpreter<'a>,
+        env: Environment<'a>,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         let node = args.get(0).unwrap().borrow();
         let v = node.try_literal();
         match v {
             Some(Tok::BoolLiteral(true)) => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
             Some(Tok::BoolLiteral(false)) => Err(node.context.runtime_error("Assertion error")),
-            Some(expr) => Err(node
+            Some(_) => Err(node
                 .context
                 .runtime_error(&format!("Invalid args, not a bool"))
                 .into()),

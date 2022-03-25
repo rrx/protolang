@@ -2,7 +2,7 @@ use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::function::Callback;
 use crate::ast::*;
-use crate::results::{InterpretError, InterpretErrorKind};
+use crate::results::{InterpretError, InterpretErrorKind, Results};
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use log::debug;
@@ -12,31 +12,43 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 #[derive(Clone)]
-pub struct Interpreter {
-    builtins: HashTrieMap<String, Callback>,
+pub struct Interpreter<'a> {
+    builtins: HashTrieMap<String, Callback<'a>>,
+    p: std::marker::PhantomData<&'a String>
 }
 
-impl Default for Interpreter {
+impl<'a> Interpreter<'a> {
+    pub fn call_builtin(&mut self, name: String, env: Environment<'a>) -> Result<ExprRefWithEnv, InterpretError> {
+        match self.builtins.get(&name) {
+            Some(cb) => {
+                debug!("cb");
+                //let cb2 = cb.clone();
+                //self.call(env, cb2, &vec![], &vec![], self.expr.clone().into());
+                let result = cb(env, vec![]).unwrap();
+                Ok(result)
+            }
+            _ => unreachable!()
+        }
+    }
+}
+
+impl<'a> Default for Interpreter<'a> {
     fn default() -> Self {
-        let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
+        let mut builtins: HashTrieMap<String, Callback<'a>> = HashTrieMap::new();
         builtins = builtins.insert(
             "asdf".into(),
             Box::new(|env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
         );
 
-        Self { builtins }
+        Self { p: std::marker::PhantomData, builtins }
     }
 }
 
-impl fmt::Debug for Interpreter {
+impl<'a> fmt::Debug for Interpreter<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map()
-            .entries(self.builtins.iter().map(|(k, _)| (k, "")))
-            .finish()
+        write!(f, "<interpreter>")
     }
 }
-
-impl Interpreter {}
 
 impl ExprNode {
     fn check_bool(&self) -> Result<bool, InterpretError> {
@@ -57,27 +69,10 @@ impl ExprNode {
             Expr::Literal(t) => match t {
                 Tok::IntLiteral(u) => Ok(*u as f64),
                 Tok::FloatLiteral(f) => Ok(*f),
-                _ => Err(InterpretError::runtime(&format!(
-                    "Expecting a number: {:?}",
-                    self
-                ))),
+                _ => Err(self.context.runtime_error(&format!("Expecting a number: {:?}", self))),
             },
-            Expr::Callable(_) => Err(InterpretError::runtime(&format!(
-                "Expecting a callable: {:?}",
-                self
-            ))),
-            //message: format!(
-            //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
-            //self,
-            //e.loc.line,
-            //e.loc.col,
-            //e.loc.fragment
-            //),
-            //line: e.loc.line,
-            _ => Err(InterpretError::runtime(&format!(
-                "Expecting a number: {:?}",
-                self
-            ))),
+            Expr::Callable(_) => Err(self.context.runtime_error(&format!("Expecting a callable: {:?}", self))),
+            _ => Err(self.context.runtime_error(&format!("Expecting a number: {:?}", self))),
         }
     }
 
@@ -184,15 +179,15 @@ impl ExprNode {
     }
 }
 
-impl Interpreter {
+impl<'a> Interpreter<'a> {
     pub fn call(
         &mut self,
-        mut env: Environment,
+        mut env: Environment<'a>,
         f: &dyn Callable,
         params: &Params,
         args: &Vec<ExprRef>,
         expr: ExprRef,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         if args.len() != f.arity() {
             return Err(params.context.runtime_error(&format!(
                 "Mismatched params on function. Expecting {}, got {}",
@@ -233,31 +228,10 @@ impl Interpreter {
         // we drop any temporary variables, if they are no longer needed
         // we aren't able to drop the env currently, in case the function mutated something outside
         Ok(r)
-
-        /*
-                match &expr.value {
-                    Expr::Callable(c) => {
-                        self.interpret(
-                        Ok(ExprNode::Literal(Tok::IntLiteral(0)))
-
-                    }
-                    Expr::Lambda(lam) => {
-                        Ok(ExprNode::Literal(Tok::IntLiteral(0)))
-                    }
-                    _ => {
-                        Err(InterpretError::Runtime {
-                            message: format!("Invalid Argument on Lambda, got {:?}", e),
-                            line: 0, //name.line(),
-                        })
-                    }
-                }
-        */
     }
 
-    pub fn eval(&mut self, v: &str, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
-        //use crate::ast::*;
+    pub fn just_eval(&mut self, v: &str, env: Environment<'a>) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         use crate::lexer::LexerState;
-        //use crate::parser::*;
         use crate::tokens::*;
         let mut lexer = LexerState::from_str_eof(v).unwrap();
         let tokens = lexer.tokens();
@@ -267,22 +241,71 @@ impl Interpreter {
                 self.evaluate(expr.into(), env)
             }
             Err(nom::Err::Error(e)) => {
+                for (tokens, err) in &e.errors {
+                    debug!("error {:?}", (&err, tokens.toks()));
+                }
+                Err(InterpretError::runtime(&format!("Error parsing {:?}", e)))
+            }
+            Err(e) => {
+                Err(InterpretError::runtime(&format!("Error parsing {:?}", e)))
+            }
+        }
+    }
+
+    pub fn eval(&mut self, v: &str, env: Environment<'a>) -> Result<Results<'a>, InterpretError> {
+        use crate::lexer::LexerState;
+        use crate::tokens::*;
+        use crate::results;
+        let mut lexer = LexerState::from_str_eof(v).unwrap();
+        let tokens = lexer.tokens();
+        use nom::InputIter;
+        let mut results = results::Results::new();
+        let file_id = results.add_source("<repl>".into(), v.to_string());
+        tokens.iter_elements().for_each(|t| {
+            if let Tok::Invalid(s) = &t.tok {
+                let error = results::LangError::Warning(format!("Invalid Token: {}", s), t.to_context());
+                let diagnostic = error.diagnostic(file_id);
+                results.push(diagnostic);
+            }
+        });
+
+        match crate::parser::parse_program(tokens) {
+            Ok((_, expr)) => {
+                debug!("SEXPR: {}", expr.sexpr().unwrap());
+                match self.evaluate(expr.into(), env) {
+                    Ok(v) => {
+                        results.add_result(v);
+                    }
+                    Err(InterpretError { context, kind }) => {
+                        let error = InterpretError { context, kind };
+                        let diagnostic = error.diagnostic(file_id);
+                        results.push(diagnostic);
+                    }
+                }
+            }
+            Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors {
                     debug!("error {:?}", (&err, tokens.toks()));
                 }
-                Err(InterpretError::runtime("Error parsing"))
+                let error = InterpretError::runtime("Error parsing");
+                let diagnostic = error.diagnostic(file_id);
+                results.push(diagnostic);
             }
-            Err(e) => Err(InterpretError::runtime(&format!("Error parsing: {:?}", e))),
+            Err(e) => {
+                let error = InterpretError::runtime(&format!("Error parsing: {:?}", e));
+                let diagnostic = error.diagnostic(file_id);
+                results.push(diagnostic);
+            }
         }
+        Ok(results)
     }
 
     pub fn evaluate(
         &mut self,
         exprref: ExprRef,
-        env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+        env: Environment<'a>,
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         let e = exprref.clone();
-        //let e1 = exprref.clone();
         let node = exprref.borrow();
         let expr = &node.value;
         debug!("EVAL: {:?}", &expr);
@@ -353,23 +376,17 @@ impl Interpreter {
                 ))
             }
 
-            Expr::Index(_ident, _args) => {
+            Expr::Index(ident, _args) => {
                 // TODO: not yet implemented
-                Ok(ExprRefWithEnv::new(
-                    Expr::Literal(Tok::IntLiteral(0)).into(),
-                    env,
-                ))
+                Err(ident.context.error(InterpretErrorKind::NotImplemented))
             }
 
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
                     Expr::Ident(ident) => {
-                        //match env.resolve_cb(&ident.name) {
                         match self.builtins.get(&ident.name) {
                             Some(cb) => {
-                                debug!("cb");
-                                let cb2 = cb.clone();
-                                let result = cb2(env, vec![])?;
+                                let result = cb(env, vec![]).unwrap();
                                 Some(Ok(result))
                             }
                             _ => {
@@ -482,8 +499,8 @@ impl Interpreter {
         op: &Operator,
         left: &ExprNode,
         right: &ExprNode,
-        env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+        env: Environment<'a>,
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         match op {
             Operator::Declare => {
                 return if let Some(ident) = left.try_ident() {
@@ -573,7 +590,9 @@ mod tests {
                 env,
             )
             .unwrap();
-        assert!(r.env.resolve("x").unwrap().is_mut());
+        r.print();
+        let value = r.value.unwrap();
+        assert!(value.env.resolve("x").unwrap().is_mut());
 
         // blocks should hide visibility
         let r = interp
@@ -584,10 +603,12 @@ mod tests {
                 let asdf1 = 1
         }
         ",
-                r.env,
+                value.env,
             )
             .unwrap();
-        assert!(r.env.resolve("asdf1").is_none());
+        r.print();
+        let value = r.value.unwrap();
+        assert!(value.env.resolve("asdf1").is_none());
 
         let r = interp
             .eval(
@@ -598,9 +619,11 @@ mod tests {
         let f = \\x -> x + nonlocal_x
         assert(4 == f(3))
         ",
-                r.env,
+                value.env,
             )
             .unwrap();
+        r.print();
+        let value = r.value.unwrap();
 
         let r = interp
             .eval(
@@ -613,9 +636,11 @@ mod tests {
         assert(2 == f(1))
         assert(nonlocal_x == 2)
         ",
-                r.env,
+                value.env,
             )
             .unwrap();
+        r.print();
+        let value = r.value.unwrap();
 
         let r = interp
             .eval(
@@ -629,12 +654,19 @@ mod tests {
         }
         f(1)
         ",
-                r.env,
+                value.env,
             )
             .unwrap();
-        assert!(r.env.resolve("super_local").is_none());
+        r.print();
+        let value = r.value.unwrap();
+        assert!(value.env.resolve("super_local").is_none());
+    }
 
-        let r = interp.eval("assert(1)", r.env);
+    #[test]
+    fn errors() {
+        let mut interp = Interpreter::default();
+        let env = Environment::default();
+        let r = interp.just_eval("assert(1)", env);
         if let Err(InterpretError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
@@ -642,7 +674,7 @@ mod tests {
         }
 
         let env = Environment::default();
-        let r = interp.eval("a", env);
+        let r = interp.just_eval("a", env);
         if let Err(InterpretError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
@@ -656,6 +688,7 @@ mod tests {
         let env = Environment::default();
         let mut interp = Interpreter::default();
         let r = interp.eval("asdf()", env).unwrap();
-        debug!("x {:?}", r);
+        r.print();
+        debug!("x {:?}", r.value);
     }
 }

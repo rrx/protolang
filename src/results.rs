@@ -1,50 +1,12 @@
-//use miette::{Diagnostic, SourceSpan, NamedSource, Report};
 use crate::ast::MaybeNodeContext;
 use thiserror::Error;
-
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use crate::eval::ExprRefWithEnv;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
-//#[derive(Error, Debug, Diagnostic)]
-//#[error("oops!")]
-//#[diagnostic(code(oops::my::bad), url("https://example.com"), help("HELP"))]
-//#[derive(Error, Debug)]
-//pub struct ReportError {
-//#[source_code]
-//pub src: NamedSource,
-//#[related]
-//others: Vec<LangError>
-//}
-//impl ReportError {
-//pub fn new(filename: String, source: String, results: Vec<LangError>) -> Self{
-//Self { src: NamedSource::new(filename, source), others: results }
-//}
-//}
-
-//#[derive(Error, Debug, Diagnostic)]
-//#[error("oops!")]
-//#[diagnostic(code(oops::my::bad), url("https://example.com"), help("HELP"))]
-//#[derive(Error, Debug)]
-//pub struct ReplError {
-//#[source_code]
-//pub source_code: String,
-//#[related]
-//others: Vec<LangError>
-//}
-//impl ReplError {
-//pub fn new(filename: String, source: String, results: Vec<LangError>) -> Self{
-//Self { source_code: source, others: results }
-//}
-//}
-
-//#[derive(Error, Debug, Diagnostic)]
-//#[error("oops!")]
-//#[diagnostic()]
 #[derive(Error, Debug)]
 pub enum LangError {
     #[error("Warning: {0}")]
@@ -72,17 +34,23 @@ impl LangError {
     }
 }
 
-pub struct Results {
-    diagnostics: Vec<Diagnostic<FileId>>,
-    files: SimpleFiles<String, String>,
+pub struct Results<'a> {
+    pub diagnostics: Vec<Diagnostic<FileId>>,
+    pub files: SimpleFiles<String, String>,
+    pub value: Option<ExprRefWithEnv<'a>>
 }
 
-impl Results {
+impl<'a> Results<'a> {
     pub fn new() -> Self {
         Self {
             diagnostics: vec![],
             files: SimpleFiles::new(),
+            value: None
         }
+    }
+
+    pub fn add_result(&mut self, value: ExprRefWithEnv<'a>) {
+        self.value = Some(value);
     }
 
     pub fn add_source(&mut self, filename: String, source: String) -> FileId {
@@ -93,11 +61,11 @@ impl Results {
         let writer = StandardStream::stderr(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
         for diagnostic in self.diagnostics.iter() {
-            term::emit(&mut writer.lock(), &config, &self.files, &diagnostic);
+            let _ = term::emit(&mut writer.lock(), &config, &self.files, &diagnostic);
         }
     }
 }
-impl std::ops::Deref for Results {
+impl<'a> std::ops::Deref for Results<'a> {
     type Target = Vec<Diagnostic<FileId>>;
 
     fn deref(&self) -> &Self::Target {
@@ -105,13 +73,13 @@ impl std::ops::Deref for Results {
     }
 }
 
-impl std::ops::DerefMut for Results {
+impl<'a> std::ops::DerefMut for Results<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.diagnostics
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub struct InterpretError {
     pub context: MaybeNodeContext,
     pub kind: InterpretErrorKind,
@@ -123,7 +91,7 @@ impl std::fmt::Display for InterpretError {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum InterpretErrorKind {
     #[error("Invalid error")]
     Invalid,

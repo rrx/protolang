@@ -6,7 +6,7 @@ use crate::sexpr::*;
 use crate::tokens::Tok;
 use std::fmt;
 use std::{
-    any::Any,
+    //any::Any,
     fmt::{Debug, Display},
 };
 
@@ -29,12 +29,12 @@ pub trait Callable: Debug + Display {
     fn arity(&self) -> usize {
         0
     }
-    fn call(
+    fn call<'a> (
         &self,
-        interp: &mut Interpreter,
-        env: Environment,
+        interp: &mut Interpreter<'a>,
+        env: Environment<'a>,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError>;
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError>;
     fn box_clone(&self) -> Box<dyn Callable>;
     //fn as_any(&self) -> &dyn Any;
 }
@@ -122,12 +122,12 @@ impl Callable for Lambda {
         self.params.value.len()
     }
 
-    fn call(
+    fn call<'a>(
         &self,
-        interp: &mut Interpreter,
-        env: Environment,
+        interp: &mut Interpreter<'a>,
+        env: Environment<'a>,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         interp.call(env, self, &self.params, &args, self.expr.clone().into())
     }
 
@@ -158,8 +158,7 @@ impl Unparse for Lambda {
             self.params.unlex(),
             Tok::LeftArrow.unlex(),
             self.expr.unlex(),
-        ]
-        .join("")
+        ] .join("")
     }
 }
 impl SExpr for Lambda {
@@ -172,29 +171,43 @@ impl SExpr for Lambda {
 }
 
 use std::collections::HashMap;
-pub struct CallContainer {
-    funcs: HashMap<String, Callback>,
+//#[derive(Clone)]
+pub struct CallContainer<'a> {
+    funcs: HashMap<String, Callback<'a>>,
 }
 
-impl CallContainer {
+impl<'a> CallContainer<'a> {
     pub fn new() -> Self {
         Self {
             funcs: HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, name: String, cb: Callback) {
+    pub fn add(&mut self, name: String, cb: Callback<'a>) {
         self.funcs.insert(name, cb);
     }
 }
 
-pub type Callback =
-    Box<dyn Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static>;
+pub type Callback<'a> =
+    Box<dyn Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static>;
+
+//impl<'a> fmt::Debug for Callback<'a> {
+    //fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        //write!(f, "<callback>")
+    //}
+//}
+
+
+pub fn mk_callback<'a, F>(f: F) -> Callback<'a>
+    where F: Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static
+{
+    Box::new(f) as Callback
+}
 
 //pub trait CallFunction: Clone + FnMut(&mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static {}
 
 //pub type GenericCallable = Generic<Box<dyn CallFunction>>;
-
+/*
 #[derive(Clone)]
 pub struct Generic<F>
 where
@@ -208,7 +221,7 @@ where
 impl<F> Generic<F>
 where
     F: Clone
-        + Fn(&mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError>,
+        + Fn(&mut Interpreter, Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError>,
 {
     pub fn new(arity: usize, cb: F) -> Self {
         Self { cb, arity } //, p: std::marker::PhantomData }
@@ -241,3 +254,5 @@ where
         write!(f, "<builtin fn generic>")
     }
 }
+*/
+

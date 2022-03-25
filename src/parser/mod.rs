@@ -189,14 +189,11 @@ pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     }
 
     let loc = i.to_location().clone();
-    let (mut i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
+    let (i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
-    //i1.result(LangError::error(format!("Invalid Expr: {}", s), 0));
-    debug!("Invalidx: {:?}", &s);
     let mut expr = ExprNode::new(Expr::Invalid(s), &loc);
     // handle trailing newline
     expr.context.append(end.expand_toks());
-    //debug!("invalid: {:?}", (&i.toks(), &stmt, r, end));
     Ok((i1, expr))
 }
 
@@ -828,7 +825,7 @@ mod tests {
             let d = 2
             assert(a == b == c != d)
         ",
-                r.env,
+                r.value.unwrap().env,
             )
             .unwrap();
     }

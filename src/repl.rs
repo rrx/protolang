@@ -87,50 +87,16 @@ pub fn run_prompt() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(
-    interpreter: &mut Interpreter,
-    mut env: Environment,
+pub fn run<'a>(
+    interpreter: &mut Interpreter<'a>,
+    env: Environment<'a>,
     filename: String,
     source: &str,
-) -> anyhow::Result<ExprRefWithEnv> {
-    let mut lexer = lexer::LexerState::default();
-
-    let mut results = Results::new();
-    let file_id = results.add_source(filename, source.into());
-
-    match lexer.lex_eof(source) {
-        Ok((_, _)) => {
-            let tokens = lexer.tokens();
-            let (maybe_prog, returns) = parse_program_with_results("repl".to_string(), tokens);
-            for r in returns {
-                results.push(r.diagnostic(file_id));
-            }
-
-            if let Some(prog) = maybe_prog {
-                prog.debug();
-                let sexpr = prog.sexpr().unwrap();
-                debug!("SEXPR: {}", &sexpr);
-                match interpreter.evaluate(prog.into(), env) {
-                    Ok(r) => {
-                        results.print();
-                        Ok(r)
-                    }
-                    Err(e) => {
-                        results.push(e.diagnostic(file_id));
-                        results.print();
-                        Err(e.into())
-                    }
-                }
-            } else {
-                debug!("unable to parse");
-                Err(InterpretError::runtime(&format!("Unable to parse")).into())
-            }
-        }
-        Err(e) => {
-            debug!("{:?}", e);
-            Err(InterpretError::runtime(&format!("Unable to lex")).into())
-        }
-    }
+) -> anyhow::Result<ExprRefWithEnv<'a>> {
+    let env = Environment::default();
+    let mut interp = Interpreter::default();
+    let r = interp.eval(source, env).unwrap();
+    Ok(r.value.unwrap())
 }
 
 #[cfg(test)]
@@ -139,7 +105,7 @@ mod tests {
     use test_log::test;
     #[test]
     fn parse() {
-        parse_file("examples/test.p");
+        let _ = parse_file("examples/test.p").unwrap();
     }
 
     #[test]
@@ -150,9 +116,11 @@ mod tests {
     #[test]
     fn test() {
         let mut interp = Interpreter::default();
-        let env = Environment::default();
-        let r = run(&mut interp, env, "".into(), "let a=1").unwrap();
-        r.env.debug();
-        assert!(r.env.resolve("a").is_some());
+        {
+            let env = Environment::default();
+            let r = run(&mut interp, env, "".into(), "let a=1").unwrap();
+            r.env.debug();
+            assert!(r.env.resolve("a").is_some());
+        }
     }
 }

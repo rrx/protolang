@@ -126,13 +126,13 @@ impl ExprAccessWeakRef {
 }
 
 #[derive(Debug)]
-pub struct ExprRefWithEnv {
+pub struct ExprRefWithEnv<'a> {
     pub expr: ExprRef,
-    pub env: Environment,
+    pub env: Environment<'a>,
 }
 
-impl ExprRefWithEnv {
-    pub fn new(expr: ExprRef, env: Environment) -> Self {
+impl<'a> ExprRefWithEnv<'a> {
+    pub fn new(expr: ExprRef, env: Environment<'a>) -> Self {
         Self { expr, env }
     }
 }
@@ -149,7 +149,7 @@ impl fmt::Debug for ExprRef {
 #[derive(Clone)]
 pub struct Layer {
     values: HashTrieMap<String, ExprAccessRef>,
-    builtins: HashTrieMap<String, Callback>,
+    //builtins: HashTrieMap<String, Callback<'a>>,
     weak: HashTrieMap<String, ExprAccessWeakRef>,
 }
 
@@ -157,7 +157,7 @@ impl Default for Layer {
     fn default() -> Self {
         Self {
             values: HashTrieMap::new(),
-            builtins: HashTrieMap::new(),
+            //builtins: HashTrieMap::new(),
             weak: HashTrieMap::new(),
         }
     }
@@ -167,7 +167,7 @@ impl fmt::Debug for Layer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(self.values.iter().map(|(k, v)| (k, v)))
-            .entries(self.builtins.iter().map(|(k, _)| (k, "")))
+            //.entries(self.builtins.iter().map(|(k, _)| (k, "")))
             .finish()
     }
 }
@@ -179,7 +179,7 @@ impl Layer {
         Layer {
             values: self.values.insert(name, accessref),
             weak: HashTrieMap::new(),
-            builtins: HashTrieMap::new(),
+            //builtins: HashTrieMap::new(),
         }
     }
 
@@ -189,7 +189,7 @@ impl Layer {
         Layer {
             weak: self.weak.insert(name, accessref),
             values: HashTrieMap::new(),
-            builtins: HashTrieMap::new(),
+            //builtins: HashTrieMap::new(),
         }
     }
 
@@ -208,30 +208,53 @@ impl Layer {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Environment {
-    stack: im::vector::Vector<Layer>,
+pub struct Globals<'a> {
+    values: HashTrieMap<String, Callback<'a>>
 }
 
-impl Default for Environment {
+//#[derive(Debug, Clone)]
+pub struct Environment<'a> {
+    stack: im::vector::Vector<Layer>,
+    //globals: im::HashMap<String, Callback<'a>>
+    //globals: HashTrieMap<String, Callback<'a>>
+    p: std::marker::PhantomData<&'a Layer>
+}
+
+impl<'a> Clone for Environment<'a> {
+    fn clone(&self) -> Self {
+        Self { 
+            stack: self.stack.clone(), p: std::marker::PhantomData
+            //globals: self.globals.clone()
+        }
+    }
+}
+
+impl<'a> fmt::Debug for Environment<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<env>")
+    }
+}
+
+
+impl<'a> Default for Environment<'a> {
     fn default() -> Self {
         let mut stack = im::Vector::new();
 
-        let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
-        builtins = builtins.insert(
-            "asdf".into(),
-            Box::new(|env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
-        );
+        //let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
+        //builtins = builtins.insert(
+            //"asdf".into(),
+            //Box::new(|interp, env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
+        //);
 
         let layer = Layer {
-            builtins,
+            //builtins,
             values: HashTrieMap::new(),
             weak: HashTrieMap::new(),
         };
 
-        println!("layer: {:?}", layer); //builtins.keys().collect::<Vec<_>>());
+        println!("layer: {:?}", layer);
         stack.push_front(layer);
-        let env = Self { stack };
+        let env = Self { stack, p: std::marker::PhantomData }; //globals: HashTrieMap::new() };
         use super::builtins::*;
         env.define("clock".into(), Clock::value().into())
             .define("assert".into(), Assert::value().into())
@@ -239,7 +262,7 @@ impl Default for Environment {
     }
 }
 
-impl Environment {
+impl<'a> Environment<'a> {
     pub fn define(mut self, identifier: Identifier, value: ExprRef) -> Self {
         if self.stack.len() > 0 && self.stack.front().unwrap().contains(&identifier.name) {
             let layer = Layer::default().define(identifier, value);
@@ -270,6 +293,7 @@ impl Environment {
             .flatten()
     }
 
+    /*
     pub fn resolve_cb(&self, name: &str) -> Option<&Callback> {
         self.debug();
         self.stack
@@ -278,6 +302,7 @@ impl Environment {
             .map(|layer| layer.builtins.get(name))
             .flatten()
     }
+    */
 
     pub fn debug(&self) {
         self.stack.iter().enumerate().for_each(|(i, layer)| {
@@ -285,9 +310,9 @@ impl Environment {
             layer.values.iter().for_each(|(k, v)| {
                 debug!("\t{}: {:?}", k, v);
             });
-            layer.builtins.iter().for_each(|(k, _)| {
-                debug!("\tbuiltin: {}", k);
-            });
+            //layer.builtins.iter().for_each(|(k, _)| {
+                //debug!("\tbuiltin: {}", k);
+            //});
         })
     }
 
