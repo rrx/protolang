@@ -5,10 +5,7 @@ use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::Tok;
 use std::fmt;
-use std::{
-    //any::Any,
-    fmt::{Debug, Display},
-};
+use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
 pub struct CallableNode {
@@ -29,7 +26,7 @@ pub trait Callable: Debug + Display {
     fn arity(&self) -> usize {
         0
     }
-    fn call<'a> (
+    fn call<'a>(
         &self,
         interp: &mut Interpreter<'a>,
         env: Environment<'a>,
@@ -158,7 +155,8 @@ impl Unparse for Lambda {
             self.params.unlex(),
             Tok::LeftArrow.unlex(),
             self.expr.unlex(),
-        ] .join("")
+        ]
+        .join("")
     }
 }
 impl SExpr for Lambda {
@@ -188,18 +186,19 @@ impl<'a> CallContainer<'a> {
     }
 }
 
-pub type Callback<'a> =
-    Box<dyn Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static>;
+pub type Callback<'a> = Box<
+    dyn Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static,
+>;
 
 //impl<'a> fmt::Debug for Callback<'a> {
-    //fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        //write!(f, "<callback>")
-    //}
+//fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//write!(f, "<callback>")
+//}
 //}
 
-
 pub fn mk_callback<'a, F>(f: F) -> Callback<'a>
-    where F: Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static
+where
+    F: Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static,
 {
     Box::new(f) as Callback
 }
@@ -255,4 +254,3 @@ where
     }
 }
 */
-

@@ -14,11 +14,15 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct Interpreter<'a> {
     builtins: HashTrieMap<String, Callback<'a>>,
-    p: std::marker::PhantomData<&'a String>
+    p: std::marker::PhantomData<&'a String>,
 }
 
 impl<'a> Interpreter<'a> {
-    pub fn call_builtin(&mut self, name: String, env: Environment<'a>) -> Result<ExprRefWithEnv, InterpretError> {
+    pub fn call_builtin(
+        &mut self,
+        name: String,
+        env: Environment<'a>,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         match self.builtins.get(&name) {
             Some(cb) => {
                 debug!("cb");
@@ -27,7 +31,7 @@ impl<'a> Interpreter<'a> {
                 let result = cb(env, vec![]).unwrap();
                 Ok(result)
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -40,7 +44,10 @@ impl<'a> Default for Interpreter<'a> {
             Box::new(|env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
         );
 
-        Self { p: std::marker::PhantomData, builtins }
+        Self {
+            p: std::marker::PhantomData,
+            builtins,
+        }
     }
 }
 
@@ -69,10 +76,16 @@ impl ExprNode {
             Expr::Literal(t) => match t {
                 Tok::IntLiteral(u) => Ok(*u as f64),
                 Tok::FloatLiteral(f) => Ok(*f),
-                _ => Err(self.context.runtime_error(&format!("Expecting a number: {:?}", self))),
+                _ => Err(self
+                    .context
+                    .runtime_error(&format!("Expecting a number: {:?}", self))),
             },
-            Expr::Callable(_) => Err(self.context.runtime_error(&format!("Expecting a callable: {:?}", self))),
-            _ => Err(self.context.runtime_error(&format!("Expecting a number: {:?}", self))),
+            Expr::Callable(_) => Err(self
+                .context
+                .runtime_error(&format!("Expecting a callable: {:?}", self))),
+            _ => Err(self
+                .context
+                .runtime_error(&format!("Expecting a number: {:?}", self))),
         }
     }
 
@@ -230,7 +243,11 @@ impl<'a> Interpreter<'a> {
         Ok(r)
     }
 
-    pub fn just_eval(&mut self, v: &str, env: Environment<'a>) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+    pub fn just_eval(
+        &mut self,
+        v: &str,
+        env: Environment<'a>,
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         use crate::lexer::LexerState;
         use crate::tokens::*;
         let mut lexer = LexerState::from_str_eof(v).unwrap();
@@ -246,16 +263,14 @@ impl<'a> Interpreter<'a> {
                 }
                 Err(InterpretError::runtime(&format!("Error parsing {:?}", e)))
             }
-            Err(e) => {
-                Err(InterpretError::runtime(&format!("Error parsing {:?}", e)))
-            }
+            Err(e) => Err(InterpretError::runtime(&format!("Error parsing {:?}", e))),
         }
     }
 
     pub fn eval(&mut self, v: &str, env: Environment<'a>) -> Result<Results<'a>, InterpretError> {
         use crate::lexer::LexerState;
-        use crate::tokens::*;
         use crate::results;
+        use crate::tokens::*;
         let mut lexer = LexerState::from_str_eof(v).unwrap();
         let tokens = lexer.tokens();
         use nom::InputIter;
@@ -263,7 +278,8 @@ impl<'a> Interpreter<'a> {
         let file_id = results.add_source("<repl>".into(), v.to_string());
         tokens.iter_elements().for_each(|t| {
             if let Tok::Invalid(s) = &t.tok {
-                let error = results::LangError::Warning(format!("Invalid Token: {}", s), t.to_context());
+                let error =
+                    results::LangError::Warning(format!("Invalid Token: {}", s), t.to_context());
                 let diagnostic = error.diagnostic(file_id);
                 results.push(diagnostic);
             }
@@ -591,7 +607,7 @@ mod tests {
             )
             .unwrap();
         r.print();
-        let value = r.value.unwrap();
+        let value = r.value;
         assert!(value.env.resolve("x").unwrap().is_mut());
 
         // blocks should hide visibility
@@ -607,7 +623,7 @@ mod tests {
             )
             .unwrap();
         r.print();
-        let value = r.value.unwrap();
+        let value = r.value;
         assert!(value.env.resolve("asdf1").is_none());
 
         let r = interp
@@ -623,7 +639,7 @@ mod tests {
             )
             .unwrap();
         r.print();
-        let value = r.value.unwrap();
+        let value = r.value;
 
         let r = interp
             .eval(
@@ -640,7 +656,7 @@ mod tests {
             )
             .unwrap();
         r.print();
-        let value = r.value.unwrap();
+        let value = r.value;
 
         let r = interp
             .eval(
@@ -658,7 +674,7 @@ mod tests {
             )
             .unwrap();
         r.print();
-        let value = r.value.unwrap();
+        let value = r.value;
         assert!(value.env.resolve("super_local").is_none());
     }
 

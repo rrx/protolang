@@ -113,7 +113,7 @@ impl Callable for Clock {
         0
     }
 
-    fn call<'a> (
+    fn call<'a>(
         &self,
         _: &mut Interpreter<'a>,
         env: Environment<'a>,

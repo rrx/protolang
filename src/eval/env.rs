@@ -209,7 +209,7 @@ impl Layer {
 }
 
 pub struct Globals<'a> {
-    values: HashTrieMap<String, Callback<'a>>
+    values: HashTrieMap<String, Callback<'a>>,
 }
 
 //#[derive(Debug, Clone)]
@@ -217,14 +217,14 @@ pub struct Environment<'a> {
     stack: im::vector::Vector<Layer>,
     //globals: im::HashMap<String, Callback<'a>>
     //globals: HashTrieMap<String, Callback<'a>>
-    p: std::marker::PhantomData<&'a Layer>
+    p: std::marker::PhantomData<&'a Layer>,
 }
 
 impl<'a> Clone for Environment<'a> {
     fn clone(&self) -> Self {
-        Self { 
-            stack: self.stack.clone(), p: std::marker::PhantomData
-            //globals: self.globals.clone()
+        Self {
+            stack: self.stack.clone(),
+            p: std::marker::PhantomData, //globals: self.globals.clone()
         }
     }
 }
@@ -235,15 +235,14 @@ impl<'a> fmt::Debug for Environment<'a> {
     }
 }
 
-
 impl<'a> Default for Environment<'a> {
     fn default() -> Self {
         let mut stack = im::Vector::new();
 
         //let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
         //builtins = builtins.insert(
-            //"asdf".into(),
-            //Box::new(|interp, env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
+        //"asdf".into(),
+        //Box::new(|interp, env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
         //);
 
         let layer = Layer {
@@ -252,9 +251,11 @@ impl<'a> Default for Environment<'a> {
             weak: HashTrieMap::new(),
         };
 
-        println!("layer: {:?}", layer);
         stack.push_front(layer);
-        let env = Self { stack, p: std::marker::PhantomData }; //globals: HashTrieMap::new() };
+        let env = Self {
+            stack,
+            p: std::marker::PhantomData,
+        }; //globals: HashTrieMap::new() };
         use super::builtins::*;
         env.define("clock".into(), Clock::value().into())
             .define("assert".into(), Assert::value().into())
@@ -311,7 +312,7 @@ impl<'a> Environment<'a> {
                 debug!("\t{}: {:?}", k, v);
             });
             //layer.builtins.iter().for_each(|(k, _)| {
-                //debug!("\tbuiltin: {}", k);
+            //debug!("\tbuiltin: {}", k);
             //});
         })
     }

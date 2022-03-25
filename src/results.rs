@@ -1,6 +1,6 @@
-use crate::ast::MaybeNodeContext;
+use crate::ast::{Expr, MaybeNodeContext};
+use crate::eval::{Environment, ExprRefWithEnv};
 use thiserror::Error;
-use crate::eval::ExprRefWithEnv;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
@@ -37,7 +37,7 @@ impl LangError {
 pub struct Results<'a> {
     pub diagnostics: Vec<Diagnostic<FileId>>,
     pub files: SimpleFiles<String, String>,
-    pub value: Option<ExprRefWithEnv<'a>>
+    pub value: ExprRefWithEnv<'a>,
 }
 
 impl<'a> Results<'a> {
@@ -45,12 +45,12 @@ impl<'a> Results<'a> {
         Self {
             diagnostics: vec![],
             files: SimpleFiles::new(),
-            value: None
+            value: ExprRefWithEnv::new(Expr::Void.into(), Environment::default()),
         }
     }
 
     pub fn add_result(&mut self, value: ExprRefWithEnv<'a>) {
-        self.value = Some(value);
+        self.value = value;
     }
 
     pub fn add_source(&mut self, filename: String, source: String) -> FileId {

@@ -95,8 +95,8 @@ pub fn run<'a>(
 ) -> anyhow::Result<ExprRefWithEnv<'a>> {
     let env = Environment::default();
     let mut interp = Interpreter::default();
-    let r = interp.eval(source, env).unwrap();
-    Ok(r.value.unwrap())
+    let r = interp.eval(source, env)?;
+    Ok(r.value)
 }
 
 #[cfg(test)]

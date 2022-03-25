@@ -825,7 +825,7 @@ mod tests {
             let d = 2
             assert(a == b == c != d)
         ",
-                r.value.unwrap().env,
+                r.value.env,
             )
             .unwrap();
     }
