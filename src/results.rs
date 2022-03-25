@@ -1,8 +1,8 @@
 //use miette::{Diagnostic, SourceSpan, NamedSource, Report};
+use crate::ast::MaybeNodeContext;
 use thiserror::Error;
-use crate::ast::{MaybeNodeContext};
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -10,21 +10,20 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
-
 //#[derive(Error, Debug, Diagnostic)]
 //#[error("oops!")]
 //#[diagnostic(code(oops::my::bad), url("https://example.com"), help("HELP"))]
 //#[derive(Error, Debug)]
 //pub struct ReportError {
-    //#[source_code]
-    //pub src: NamedSource,
-    //#[related]
-    //others: Vec<LangError>
+//#[source_code]
+//pub src: NamedSource,
+//#[related]
+//others: Vec<LangError>
 //}
 //impl ReportError {
-    //pub fn new(filename: String, source: String, results: Vec<LangError>) -> Self{
-        //Self { src: NamedSource::new(filename, source), others: results }
-    //}
+//pub fn new(filename: String, source: String, results: Vec<LangError>) -> Self{
+//Self { src: NamedSource::new(filename, source), others: results }
+//}
 //}
 
 //#[derive(Error, Debug, Diagnostic)]
@@ -32,15 +31,15 @@ use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 //#[diagnostic(code(oops::my::bad), url("https://example.com"), help("HELP"))]
 //#[derive(Error, Debug)]
 //pub struct ReplError {
-    //#[source_code]
-    //pub source_code: String,
-    //#[related]
-    //others: Vec<LangError>
+//#[source_code]
+//pub source_code: String,
+//#[related]
+//others: Vec<LangError>
 //}
 //impl ReplError {
-    //pub fn new(filename: String, source: String, results: Vec<LangError>) -> Self{
-        //Self { source_code: source, others: results }
-    //}
+//pub fn new(filename: String, source: String, results: Vec<LangError>) -> Self{
+//Self { source_code: source, others: results }
+//}
 //}
 
 //#[derive(Error, Debug, Diagnostic)]
@@ -51,7 +50,7 @@ pub enum LangError {
     #[error("Warning: {0}")]
     Warning(String, MaybeNodeContext),
     #[error("Error: {0}")]
-    Error(String, MaybeNodeContext)
+    Error(String, MaybeNodeContext),
 }
 
 type FileId = usize;
@@ -66,27 +65,26 @@ impl LangError {
 
     pub fn diagnostic(&self, file_id: FileId) -> Diagnostic<FileId> {
         match self {
-            Self::Warning(msg, context) | Self::Error(msg, context) => {
-                Diagnostic::warning()
-                    .with_message(msg)
-                    .with_labels(vec![
-                                 Label::primary(file_id, context.range())
-                    ])
-            }
+            Self::Warning(msg, context) | Self::Error(msg, context) => Diagnostic::warning()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(file_id, context.range())]),
         }
     }
 }
 
 pub struct Results {
     diagnostics: Vec<Diagnostic<FileId>>,
-    files: SimpleFiles<String, String>
+    files: SimpleFiles<String, String>,
 }
 
 impl Results {
     pub fn new() -> Self {
-        Self { diagnostics: vec![], files: SimpleFiles::new() }
+        Self {
+            diagnostics: vec![],
+            files: SimpleFiles::new(),
+        }
     }
-    
+
     pub fn add_source(&mut self, filename: String, source: String) -> FileId {
         self.files.add(filename, source)
     }
@@ -98,7 +96,6 @@ impl Results {
             term::emit(&mut writer.lock(), &config, &self.files, &diagnostic);
         }
     }
-
 }
 impl std::ops::Deref for Results {
     type Target = Vec<Diagnostic<FileId>>;
@@ -117,7 +114,7 @@ impl std::ops::DerefMut for Results {
 #[derive(Debug, Error)]
 pub struct InterpretError {
     pub context: MaybeNodeContext,
-    pub kind: InterpretErrorKind
+    pub kind: InterpretErrorKind,
 }
 
 impl std::fmt::Display for InterpretError {
@@ -144,36 +141,33 @@ impl InterpretError {
     pub fn runtime(m: &str) -> Self {
         Self {
             kind: InterpretErrorKind::Runtime(m.to_string()),
-            context: MaybeNodeContext::default()
+            context: MaybeNodeContext::default(),
         }
     }
 
     pub fn diagnostic(&self, file_id: FileId) -> Diagnostic<FileId> {
         match &self.kind {
-            InterpretErrorKind::Runtime(message) => {
-                Diagnostic::error()
-                    .with_message(message)
-                    .with_labels(vec![
-                                 Label::primary(file_id, self.context.range())
-                    ])
-            }
-            _ => {
-                Diagnostic::error()
-                    .with_message(format!("{}", self))
-                    .with_labels(vec![
-                                 Label::primary(file_id, self.context.range())
-                    ])
-            }
+            InterpretErrorKind::Runtime(message) => Diagnostic::error()
+                .with_message(message)
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+            _ => Diagnostic::error()
+                .with_message(format!("{}", self))
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
         }
     }
 }
 
 impl MaybeNodeContext {
     pub fn runtime_error(&self, m: &str) -> InterpretError {
-        InterpretError { kind: InterpretErrorKind::Runtime(m.to_string()), context: self.clone() }
+        InterpretError {
+            kind: InterpretErrorKind::Runtime(m.to_string()),
+            context: self.clone(),
+        }
     }
     pub fn error(&self, kind: InterpretErrorKind) -> InterpretError {
-        InterpretError { kind, context: self.clone() }
+        InterpretError {
+            kind,
+            context: self.clone(),
+        }
     }
 }
-

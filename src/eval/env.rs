@@ -1,6 +1,5 @@
-use super::*;
-use crate::ast::*;
 use crate::ast::function::Callback;
+use crate::ast::*;
 use crate::results::InterpretError;
 use log::debug;
 use rpds::HashTrieMap;
@@ -11,13 +10,11 @@ use std::rc::{Rc, Weak};
 use std::result::Result;
 
 #[derive(Clone)]
-//pub struct ExprRef(pub RefCell<Rc<Expr>>);
 pub struct ExprRef(pub Rc<RefCell<ExprNode>>);
 
 impl ExprRef {
     pub fn new(v: ExprNode) -> Self {
         Self(Rc::new(RefCell::new(v)))
-        //Self(RefCell::new(Rc::new(v)))
     }
 
     pub fn mutate(self, expr: ExprNode) -> Self {
@@ -36,7 +33,6 @@ impl ExprRef {
 
 impl std::ops::Deref for ExprRef {
     type Target = Rc<RefCell<ExprNode>>;
-    //type Target = RefCell<Rc<Expr>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -73,8 +69,6 @@ impl From<Box<ExprNode>> for ExprRef {
     }
 }
 
-
-
 #[derive(Clone, Debug)]
 pub struct ExprWeakRef(pub Weak<RefCell<ExprNode>>);
 
@@ -84,7 +78,6 @@ impl ExprWeakRef {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct ExprAccessRef {
     pub expr: ExprRef,
@@ -93,7 +86,10 @@ pub struct ExprAccessRef {
 
 impl ExprAccessRef {
     pub fn new(expr: ExprRef, modifier: &VarModifier) -> Self {
-        Self { expr, modifier: modifier.clone() }
+        Self {
+            expr,
+            modifier: modifier.clone(),
+        }
     }
     pub fn is_mut(&self) -> bool {
         self.modifier == VarModifier::Mutable
@@ -106,7 +102,6 @@ impl From<Expr> for ExprAccessRef {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct ExprAccessWeakRef {
     pub expr: ExprWeakRef,
@@ -114,13 +109,19 @@ pub struct ExprAccessWeakRef {
 }
 impl ExprAccessWeakRef {
     pub fn new(expr: &ExprRef, modifier: VarModifier) -> Self {
-        Self { expr: ExprWeakRef::new(&expr), modifier }
+        Self {
+            expr: ExprWeakRef::new(&expr),
+            modifier,
+        }
     }
     pub fn is_mut(&self) -> bool {
         self.modifier == VarModifier::Mutable
     }
     pub fn upgrade(&self) -> Option<ExprAccessRef> {
-        self.expr.0.upgrade().map(|e| ExprAccessRef::new(ExprRef(e), &self.modifier))
+        self.expr
+            .0
+            .upgrade()
+            .map(|e| ExprAccessRef::new(ExprRef(e), &self.modifier))
     }
 }
 
@@ -166,7 +167,7 @@ impl fmt::Debug for Layer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(self.values.iter().map(|(k, v)| (k, v)))
-            .entries(self.builtins.iter().map(|(k, v)| (k, "")))
+            .entries(self.builtins.iter().map(|(k, _)| (k, "")))
             .finish()
     }
 }
@@ -199,12 +200,10 @@ impl Layer {
     pub fn get(&self, name: &str) -> Option<ExprAccessRef> {
         match self.values.get(name) {
             Some(expr) => Some(expr.clone()),
-            None => {
-                match self.weak.get(name) {
-                    Some(expr) => expr.upgrade(),
-                    None => None,
-                }
-            }
+            None => match self.weak.get(name) {
+                Some(expr) => expr.upgrade(),
+                None => None,
+            },
         }
     }
 }
@@ -218,16 +217,19 @@ impl Default for Environment {
     fn default() -> Self {
         let mut stack = im::Vector::new();
 
-        let mut builtins: HashTrieMap<String,Callback> = HashTrieMap::new();
-        builtins = builtins.insert("asdf".into(), Box::new(|env,args| {
-            Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
-        }));
+        let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
+        builtins = builtins.insert(
+            "asdf".into(),
+            Box::new(|env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
+        );
 
         let layer = Layer {
-            builtins, values: HashTrieMap::new(), weak: HashTrieMap::new()
+            builtins,
+            values: HashTrieMap::new(),
+            weak: HashTrieMap::new(),
         };
 
-        println!("layer: {:?}", layer);//builtins.keys().collect::<Vec<_>>()); 
+        println!("layer: {:?}", layer); //builtins.keys().collect::<Vec<_>>());
         stack.push_front(layer);
         let env = Self { stack };
         use super::builtins::*;
@@ -239,7 +241,6 @@ impl Default for Environment {
 
 impl Environment {
     pub fn define(mut self, identifier: Identifier, value: ExprRef) -> Self {
-        let name = identifier.name.clone();
         if self.stack.len() > 0 && self.stack.front().unwrap().contains(&identifier.name) {
             let layer = Layer::default().define(identifier, value);
             self.stack.push_front(layer);
@@ -265,7 +266,8 @@ impl Environment {
         self.stack
             .iter()
             .find(|layer| layer.values.contains_key(name))
-            .map(|layer| layer.get(name)).flatten()
+            .map(|layer| layer.get(name))
+            .flatten()
     }
 
     pub fn resolve_cb(&self, name: &str) -> Option<&Callback> {
@@ -273,7 +275,8 @@ impl Environment {
         self.stack
             .iter()
             .find(|layer| layer.builtins.contains_key(name))
-            .map(|layer| layer.builtins.get(name)).flatten()
+            .map(|layer| layer.builtins.get(name))
+            .flatten()
     }
 
     pub fn debug(&self) {

@@ -1,34 +1,28 @@
 use super::*;
 use super::{ExprRef, ExprRefWithEnv};
+use crate::ast::function::Callback;
 use crate::ast::*;
-use crate::parser::Unparse;
+use crate::results::{InterpretError, InterpretErrorKind};
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
-use crate::results::{InterpretError, InterpretErrorKind};
-use crate::ast::function::Callback;
+use log::debug;
 use rpds::HashTrieMap;
 use std::fmt;
-use log::debug;
-//use std::borrow::Borrow;
-//use std::convert::From;
 use std::ops::Deref;
 use std::rc::Rc;
-//use std::result::Result;
-//use miette::{Diagnostic, SourceSpan, IntoDiagnostic, WrapErr, Result};
-//use thiserror::Error;
-
 
 #[derive(Clone)]
 pub struct Interpreter {
-    builtins: HashTrieMap<String, Callback>
+    builtins: HashTrieMap<String, Callback>,
 }
 
 impl Default for Interpreter {
     fn default() -> Self {
-        let mut builtins: HashTrieMap<String,Callback> = HashTrieMap::new();
-        builtins = builtins.insert("asdf".into(), Box::new(|env,args| {
-            Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
-        }));
+        let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
+        builtins = builtins.insert(
+            "asdf".into(),
+            Box::new(|env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
+        );
 
         Self { builtins }
     }
@@ -37,11 +31,10 @@ impl Default for Interpreter {
 impl fmt::Debug for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
-            .entries(self.builtins.iter().map(|(k, v)| (k, "")))
+            .entries(self.builtins.iter().map(|(k, _)| (k, "")))
             .finish()
     }
 }
-
 
 impl Interpreter {}
 
@@ -50,9 +43,12 @@ impl ExprNode {
         match &self.value {
             Expr::Literal(t) => match t {
                 Tok::BoolLiteral(b) => Ok(*b),
-                _ => Err(self.context.error(InterpretErrorKind::ExpectBool))
+                _ => Err(self.context.error(InterpretErrorKind::ExpectBool)),
             },
-            _ => Err(InterpretError::runtime(&format!("Expecting a literal: {:?}", self))),
+            _ => Err(InterpretError::runtime(&format!(
+                "Expecting a literal: {:?}",
+                self
+            ))),
         }
     }
 
@@ -61,18 +57,27 @@ impl ExprNode {
             Expr::Literal(t) => match t {
                 Tok::IntLiteral(u) => Ok(*u as f64),
                 Tok::FloatLiteral(f) => Ok(*f),
-                _ => Err(InterpretError::runtime(&format!("Expecting a number: {:?}", self)))
+                _ => Err(InterpretError::runtime(&format!(
+                    "Expecting a number: {:?}",
+                    self
+                ))),
             },
-            Expr::Callable(_) => Err(InterpretError::runtime(&format!("Expecting a callable: {:?}", self))),
-                //message: format!(
-                //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
-                //self,
-                //e.loc.line,
-                //e.loc.col,
-                //e.loc.fragment
-                //),
-                //line: e.loc.line,
-            _ => Err(InterpretError::runtime(&format!("Expecting a number: {:?}", self)))
+            Expr::Callable(_) => Err(InterpretError::runtime(&format!(
+                "Expecting a callable: {:?}",
+                self
+            ))),
+            //message: format!(
+            //"Expecting a number, got a lambda: {:?} on line:{}, column:{}, fragment:{}",
+            //self,
+            //e.loc.line,
+            //e.loc.col,
+            //e.loc.fragment
+            //),
+            //line: e.loc.line,
+            _ => Err(InterpretError::runtime(&format!(
+                "Expecting a number: {:?}",
+                self
+            ))),
         }
     }
 
@@ -190,10 +195,10 @@ impl Interpreter {
     ) -> Result<ExprRefWithEnv, InterpretError> {
         if args.len() != f.arity() {
             return Err(params.context.runtime_error(&format!(
-                    "Mismatched params on function. Expecting {}, got {}",
-                    f.arity(),
-                    args.len()
-                )));
+                "Mismatched params on function. Expecting {}, got {}",
+                f.arity(),
+                args.len()
+            )));
         }
 
         let param_idents = params
@@ -201,7 +206,9 @@ impl Interpreter {
             .iter()
             .map(|param| match param.value.try_ident() {
                 Some(ident) => Ok(ident),
-                None => Err(param.context.runtime_error(&format!("Invalid Argument on Lambda, got {:?}", param))),
+                None => Err(param
+                    .context
+                    .runtime_error(&format!("Invalid Argument on Lambda, got {:?}", param))),
             })
             .collect::<Vec<_>>();
 
@@ -211,7 +218,9 @@ impl Interpreter {
         ) = param_idents.into_iter().partition(|p| p.is_ok());
 
         if e.len() > 0 {
-            return Err(params.context.runtime_error(&format!("Invalid Argument on Lambda, got {:?}", e)));
+            return Err(params
+                .context
+                .runtime_error(&format!("Invalid Argument on Lambda, got {:?}", e)));
         }
 
         // push variables into scope
@@ -306,12 +315,13 @@ impl Interpreter {
                     let e = eref.expr.as_ref().borrow().deref().clone();
                     eval_elements.push(e);
                 }
-                Ok(ExprRefWithEnv::new(eval_elements.pop().unwrap().into(), newenv))
+                Ok(ExprRefWithEnv::new(
+                    eval_elements.pop().unwrap().into(),
+                    newenv,
+                ))
             }
 
-            Expr::Binary(op, left, right) => {
-                self.evaluate_binary(op, left, right, env)
-            }
+            Expr::Binary(op, left, right) => self.evaluate_binary(op, left, right, env),
 
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
@@ -330,7 +340,9 @@ impl Interpreter {
 
             Expr::Callable(e) => {
                 debug!("Callable({:?})", &e);
-                Err(node.context.runtime_error(&format!("Unimplemented callable::{:?}", &e)))
+                Err(node
+                    .context
+                    .runtime_error(&format!("Unimplemented callable::{:?}", &e)))
             }
 
             Expr::Lambda(e) => {
@@ -356,14 +368,13 @@ impl Interpreter {
                         match self.builtins.get(&ident.name) {
                             Some(cb) => {
                                 debug!("cb");
-                                let mut cb2 = cb.clone();
+                                let cb2 = cb.clone();
                                 let result = cb2(env, vec![])?;
                                 Some(Ok(result))
-
-                                //Some(Ok(ExprRefWithEnv::new(Expr::Void.into(), env)))
                             }
                             _ => {
-                                let x: ExprAccessRef = env.get_at(&ident.name, &node.context)?.clone();
+                                let x: ExprAccessRef =
+                                    env.get_at(&ident.name, &node.context)?.clone();
                                 let expr = x.expr.as_ref().borrow();
                                 match expr.try_callable() {
                                     Some(c) => {
@@ -371,7 +382,10 @@ impl Interpreter {
                                         let mut newenv = env;
                                         for arg in args {
                                             let v = self.evaluate(arg.clone().into(), newenv)?;
-                                            debug!("arg context {:?}", (&arg.context, &v.expr.borrow().context));
+                                            debug!(
+                                                "arg context {:?}",
+                                                (&arg.context, &v.expr.borrow().context)
+                                            );
                                             eval_args.push(v.expr);
                                             newenv = v.env;
                                         }
@@ -382,29 +396,28 @@ impl Interpreter {
                                         // newenv.clone here creates a stack branch
                                         let result = c.call(self, newenv.clone(), eval_args)?;
                                         debug!("Call Result {:?}", &result);
-                                        Some(Ok(result)) //ExprRefWithEnv::new(result.into(), newenv)))
+                                        Some(Ok(result))
                                     }
                                     _ => None,
                                 }
                             }
-
                         }
-
                     }
                     _ => None,
                 };
 
-                //let env = Environment::default();
                 if let Some(r) = f {
                     r
                 } else {
-                    Err(node.context.runtime_error(&format!("Not a function: {:?}", f)))
+                    Err(node
+                        .context
+                        .runtime_error(&format!("Not a function: {:?}", f)))
                 }
             }
 
             Expr::Block(exprs) => {
                 // default return value for a block is void
-                let mut result = Expr::Void.into(); //List(vec![]).into();
+                let mut result = Expr::Void.into();
                 let original_env = env.clone();
                 let mut newenv = env;
                 for expr in exprs {
@@ -425,7 +438,7 @@ impl Interpreter {
             }
 
             Expr::Program(exprs) => {
-                let mut result = Expr::Void.into(); //List(vec![]).into();
+                let mut result = Expr::Void.into();
                 let mut newenv = env;
                 for expr in exprs {
                     let r = self.evaluate(expr.clone().into(), newenv);
@@ -455,16 +468,22 @@ impl Interpreter {
                 _ => unimplemented!(),
             },
 
-            Expr::Chain(_, _) => {
-                Err(node.context.runtime_error("Not implemented"))
-            }
+            Expr::Chain(_, _) => Err(node.context.runtime_error("Not implemented")),
 
-            Expr::Invalid(s) => Err(node.context.runtime_error(&format!("Invalid expr: {:?}", s))),
+            Expr::Invalid(s) => Err(node
+                .context
+                .runtime_error(&format!("Invalid expr: {:?}", s))),
             Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
         }
     }
 
-    fn evaluate_binary(&mut self, op: &Operator, left: &ExprNode, right: &ExprNode, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+    fn evaluate_binary(
+        &mut self,
+        op: &Operator,
+        left: &ExprNode,
+        right: &ExprNode,
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         match op {
             Operator::Declare => {
                 return if let Some(ident) = left.try_ident() {
@@ -473,7 +492,9 @@ impl Interpreter {
                     let env = eval_right.env.define(ident, eval_right.expr.clone());
                     Ok(ExprRefWithEnv::new(eval_right.expr, env))
                 } else {
-                    Err(left.context.runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
+                    Err(left
+                        .context
+                        .runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
                 };
             }
             Operator::Assign => {
@@ -483,9 +504,9 @@ impl Interpreter {
                         left.debug();
                         env.debug();
                         return Err(left.context.runtime_error(&format!(
-                                    "Invalid Assignment, '{}' Not mutable",
-                                    &ident.name
-                                    )));
+                            "Invalid Assignment, '{}' Not mutable",
+                            &ident.name
+                        )));
                     }
 
                     let eval_right = self.evaluate(right.clone().into(), env)?;
@@ -493,10 +514,12 @@ impl Interpreter {
                     let expr = access
                         .expr
                         .mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
-                    //env.define(ident, eval_right.expr.clone());
+
                     Ok(ExprRefWithEnv::new(expr, eval_right.env))
                 } else {
-                    Err(left.context.runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
+                    Err(left
+                        .context
+                        .runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
                 };
             }
             _ => (),
@@ -519,13 +542,15 @@ impl Interpreter {
             Operator::LessThan => eval_left.lt(&eval_right),
             Operator::Equal => eval_left.eq(&eval_right),
             Operator::NotEqual => eval_left.ne(&eval_right),
-            _ => Err(eval_left.context.runtime_error(&format!("Unimplemented expression op: Operator::{:?}", op)))
+            _ => Err(eval_left
+                .context
+                .runtime_error(&format!("Unimplemented expression op: Operator::{:?}", op))),
         }
         .map(|v| {
             ExprRefWithEnv::new(
                 ExprNode::new(v.into(), &left.context.to_location()).into(),
                 v_right.env,
-                )
+            )
         })
     }
 }
@@ -609,9 +634,7 @@ mod tests {
             .unwrap();
         assert!(r.env.resolve("super_local").is_none());
 
-        let r = interp
-            .eval("assert(1)", r.env,
-            );
+        let r = interp.eval("assert(1)", r.env);
         if let Err(InterpretError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {

@@ -32,7 +32,7 @@ struct Op {
     // Only applicable for binary, or ternary operators
     rbp: Prec,
 
-    op_type: OpType
+    op_type: OpType,
 }
 
 #[derive(Clone, Debug)]
@@ -41,7 +41,7 @@ pub enum OpType {
     RightChain,
     LeftAssoc,
     RightAssoc,
-    Default
+    Default,
 }
 
 impl Op {
@@ -51,16 +51,16 @@ impl Op {
             lbp,
             nbp,
             rbp,
-            op_type
+            op_type,
         }
     }
 
     pub fn new_left_chain(op: &Tok, p: i8) -> Self {
-        Self::new(op, Some(p), Some(p+1), Some(p + 2), OpType::LeftChain)
+        Self::new(op, Some(p), Some(p + 1), Some(p + 2), OpType::LeftChain)
     }
 
     pub fn new_right_chain(op: &Tok, p: i8) -> Self {
-        Self::new(op, Some(p), Some(p+1), Some(p + 2), OpType::RightChain)
+        Self::new(op, Some(p), Some(p + 1), Some(p + 2), OpType::RightChain)
     }
 
     pub fn new_left_assoc(op: &Tok, p: i8) -> Self {
@@ -80,11 +80,17 @@ impl Op {
     pub fn try_from(op: &Tok) -> Option<Self> {
         match op {
             // non-associative ops, indicated by rbp = lbp + 1, nbp = lbp -1
-            
+
             //Tok::Assign => Some(Self::new_right_assoc(op, 10)),
             // With assign we want to bind more strongly with the LHS
             // Alternatively, we can move assignment outside of the pratt parser
-            Tok::Assign => Some(Self::new(op, Some(20), Some(10), Some(10), OpType::RightAssoc)),
+            Tok::Assign => Some(Self::new(
+                op,
+                Some(20),
+                Some(10),
+                Some(10),
+                OpType::RightAssoc,
+            )),
 
             Tok::Elvis => Some(Self::new_left_assoc(op, 35)),
             Tok::Comma => Some(Self::new_left_assoc(op, 1)),
@@ -117,8 +123,8 @@ impl Op {
             // operand of. 127, will allows to be the left operand for everything
             Tok::Exclamation => Some(Self::new(op, Some(40), Some(127), None, OpType::Default)),
 
-            Tok::Equals => Some(Self::new_left_chain(op, 10)),//(op, Some(10), Some(9), Some(20))),
-            Tok::NotEquals => Some(Self::new_left_chain(op, 10)),// Some(9), Some(20))),
+            Tok::Equals => Some(Self::new_left_chain(op, 10)), //(op, Some(10), Some(9), Some(20))),
+            Tok::NotEquals => Some(Self::new_left_chain(op, 10)), // Some(9), Some(20))),
 
             Tok::LTE => Some(Self::new_left_chain(op, 15)),
             Tok::LT => Some(Self::new_left_chain(op, 15)),
@@ -271,7 +277,7 @@ impl Op {
                     // binary parses the RHS, and returns a binary node
                     let (i, y) = extra(i, self.rbp, depth + 1)?;
                     let op = Operator::from_tok(&token.tok).unwrap();
-                  
+
                     debug!("Binary LHS: {:?}", &x);
                     debug!("Binary Op: {:?}", &op);
                     debug!("Binary RHS: {:?}", &y);
@@ -285,7 +291,7 @@ impl Op {
                             let mut right = y;
                             right.context.prepend(token.expand_toks());
                             let args = vec![*a, *b, right];
-                            let expr = Expr::Chain(left_op,  args);
+                            let expr = Expr::Chain(left_op, args);
                             let node = i.node(expr);
                             (i, node)
                         }
@@ -294,7 +300,7 @@ impl Op {
                             let mut right = y;
                             right.context.prepend(token.expand_toks());
                             args.push(right);
-                            let expr = Expr::Chain(left_op,  args);
+                            let expr = Expr::Chain(left_op, args);
                             let node = i.node(expr);
                             (i, node)
                         }
@@ -322,7 +328,6 @@ impl Op {
                                     let (i, _) = take_one_any(i.clone())?;
                                     let (i, t) = self.left_denotation(i, &right, &n, depth)?;
                                     debug!("chain consume: {:?}", (self.lbp, next_op, &t));
-
 
                                     // merge node and t which can both be binary chains
                                     let mut exprs = vec![];
@@ -965,7 +970,6 @@ mod tests {
             // comma in ternary op
             ("a ? b, c : d", "(? a (, b c) d)"),
             ("a! ^ b", "(^ (! a) b)"),
-
             // ( a < b < c)
             ("a < b < c", "(chain (< a b) (< b c))"),
             ("a < b < c < d", "(chain (< a b) (< b c) (< c d))"),
@@ -974,10 +978,18 @@ mod tests {
             ("( a <= b <= c <= d )", "(chain (<= a b) (<= b c) (<= c d))"),
             ("( d = a < b <= c )", "(= d (chain (< a b) (<= b c)))"),
             ("( a < b <= c == d)", "(== (chain (< a b) (<= b c)) d)"),
-            ("a < b <= c = d = e = f", "(chain (< a b) (<= b (= c (= d (= e f)))))"),
-            ("a == b == c == d == e", "(chain (== a b) (== b c) (== c d) (== d e))"),
-            ("a != b != c != d != e", "(chain (!= a b) (!= b c) (!= c d) (!= d e))"),
-
+            (
+                "a < b <= c = d = e = f",
+                "(chain (< a b) (<= b (= c (= d (= e f)))))",
+            ),
+            (
+                "a == b == c == d == e",
+                "(chain (== a b) (== b c) (== c d) (== d e))",
+            ),
+            (
+                "a != b != c != d != e",
+                "(chain (!= a b) (!= b c) (!= c d) (!= d e))",
+            ),
             // this is sort of right, but we probably don't want to duplicate the inner expression?
             // we might evaluate this twice
             ("a == b < c == d", "(chain (== a (< b c)) (== (< b c) d))"),

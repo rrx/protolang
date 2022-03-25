@@ -1,6 +1,6 @@
+use crate::ast::{Context2, MaybeNodeContext};
 use crate::lexer::{Location, Surround};
 use crate::results::LangError;
-use crate::ast::{Context2, MaybeNodeContext};
 use nom::*;
 use nom_locate::LocatedSpan;
 use std::fmt;
@@ -341,7 +341,7 @@ impl<'a> Tokens<'a> {
     //Ok((i, Tokens::new(&toks[..])))
     //}
     //pub fn result(&mut self, result: LangError) {
-        //self.results.push(result);
+    //self.results.push(result);
     //}
 
     pub fn to_string(&self) -> String {

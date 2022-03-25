@@ -18,7 +18,7 @@ pub struct Generic<'a, F> where F: Clone {
     p: std::marker::PhantomData<&'a F>
 }
 
-impl<'a, F> Generic<'a, F> 
+impl<'a, F> Generic<'a, F>
 where F: Clone + Fn(&'a mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> {
     pub fn new(arity: usize, cb: F) -> Self {
         Self { cb, arity, p: std::marker::PhantomData }
@@ -37,8 +37,8 @@ impl<'a, F> fmt::Display for Generic<'a, F> where F: Clone {
     }
 }
 
-impl<'a, F> Callable for Generic<'a, F> 
-where F: Clone + Fn(&'a mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> 
+impl<'a, F> Callable for Generic<'a, F>
+where F: Clone + Fn(&'a mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError>
 {
     fn call(
         &'a self,
@@ -89,7 +89,7 @@ impl Callable for ShowStack {
     }
 
     //fn as_any(&self) -> &dyn Any {
-        //self
+    //self
     //}
 }
 
@@ -135,7 +135,7 @@ impl Callable for Clock {
     }
 
     //fn as_any(&self) -> &dyn Any {
-        //self
+    //self
     //}
 }
 
@@ -170,8 +170,14 @@ impl Callable for Assert {
         match v {
             Some(Tok::BoolLiteral(true)) => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
             Some(Tok::BoolLiteral(false)) => Err(node.context.runtime_error("Assertion error")),
-            Some(expr) => Err(node.context.runtime_error(&format!("Invalid args, not a bool")).into()),
-            _ => Err(node.context.runtime_error(&format!("Invalid Type: {:?}", args)).into()),
+            Some(expr) => Err(node
+                .context
+                .runtime_error(&format!("Invalid args, not a bool"))
+                .into()),
+            _ => Err(node
+                .context
+                .runtime_error(&format!("Invalid Type: {:?}", args))
+                .into()),
         }
     }
 
@@ -180,6 +186,6 @@ impl Callable for Assert {
     }
 
     //fn as_any(&self) -> &dyn Any {
-        //self
+    //self
     //}
 }

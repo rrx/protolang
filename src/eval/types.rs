@@ -1,19 +1,21 @@
-
 #[derive(Clone)]
 pub enum TypeModifier {
     Ref,
-    Default
+    Default,
 }
 
 #[derive(Clone)]
 pub struct TypeSig {
     modifier: TypeModifier,
-    traits: Vec<Trait>
+    traits: Vec<Trait>,
 }
 
 impl Default for TypeSig {
     fn default() -> Self {
-        Self { modifier: TypeModifier::Default, traits: vec![] }
+        Self {
+            modifier: TypeModifier::Default,
+            traits: vec![],
+        }
     }
 }
 
@@ -23,7 +25,7 @@ pub struct ErrorSig {}
 #[derive(Clone)]
 pub enum FunctionModifier {
     Pure,
-    Default
+    Default,
 }
 
 #[derive(Clone)]
@@ -31,7 +33,7 @@ pub struct FunctionSig {
     modifier: FunctionModifier,
     args: Vec<TypeSig>,
     ret: TypeSig,
-    err: Vec<ErrorSig>
+    err: Vec<ErrorSig>,
 }
 
 impl FunctionSig {
@@ -39,29 +41,26 @@ impl FunctionSig {
     fn id() -> Self {
         let arg = TypeSig::default();
         let ret = TypeSig::default();
-        Self { 
+        Self {
             modifier: FunctionModifier::Pure,
             args: vec![arg],
             ret,
-            err: vec![]
+            err: vec![],
         }
     }
 
     fn single_pure(arg: TypeSig) -> Self {
         let ret = arg.clone();
-        Self { 
+        Self {
             modifier: FunctionModifier::Pure,
             args: vec![arg],
             ret,
-            err: vec![]
+            err: vec![],
         }
     }
 }
 
-
 #[derive(Clone)]
 pub struct Trait {
-    sigs: Vec<FunctionSig>
+    sigs: Vec<FunctionSig>,
 }
-
-

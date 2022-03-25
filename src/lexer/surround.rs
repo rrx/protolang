@@ -1,6 +1,6 @@
 use crate::tokens::Tok;
-use std::fmt;
 use miette::SourceSpan;
+use std::fmt;
 
 #[derive(PartialEq, Clone)]
 pub struct Location {
@@ -40,7 +40,7 @@ impl Location {
         }
     }
     //pub fn span(&self) -> SourceSpan {
-        //SourceSpan::new(self.offset, self.fragment.len())
+    //SourceSpan::new(self.offset, self.fragment.len())
     //}
 }
 

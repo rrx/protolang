@@ -218,15 +218,19 @@ pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, expr))
 }
 
-
-pub fn parse_program_with_results(filename: String, i: Tokens) -> (Option<ExprNode>, Vec<LangError>) {
+pub fn parse_program_with_results(
+    filename: String,
+    i: Tokens,
+) -> (Option<ExprNode>, Vec<LangError>) {
     let context = i.to_context();
     match parse_program(i) {
         Ok((prog_rest, prog)) => {
             let mut results = vec![];
             if prog_rest.tok.len() > 0 {
-                results.push(
-                    LangError::Warning(format!("Not all tokens parsed: {:?}", prog_rest.toks()), prog_rest.to_context()));
+                results.push(LangError::Warning(
+                    format!("Not all tokens parsed: {:?}", prog_rest.toks()),
+                    prog_rest.to_context(),
+                ));
                 (None, results)
             } else {
                 (Some(prog), results)
@@ -237,7 +241,10 @@ pub fn parse_program_with_results(filename: String, i: Tokens) -> (Option<ExprNo
                 .errors
                 .iter()
                 .map(|(tokens, err)| {
-                    LangError::Error( format!("Error: {:?}, {:?}", err, tokens.toks()), context.clone())
+                    LangError::Error(
+                        format!("Error: {:?}, {:?}", err, tokens.toks()),
+                        context.clone(),
+                    )
                 })
                 .collect();
             (None, results)
@@ -812,13 +819,17 @@ mod tests {
         let mut interp = crate::eval::Interpreter::default();
 
         let r = interp.eval("assert(1 == 1 == 1 == 1)", env).unwrap();
-        let r = interp.eval("
+        let r = interp
+            .eval(
+                "
             let a = 1
             let b = 1
             let c = 1
             let d = 2
             assert(a == b == c != d)
-        ", r.env).unwrap();
+        ",
+                r.env,
+            )
+            .unwrap();
     }
-
 }

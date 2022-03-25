@@ -29,13 +29,18 @@ pub fn run_file(filename: &str) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(filename.clone())?.to_string();
     let mut interpreter = Interpreter::default();
     let env = Environment::default();
-    match run(&mut interpreter, env.clone(), filename.to_string(), &contents) {
+    match run(
+        &mut interpreter,
+        env.clone(),
+        filename.to_string(),
+        &contents,
+    ) {
         Ok(r) => {
             r.env.debug();
             println!("> {:?}", r.expr);
             Ok(())
         }
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
@@ -58,7 +63,7 @@ pub fn run_prompt() -> anyhow::Result<()> {
                         println!("> {:?}", r.expr);
                         env = r.env;
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
 
