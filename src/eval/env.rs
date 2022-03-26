@@ -126,13 +126,13 @@ impl ExprAccessWeakRef {
 }
 
 #[derive(Debug)]
-pub struct ExprRefWithEnv<'a> {
+pub struct ExprRefWithEnv {
     pub expr: ExprRef,
-    pub env: Environment<'a>,
+    pub env: Environment,
 }
 
-impl<'a> ExprRefWithEnv<'a> {
-    pub fn new(expr: ExprRef, env: Environment<'a>) -> Self {
+impl ExprRefWithEnv {
+    pub fn new(expr: ExprRef, env: Environment) -> Self {
         Self { expr, env }
     }
 }
@@ -208,17 +208,17 @@ impl Layer {
     }
 }
 
-pub struct Globals<'a> {
-    values: HashTrieMap<String, Callback<'a>>,
+pub struct Globals {
+    values: HashTrieMap<String, Callback>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Environment<'a> {
+pub struct Environment {
     stack: im::vector::Vector<Layer>,
-    builtins: CallTable<'a>,
+    builtins: CallTable,
     //globals: im::HashMap<String, Callback<'a>>
     //globals: HashTrieMap<String, Callback<'a>>
-    p: std::marker::PhantomData<&'a Layer>,
+    //p: std::marker::PhantomData<&'a Layer>,
 }
 
 /*
@@ -239,7 +239,7 @@ impl<'a> fmt::Debug for Environment<'a> {
 }
 */
 
-impl<'a> Default for Environment<'a> {
+impl Default for Environment {
     fn default() -> Self {
         let mut stack = im::Vector::new();
 
@@ -259,7 +259,7 @@ impl<'a> Default for Environment<'a> {
         let env = Self {
             stack,
             builtins: CallTable::new(),
-            p: std::marker::PhantomData,
+            //p: std::marker::PhantomData,
         }; //globals: HashTrieMap::new() };
            //use super::builtins::*;
         env
@@ -269,7 +269,7 @@ impl<'a> Default for Environment<'a> {
     }
 }
 
-impl<'a> Environment<'a> {
+impl Environment {
     pub fn define(mut self, identifier: Identifier, value: ExprRef) -> Self {
         if self.stack.len() > 0 && self.stack.front().unwrap().contains(&identifier.name) {
             let layer = Layer::default().define(identifier, value);

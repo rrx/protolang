@@ -145,10 +145,10 @@ impl fmt::Display for ShowStack {
 impl Callable for ShowStack {
     fn call<'a>(
         &self,
-        _: &mut Interpreter<'a>,
-        env: Environment<'a>,
+        _: &mut Interpreter,
+        env: Environment,
         _: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         env.debug();
         Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
     }
@@ -184,10 +184,10 @@ impl Callable for Clock {
 
     fn call<'a>(
         &self,
-        _: &mut Interpreter<'a>,
-        env: Environment<'a>,
+        _: &mut Interpreter,
+        env: Environment,
         _: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("we mustn't travel back in time")
@@ -230,10 +230,10 @@ impl Callable for Assert {
 
     fn call<'a>(
         &self,
-        _: &mut Interpreter<'a>,
-        env: Environment<'a>,
+        _: &mut Interpreter,
+        env: Environment,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         let node = args.get(0).unwrap().borrow();
         let v = node.try_literal();
         match v {

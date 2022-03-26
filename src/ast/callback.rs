@@ -3,23 +3,23 @@ use std::fmt;
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
-pub struct CallTable<'a> {
-    funcs: im::HashMap<String, Callback<'a>>,
+pub struct CallTable {
+    funcs: im::HashMap<String, Callback>,
 }
 
-impl<'a> CallTable<'a> {
+impl CallTable {
     pub fn new() -> Self {
         Self {
             funcs: im::HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, name: String, cb: Callback<'a>) -> Self {
+    pub fn add(&mut self, name: String, cb: Callback) -> Self {
         self.funcs.insert(name, cb);
         self.clone()
     }
 
-    pub fn get(&self, name: &str) -> Option<&Callback<'a>> {
+    pub fn get(&self, name: &str) -> Option<&Callback> {
         self.funcs.get(name)
     }
 
@@ -27,8 +27,8 @@ impl<'a> CallTable<'a> {
         &mut self,
         name: &str,
         args: Vec<ExprRef>,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         match self.get(name) {
             Some(cb) => {
                 let result = cb(env, args)?;
@@ -39,19 +39,19 @@ impl<'a> CallTable<'a> {
     }
 }
 
-pub type CallbackFn<'a> =
-    dyn Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static;
+pub type CallbackFn =
+    dyn Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static;
 
 #[derive(Clone)]
-pub struct Callback<'a> {
-    cb: Rc<CallbackFn<'a>>,
+pub struct Callback {
+    cb: Rc<CallbackFn>,
     arity: usize,
 }
 
-impl<'a> Callback<'a> {
-    pub fn new<'b, F>(f: F) -> Callback<'a>
+impl Callback {
+    pub fn new<F>(f: F) -> Callback
     where
-        F: Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError>
+        F: Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError>
             + 'static,
     {
         Callback {
@@ -61,21 +61,21 @@ impl<'a> Callback<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Callback<'a> {
+impl fmt::Debug for Callback {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<callback>")
     }
 }
 
-impl<'a> std::ops::Deref for Callback<'a> {
-    type Target = Rc<CallbackFn<'a>>;
+impl std::ops::Deref for Callback {
+    type Target = Rc<CallbackFn>;
 
     fn deref(&self) -> &Self::Target {
         &self.cb
     }
 }
 
-impl<'a> std::ops::DerefMut for Callback<'a> {
+impl std::ops::DerefMut for Callback {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.cb
     }

@@ -12,22 +12,22 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 #[derive(Clone)]
-pub struct Interpreter<'a> {
-    builtins: CallTable<'a>,
+pub struct Interpreter {
+    builtins: CallTable,
     //builtins: HashTrieMap<String, Callback<'a>>,
-    p: std::marker::PhantomData<&'a String>,
+    //p: std::marker::PhantomData<&'a String>,
 }
 
-impl<'a> Default for Interpreter<'a> {
+impl Default for Interpreter {
     fn default() -> Self {
         Self {
-            p: std::marker::PhantomData,
+            //p: std::marker::PhantomData,
             builtins: crate::eval::builtins::builtins(CallTable::new()),
         }
     }
 }
 
-impl<'a> fmt::Debug for Interpreter<'a> {
+impl fmt::Debug for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<interpreter>")
     }
@@ -168,15 +168,15 @@ impl ExprNode {
     }
 }
 
-impl<'a> Interpreter<'a> {
+impl Interpreter {
     pub fn call(
         &mut self,
-        mut env: Environment<'a>,
+        mut env: Environment,
         f: &dyn Callable,
         params: &Params,
         args: &Vec<ExprRef>,
         expr: ExprRef,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         if args.len() != f.arity() {
             return Err(params.context.runtime_error(&format!(
                 "Mismatched params on function. Expecting {}, got {}",
@@ -222,8 +222,8 @@ impl<'a> Interpreter<'a> {
     pub fn evaluate(
         &mut self,
         exprref: ExprRef,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         let e = exprref.clone();
         let node = exprref.borrow();
         let expr = &node.value;
@@ -420,8 +420,8 @@ impl<'a> Interpreter<'a> {
         op: &Operator,
         left: &ExprNode,
         right: &ExprNode,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         match op {
             Operator::Declare => {
                 return if let Some(ident) = left.try_ident() {

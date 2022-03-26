@@ -34,14 +34,14 @@ impl InterpretError {
     }
 }
 
-pub struct Program<'a> {
+pub struct Program {
     pub diagnostics: Vec<Diagnostic<FileId>>,
     pub files: SimpleFiles<String, String>,
-    pub value: ExprRefWithEnv<'a>,
-    pub interp: Interpreter<'a>,
+    pub value: ExprRefWithEnv,
+    pub interp: Interpreter,
 }
 
-impl<'a> Program<'a> {
+impl Program {
     pub fn new() -> Self {
         Self {
             diagnostics: vec![],
@@ -51,7 +51,7 @@ impl<'a> Program<'a> {
         }
     }
 
-    pub fn add_result(&mut self, value: ExprRefWithEnv<'a>) {
+    pub fn add_result(&mut self, value: ExprRefWithEnv) {
         self.value = value;
     }
 
@@ -87,16 +87,16 @@ impl<'a> Program<'a> {
     pub fn eval(
         &mut self,
         v: &str,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         self._eval_file("<repl>", v, env)
     }
 
     pub fn eval_file(
         &mut self,
         filename: &str,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         let contents = std::fs::read_to_string(filename.clone())
             .unwrap()
             .to_string();
@@ -107,8 +107,8 @@ impl<'a> Program<'a> {
         &mut self,
         filename: &str,
         v: &str,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         use crate::lexer::LexerState;
         use crate::results;
         use crate::tokens::*;
@@ -163,7 +163,7 @@ impl<'a> Program<'a> {
     }
 }
 
-impl<'a> std::ops::Deref for Program<'a> {
+impl std::ops::Deref for Program {
     type Target = Vec<Diagnostic<FileId>>;
 
     fn deref(&self) -> &Self::Target {
@@ -171,7 +171,7 @@ impl<'a> std::ops::Deref for Program<'a> {
     }
 }
 
-impl<'a> std::ops::DerefMut for Program<'a> {
+impl std::ops::DerefMut for Program {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.diagnostics
     }
