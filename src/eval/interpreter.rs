@@ -26,8 +26,6 @@ impl<'a> Interpreter<'a> {
         match self.builtins.get(&name) {
             Some(cb) => {
                 debug!("cb");
-                //let cb2 = cb.clone();
-                //self.call(env, cb2, &vec![], &vec![], self.expr.clone().into());
                 let result = cb(env, vec![]).unwrap();
                 Ok(result)
             }
@@ -42,14 +40,14 @@ impl<'a> Default for Interpreter<'a> {
         builtins = builtins
             .insert(
                 "showstack".into(),
-                Box::new(|env, _| {
+                Callback::new(|env, _| {
                     env.debug();
                     Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
                 }),
             )
             .insert(
                 "assert".into(),
-                Box::new(|env, args| {
+                Callback::new(|env, args| {
                     let node = args.get(0).unwrap().borrow();
                     let v = node.try_literal();
                     match v {
@@ -72,7 +70,7 @@ impl<'a> Default for Interpreter<'a> {
             )
             .insert(
                 "sexpr".into(),
-                Box::new(|env, args| {
+                Callback::new(|env, args| {
                     let mut out = vec![];
                     use crate::sexpr::SExpr;
                     for arg in args {
@@ -82,7 +80,10 @@ impl<'a> Default for Interpreter<'a> {
                                 println!("SEXPR: {}", sexpr);
                             }
                             Err(e) => {
-                                return Err(InterpretError::runtime("unable to parse"));
+                                return Err(InterpretError::runtime(&format!(
+                                    "unable to parse: {:?}",
+                                    e
+                                )));
                             }
                         }
                     }
@@ -91,7 +92,7 @@ impl<'a> Default for Interpreter<'a> {
             )
             .insert(
                 "clock".into(),
-                Box::new(|env, _| {
+                Callback::new(|env, _| {
                     use std::time::{SystemTime, UNIX_EPOCH};
                     let secs = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
@@ -690,7 +691,7 @@ mod tests {
         println!("x");
         let mut program = Program::new();
         let env = Environment::default();
-        let r = program.eval("asdf()", env).unwrap();
+        let r = program.eval("showstack()", env).unwrap();
         program.print();
         debug!("x {:?}", r.expr);
     }

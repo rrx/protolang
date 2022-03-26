@@ -1,7 +1,7 @@
 use crate::ast::ExprNode;
 use crate::eval::{Environment, ExprRefWithEnv, InterpretError, Interpreter};
 use crate::lexer;
-use crate::parser::{parse_program, parse_program_with_results};
+use crate::parser::{parse_program, parse_program_with_results, Unparse};
 use crate::program::Program;
 use crate::results::*;
 use crate::sexpr::SExpr;
@@ -37,7 +37,7 @@ pub fn repl() -> anyhow::Result<()> {
                 rl.add_history_entry(line.as_str());
                 match program.eval(&line, env.clone()) {
                     Ok(r) => {
-                        println!("> {:?}", r.expr);
+                        println!("> {}", r.expr.borrow().unlex());
                         env = r.env;
                     }
                     _ => (),

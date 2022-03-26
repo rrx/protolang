@@ -186,22 +186,50 @@ impl<'a> CallContainer<'a> {
     }
 }
 
-pub type Callback<'a> = Box<
-    dyn Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static,
->;
+pub type CallbackFn<'a> =
+    dyn Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static;
 
-//impl<'a> fmt::Debug for Callback<'a> {
-//fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//write!(f, "<callback>")
-//}
-//}
+use std::rc::Rc;
 
-pub fn mk_callback<'a, F>(f: F) -> Callback<'a>
-where
-    F: Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static,
-{
-    Box::new(f) as Callback
+#[derive(Clone)]
+pub struct Callback<'a> {
+    cb: Rc<CallbackFn<'a>>,
 }
+impl<'a> Callback<'a> {
+    pub fn new<F>(f: F) -> Callback<'a>
+    where
+        F: Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError>
+            + 'static,
+    {
+        Callback { cb: Rc::new(f) }
+    }
+}
+
+impl<'a> fmt::Debug for Callback<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<callback>")
+    }
+}
+
+impl<'a> std::ops::Deref for Callback<'a> {
+    type Target = Rc<CallbackFn<'a>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cb
+    }
+}
+
+impl<'a> std::ops::DerefMut for Callback<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.cb
+    }
+}
+
+//impl<'a> Clone for Callback2<'a> {
+//fn clone(&self) -> Self {
+//Self { cb: Box::new(self.cb) }
+//}
+//}
 
 //pub trait CallFunction: Clone + FnMut(&mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static {}
 
