@@ -72,13 +72,13 @@ impl<'a> LexerState<'a> {
         match lexer.lex_eof(s.into()) {
             Ok((rest, _)) => {
                 if rest.len() > 0 {
-                    debug!("remaining {:?}", (&rest));
+                    //debug!("remaining {:?}", (&rest));
                 }
                 Some(lexer)
             }
             Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors {
-                    debug!("error {:?}", (&err, tokens));
+                    //debug!("error {:?}", (&err, tokens));
                 }
                 None
             }
@@ -90,13 +90,13 @@ impl<'a> LexerState<'a> {
         match lexer.lex(s.into()) {
             Ok((rest, _)) => {
                 if rest.len() > 0 {
-                    debug!("remaining {:?}", (&rest));
+                    //debug!("remaining {:?}", (&rest));
                 }
                 Some(lexer)
             }
             Err(nom::Err::Error(e)) => {
                 for (tokens, err) in e.errors {
-                    debug!("error {:?}", (&err, tokens));
+                    //debug!("error {:?}", (&err, tokens));
                 }
                 None
             }
@@ -164,13 +164,13 @@ impl<'a> LexerState<'a> {
 
     pub fn tokens(&'a mut self) -> Tokens<'a> {
         self.flush();
-        self.dump();
+        //self.dump();
         Tokens::new(&self.acc[..])
     }
 
     pub fn tokens2(&mut self) -> Tokens {
         self.flush();
-        self.dump();
+        //self.dump();
         Tokens::new(&self.acc[..]).clone()
     }
 

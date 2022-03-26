@@ -255,8 +255,6 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
         context("program-start", many0(alt((parse_expr, parse_invalid)))),
         context("program-end", combinator::rest), //many0(parse_whitespace_or_eof)),
     )(i)?;
-    debug!("program has {} expressions", exprs.len());
-    debug!("program rest {:?}", end); //.expand_toks());
 
     let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
     value.context.append(end.expand_toks());
@@ -289,7 +287,7 @@ impl ExprNode {
             i
         };
 
-        debug!("is_mut {}", is_mutable);
+        //debug!("is_mut {}", is_mutable);
         let (i, mut ident) = Self::parse_ident(i)?;
         if is_mutable {
             ident.modifier = VarModifier::Mutable;
@@ -371,9 +369,9 @@ impl ExprNode {
         ))(i)?;
 
         let (i, mut body) = parse_expr(i)?;
-        debug!("slash: {:?}", &slash);
-        debug!("idents: {:?}", &idents);
-        debug!("body: {:?}", &body);
+        //debug!("slash: {:?}", &slash);
+        //debug!("idents: {:?}", &idents);
+        //debug!("body: {:?}", &body);
         let loc = slash.tok[0].to_location();
         let mut params = Params::new(idents, &loc);
         params.context.prepend(slash.tok[0].toks_post());

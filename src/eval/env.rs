@@ -257,9 +257,10 @@ impl<'a> Default for Environment<'a> {
             p: std::marker::PhantomData,
         }; //globals: HashTrieMap::new() };
         use super::builtins::*;
-        env.define("clock".into(), Clock::value().into())
-            .define("assert".into(), Assert::value().into())
-            .define("showstack".into(), ShowStack::value().into())
+        env
+        //env.define("clock".into(), Clock::value().into())
+        //.define("assert".into(), Assert::value().into())
+        //.define("showstack".into(), ShowStack::value().into())
     }
 }
 
@@ -286,7 +287,7 @@ impl<'a> Environment<'a> {
     }
 
     pub fn resolve(&self, name: &str) -> Option<ExprAccessRef> {
-        self.debug();
+        //self.debug();
         self.stack
             .iter()
             .find(|layer| layer.values.contains_key(name))
@@ -358,7 +359,7 @@ mod tests {
         env.debug();
         let x2 = env.resolve("x".into()).unwrap();
         let y = env.resolve("y".into()).unwrap();
-        let _ = env.resolve("clock".into()).unwrap();
+        //let _ = env.resolve("clock".into()).unwrap();
 
         debug!("1:{:?}", x1);
         debug!("2:{:?}", x2);

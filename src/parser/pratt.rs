@@ -145,13 +145,13 @@ impl Op {
         token: &Token,
         depth: usize,
     ) -> RNode<'a> {
-        debug!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
+        //debug!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
 
         // parse the RHS, making sure the expression we are getting stops when we reach
         // a LBP that is equal to the current BP, this is why we pass in RBP+1
         let (i, y) = extra(i, Some(self.rbp.unwrap() + 1), depth + 1)?;
 
-        debug!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
+        //debug!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
 
         let maybe_op = Operator::from_tok(&token.tok);
         let op = maybe_op.unwrap();
@@ -165,28 +165,28 @@ impl Op {
         };
 
         let n = i.peek().unwrap();
-        debug!("chain_LeD2: {:?}", (&left_op, &c, &n));
+        //debug!("chain_LeD2: {:?}", (&left_op, &c, &n));
 
         if n.tok == Tok::EOF {
-            debug!("chain: got eof");
+            //debug!("chain: got eof");
             let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             return i.node_success(t);
         }
 
         let next_op = n.tok.op().unwrap();
-        debug!("chain next: {:?}", (self, &n));
+        //debug!("chain next: {:?}", (self, &n));
         if self.lbp == next_op.lbp {
             // consume
             let (i, _) = take_one_any(i.clone())?;
             let (i, t) = self._chain_left_denotation(i, &y, &n, depth)?;
-            debug!("chain consume: {:?}", (self.lbp, next_op, &t));
+            //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
             let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             let op = Operator::End;
             let t = Expr::Chain(op, vec![i.node(t0), t]);
             i.node_success(t)
         } else {
             let t = Expr::Chain(left_op.clone(), c);
-            debug!("chain drop: {:?}", (self.lbp, next_op, &t));
+            //debug!("chain drop: {:?}", (self.lbp, next_op, &t));
             i.node_success(t)
         }
     }
@@ -200,11 +200,11 @@ impl Op {
     ) -> RNode<'a> {
         // Given the LHS, and an op (token), return a Node
         //
-        debug!("left_denotation x: {:?}", (&x));
+        //debug!("left_denotation x: {:?}", (&x));
         //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
-                debug!("handle semicolon: {:?}", i.expand_toks());
+                //debug!("handle semicolon: {:?}", i.expand_toks());
                 let mut x = x.clone();
                 x.context.append(token.expand_toks());
                 // escape, we are done
@@ -254,7 +254,7 @@ impl Op {
             Tok::LParen => {
                 let (i, (nodes, end)) =
                     sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
-                debug!("nodes: {:?}", (&nodes, &end));
+                //debug!("nodes: {:?}", (&nodes, &end));
                 //let op = Operator::Call;
                 let mut f = x.clone();
                 f.context.append(token.expand_toks());
@@ -278,16 +278,16 @@ impl Op {
                     let (i, y) = extra(i, self.rbp, depth + 1)?;
                     let op = Operator::from_tok(&token.tok).unwrap();
 
-                    debug!("Binary LHS: {:?}", &x);
-                    debug!("Binary Op: {:?}", &op);
-                    debug!("Binary RHS: {:?}", &y);
+                    //debug!("Binary LHS: {:?}", &x);
+                    //debug!("Binary Op: {:?}", &op);
+                    //debug!("Binary RHS: {:?}", &y);
                     //debug!("Binary: lbp:{:?}, nbp:{:?}", &lbp, &nbp);
 
                     let is_chain = token.tok.is_chain();
 
                     match x.value.clone() {
                         Expr::Binary(left_op, a, b) if left_op == op && is_chain => {
-                            debug!("chain binary");
+                            //debug!("chain binary");
                             let mut right = y;
                             right.context.prepend(token.expand_toks());
                             let args = vec![*a, *b, right];
@@ -296,7 +296,7 @@ impl Op {
                             (i, node)
                         }
                         Expr::Chain(left_op, mut args) if left_op == op && is_chain => {
-                            debug!("chain chain");
+                            //debug!("chain chain");
                             let mut right = y;
                             right.context.prepend(token.expand_toks());
                             args.push(right);
@@ -305,7 +305,7 @@ impl Op {
                             (i, node)
                         }
                         _ => {
-                            debug!("XXX binary");
+                            //debug!("XXX binary");
                             let left = x.clone();
                             let mut right = y;
 
@@ -319,15 +319,15 @@ impl Op {
                             let n = i.peek().unwrap();
                             let maybe_next_op = n.tok.op();
                             if n.tok == Tok::EOF {
-                                debug!("chain: got eof");
+                                //debug!("chain: got eof");
                                 (i, node)
                             } else if let Some(next_op) = maybe_next_op {
-                                debug!("chain next: {:?}", (self, &n));
+                                //debug!("chain next: {:?}", (self, &n));
                                 if is_chain && self.lbp == next_op.lbp {
                                     // consume
                                     let (i, _) = take_one_any(i.clone())?;
                                     let (i, t) = self.left_denotation(i, &right, &n, depth)?;
-                                    debug!("chain consume: {:?}", (self.lbp, next_op, &t));
+                                    //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
 
                                     // merge node and t which can both be binary chains
                                     let mut exprs = vec![];
@@ -345,18 +345,18 @@ impl Op {
                                     let node = i.node(Expr::BinaryChain(exprs));
                                     (i, node)
                                 } else {
-                                    debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
+                                    //debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
                                     (i, node)
                                 }
                             } else {
-                                debug!("chain drop2: {:?}", (self.lbp, &n, &node));
+                                //debug!("chain drop2: {:?}", (self.lbp, &n, &node));
                                 (i, node)
                             }
                         }
                     }
                 } else {
                     // postfix just returns, there's no RHS
-                    debug!("Postfix: {:?}", (&x, &token));
+                    //debug!("Postfix: {:?}", (&x, &token));
                     let op = OperatorNode::from_postfix_token(token.clone()).unwrap();
                     let t = Expr::Postfix(op, Box::new(x.clone()));
                     let mut node = i.node(t);
@@ -476,7 +476,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
     let n = i.tok[0].tok.clone();
     let token = &i.tok[0];
 
-    debug!("P {:?}", (&n));
+    //debug!("P {:?}", (&n));
 
     let rbp = n.op().map_or(None, |t| t.rbp);
 
@@ -519,10 +519,10 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LBrace) => {
             // consume LBrace
             let (i, left) = take_one_any(i)?;
-            debug!(
-                "prefix brace1: {:?}",
-                (&i.expand_toks(), &i.toks(), &n, &left)
-            );
+            //debug!(
+            //"prefix brace1: {:?}",
+            //(&i.expand_toks(), &i.toks(), &n, &left)
+            //);
             let p = |i| extra(i, Some(0), 0);
 
             let (i, (t, right)) =
@@ -530,9 +530,9 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             // let (i, t) = //extra(i, Some(0), depth + 1)?;
             let t = Expr::Block(t); //vec![t]);
             let mut node = i.node(t);
-            node.debug();
+            //node.debug();
             //debug!("block: {:?}", (&t.debug()));
-            debug!("prefix brace2: {:?}", (&i.expand_toks()));
+            //debug!("prefix brace2: {:?}", (&i.expand_toks()));
             // consume RBrace
             //let (i, right) = context("r-brace", tag_token(Tok::RBrace))(i)?;
             node.context.prepend(left.expand_toks());
@@ -544,9 +544,9 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LBracket) => {
             // consume LBracket
             let (i, left) = take_one_any(i)?;
-            debug!("prefix bracket1: {:?}", (&i, &n, &left));
+            //debug!("prefix bracket1: {:?}", (&i, &n, &left));
             let (i, t) = i.extra(Some(0), depth + 1)?;
-            debug!("prefix bracket2: {:?}", (&i, &t));
+            //debug!("prefix bracket2: {:?}", (&i, &t));
             // consume RBracket
             let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
             let t = Expr::List(vec![t]);
@@ -560,12 +560,12 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         Some(Tok::LParen) => {
             // consume LParen
             let (i, left) = take_one_any(i)?;
-            debug!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
+            //debug!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
 
             // consume anything inside the parents, bp = 0
             let (i, mut node) = i.extra(Some(0), depth + 1)?;
 
-            debug!("prefix paren2: {:?}", (&i.toks(), &node));
+            //debug!("prefix paren2: {:?}", (&i.toks(), &node));
             let (i, right) = context("r-paren", tag_token(Tok::RParen))(i)?;
             node.context.prepend(left.expand_toks());
             node.context.append(right.expand_toks());
@@ -591,7 +591,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         */
         // Non N-tokens, are handled as errors
         Some(Tok::EOF) | None => {
-            debug!("got eof3");
+            //debug!("got eof3");
             // we got an EOF when we were expecting an N token
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)))
         }
@@ -617,7 +617,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
         }
 
         _ => {
-            debug!("got unexpected token {:?}", &n);
+            //debug!("got unexpected token {:?}", &n);
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Tag)))
         }
     }
@@ -635,7 +635,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // r = +inf
     let r = 127;
 
-    debug!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
+    //debug!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
 
     // The P parser starts with an N token, and goes with it, returning a Node
     // This is the first element of the expression
@@ -645,13 +645,13 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
         return Ok((i, p));
     }
 
-    debug!(
-        "E1 {:?}, prec: {:?}, P:{:?}, depth:{}",
-        i.toks(),
-        prec,
-        &p,
-        depth
-    );
+    //debug!(
+    //"E1 {:?}, prec: {:?}, P:{:?}, depth:{}",
+    //i.toks(),
+    //prec,
+    //&p,
+    //depth
+    //);
 
     // get a chain of subsequent expressions
     // What follows could be a postfix operator, a binary operator, or a ternary operator
@@ -661,7 +661,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // G will parse what's next recursively, until we find something that has a lower precedence
     let (i, (r, t)) = extra_recursive(i, r, p, prec, 0)?;
 
-    debug!("E2 {:?}", (&t, r, depth, i.toks()));
+    //debug!("E2 {:?}", (&t, r, depth, i.toks()));
     Ok((i, t))
 }
 
@@ -682,7 +682,7 @@ fn extra_recursive<'a>(
     //
     // peek
 
-    debug!("G: {:?}", (&i.toks(), &r, &prec, &r, depth));
+    //debug!("G: {:?}", (&i.toks(), &r, &prec, &r, depth));
 
     if i.is_eof() {
         return Ok((i, (r, t)));
@@ -705,17 +705,17 @@ fn extra_recursive<'a>(
         (i, Op::new_default_left())
     };
 
-    debug!("op: {:?}", (&token, &op));
+    //debug!("op: {:?}", (&token, &op));
 
     let lbp = op.lbp.unwrap_or(-1);
-    debug!(
-        "guard: prec:{} <= lbp:{} <= r:{}\n\tLHS: {:?}\n\t{:?}",
-        prec.unwrap(),
-        lbp,
-        r,
-        t,
-        (&op, &i.toks())
-    );
+    //debug!(
+    //"guard: prec:{} <= lbp:{} <= r:{}\n\tLHS: {:?}\n\t{:?}",
+    //prec.unwrap(),
+    //lbp,
+    //r,
+    //t,
+    //(&op, &i.toks())
+    //);
 
     // lbp must be between r and prec, or we exit
     // if we have lbp greater than or equal to prec, then we parse and include the RHS
@@ -729,7 +729,7 @@ fn extra_recursive<'a>(
         // left_denotation, parse the RHS, and return the appropriate node
         let t1 = t.clone();
         let (i, t) = op.left_denotation(i, &t, &token, depth)?;
-        debug!("left_denotation: {:?} -> {:?}", (&t1, &token), &t);
+        //debug!("left_denotation: {:?} -> {:?}", (&t1, &token), &t);
 
         // set r = NBP of op
         match op.nbp {
@@ -738,12 +738,12 @@ fn extra_recursive<'a>(
                 extra_recursive(i, new_r, t, prec, depth + 1)
             }
             None => {
-                debug!("r exit: {:?}", &i.toks());
+                //debug!("r exit: {:?}", &i.toks());
                 Ok((i, (r, t)))
             }
         }
     } else {
-        debug!("guard exit: {:?}", &i.toks());
+        //debug!("guard exit: {:?}", &i.toks());
         Ok((i, (r, t)))
     }
 }

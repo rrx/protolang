@@ -39,10 +39,71 @@ impl<'a> Interpreter<'a> {
 impl<'a> Default for Interpreter<'a> {
     fn default() -> Self {
         let mut builtins: HashTrieMap<String, Callback<'a>> = HashTrieMap::new();
-        builtins = builtins.insert(
-            "asdf".into(),
-            Box::new(|env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
-        );
+        builtins = builtins
+            .insert(
+                "showstack".into(),
+                Box::new(|env, _| {
+                    env.debug();
+                    Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
+                }),
+            )
+            .insert(
+                "assert".into(),
+                Box::new(|env, args| {
+                    let node = args.get(0).unwrap().borrow();
+                    let v = node.try_literal();
+                    match v {
+                        Some(Tok::BoolLiteral(true)) => {
+                            Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
+                        }
+                        Some(Tok::BoolLiteral(false)) => {
+                            Err(node.context.runtime_error("Assertion error"))
+                        }
+                        Some(_) => Err(node
+                            .context
+                            .runtime_error(&format!("Invalid args, not a bool"))
+                            .into()),
+                        _ => Err(node
+                            .context
+                            .runtime_error(&format!("Invalid Type: {:?}", args))
+                            .into()),
+                    }
+                }),
+            )
+            .insert(
+                "sexpr".into(),
+                Box::new(|env, args| {
+                    let mut out = vec![];
+                    use crate::sexpr::SExpr;
+                    for arg in args {
+                        match arg.borrow().sexpr() {
+                            Ok(sexpr) => {
+                                out.push(Expr::new_string(sexpr.to_string()).into());
+                                println!("SEXPR: {}", sexpr);
+                            }
+                            Err(e) => {
+                                return Err(InterpretError::runtime("unable to parse"));
+                            }
+                        }
+                    }
+                    Ok(ExprRefWithEnv::new(Expr::List(out).into(), env))
+                }),
+            )
+            .insert(
+                "clock".into(),
+                Box::new(|env, _| {
+                    use std::time::{SystemTime, UNIX_EPOCH};
+                    let secs = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("we mustn't travel back in time")
+                        .as_secs_f64();
+
+                    Ok(ExprRefWithEnv::new(
+                        Expr::Literal(Tok::FloatLiteral(secs)).into(),
+                        env,
+                    ))
+                }),
+            );
 
         Self {
             p: std::marker::PhantomData,
@@ -251,7 +312,7 @@ impl<'a> Interpreter<'a> {
         let e = exprref.clone();
         let node = exprref.borrow();
         let expr = &node.value;
-        debug!("EVAL: {:?}", &expr);
+        //debug!("EVAL: {:?}", &expr);
         match expr {
             Expr::Literal(_) => Ok(ExprRefWithEnv::new(e, env)),
             Expr::Ident(ident) => {
@@ -305,14 +366,14 @@ impl<'a> Interpreter<'a> {
             }
 
             Expr::Callable(e) => {
-                debug!("Callable({:?})", &e);
+                //debug!("Callable({:?})", &e);
                 Err(node
                     .context
                     .runtime_error(&format!("Unimplemented callable::{:?}", &e)))
             }
 
             Expr::Lambda(e) => {
-                debug!("Lambda({:?})", &e);
+                //debug!("Lambda({:?})", &e);
                 Ok(ExprRefWithEnv::new(
                     Expr::Callable(Box::new(e.clone())).into(),
                     env,
@@ -327,35 +388,37 @@ impl<'a> Interpreter<'a> {
             Expr::Apply(expr, args) => {
                 let f = match &expr.value {
                     Expr::Ident(ident) => {
+                        let mut eval_args = vec![];
+                        let mut newenv = env;
+                        for arg in args {
+                            let v = self.evaluate(arg.clone().into(), newenv)?;
+                            //debug!(
+                            //"arg context {:?}",
+                            //(&arg.context, &v.expr.borrow().context)
+                            //);
+                            eval_args.push(v.expr);
+                            newenv = v.env;
+                        }
+                        //debug!("Calling context {:?}", (&node.context));
+
                         match self.builtins.get(&ident.name) {
                             Some(cb) => {
-                                let result = cb(env, vec![]).unwrap();
+                                let result = cb(newenv.clone(), eval_args)?;
+                                //debug!("Call Result {:?}", &result);
                                 Some(Ok(result))
                             }
                             _ => {
                                 let x: ExprAccessRef =
-                                    env.get_at(&ident.name, &node.context)?.clone();
+                                    newenv.get_at(&ident.name, &node.context)?.clone();
                                 let expr = x.expr.as_ref().borrow();
                                 match expr.try_callable() {
                                     Some(c) => {
-                                        let mut eval_args = vec![];
-                                        let mut newenv = env;
-                                        for arg in args {
-                                            let v = self.evaluate(arg.clone().into(), newenv)?;
-                                            debug!(
-                                                "arg context {:?}",
-                                                (&arg.context, &v.expr.borrow().context)
-                                            );
-                                            eval_args.push(v.expr);
-                                            newenv = v.env;
-                                        }
-                                        debug!("Calling context {:?}", (&node.context));
-                                        debug!("Calling context {:?}", (&x, &expr));
-                                        debug!("Calling {:?}({:?})", c, eval_args);
+                                        //debug!("Calling context {:?}", (&x, &expr));
+                                        //debug!("Calling {:?}({:?})", c, eval_args);
 
                                         // newenv.clone here creates a stack branch
                                         let result = c.call(self, newenv.clone(), eval_args)?;
-                                        debug!("Call Result {:?}", &result);
+                                        //debug!("Call Result {:?}", &result);
                                         Some(Ok(result))
                                     }
                                     _ => None,
@@ -448,7 +511,7 @@ impl<'a> Interpreter<'a> {
             Operator::Declare => {
                 return if let Some(ident) = left.try_ident() {
                     let eval_right = self.evaluate(right.clone().into(), env)?;
-                    debug!("Declare {:?} to {}", &eval_right, &ident.name);
+                    //debug!("Declare {:?} to {}", &eval_right, &ident.name);
                     let env = eval_right.env.define(ident, eval_right.expr.clone());
                     Ok(ExprRefWithEnv::new(eval_right.expr, env))
                 } else {
@@ -461,8 +524,8 @@ impl<'a> Interpreter<'a> {
                 return if let Some(ident) = left.try_ident() {
                     let access = env.get_at(&ident.name, &left.context)?;
                     if access.modifier != VarModifier::Mutable {
-                        left.debug();
-                        env.debug();
+                        //left.debug();
+                        //env.debug();
                         return Err(left.context.runtime_error(&format!(
                             "Invalid Assignment, '{}' Not mutable",
                             &ident.name
@@ -470,7 +533,7 @@ impl<'a> Interpreter<'a> {
                     }
 
                     let eval_right = self.evaluate(right.clone().into(), env)?;
-                    debug!("Assign {:?} to {}", &eval_right, &ident.name);
+                    //debug!("Assign {:?} to {}", &eval_right, &ident.name);
                     let expr = access
                         .expr
                         .mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());

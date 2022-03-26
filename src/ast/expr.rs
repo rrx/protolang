@@ -121,6 +121,10 @@ impl Expr {
         }
     }
 
+    pub fn new_string(s: String) -> Self {
+        Self::Literal(Tok::StringLiteral(s))
+    }
+
     pub fn new_float(f: f64) -> Self {
         Self::Literal(Tok::FloatLiteral(f))
     }

@@ -127,8 +127,13 @@ impl<'a> Program<'a> {
         });
 
         match crate::parser::parse_program(tokens) {
-            Ok((_, expr)) => {
+            Ok((end, expr)) => {
                 debug!("SEXPR: {}", expr.sexpr().unwrap());
+                //debug!("program has {} expressions", exprs.len());
+                use nom::InputLength;
+                if end.input_len() > 0 {
+                    debug!("program rest {:?}", end); //.expand_toks());
+                }
                 match self.interp.evaluate(expr.into(), env) {
                     Ok(v) => Ok(v),
                     Err(InterpretError { context, kind }) => {

@@ -15,6 +15,7 @@ pub fn cli() -> anyhow::Result<()> {
     for filename in std::env::args().skip(1) {
         let r = program.eval_file(filename.as_str(), env)?;
         env = r.env;
+        println!("> {:?}", r.expr);
     }
     Ok(())
 }
