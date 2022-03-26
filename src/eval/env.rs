@@ -1,5 +1,5 @@
-use crate::ast::Callback;
 use crate::ast::*;
+use crate::ast::{CallTable, Callback};
 use crate::results::InterpretError;
 use log::debug;
 use rpds::HashTrieMap;
@@ -212,18 +212,21 @@ pub struct Globals<'a> {
     values: HashTrieMap<String, Callback<'a>>,
 }
 
-//#[derive(Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Environment<'a> {
     stack: im::vector::Vector<Layer>,
+    builtins: CallTable<'a>,
     //globals: im::HashMap<String, Callback<'a>>
     //globals: HashTrieMap<String, Callback<'a>>
     p: std::marker::PhantomData<&'a Layer>,
 }
 
+/*
 impl<'a> Clone for Environment<'a> {
     fn clone(&self) -> Self {
         Self {
             stack: self.stack.clone(),
+            builtins: self.builtins.clone(),
             p: std::marker::PhantomData, //globals: self.globals.clone()
         }
     }
@@ -234,6 +237,7 @@ impl<'a> fmt::Debug for Environment<'a> {
         write!(f, "<env>")
     }
 }
+*/
 
 impl<'a> Default for Environment<'a> {
     fn default() -> Self {
@@ -254,9 +258,10 @@ impl<'a> Default for Environment<'a> {
         stack.push_front(layer);
         let env = Self {
             stack,
+            builtins: CallTable::new(),
             p: std::marker::PhantomData,
         }; //globals: HashTrieMap::new() };
-        use super::builtins::*;
+           //use super::builtins::*;
         env
         //env.define("clock".into(), Clock::value().into())
         //.define("assert".into(), Assert::value().into())

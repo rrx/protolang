@@ -2,7 +2,7 @@ use crate::eval::*;
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CallTable<'a> {
     funcs: im::HashMap<String, Callback<'a>>,
 }
@@ -28,7 +28,7 @@ impl<'a> CallTable<'a> {
         name: &str,
         args: Vec<ExprRef>,
         env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
         match self.get(name) {
             Some(cb) => {
                 let result = cb(env, args)?;
@@ -42,7 +42,6 @@ impl<'a> CallTable<'a> {
 pub type CallbackFn<'a> =
     dyn Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError> + 'static;
 
-
 #[derive(Clone)]
 pub struct Callback<'a> {
     cb: Rc<CallbackFn<'a>>,
@@ -55,7 +54,10 @@ impl<'a> Callback<'a> {
         F: Fn(Environment<'a>, Vec<ExprRef>) -> Result<ExprRefWithEnv<'a>, InterpretError>
             + 'static,
     {
-        Callback { cb: Rc::new(f), arity: 0 }
+        Callback {
+            cb: Rc::new(f),
+            arity: 0,
+        }
     }
 }
 

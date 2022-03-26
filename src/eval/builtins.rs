@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Callable, Expr},
+    ast::{CallTable, Callable, Callback, Expr},
     eval::{Environment, ExprRef, ExprRefWithEnv, InterpretError, Interpreter},
     tokens::Tok,
 };
@@ -9,6 +9,75 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 //use thiserror::Error;
+
+pub fn builtins(mut builtins: CallTable) -> CallTable {
+    builtins
+        .add(
+            "showstack".into(),
+            Callback::new(|env, _| {
+                env.debug();
+                Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
+            }),
+        )
+        .add(
+            "assert".into(),
+            Callback::new(|env, args| {
+                let node = args.get(0).unwrap().borrow();
+                let v = node.try_literal();
+                match v {
+                    Some(Tok::BoolLiteral(true)) => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
+                    Some(Tok::BoolLiteral(false)) => {
+                        Err(node.context.runtime_error("Assertion error"))
+                    }
+                    Some(_) => Err(node
+                        .context
+                        .runtime_error(&format!("Invalid args, not a bool"))
+                        .into()),
+                    _ => Err(node
+                        .context
+                        .runtime_error(&format!("Invalid Type: {:?}", args))
+                        .into()),
+                }
+            }),
+        )
+        .add(
+            "sexpr".into(),
+            Callback::new(|env, args| {
+                let mut out = vec![];
+                use crate::sexpr::SExpr;
+                for arg in args {
+                    match arg.borrow().sexpr() {
+                        Ok(sexpr) => {
+                            out.push(Expr::new_string(sexpr.to_string()).into());
+                            println!("SEXPR: {}", sexpr);
+                        }
+                        Err(e) => {
+                            return Err(InterpretError::runtime(&format!(
+                                "unable to parse: {:?}",
+                                e
+                            )));
+                        }
+                    }
+                }
+                Ok(ExprRefWithEnv::new(Expr::List(out).into(), env))
+            }),
+        )
+        .add(
+            "clock".into(),
+            Callback::new(|env, _| {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let secs = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("we mustn't travel back in time")
+                    .as_secs_f64();
+
+                Ok(ExprRefWithEnv::new(
+                    Expr::Literal(Tok::FloatLiteral(secs)).into(),
+                    env,
+                ))
+            }),
+        )
+}
 
 /*
 #[derive(Clone)]
