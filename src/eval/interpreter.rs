@@ -518,8 +518,8 @@ impl<'a> Interpreter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_log::test;
     use crate::program::Program;
+    use test_log::test;
 
     #[test]
     fn test() {

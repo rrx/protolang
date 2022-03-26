@@ -15,7 +15,6 @@ pub enum LangError {
     Error(String, MaybeNodeContext),
 }
 
-
 impl LangError {
     pub fn warning(message: String, context: MaybeNodeContext) -> Self {
         Self::Warning(message, context)

@@ -401,10 +401,10 @@ impl ExprNode {
 mod tests {
     use super::*;
     use crate::lexer::*;
+    use crate::program::Program;
     use crate::sexpr::SExpr;
     use nom::multi::many1;
     use test_log::test;
-    use crate::program::Program;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);
