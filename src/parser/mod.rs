@@ -1,7 +1,7 @@
 use nom::*;
 
 use crate::ast::*;
-use crate::results::*;
+//use crate::results::*;
 use crate::tokens::TokensList;
 use crate::tokens::*;
 use log::debug;
@@ -215,6 +215,7 @@ pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, expr))
 }
 
+/*
 pub fn parse_program_with_results(
     filename: String,
     i: Tokens,
@@ -249,6 +250,7 @@ pub fn parse_program_with_results(
         _ => unreachable!(),
     }
 }
+*/
 
 pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (exprs, end)) = pair(
@@ -812,7 +814,7 @@ mod tests {
     #[test]
     fn interpret_expressions() {
         let env = crate::eval::Environment::default();
-        let mut interp = crate::eval::Interpreter::default();
+        //let mut interp = crate::eval::Interpreter::default();
         let mut program = Program::new();
         let r = program.eval("assert(1 == 1 == 1 == 1)", env).unwrap();
         let r = program

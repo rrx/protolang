@@ -1,14 +1,9 @@
 use crate::{
     ast::{CallTable, Callable, Callback, Expr},
-    eval::{Environment, ExprRef, ExprRefWithEnv, InterpretError, Interpreter},
+    eval::{Environment, ExprRef, ExprRefWithEnv, InterpretError},
     tokens::Tok,
 };
-use std::{
-    //any::Any,
-    fmt,
-    time::{SystemTime, UNIX_EPOCH},
-};
-//use thiserror::Error;
+use std::fmt;
 
 pub fn builtins(mut builtins: CallTable) -> CallTable {
     builtins
@@ -79,55 +74,6 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
         )
 }
 
-/*
-#[derive(Clone)]
-pub struct Generic<'a, F> where F: Clone {
-    arity: usize,
-    cb: F,
-    p: std::marker::PhantomData<&'a F>
-}
-
-impl<'a, F> Generic<'a, F>
-where F: Clone + Fn(&'a mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> {
-    pub fn new(arity: usize, cb: F) -> Self {
-        Self { cb, arity, p: std::marker::PhantomData }
-    }
-}
-
-impl<'a, F> fmt::Debug for Generic<'a, F> where F: Clone {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<builtin fn generic>")
-    }
-}
-
-impl<'a, F> fmt::Display for Generic<'a, F> where F: Clone {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<builtin fn generic>")
-    }
-}
-
-impl<'a, F> Callable for Generic<'a, F>
-where F: Clone + Fn(&'a mut Interpreter, Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError>
-{
-    fn call(
-        &'a self,
-        interp: &'a mut Interpreter,
-        env: Environment,
-        args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
-        (self.cb)(interp, env, args)
-    }
-
-    fn box_clone(&self) -> Box<dyn Callable> {
-        Box::new(Self { arity: self.arity, cb: self.cb.clone(), p: self.p.clone() })//(*self).clone())
-    }
-
-    //fn as_any(&self) -> &dyn Any {
-        //self
-    //}
-}
-*/
-
 #[derive(Clone, Debug)]
 pub struct ShowStack;
 impl ShowStack {
@@ -145,7 +91,6 @@ impl fmt::Display for ShowStack {
 impl Callable for ShowStack {
     fn call<'a>(
         &self,
-        _: &mut Interpreter,
         env: Environment,
         _: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError> {
@@ -156,10 +101,6 @@ impl Callable for ShowStack {
     fn box_clone(&self) -> Box<dyn Callable> {
         Box::new((*self).clone())
     }
-
-    //fn as_any(&self) -> &dyn Any {
-    //self
-    //}
 }
 
 #[derive(Clone, Debug)]
@@ -184,10 +125,10 @@ impl Callable for Clock {
 
     fn call<'a>(
         &self,
-        _: &mut Interpreter,
         env: Environment,
         _: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError> {
+        use std::time::{SystemTime, UNIX_EPOCH};
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("we mustn't travel back in time")
@@ -202,10 +143,6 @@ impl Callable for Clock {
     fn box_clone(&self) -> Box<dyn Callable> {
         Box::new((*self).clone())
     }
-
-    //fn as_any(&self) -> &dyn Any {
-    //self
-    //}
 }
 
 #[derive(Clone, Debug)]
@@ -230,7 +167,6 @@ impl Callable for Assert {
 
     fn call<'a>(
         &self,
-        _: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError> {
@@ -253,8 +189,4 @@ impl Callable for Assert {
     fn box_clone(&self) -> Box<dyn Callable> {
         Box::new((*self).clone())
     }
-
-    //fn as_any(&self) -> &dyn Any {
-    //self
-    //}
 }

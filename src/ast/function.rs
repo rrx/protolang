@@ -28,7 +28,7 @@ pub trait Callable: Debug + Display {
     }
     fn call<'a>(
         &self,
-        interp: &mut Interpreter,
+        //interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError>;
@@ -121,11 +121,11 @@ impl Callable for Lambda {
 
     fn call<'a>(
         &self,
-        interp: &mut Interpreter,
+        //interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError> {
-        interp.call(env, self, &self.params, &args, self.expr.clone().into())
+        Interpreter::call(env, self, &self.params, &args, self.expr.clone().into())
     }
 
     fn box_clone(&self) -> Box<dyn Callable> {

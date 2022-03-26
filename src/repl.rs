@@ -1,10 +1,6 @@
-use crate::ast::ExprNode;
-use crate::eval::{Environment, ExprRefWithEnv, InterpretError, Interpreter};
-use crate::lexer;
-use crate::parser::{parse_program, parse_program_with_results, Unparse};
+use crate::eval::Environment;
+use crate::parser::Unparse;
 use crate::program::Program;
-use crate::results::*;
-use crate::sexpr::SExpr;
 use log::debug;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -62,10 +58,4 @@ pub fn repl() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use test_log::test;
 }

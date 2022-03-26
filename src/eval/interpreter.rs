@@ -1,31 +1,22 @@
 use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
-//use crate::ast::{CallTable};
 use crate::results::{InterpretError, InterpretErrorKind};
-//use crate::sexpr::SExpr;
 use crate::tokens::Tok;
-//use log::debug;
-//use rpds::HashTrieMap;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
 
-#[derive(Clone)]
-pub struct Interpreter {
-    //builtins: CallTable,
-//builtins: HashTrieMap<String, Callback<'a>>,
-//p: std::marker::PhantomData<&'a String>,
-}
+//#[derive(Clone, Default)]
+pub struct Interpreter {}
 
+/*
 impl Default for Interpreter {
     fn default() -> Self {
-        Self {
-            //p: std::marker::PhantomData,
-            //builtins: crate::eval::builtins::builtins(CallTable::new()),
-        }
+        Self {}
     }
 }
+*/
 
 impl fmt::Debug for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -170,7 +161,7 @@ impl ExprNode {
 
 impl Interpreter {
     pub fn call(
-        &mut self,
+        //&mut self,
         mut env: Environment,
         f: &dyn Callable,
         params: &Params,
@@ -213,14 +204,14 @@ impl Interpreter {
         }
 
         // evaluate the result
-        let r = self.evaluate(expr, env)?;
+        let r = Self::evaluate(expr, env)?;
         // we drop any temporary variables, if they are no longer needed
         // we aren't able to drop the env currently, in case the function mutated something outside
         Ok(r)
     }
 
     pub fn evaluate(
-        &mut self,
+        //&mut self,
         exprref: ExprRef,
         env: Environment,
     ) -> Result<ExprRefWithEnv, InterpretError> {
@@ -235,12 +226,12 @@ impl Interpreter {
                 Ok(ExprRefWithEnv::new(v.into(), env))
             }
             Expr::Prefix(prefix, expr) => {
-                let r = self.evaluate(expr.clone().into(), env)?;
+                let r = Self::evaluate(expr.clone().into(), env)?;
                 let eval = r.expr.as_ref().borrow().prefix(&prefix.value)?.into();
                 Ok(ExprRefWithEnv::new(eval, r.env))
             }
             Expr::Postfix(op, expr) => {
-                let r = self.evaluate(expr.clone().into(), env)?;
+                let r = Self::evaluate(expr.clone().into(), env)?;
                 let eval = r.expr.as_ref().borrow().postfix(&op.value)?;
                 Ok(ExprRefWithEnv::new(eval.into(), r.env))
             }
@@ -252,7 +243,7 @@ impl Interpreter {
                 let mut eval_elements = vec![];
                 let mut newenv = env;
                 for e in exprs.clone() {
-                    let eref = self.evaluate(e.into(), newenv)?;
+                    let eref = Self::evaluate(e.into(), newenv)?;
                     newenv = eref.env;
                     let e = eref.expr.as_ref().borrow().deref().clone();
                     eval_elements.push(e);
@@ -263,13 +254,13 @@ impl Interpreter {
                 ))
             }
 
-            Expr::Binary(op, left, right) => self.evaluate_binary(op, left, right, env),
+            Expr::Binary(op, left, right) => Self::evaluate_binary(op, left, right, env),
 
             Expr::List(elements) => {
                 let mut eval_elements = vec![];
                 let mut newenv = env;
                 for e in elements.clone() {
-                    let eref = self.evaluate(e.into(), newenv)?;
+                    let eref = Self::evaluate(e.into(), newenv)?;
                     newenv = eref.env;
                     let e = eref.expr.as_ref().borrow().deref().clone();
                     eval_elements.push(e);
@@ -306,7 +297,7 @@ impl Interpreter {
                         let mut eval_args = vec![];
                         let mut newenv = env;
                         for arg in args {
-                            let v = self.evaluate(arg.clone().into(), newenv)?;
+                            let v = Self::evaluate(arg.clone().into(), newenv)?;
                             //debug!(
                             //"arg context {:?}",
                             //(&arg.context, &v.expr.borrow().context)
@@ -326,7 +317,7 @@ impl Interpreter {
                             //debug!("Calling {:?}({:?})", c, eval_args);
 
                             // newenv.clone here creates a stack branch
-                            let result = cb.call(self, newenv.clone(), eval_args)?;
+                            let result = cb.call(newenv.clone(), eval_args)?;
                             //debug!("Call Result {:?}", &result);
                             Some(Ok(result))
                         } else {
@@ -351,7 +342,7 @@ impl Interpreter {
                 let original_env = env.clone();
                 let mut newenv = env;
                 for expr in exprs {
-                    let r = self.evaluate(expr.clone().into(), newenv);
+                    let r = Self::evaluate(expr.clone().into(), newenv);
                     match r {
                         Ok(v) => {
                             newenv = v.env;
@@ -371,7 +362,7 @@ impl Interpreter {
                 let mut result = Expr::Void.into();
                 let mut newenv = env;
                 for expr in exprs {
-                    let r = self.evaluate(expr.clone().into(), newenv);
+                    let r = Self::evaluate(expr.clone().into(), newenv);
                     match r {
                         Ok(v) => {
                             newenv = v.env;
@@ -387,12 +378,12 @@ impl Interpreter {
 
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {
-                    let v = self.evaluate(x.clone().into(), env)?;
+                    let v = Self::evaluate(x.clone().into(), env)?;
                     let b = ExprNode::check_bool(&v.expr.as_ref().borrow())?;
                     if b {
-                        self.evaluate(y.clone().into(), v.env)
+                        Self::evaluate(y.clone().into(), v.env)
                     } else {
-                        self.evaluate(z.clone().into(), v.env)
+                        Self::evaluate(z.clone().into(), v.env)
                     }
                 }
                 _ => unimplemented!(),
@@ -408,7 +399,7 @@ impl Interpreter {
     }
 
     fn evaluate_binary(
-        &mut self,
+        //&mut self,
         op: &Operator,
         left: &ExprNode,
         right: &ExprNode,
@@ -417,7 +408,7 @@ impl Interpreter {
         match op {
             Operator::Declare => {
                 return if let Some(ident) = left.try_ident() {
-                    let eval_right = self.evaluate(right.clone().into(), env)?;
+                    let eval_right = Self::evaluate(right.clone().into(), env)?;
                     //debug!("Declare {:?} to {}", &eval_right, &ident.name);
                     let env = eval_right.env.define(ident, eval_right.expr.clone());
                     Ok(ExprRefWithEnv::new(eval_right.expr, env))
@@ -431,15 +422,13 @@ impl Interpreter {
                 return if let Some(ident) = left.try_ident() {
                     let access = env.get_at(&ident.name, &left.context)?;
                     if access.modifier != VarModifier::Mutable {
-                        //left.debug();
-                        //env.debug();
                         return Err(left.context.runtime_error(&format!(
                             "Invalid Assignment, '{}' Not mutable",
                             &ident.name
                         )));
                     }
 
-                    let eval_right = self.evaluate(right.clone().into(), env)?;
+                    let eval_right = Self::evaluate(right.clone().into(), env)?;
                     //debug!("Assign {:?} to {}", &eval_right, &ident.name);
                     let expr = access
                         .expr
@@ -455,8 +444,8 @@ impl Interpreter {
             _ => (),
         }
 
-        let v_left = self.evaluate(left.clone().into(), env)?;
-        let v_right = self.evaluate(right.clone().into(), v_left.env)?;
+        let v_left = Self::evaluate(left.clone().into(), env)?;
+        let v_right = Self::evaluate(right.clone().into(), v_left.env)?;
 
         let eval_left = v_left.expr.as_ref().borrow();
         let eval_right = v_right.expr.as_ref().borrow();

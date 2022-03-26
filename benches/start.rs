@@ -53,9 +53,9 @@ fn interpret(c: &mut Criterion) {
     unparse_expr(&expr, true);
     c.bench_function("interpret", |b| {
         b.iter(|| {
-            let mut interp = Interpreter::default();
+            //let mut interp = Interpreter::default();
             let env = Environment::default();
-            let _ = interp.evaluate(expr.clone().into(), env).unwrap();
+            let _ = Interpreter::evaluate(expr.clone().into(), env).unwrap();
         })
     });
 }

@@ -38,7 +38,7 @@ pub struct Program {
     pub diagnostics: Vec<Diagnostic<FileId>>,
     pub files: SimpleFiles<String, String>,
     pub value: ExprRefWithEnv,
-    pub interp: Interpreter,
+    //pub interp: Interpreter,
 }
 
 impl Program {
@@ -47,7 +47,7 @@ impl Program {
             diagnostics: vec![],
             files: SimpleFiles::new(),
             value: ExprRefWithEnv::new(Expr::Void.into(), Environment::default()),
-            interp: Interpreter::default(),
+            //interp: Interpreter::default(),
         }
     }
 
@@ -130,7 +130,7 @@ impl Program {
                 if end.input_len() > 0 {
                     debug!("program rest {:?}", end); //.expand_toks());
                 }
-                match self.interp.evaluate(expr.into(), env) {
+                match Interpreter::evaluate(expr.into(), env) {
                     Ok(v) => Ok(v),
                     Err(InterpretError { context, kind }) => {
                         let error = InterpretError { context, kind };
