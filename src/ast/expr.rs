@@ -391,11 +391,9 @@ impl Unparse for ExprNode {
             }
             Expr::Callback(_) => {
                 unimplemented!();
-                //out.append(&mut e.unparse());
             }
             Expr::Callable(_) => {
                 unimplemented!();
-                //out.append(&mut e.unparse());
             }
             Expr::Index(expr, arg) => {
                 out.append(&mut expr.unparse());

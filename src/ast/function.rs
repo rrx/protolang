@@ -4,7 +4,6 @@ use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::Tok;
-//use std::fmt;
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
@@ -28,12 +27,10 @@ pub trait Callable: Debug + Display {
     }
     fn call<'a>(
         &self,
-        //interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError>;
     fn box_clone(&self) -> Box<dyn Callable>;
-    //fn as_any(&self) -> &dyn Any;
 }
 
 impl Clone for Box<dyn Callable> {
@@ -121,7 +118,6 @@ impl Callable for Lambda {
 
     fn call<'a>(
         &self,
-        //interp: &mut Interpreter,
         env: Environment,
         args: Vec<ExprRef>,
     ) -> Result<ExprRefWithEnv, InterpretError> {
@@ -131,10 +127,6 @@ impl Callable for Lambda {
     fn box_clone(&self) -> Box<dyn Callable> {
         Box::new((*self).clone())
     }
-
-    //fn as_any(&self) -> &dyn Any {
-    //self
-    //}
 }
 
 impl Unparse for Lambda {

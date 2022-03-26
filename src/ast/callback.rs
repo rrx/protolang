@@ -39,6 +39,14 @@ impl CallTable {
     }
 }
 
+impl std::ops::Deref for CallTable {
+    type Target = im::HashMap<String, Callback>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.funcs
+    }
+}
+
 pub type CallbackFn =
     dyn Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static;
 

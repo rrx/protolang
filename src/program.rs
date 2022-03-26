@@ -38,7 +38,6 @@ pub struct Program {
     pub diagnostics: Vec<Diagnostic<FileId>>,
     pub files: SimpleFiles<String, String>,
     pub value: ExprRefWithEnv,
-    //pub interp: Interpreter,
 }
 
 impl Program {
@@ -47,7 +46,6 @@ impl Program {
             diagnostics: vec![],
             files: SimpleFiles::new(),
             value: ExprRefWithEnv::new(Expr::Void.into(), Environment::default()),
-            //interp: Interpreter::default(),
         }
     }
 
@@ -179,7 +177,6 @@ mod tests {
     use test_log::test;
     #[test]
     fn parse() {
-        //let mut program = Program::new();
         let _ = Program::parse_file("examples/test.p").unwrap();
     }
 

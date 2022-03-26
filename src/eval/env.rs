@@ -325,9 +325,9 @@ impl Environment {
             layer.values.iter().for_each(|(k, v)| {
                 debug!("\t{}: {:?}", k, v);
             });
-            //layer.builtins.iter().for_each(|(k, _)| {
-            //debug!("\tbuiltin: {}", k);
-            //});
+            self.builtins.iter().for_each(|(k, _)| {
+                debug!("\tbuiltin: {}", k);
+            });
         })
     }
 

@@ -2,7 +2,6 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use protolang::eval::{Environment, Interpreter};
 use protolang::lexer;
 use protolang::parser::{parse_program, unparse_expr, Unparse};
-//use protolang::repl::parse_file;
 
 const FILENAME: &str = "benches/test.p";
 
@@ -53,7 +52,6 @@ fn interpret(c: &mut Criterion) {
     unparse_expr(&expr, true);
     c.bench_function("interpret", |b| {
         b.iter(|| {
-            //let mut interp = Interpreter::default();
             let env = Environment::default();
             let _ = Interpreter::evaluate(expr.clone().into(), env).unwrap();
         })
