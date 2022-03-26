@@ -242,7 +242,7 @@ impl<'a> fmt::Debug for Environment<'a> {
 impl Default for Environment {
     fn default() -> Self {
         let mut stack = im::Vector::new();
-
+    
         //let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
         //builtins = builtins.insert(
         //"asdf".into(),
@@ -258,7 +258,7 @@ impl Default for Environment {
         stack.push_front(layer);
         let env = Self {
             stack,
-            builtins: CallTable::new(),
+            builtins: crate::eval::builtins::builtins(CallTable::new()),
             //p: std::marker::PhantomData,
         }; //globals: HashTrieMap::new() };
            //use super::builtins::*;
@@ -293,11 +293,19 @@ impl Environment {
 
     pub fn resolve(&self, name: &str) -> Option<ExprAccessRef> {
         //self.debug();
-        self.stack
+        match self.stack
             .iter()
             .find(|layer| layer.values.contains_key(name))
             .map(|layer| layer.get(name))
-            .flatten()
+            .flatten() {
+                Some(b) => Some(b),
+                None => {
+                    self.builtins.get(name)
+                        .map(|b| {
+                            Expr::Callback(b.clone()).into()
+                        })
+                }
+            }
     }
 
     /*
@@ -333,16 +341,6 @@ impl Environment {
         }
         Err(context.runtime_error(&format!("Undefined variable '{}'.", name)))
     }
-
-    pub fn get_(&self, name: &str) -> Result<ExprAccessRef, InterpretError> {
-        if let Some(value) = self.resolve(name) {
-            return Ok(value);
-        }
-        Err(InterpretError::runtime(&format!(
-            "Undefined variable '{}'.",
-            name
-        )))
-    }
 }
 
 #[cfg(test)]
@@ -364,7 +362,7 @@ mod tests {
         env.debug();
         let x2 = env.resolve("x".into()).unwrap();
         let y = env.resolve("y".into()).unwrap();
-        //let _ = env.resolve("clock".into()).unwrap();
+        let _ = env.resolve("clock".into()).unwrap();
 
         debug!("1:{:?}", x1);
         debug!("2:{:?}", x2);

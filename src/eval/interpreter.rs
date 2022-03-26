@@ -229,7 +229,7 @@ impl Interpreter {
         let expr = &node.value;
         //debug!("EVAL: {:?}", &expr);
         match expr {
-            Expr::Literal(_) => Ok(ExprRefWithEnv::new(e, env)),
+            Expr::Literal(_) | Expr::Callback(_) => Ok(ExprRefWithEnv::new(e, env)),
             Expr::Ident(ident) => {
                 let v = env.get_at(&ident.name, &node.context)?;
                 Ok(ExprRefWithEnv::new(v.into(), env))
@@ -316,30 +316,35 @@ impl Interpreter {
                         }
                         //debug!("Calling context {:?}", (&node.context));
 
-                        match self.builtins.get(&ident.name) {
-                            Some(cb) => {
-                                let result = cb(newenv.clone(), eval_args)?;
+                        //match self.builtins.get(&ident.name) {
+                            //Some(cb) => {
+                                //let result = cb(newenv.clone(), eval_args)?;
                                 //debug!("Call Result {:?}", &result);
-                                Some(Ok(result))
-                            }
-                            _ => {
+                                //Some(Ok(result))
+                            //}
+                            //_ => {
                                 let x: ExprAccessRef =
                                     newenv.get_at(&ident.name, &node.context)?.clone();
                                 let expr = x.expr.as_ref().borrow();
-                                match expr.try_callable() {
-                                    Some(c) => {
+                                if let Some(cb) = expr.try_callback() {
+                                    let result = cb(newenv.clone(), eval_args)?;
+                                    Some(Ok(result))
+                                } else if let Some(cb) = expr.try_callable() {
+                                    //Some(c) => {
                                         //debug!("Calling context {:?}", (&x, &expr));
                                         //debug!("Calling {:?}({:?})", c, eval_args);
 
                                         // newenv.clone here creates a stack branch
-                                        let result = c.call(self, newenv.clone(), eval_args)?;
+                                        let result = cb.call(self, newenv.clone(), eval_args)?;
                                         //debug!("Call Result {:?}", &result);
                                         Some(Ok(result))
-                                    }
-                                    _ => None,
+                                    //}
+                                } else {
+                                    None
+                                    //_ => None,
                                 }
-                            }
-                        }
+                            //}
+                        //}
                     }
                     _ => None,
                 };

@@ -2,7 +2,7 @@ use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
-
+use crate::ast::Callback;
 use super::function::{Callable, Lambda};
 use super::node::{Context, Context2, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
@@ -55,6 +55,7 @@ pub enum Expr {
     //NAry(Operator, Vec<ExprNode>),
     Lambda(Lambda),
     Callable(Box<dyn Callable>),
+    Callback(Callback),
     List(Vec<ExprNode>),
     Chain(Operator, Vec<ExprNode>),
     BinaryChain(Vec<ExprNode>),
@@ -95,6 +96,14 @@ impl Expr {
 
     pub fn try_literal(&self) -> Option<Tok> {
         if let Expr::Literal(s) = self {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn try_callback(&self) -> Option<Callback> {
+        if let Expr::Callback(s) = self {
             Some(s.clone())
         } else {
             None
@@ -184,7 +193,7 @@ impl ExprVisitor<String> for ExprFormatter {
             Expr::Chain(_, _) => {
                 write!(f, "{}{}\n", indent, s)
             }
-            Expr::BinaryChain(exprs) => {
+            Expr::BinaryChain(_) => {
                 write!(f, "{}{}\n", indent, s)
             }
             Expr::Prefix(op, _) => {
@@ -200,6 +209,9 @@ impl ExprVisitor<String> for ExprFormatter {
                 write!(f, "{}{}(len={})\n", indent, s, elements.len())
             }
             Expr::Callable(_) => {
+                write!(f, "{}{}\n", indent, s)
+            }
+            Expr::Callback(_) => {
                 write!(f, "{}{}\n", indent, s)
             }
             Expr::Index(_, _) => {
@@ -329,8 +341,8 @@ impl Unparse for ExprNode {
                 out.append(&mut y.unparse());
                 out.append(&mut z.unparse());
             }
-            Expr::Chain(op, args) => {
-                use itertools::Itertools;
+            Expr::Chain(_, args) => {
+                //use itertools::Itertools;
                 //let mut args: Vec<_> = args.iter().map(|v| v.unparse()).intersperse(vec![op.token()]).flatten().collect();
                 let mut args: Vec<_> = args.iter().map(|v| v.unparse()).flatten().collect();
                 out.append(&mut args);
@@ -340,7 +352,7 @@ impl Unparse for ExprNode {
                     unreachable!();
                 } else {
                     for v in exprs {
-                        if let Expr::Binary(op, left, right) = &v.value {
+                        if let Expr::Binary(_, _, right) = &v.value {
                             if out.len() == 0 {
                                 out.append(&mut v.unparse());
                             } else {
@@ -377,7 +389,12 @@ impl Unparse for ExprNode {
             Expr::Lambda(e) => {
                 out.append(&mut e.unparse());
             }
+            Expr::Callback(_) => {
+                unimplemented!();
+                //out.append(&mut e.unparse());
+            }
             Expr::Callable(_) => {
+                unimplemented!();
                 //out.append(&mut e.unparse());
             }
             Expr::Index(expr, arg) => {
@@ -454,6 +471,7 @@ impl SExpr for ExprNode {
             }
             Lambda(e) => e.sexpr(),
             Callable(_) => Ok(S::Cons("callable".into(), vec![])),
+            Callback(_) => Ok(S::Cons("callback".into(), vec![])),
             Index(expr, arg) => {
                 let sexpr = expr.sexpr()?;
                 let sarg = arg.sexpr()?;

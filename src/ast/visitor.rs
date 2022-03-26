@@ -76,7 +76,8 @@ impl Expr {
                         .collect::<Vec<_>>(),
                 );
             }
-            Expr::Callable(_) => {}
+            Expr::Callable(_) => {unimplemented!()}
+            Expr::Callback(_) => {unimplemented!()}
             Expr::Index(expr, arg) => {
                 out.push(expr.clone());
                 out.push(arg.clone());
@@ -136,8 +137,10 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
                 visit_expr(&e, f, n)?;
             }
         }
+        Expr::Callback(_) => {
+            f.leaf(e, n)?;
+        }
         Expr::Callable(_) => {
-            //out.append(&mut e.unparse());
             f.leaf(e, n)?;
         }
         Expr::Index(expr, arg) => {
