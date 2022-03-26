@@ -242,7 +242,7 @@ impl<'a> fmt::Debug for Environment<'a> {
 impl Default for Environment {
     fn default() -> Self {
         let mut stack = im::Vector::new();
-    
+
         //let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
         //builtins = builtins.insert(
         //"asdf".into(),
@@ -293,19 +293,19 @@ impl Environment {
 
     pub fn resolve(&self, name: &str) -> Option<ExprAccessRef> {
         //self.debug();
-        match self.stack
+        match self
+            .stack
             .iter()
             .find(|layer| layer.values.contains_key(name))
             .map(|layer| layer.get(name))
-            .flatten() {
-                Some(b) => Some(b),
-                None => {
-                    self.builtins.get(name)
-                        .map(|b| {
-                            Expr::Callback(b.clone()).into()
-                        })
-                }
-            }
+            .flatten()
+        {
+            Some(b) => Some(b),
+            None => self
+                .builtins
+                .get(name)
+                .map(|b| Expr::Callback(b.clone()).into()),
+        }
     }
 
     /*

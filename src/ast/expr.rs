@@ -1,12 +1,12 @@
-use crate::lexer::Location;
-use crate::parser::Unparse;
-use crate::sexpr::*;
-use crate::tokens::{Tok, Token};
-use crate::ast::Callback;
 use super::function::{Callable, Lambda};
 use super::node::{Context, Context2, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
+use crate::ast::Callback;
+use crate::lexer::Location;
+use crate::parser::Unparse;
+use crate::sexpr::*;
+use crate::tokens::{Tok, Token};
 use log::debug;
 use std::fmt;
 use std::fmt::Write;

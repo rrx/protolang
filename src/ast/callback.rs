@@ -51,8 +51,7 @@ pub struct Callback {
 impl Callback {
     pub fn new<F>(f: F) -> Callback
     where
-        F: Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError>
-            + 'static,
+        F: Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static,
     {
         Callback {
             cb: Rc::new(f),

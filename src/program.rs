@@ -84,11 +84,7 @@ impl Program {
         Ok(expr)
     }
 
-    pub fn eval(
-        &mut self,
-        v: &str,
-        env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    pub fn eval(&mut self, v: &str, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
         self._eval_file("<repl>", v, env)
     }
 

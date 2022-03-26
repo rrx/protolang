@@ -1,7 +1,7 @@
 use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
-use crate::ast::{CallTable, Callback};
+//use crate::ast::{CallTable};
 use crate::results::{InterpretError, InterpretErrorKind};
 //use crate::sexpr::SExpr;
 use crate::tokens::Tok;
@@ -13,16 +13,16 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct Interpreter {
-    builtins: CallTable,
-    //builtins: HashTrieMap<String, Callback<'a>>,
-    //p: std::marker::PhantomData<&'a String>,
+    //builtins: CallTable,
+//builtins: HashTrieMap<String, Callback<'a>>,
+//p: std::marker::PhantomData<&'a String>,
 }
 
 impl Default for Interpreter {
     fn default() -> Self {
         Self {
             //p: std::marker::PhantomData,
-            builtins: crate::eval::builtins::builtins(CallTable::new()),
+            //builtins: crate::eval::builtins::builtins(CallTable::new()),
         }
     }
 }
@@ -316,35 +316,22 @@ impl Interpreter {
                         }
                         //debug!("Calling context {:?}", (&node.context));
 
-                        //match self.builtins.get(&ident.name) {
-                            //Some(cb) => {
-                                //let result = cb(newenv.clone(), eval_args)?;
-                                //debug!("Call Result {:?}", &result);
-                                //Some(Ok(result))
-                            //}
-                            //_ => {
-                                let x: ExprAccessRef =
-                                    newenv.get_at(&ident.name, &node.context)?.clone();
-                                let expr = x.expr.as_ref().borrow();
-                                if let Some(cb) = expr.try_callback() {
-                                    let result = cb(newenv.clone(), eval_args)?;
-                                    Some(Ok(result))
-                                } else if let Some(cb) = expr.try_callable() {
-                                    //Some(c) => {
-                                        //debug!("Calling context {:?}", (&x, &expr));
-                                        //debug!("Calling {:?}({:?})", c, eval_args);
+                        let x: ExprAccessRef = newenv.get_at(&ident.name, &node.context)?.clone();
+                        let expr = x.expr.as_ref().borrow();
+                        if let Some(cb) = expr.try_callback() {
+                            let result = cb(newenv.clone(), eval_args)?;
+                            Some(Ok(result))
+                        } else if let Some(cb) = expr.try_callable() {
+                            //debug!("Calling context {:?}", (&x, &expr));
+                            //debug!("Calling {:?}({:?})", c, eval_args);
 
-                                        // newenv.clone here creates a stack branch
-                                        let result = cb.call(self, newenv.clone(), eval_args)?;
-                                        //debug!("Call Result {:?}", &result);
-                                        Some(Ok(result))
-                                    //}
-                                } else {
-                                    None
-                                    //_ => None,
-                                }
-                            //}
-                        //}
+                            // newenv.clone here creates a stack branch
+                            let result = cb.call(self, newenv.clone(), eval_args)?;
+                            //debug!("Call Result {:?}", &result);
+                            Some(Ok(result))
+                        } else {
+                            None
+                        }
                     }
                     _ => None,
                 };

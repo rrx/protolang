@@ -76,8 +76,12 @@ impl Expr {
                         .collect::<Vec<_>>(),
                 );
             }
-            Expr::Callable(_) => {unimplemented!()}
-            Expr::Callback(_) => {unimplemented!()}
+            Expr::Callable(_) => {
+                unimplemented!()
+            }
+            Expr::Callback(_) => {
+                unimplemented!()
+            }
             Expr::Index(expr, arg) => {
                 out.push(expr.clone());
                 out.push(arg.clone());
