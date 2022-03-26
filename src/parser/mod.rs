@@ -404,6 +404,7 @@ mod tests {
     use crate::sexpr::SExpr;
     use nom::multi::many1;
     use test_log::test;
+    use crate::program::Program;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);
@@ -814,9 +815,9 @@ mod tests {
     fn interpret_expressions() {
         let env = crate::eval::Environment::default();
         let mut interp = crate::eval::Interpreter::default();
-
-        let r = interp.eval("assert(1 == 1 == 1 == 1)", env).unwrap();
-        let r = interp
+        let mut program = Program::new();
+        let r = program.eval("assert(1 == 1 == 1 == 1)", env).unwrap();
+        let r = program
             .eval(
                 "
             let a = 1
@@ -825,7 +826,7 @@ mod tests {
             let d = 2
             assert(a == b == c != d)
         ",
-                r.value.env,
+                r.env,
             )
             .unwrap();
     }

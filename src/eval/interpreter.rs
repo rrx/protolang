@@ -2,8 +2,8 @@ use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::function::Callback;
 use crate::ast::*;
-use crate::results::{InterpretError, InterpretErrorKind, Results};
-use crate::sexpr::SExpr;
+use crate::results::{InterpretError, InterpretErrorKind};
+//use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use log::debug;
 use rpds::HashTrieMap;
@@ -241,79 +241,6 @@ impl<'a> Interpreter<'a> {
         // we drop any temporary variables, if they are no longer needed
         // we aren't able to drop the env currently, in case the function mutated something outside
         Ok(r)
-    }
-
-    pub fn just_eval(
-        &mut self,
-        v: &str,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv<'a>, InterpretError> {
-        use crate::lexer::LexerState;
-        use crate::tokens::*;
-        let mut lexer = LexerState::from_str_eof(v).unwrap();
-        let tokens = lexer.tokens();
-        match crate::parser::parse_program(tokens) {
-            Ok((_, expr)) => {
-                debug!("SEXPR: {}", expr.sexpr().unwrap());
-                self.evaluate(expr.into(), env)
-            }
-            Err(nom::Err::Error(e)) => {
-                for (tokens, err) in &e.errors {
-                    debug!("error {:?}", (&err, tokens.toks()));
-                }
-                Err(InterpretError::runtime(&format!("Error parsing {:?}", e)))
-            }
-            Err(e) => Err(InterpretError::runtime(&format!("Error parsing {:?}", e))),
-        }
-    }
-
-    pub fn eval(&mut self, v: &str, env: Environment<'a>) -> Result<Results<'a>, InterpretError> {
-        use crate::lexer::LexerState;
-        use crate::results;
-        use crate::tokens::*;
-        let mut lexer = LexerState::from_str_eof(v).unwrap();
-        let tokens = lexer.tokens();
-        use nom::InputIter;
-        let mut results = results::Results::new();
-        let file_id = results.add_source("<repl>".into(), v.to_string());
-        tokens.iter_elements().for_each(|t| {
-            if let Tok::Invalid(s) = &t.tok {
-                let error =
-                    results::LangError::Warning(format!("Invalid Token: {}", s), t.to_context());
-                let diagnostic = error.diagnostic(file_id);
-                results.push(diagnostic);
-            }
-        });
-
-        match crate::parser::parse_program(tokens) {
-            Ok((_, expr)) => {
-                debug!("SEXPR: {}", expr.sexpr().unwrap());
-                match self.evaluate(expr.into(), env) {
-                    Ok(v) => {
-                        results.add_result(v);
-                    }
-                    Err(InterpretError { context, kind }) => {
-                        let error = InterpretError { context, kind };
-                        let diagnostic = error.diagnostic(file_id);
-                        results.push(diagnostic);
-                    }
-                }
-            }
-            Err(nom::Err::Error(e)) => {
-                for (tokens, err) in e.errors {
-                    debug!("error {:?}", (&err, tokens.toks()));
-                }
-                let error = InterpretError::runtime("Error parsing");
-                let diagnostic = error.diagnostic(file_id);
-                results.push(diagnostic);
-            }
-            Err(e) => {
-                let error = InterpretError::runtime(&format!("Error parsing: {:?}", e));
-                let diagnostic = error.diagnostic(file_id);
-                results.push(diagnostic);
-            }
-        }
-        Ok(results)
     }
 
     pub fn evaluate(
@@ -592,11 +519,13 @@ impl<'a> Interpreter<'a> {
 mod tests {
     use super::*;
     use test_log::test;
+    use crate::program::Program;
+
     #[test]
     fn test() {
         let env = Environment::default();
-        let mut interp = Interpreter::default();
-        let r = interp
+        let mut program = Program::new();
+        let r = program
             .eval(
                 "
         let x = 0;
@@ -606,12 +535,11 @@ mod tests {
                 env,
             )
             .unwrap();
-        r.print();
-        let value = r.value;
-        assert!(value.env.resolve("x").unwrap().is_mut());
+        program.print();
+        assert!(r.env.resolve("x").unwrap().is_mut());
 
         // blocks should hide visibility
-        let r = interp
+        let r = program
             .eval(
                 "
         # asdf should not be visible outside the block
@@ -619,14 +547,13 @@ mod tests {
                 let asdf1 = 1
         }
         ",
-                value.env,
+                r.env,
             )
             .unwrap();
-        r.print();
-        let value = r.value;
-        assert!(value.env.resolve("asdf1").is_none());
+        program.print();
+        assert!(r.env.resolve("asdf1").is_none());
 
-        let r = interp
+        let r = program
             .eval(
                 "
         # verify that we can use non-local variables for calculationsa in a closure
@@ -635,13 +562,12 @@ mod tests {
         let f = \\x -> x + nonlocal_x
         assert(4 == f(3))
         ",
-                value.env,
+                r.env,
             )
             .unwrap();
-        r.print();
-        let value = r.value;
+        program.print();
 
-        let r = interp
+        let r = program
             .eval(
                 "
         # verify that we are able to modify non local variables from within the closure
@@ -652,13 +578,12 @@ mod tests {
         assert(2 == f(1))
         assert(nonlocal_x == 2)
         ",
-                value.env,
+                r.env,
             )
             .unwrap();
-        r.print();
-        let value = r.value;
+        program.print();
 
-        let r = interp
+        let r = program
             .eval(
                 "
         # check to make sure closures don't leak
@@ -670,19 +595,18 @@ mod tests {
         }
         f(1)
         ",
-                value.env,
+                r.env,
             )
             .unwrap();
-        r.print();
-        let value = r.value;
-        assert!(value.env.resolve("super_local").is_none());
+        program.print();
+        assert!(r.env.resolve("super_local").is_none());
     }
 
     #[test]
     fn errors() {
-        let mut interp = Interpreter::default();
         let env = Environment::default();
-        let r = interp.just_eval("assert(1)", env);
+        let mut program = Program::new();
+        let r = program.eval("assert(1)", env);
         if let Err(InterpretError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
@@ -690,7 +614,7 @@ mod tests {
         }
 
         let env = Environment::default();
-        let r = interp.just_eval("a", env);
+        let r = program.eval("a", env);
         if let Err(InterpretError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
@@ -699,12 +623,12 @@ mod tests {
     }
 
     #[test]
-    fn test2() {
+    fn builtin() {
         println!("x");
+        let mut program = Program::new();
         let env = Environment::default();
-        let mut interp = Interpreter::default();
-        let r = interp.eval("asdf()", env).unwrap();
-        r.print();
-        debug!("x {:?}", r.value);
+        let r = program.eval("asdf()", env).unwrap();
+        program.print();
+        debug!("x {:?}", r.expr);
     }
 }
