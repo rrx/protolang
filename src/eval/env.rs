@@ -1,4 +1,4 @@
-use crate::ast::function::Callback;
+use crate::ast::Callback;
 use crate::ast::*;
 use crate::results::InterpretError;
 use log::debug;

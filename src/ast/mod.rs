@@ -12,3 +12,6 @@ pub use expr::{Expr, ExprNode, Identifier, VarModifier};
 
 mod op;
 pub use op::{Operator, OperatorNode};
+
+mod callback;
+pub use callback::{Callback, CallbackFn, CallTable};

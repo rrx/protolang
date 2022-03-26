@@ -1,51 +1,35 @@
 use super::*;
 use super::{ExprRef, ExprRefWithEnv};
-use crate::ast::function::Callback;
+use crate::ast::{CallTable, Callback};
 use crate::ast::*;
 use crate::results::{InterpretError, InterpretErrorKind};
 //use crate::sexpr::SExpr;
 use crate::tokens::Tok;
-use log::debug;
-use rpds::HashTrieMap;
+//use log::debug;
+//use rpds::HashTrieMap;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct Interpreter<'a> {
-    builtins: HashTrieMap<String, Callback<'a>>,
+    builtins: CallTable<'a>,
+    //builtins: HashTrieMap<String, Callback<'a>>,
     p: std::marker::PhantomData<&'a String>,
-}
-
-impl<'a> Interpreter<'a> {
-    pub fn call_builtin(
-        &mut self,
-        name: String,
-        env: Environment<'a>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
-        match self.builtins.get(&name) {
-            Some(cb) => {
-                debug!("cb");
-                let result = cb(env, vec![]).unwrap();
-                Ok(result)
-            }
-            _ => unreachable!(),
-        }
-    }
 }
 
 impl<'a> Default for Interpreter<'a> {
     fn default() -> Self {
-        let mut builtins: HashTrieMap<String, Callback<'a>> = HashTrieMap::new();
+        let mut builtins = CallTable::new();//HashTrieMap<String, Callback<'a>> = HashTrieMap::new();
         builtins = builtins
-            .insert(
+            .add(
                 "showstack".into(),
                 Callback::new(|env, _| {
                     env.debug();
                     Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
                 }),
             )
-            .insert(
+            .add(
                 "assert".into(),
                 Callback::new(|env, args| {
                     let node = args.get(0).unwrap().borrow();
@@ -68,7 +52,7 @@ impl<'a> Default for Interpreter<'a> {
                     }
                 }),
             )
-            .insert(
+            .add(
                 "sexpr".into(),
                 Callback::new(|env, args| {
                     let mut out = vec![];
@@ -90,7 +74,7 @@ impl<'a> Default for Interpreter<'a> {
                     Ok(ExprRefWithEnv::new(Expr::List(out).into(), env))
                 }),
             )
-            .insert(
+            .add(
                 "clock".into(),
                 Callback::new(|env, _| {
                     use std::time::{SystemTime, UNIX_EPOCH};
@@ -584,6 +568,7 @@ mod tests {
     use super::*;
     use crate::program::Program;
     use test_log::test;
+    use log::debug;
 
     #[test]
     fn test() {
