@@ -4,7 +4,7 @@ use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::Tok;
-use std::fmt;
+//use std::fmt;
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
