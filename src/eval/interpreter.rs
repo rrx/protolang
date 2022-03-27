@@ -7,16 +7,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
 
-//#[derive(Clone, Default)]
 pub struct Interpreter {}
-
-/*
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self {}
-    }
-}
-*/
 
 impl fmt::Debug for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -496,7 +487,7 @@ mod tests {
             )
             .unwrap();
         program.print();
-        assert!(r.env.resolve("x").unwrap().is_mut());
+        assert!(r.env.resolve_value("x").unwrap().is_mut());
 
         // blocks should hide visibility
         let r = program
@@ -511,7 +502,7 @@ mod tests {
             )
             .unwrap();
         program.print();
-        assert!(r.env.resolve("asdf1").is_none());
+        assert!(r.env.resolve_value("asdf1").is_none());
 
         let r = program
             .eval(
@@ -559,7 +550,7 @@ mod tests {
             )
             .unwrap();
         program.print();
-        assert!(r.env.resolve("super_local").is_none());
+        assert!(r.env.resolve_value("super_local").is_none());
     }
 
     #[test]

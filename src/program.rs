@@ -193,6 +193,6 @@ mod tests {
         let env = Environment::default();
         let r = program.eval("let a=1", env).unwrap();
         r.env.debug();
-        assert!(r.env.resolve("a").is_some());
+        assert!(r.env.resolve_value("a").is_some());
     }
 }

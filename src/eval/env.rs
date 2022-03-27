@@ -1,6 +1,7 @@
 use crate::ast::*;
-use crate::ast::{CallTable, Callback};
+use crate::ast::{CallTable};
 use crate::results::InterpretError;
+use super::RefTypeSig;
 use log::debug;
 use rpds::HashTrieMap;
 use std::cell::{Ref, RefCell};
@@ -149,7 +150,7 @@ impl fmt::Debug for ExprRef {
 #[derive(Clone)]
 pub struct Layer {
     values: HashTrieMap<String, ExprAccessRef>,
-    //builtins: HashTrieMap<String, Callback<'a>>,
+    types: HashTrieMap<String, RefTypeSig>,
     weak: HashTrieMap<String, ExprAccessWeakRef>,
 }
 
@@ -157,8 +158,8 @@ impl Default for Layer {
     fn default() -> Self {
         Self {
             values: HashTrieMap::new(),
-            //builtins: HashTrieMap::new(),
             weak: HashTrieMap::new(),
+            types: HashTrieMap::new(),
         }
     }
 }
@@ -173,13 +174,22 @@ impl fmt::Debug for Layer {
 }
 
 impl Layer {
-    pub fn define(&self, identifier: Identifier, value: ExprRef) -> Layer {
+    pub fn define_value(&self, identifier: Identifier, value: ExprRef) -> Layer {
         let name = identifier.name.to_string();
         let accessref = ExprAccessRef::new(value, &identifier.modifier);
         Layer {
             values: self.values.insert(name, accessref),
             weak: HashTrieMap::new(),
-            //builtins: HashTrieMap::new(),
+            types: HashTrieMap::new(),
+        }
+    }
+
+    pub fn define_type(&self, identifier: Identifier, value: RefTypeSig) -> Layer {
+        let name = identifier.name.to_string();
+        Layer {
+            types: self.types.insert(name, value),
+            values: HashTrieMap::new(),
+            weak: HashTrieMap::new(),
         }
     }
 
@@ -189,7 +199,7 @@ impl Layer {
         Layer {
             weak: self.weak.insert(name, accessref),
             values: HashTrieMap::new(),
-            //builtins: HashTrieMap::new(),
+            types: HashTrieMap::new(),
         }
     }
 
@@ -197,7 +207,11 @@ impl Layer {
         self.values.contains_key(name)
     }
 
-    pub fn get(&self, name: &str) -> Option<ExprAccessRef> {
+    pub fn get_type(&self, name: &str) -> Option<RefTypeSig> {
+        self.types.get(name).map(|v| v.clone())
+    }
+
+    pub fn get_value(&self, name: &str) -> Option<ExprAccessRef> {
         match self.values.get(name) {
             Some(expr) => Some(expr.clone()),
             None => match self.weak.get(name) {
@@ -208,82 +222,45 @@ impl Layer {
     }
 }
 
-pub struct Globals {
-    values: HashTrieMap<String, Callback>,
-}
-
 #[derive(Debug, Clone)]
 pub struct Environment {
     stack: im::vector::Vector<Layer>,
     builtins: CallTable,
-    //globals: im::HashMap<String, Callback<'a>>
-    //globals: HashTrieMap<String, Callback<'a>>
-    //p: std::marker::PhantomData<&'a Layer>,
 }
-
-/*
-impl<'a> Clone for Environment<'a> {
-    fn clone(&self) -> Self {
-        Self {
-            stack: self.stack.clone(),
-            builtins: self.builtins.clone(),
-            p: std::marker::PhantomData, //globals: self.globals.clone()
-        }
-    }
-}
-
-impl<'a> fmt::Debug for Environment<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<env>")
-    }
-}
-*/
 
 impl Default for Environment {
     fn default() -> Self {
         let mut stack = im::Vector::new();
 
-        //let mut builtins: HashTrieMap<String, Callback> = HashTrieMap::new();
-        //builtins = builtins.insert(
-        //"asdf".into(),
-        //Box::new(|interp, env, _| Ok(ExprRefWithEnv::new(Expr::Void.into(), env))),
-        //);
-
         let layer = Layer {
-            //builtins,
             values: HashTrieMap::new(),
+            types: HashTrieMap::new(),
             weak: HashTrieMap::new(),
         };
 
         stack.push_front(layer);
-        let env = Self {
+        Self {
             stack,
             builtins: crate::eval::builtins::builtins(CallTable::new()),
-            //p: std::marker::PhantomData,
-        }; //globals: HashTrieMap::new() };
-           //use super::builtins::*;
-        env
-        //env.define("clock".into(), Clock::value().into())
-        //.define("assert".into(), Assert::value().into())
-        //.define("showstack".into(), ShowStack::value().into())
+        }
     }
 }
 
 impl Environment {
     pub fn define(mut self, identifier: Identifier, value: ExprRef) -> Self {
         if self.stack.len() > 0 && self.stack.front().unwrap().contains(&identifier.name) {
-            let layer = Layer::default().define(identifier, value);
+            let layer = Layer::default().define_value(identifier, value);
             self.stack.push_front(layer);
             self
         } else {
             match self.stack.pop_front() {
                 Some(layer) => {
-                    let layer = layer.define(identifier, value);
+                    let layer = layer.define_value(identifier, value);
                     self.stack.push_front(layer);
                     self
                 }
                 None => {
-                    let layer = Layer::default().define(identifier, value);
+                    let layer = Layer::default().define_value(identifier, value);
                     self.stack.push_front(layer);
                     self
                 }
@@ -291,13 +268,21 @@ impl Environment {
         }
     }
 
-    pub fn resolve(&self, name: &str) -> Option<ExprAccessRef> {
-        //self.debug();
+    pub fn resolve_type(&self, name: &str) -> Option<RefTypeSig> {
+        self
+            .stack
+            .iter()
+            .find(|layer| layer.types.contains_key(name))
+            .map(|layer| layer.get_type(name))
+            .flatten()
+    }
+
+    pub fn resolve_value(&self, name: &str) -> Option<ExprAccessRef> {
         match self
             .stack
             .iter()
             .find(|layer| layer.values.contains_key(name))
-            .map(|layer| layer.get(name))
+            .map(|layer| layer.get_value(name))
             .flatten()
         {
             Some(b) => Some(b),
@@ -336,7 +321,7 @@ impl Environment {
         name: &str,
         context: &MaybeNodeContext,
     ) -> Result<ExprAccessRef, InterpretError> {
-        if let Some(value) = self.resolve(name) {
+        if let Some(value) = self.resolve_value(name) {
             return Ok(value);
         }
         Err(context.runtime_error(&format!("Undefined variable '{}'.", name)))
@@ -352,7 +337,7 @@ mod tests {
         let env = Environment::default();
         let x1 = Expr::from(1).into();
         let env = env.define("x".into(), x1);
-        let x1 = env.resolve("x".into()).unwrap();
+        let x1 = env.resolve_value("x".into()).unwrap();
 
         let env = env.define("x".into(), Expr::from(2).into());
         let env = env.define("y".into(), Expr::from(3).into());
@@ -360,16 +345,16 @@ mod tests {
         let env_before_z = env.clone();
         let env = env.define("z".into(), Expr::from(4).into());
         env.debug();
-        let x2 = env.resolve("x".into()).unwrap();
-        let y = env.resolve("y".into()).unwrap();
-        let _ = env.resolve("clock".into()).unwrap();
+        let x2 = env.resolve_value("x".into()).unwrap();
+        let y = env.resolve_value("y".into()).unwrap();
+        let _ = env.resolve_value("clock".into()).unwrap();
 
         debug!("1:{:?}", x1);
         debug!("2:{:?}", x2);
         debug!("3:{:?}", y);
 
         // make sure z isn't visible
-        assert!(env_before_z.resolve("z".into()).is_none());
+        assert!(env_before_z.resolve_value("z".into()).is_none());
 
         assert_eq!(2, Rc::strong_count(&x1.expr.0));
         assert_eq!(2, Rc::strong_count(&x2.expr.0));
