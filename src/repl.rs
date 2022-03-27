@@ -33,11 +33,15 @@ pub fn repl() -> anyhow::Result<()> {
                 rl.add_history_entry(line.as_str());
                 match program.eval(&line, env.clone()) {
                     Ok(r) => {
+                        program.print();
                         println!("> {}", r.expr.borrow().unlex());
                         env = r.env;
                     }
-                    _ => (),
+                    _ => {
+                        program.print();
+                    }
                 }
+                program.diagnostics.clear();
             }
 
             Err(ReadlineError::Interrupted) => {

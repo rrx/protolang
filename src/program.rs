@@ -21,6 +21,7 @@ impl LangError {
             }
             _ => {
                 Diagnostic::warning()
+                    .with_message(&format!("{}", &self))
                     .with_labels(vec![Label::primary(file_id, self.context.range())])
             }
         }
@@ -131,8 +132,25 @@ impl Program {
                 //debug!("program has {} expressions", exprs.len());
                 use nom::InputLength;
                 if end.input_len() > 0 {
-                    debug!("program rest {:?}", end); //.expand_toks());
+                    debug!("program rest {:?}", end);
                 }
+
+                // Analyze it
+                let mut a = Analysis::new();
+                let env = a.analyze(expr.clone().into(), env);
+                let mut has_errors = false;
+                a.results.iter().for_each(|r| {
+                    if let LangErrorKind::Warning(_) = r.kind {
+                    } else {
+                        has_errors = true;
+                    }
+                    self.push(r.diagnostic(file_id));
+                });
+
+                if has_errors {
+                    return Err(expr.context.error(InterpretErrorKind::AnalysisFailed));
+                }
+
                 match Interpreter::evaluate(expr.into(), env) {
                     Ok(v) => Ok(v),
                     Err(InterpretError { context, kind }) => {

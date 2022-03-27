@@ -68,6 +68,8 @@ pub enum InterpretErrorKind {
     Assertion,
     #[error("Not Implemented")]
     NotImplemented,
+    #[error("Analysis Failed")]
+    AnalysisFailed,
 }
 
 impl InterpretError {

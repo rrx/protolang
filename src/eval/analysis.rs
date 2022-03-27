@@ -6,10 +6,14 @@ use crate::tokens::Tok;
 //use std::rc::Rc;
 
 pub struct Analysis {
-    results: Vec<LangError>
+    pub results: Vec<LangError>
 }
 
 impl Analysis {
+    pub fn new() -> Self {
+        Self { results: vec![] }
+    }
+
     pub fn analyze(
         &mut self,
         exprref: ExprRef,
@@ -194,7 +198,7 @@ impl Analysis {
                             self.analyze(right.clone().into(), env)
                         }
                         None => {
-                            left.context.lang_error(LangErrorKind::NotFound);
+                            //left.context.lang_error(LangErrorKind::NotFound);
                             env
                         }
                     }
