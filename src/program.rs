@@ -13,10 +13,16 @@ type FileId = usize;
 
 impl LangError {
     pub fn diagnostic(&self, file_id: FileId) -> Diagnostic<FileId> {
-        match self {
-            Self::Warning(msg, context) | Self::Error(msg, context) => Diagnostic::warning()
-                .with_message(msg)
-                .with_labels(vec![Label::primary(file_id, context.range())]),
+        match &self.kind {
+            LangErrorKind::Warning(msg) | LangErrorKind::Error(msg) => {
+                Diagnostic::warning()
+                    .with_message(msg)
+                    .with_labels(vec![Label::primary(file_id, self.context.range())])
+            }
+            _ => {
+                Diagnostic::warning()
+                    .with_labels(vec![Label::primary(file_id, self.context.range())])
+            }
         }
     }
 }
@@ -104,7 +110,6 @@ impl Program {
         env: Environment,
     ) -> Result<ExprRefWithEnv, InterpretError> {
         use crate::lexer::LexerState;
-        use crate::results;
         use crate::tokens::*;
         let mut lexer = LexerState::from_str_eof(v).unwrap();
         let tokens = lexer.tokens();
@@ -114,7 +119,7 @@ impl Program {
         tokens.iter_elements().for_each(|t| {
             if let Tok::Invalid(s) = &t.tok {
                 let error =
-                    results::LangError::Warning(format!("Invalid Token: {}", s), t.to_context());
+                    t.to_context().lang_error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
                 let diagnostic = error.diagnostic(file_id);
                 self.push(diagnostic);
             }

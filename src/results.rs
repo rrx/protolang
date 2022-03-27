@@ -7,20 +7,40 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
-#[derive(Error, Debug)]
-pub enum LangError {
+#[derive(Error, Debug, Clone)]
+pub enum LangErrorKind {
     #[error("Warning: {0}")]
-    Warning(String, MaybeNodeContext),
+    Warning(String),
     #[error("Error: {0}")]
-    Error(String, MaybeNodeContext),
+    Error(String),
+    #[error("Expecting boolean")]
+    ExpectBool,
+    #[error("Not Implemented")]
+    NotImplemented,
+    #[error("Not Found")]
+    NotFound,
+    #[error("Invalid")]
+    Invalid,
+}
+
+#[derive(Debug, Error, Clone)]
+pub struct LangError {
+    pub context: MaybeNodeContext,
+    pub kind: LangErrorKind,
+}
+
+impl std::fmt::Display for LangError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)
+    }
 }
 
 impl LangError {
     pub fn warning(message: String, context: MaybeNodeContext) -> Self {
-        Self::Warning(message, context)
+        Self { context, kind: LangErrorKind::Warning(message) }
     }
     pub fn error(message: String, context: MaybeNodeContext) -> Self {
-        Self::Error(message, context)
+        Self { context, kind: LangErrorKind::Error(message) }
     }
 }
 
@@ -68,6 +88,12 @@ impl MaybeNodeContext {
     }
     pub fn error(&self, kind: InterpretErrorKind) -> InterpretError {
         InterpretError {
+            kind,
+            context: self.clone(),
+        }
+    }
+    pub fn lang_error(&self, kind: LangErrorKind) -> LangError {
+        LangError {
             kind,
             context: self.clone(),
         }

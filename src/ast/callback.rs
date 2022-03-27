@@ -2,6 +2,10 @@ use crate::eval::*;
 use std::fmt;
 use std::rc::Rc;
 
+// This was a great help in figuring out how to do callbacks.  The trick is to ensure that the
+// function is 'static
+// https://gist.github.com/aisamanra/da7cdde67fc3dfee00d3
+//
 #[derive(Clone, Debug)]
 pub struct CallTable {
     funcs: im::HashMap<String, Callback>,
