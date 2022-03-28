@@ -22,5 +22,13 @@ let x1 = 1
 let x2 = 2
 
 # what's in the block should no longer be visible
-assert(mx2 == 1)
+# assert(mx2 == 1)
+
+# asdf should not be visible outside the block
+{
+        let mut asdf1 = 1;
+        (asdf1 + 1);
+        asdf1 = 2;
+        assert(asdf1 == 2);
+}
 

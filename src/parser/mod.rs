@@ -7,7 +7,7 @@ use crate::tokens::*;
 use log::debug;
 use nom::branch::*;
 use nom::bytes::complete::take;
-use nom::combinator::verify;
+use nom::combinator::{map, verify};
 use nom::error::{context, ContextError, ErrorKind, VerboseErrorKind};
 use nom::multi::many0;
 use nom::sequence::*;
@@ -29,7 +29,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
     // on one line, we show the error code and the input that caused it
     fn from_error_kind(input: I, kind: ErrorKind) -> Self {
         let message = format!("kind {:?}:\t{:?}\n", kind, input.toks());
-        //debug!("{}", message);
+        //debug!("T:from:{}", message);
         DebugError {
             message,
             errors: vec![(input, VerboseErrorKind::Nom(kind))],
@@ -39,7 +39,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
     // if combining multiple errors, we show them one after the other
     fn append(input: I, kind: ErrorKind, mut other: Self) -> Self {
         other.message = format!("{}kind {:?}:\t{:?}\n", other.message, kind, input.toks());
-        //debug!("{}", message);
+        //debug!("T:append:{}", other.message);
         //DebugError {
         //message,
         other.errors.push((input, VerboseErrorKind::Nom(kind)));
@@ -49,7 +49,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
 
     fn from_char(input: I, c: char) -> Self {
         let message = format!("'{}':\t{:?}\n", c, input.toks());
-        //debug!("{}", message);
+        //debug!("T:char:{}", message);
         DebugError {
             message,
             errors: vec![(input, VerboseErrorKind::Char(c))],
@@ -58,7 +58,7 @@ impl<I: std::fmt::Debug + TokensList> nom::error::ParseError<I> for DebugError<I
 
     fn or(self, other: Self) -> Self {
         let message = format!("{}\tOR\n{}\n", self.message, other.message);
-        //debug!("{}", message);
+        //debug!("T {}", message);
         DebugError {
             message,
             errors: vec![],
@@ -74,7 +74,7 @@ impl<I: std::fmt::Debug + TokensList> ContextError<I> for DebugError<I> {
             ctx,
             input.toks()
         );
-        //debug!("{}", message);
+        //debug!("context {}", message);
         DebugError {
             message,
             errors: vec![],
@@ -215,43 +215,6 @@ pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, expr))
 }
 
-/*
-pub fn parse_program_with_results(
-    filename: String,
-    i: Tokens,
-) -> (Option<ExprNode>, Vec<LangError>) {
-    let context = i.to_context();
-    match parse_program(i) {
-        Ok((prog_rest, prog)) => {
-            let mut results = vec![];
-            if prog_rest.tok.len() > 0 {
-                results.push(LangError::Warning(
-                    format!("Not all tokens parsed: {:?}", prog_rest.toks()),
-                    prog_rest.to_context(),
-                ));
-                (None, results)
-            } else {
-                (Some(prog), results)
-            }
-        }
-        Err(nom::Err::Error(e)) => {
-            let results = e
-                .errors
-                .iter()
-                .map(|(tokens, err)| {
-                    LangError::Error(
-                        format!("Error: {:?}, {:?}", err, tokens.toks()),
-                        context.clone(),
-                    )
-                })
-                .collect();
-            (None, results)
-        }
-        _ => unreachable!(),
-    }
-}
-*/
-
 pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (exprs, end)) = pair(
         context("program-start", many0(alt((parse_expr, parse_invalid)))),
@@ -264,14 +227,17 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    context(
+    let (i, t) = context(
         "parse-expr",
         alt((
-            pratt::parse_expr,
-            ExprNode::parse_declaration,
-            ExprNode::parse_lambda,
+            context("expr-eof", map(tag_token(Tok::EOF), |t| ExprNode::new_with_token(Expr::Void, &t.tok[0]))),
+            context("pratt-expr", pratt::parse_expr),
+            context("declaration", ExprNode::parse_declaration),
+            context("expr-lambda", ExprNode::parse_lambda),
         )),
-    )(i)
+    )(i)?;
+    debug!("got expr: {:?}", t.unparse());
+    Ok((i, t))
 }
 
 impl ExprNode {
@@ -300,7 +266,7 @@ impl ExprNode {
         let (i, assign) = tag_token(Tok::Assign)(i)?;
         node.context.append(assign.expand_toks());
 
-        let (i, rhs) = parse_expr(i)?;
+        let (i, rhs) = pratt::parse_expr(i)?;
         let expr = Expr::Binary(Operator::Declare, Box::new(node), Box::new(rhs));
         let node = ExprNode::new(expr, &i.to_location());
         Ok((i, node))
@@ -509,6 +475,7 @@ mod tests {
             "\\x -> y^2 ",
             "\\x -> y^2\n",
             "\\x -> y^2;\n",
+            "let x=1;(x+1);",
         ];
         r.iter().for_each(|v| {
             let mut lexer = LexerState::from_str_eof(v).unwrap();
@@ -652,7 +619,7 @@ mod tests {
         ];
         r.iter_mut().for_each(|(q, a)| {
             debug!("q {:?}", (&q));
-            a.push(Tok::EOF);
+            //a.push(Tok::EOF);
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let tokens = lexer.tokens();
             debug!("tokens: {:?}", (&tokens.toks()));
@@ -734,6 +701,7 @@ mod tests {
             "x=y=z",
             "x!",
             "a! ^ b",
+            "let x=1;(x+1);",
         ];
         r.iter().for_each(|v| {
             assert!(parser_losslessness(v));
@@ -768,6 +736,8 @@ mod tests {
     #[test]
     fn sexpr_prog() {
         let r = vec![
+            ("let x = 1;(x+1);", "(program (let x 1) (+ x 1))"),
+            ("x = 1;(x+1);", "(program (= x 1) (+ x 1))"),
             ("+1", "(program (+ 1))"),
             ("+1;\n+1", "(program (+ 1) (+ 1))"),
             ("a < b < c", "(program (chain (< a b) (< b c)))"),
@@ -776,7 +746,7 @@ mod tests {
         r.iter().for_each(|(q, a)| {
             debug!("q {:?}", (&q));
 
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
+            let mut lexer = LexerState::from_str(q).unwrap();
             let i = lexer.tokens();
 
             debug!("tokens: {:?}", (i.toks()));

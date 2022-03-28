@@ -251,12 +251,19 @@ impl<'a> LexerState<'a> {
                             if self.indent_size < prev_indent {
                                 // close out
                                 let prev = self.indent_stack.pop().unwrap();
-                                self.whitespace
-                                    .push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                                let close = crate::tokens::Token::new(Tok::IndentClose, prev.pos);
+                                if false {
+                                    self.push_token(close);
+                                } else {
+                                    self.whitespace.push(close);
+                                }
                             } else if self.indent_size > prev_indent {
-                                self.push_token(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
-                                //self.whitespace
-                                //.push(crate::tokens::Token::new(Tok::IndentOpen, t.pos));
+                                let open = crate::tokens::Token::new(Tok::IndentOpen, t.pos);
+                                if false {
+                                    self.push_token(open);
+                                } else {
+                                    self.whitespace.push(open);
+                                }
                                 //
                                 // update indentation before pushing
                                 let mut x = t.clone();

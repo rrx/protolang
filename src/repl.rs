@@ -9,9 +9,19 @@ pub fn cli() -> anyhow::Result<()> {
     let mut program = Program::new();
     let mut env = Environment::default();
     for filename in std::env::args().skip(1) {
-        let r = program.eval_file(filename.as_str(), env)?;
-        env = r.env;
-        println!("> {:?}", r.expr);
+        match program.eval_file(filename.as_str(), env.clone()) {
+            Ok(r) => {
+                env = r.env;
+                program.print();
+                println!("> {:?}", r.expr);
+            }
+            Err(_) => {
+                program.print();
+                println!("> {:?}", &program.value.expr);
+                break;
+            }
+        }
+        program.diagnostics.clear();
     }
     Ok(())
 }

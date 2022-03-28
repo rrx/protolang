@@ -4,6 +4,7 @@ use crate::eval::*;
 use crate::tokens::Tok;
 //use std::ops::Deref;
 //use std::rc::Rc;
+use crate::parser::Unparse;
 
 pub struct Analysis {
     pub results: Vec<LangError>
@@ -42,7 +43,8 @@ impl Analysis {
             Expr::Ident(ident) => {
                 if let Some(_) = env.resolve_value(&ident.name) {
                 } else {
-                    push(LangErrorKind::NotFound);
+                    env.debug();
+                    self.results.push(node.context.lang_error(LangErrorKind::Error(format!("Not found: {:?}", node.unlex()))));
                 }
                 env.clone()
             }
@@ -101,11 +103,12 @@ impl Analysis {
                             let expr = x.expr.as_ref().borrow();
                             if let Some(_) = expr.try_callback() {
                             } else if let Some(_) = expr.try_callable() {
+                            } else if let Some(_) = expr.try_lambda() {
                             } else {
-                                push(LangErrorKind::Error(format!("Not a function: {:?}", expr)));
+                                self.results.push(expr.context.lang_error(LangErrorKind::Error(format!("Not a function1: {:?}", expr))));
                             }
                         } else {
-                            push(LangErrorKind::NotFound);
+                            self.results.push(expr.context.lang_error(LangErrorKind::Error(format!("Function not found: {:?}", expr.unlex()))));
                         }
 
                         for arg in args {
@@ -114,7 +117,7 @@ impl Analysis {
 
                     }
                     _ => {
-                        push(LangErrorKind::Error(format!("Not a function: {:?}", expr)));
+                        self.results.push(expr.context.lang_error(LangErrorKind::Error(format!("Not a function2: {:?}", expr.unlex()))));
                     }
                 }
 
@@ -171,12 +174,13 @@ impl Analysis {
         op: &Operator,
         left: &ExprNode,
         right: &ExprNode,
-        env: Environment,
+        mut env: Environment,
     ) -> Environment {
         match op {
             Operator::Declare => {
                 return if let Some(ident) = left.try_ident() {
                     // add the RHS to env
+                    log::debug!("Declare {:?} to {}", &right, &ident.name);
                     env.define(ident, right.clone().into())
                 } else {
                     self.results.push(left.context.lang_error(LangErrorKind::Error(format!("Invalid Assignment, LHS must be identifier"))));
@@ -198,7 +202,7 @@ impl Analysis {
                             self.analyze(right.clone().into(), env)
                         }
                         None => {
-                            //left.context.lang_error(LangErrorKind::NotFound);
+                            left.context.lang_error(LangErrorKind::NotFound);
                             env
                         }
                     }
@@ -207,30 +211,31 @@ impl Analysis {
                     env
                 };
             }
-            _ => (),
-        }
-
-        self.analyze(left.clone().into(), env.clone());
-        self.analyze(right.clone().into(), env.clone());
-
-        match op {
-            Operator::Plus => (),
-            Operator::Minus => (),
-            Operator::Exp => (),
-            Operator::Multiply => (),
-            Operator::Divide => (),
-            Operator::GreaterThanEqual => (),
-            Operator::LessThanEqual => (),
-            Operator::GreaterThan => (),
-            Operator::LessThan => (),
-            Operator::Equal => (),
-            Operator::NotEqual => (),
             _ => {
-                self.results.push(left
-                .context.lang_error(LangErrorKind::Error(format!("Unimplemented expression op: Operator::{:?}", op))));
+                env = self.analyze(left.clone().into(), env);
+                env = self.analyze(right.clone().into(), env);
+
+                match op {
+                    Operator::Plus => (),
+                    Operator::Minus => (),
+                    Operator::Exp => (),
+                    Operator::Multiply => (),
+                    Operator::Divide => (),
+                    Operator::GreaterThanEqual => (),
+                    Operator::LessThanEqual => (),
+                    Operator::GreaterThan => (),
+                    Operator::LessThan => (),
+                    Operator::Equal => (),
+                    Operator::NotEqual => (),
+                    _ => {
+                        self.results.push(left
+                                          .context.lang_error(LangErrorKind::Error(format!("Unimplemented expression op: Operator::{:?}", op))));
+                    }
+                }
+                env
             }
         }
-        env
+
     }
 
     fn check_bool(expr: &ExprNode) -> Result<bool, LangError> {
@@ -261,7 +266,7 @@ impl Analysis {
     }
 
     pub fn prefix_expr(&mut self, expr: &ExprNode, op: &Operator) {
-        self.check_number(expr);
+        //self.check_number(expr);
         match op {
             Operator::Plus => (),
             Operator::Minus => (),
@@ -272,7 +277,7 @@ impl Analysis {
     }
 
     pub fn postfix_expr(&mut self, expr: &ExprNode, op: &Operator) {
-        self.check_number(expr);
+        //self.check_number(expr);
         match op {
             Operator::Bang => (),
             _ => {
@@ -281,4 +286,31 @@ impl Analysis {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::program::Program;
+    use log::debug;
+    use test_log::test;
 
+    #[test]
+    fn analyze() {
+        let mut program = Program::new();
+        let mut env = Environment::default();
+        env = program.analyze(
+                "
+        # asdf should not be visible outside the block
+        {
+                let mut asdf1 = 1;
+                (asdf1 + 1);
+                asdf1 = 2;
+                assert(asdf1 == 2);
+        }
+        ",
+                env,
+            );
+        program.print();
+        assert!(env.resolve_value("asdf1").is_none());
+    } 
+
+}

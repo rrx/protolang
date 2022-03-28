@@ -6,6 +6,7 @@ use crate::tokens::Tok;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
+use log::debug;
 
 pub struct Interpreter {}
 
@@ -29,27 +30,30 @@ impl ExprNode {
         }
     }
 
-    fn check_number(&self) -> Result<f64, InterpretError> {
-        match &self.value {
+    fn check_number(a: &Self) -> Result<f64, InterpretError> {
+        match &a.value {
             Expr::Literal(t) => match t {
                 Tok::IntLiteral(u) => Ok(*u as f64),
                 Tok::FloatLiteral(f) => Ok(*f),
-                _ => Err(self
+                _ => Err(a
                     .context
-                    .runtime_error(&format!("Expecting a number: {:?}", self))),
+                    .runtime_error(&format!("Expecting a number1: {:?}", a))),
             },
-            Expr::Callable(_) => Err(self
+            //Expr::Callable(_) => Err(self
+                //.context
+                //.runtime_error(&format!("Expecting a callable: {:?}", self))),
+            _ => {
+                //panic!();
+                Err(a
                 .context
-                .runtime_error(&format!("Expecting a callable: {:?}", self))),
-            _ => Err(self
-                .context
-                .runtime_error(&format!("Expecting a number: {:?}", self))),
+                .runtime_error(&format!("Expecting a number2: {:?}", a)))
+            }
         }
     }
 
     fn check_numbers(a: &Self, b: &Self) -> Result<(f64, f64), InterpretError> {
-        let a = a.check_number()?;
-        let b = b.check_number()?;
+        let a = Self::check_number(a)?;
+        let b = Self::check_number(b)?;
         Ok((a, b))
     }
 
@@ -63,6 +67,7 @@ impl ExprNode {
     }
 
     pub fn minus(&self, other: &Self) -> Result<Self, InterpretError> {
+        debug!("{:?}", (self, other));
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_float(left - right)))
     }
@@ -127,7 +132,7 @@ impl ExprNode {
     pub fn postfix(&self, op: &Operator) -> Result<Self, InterpretError> {
         match op {
             Operator::Bang => {
-                let _ = self.check_number()?;
+                let _ = Self::check_number(self)?;
                 // TODO: Fib not yet implemented
                 Err(self.context.error(InterpretErrorKind::NotImplemented))
             }
@@ -138,11 +143,11 @@ impl ExprNode {
     pub fn prefix(&self, prefix: &Operator) -> Result<Self, InterpretError> {
         match prefix {
             Operator::Plus => {
-                let right = self.check_number()?;
+                let right = Self::check_number(self)?;
                 Ok(self.new_expr(Expr::new_float(right)))
             }
             Operator::Minus => {
-                let right = self.check_number()?;
+                let right = Self::check_number(self)?;
                 Ok(self.new_expr(Expr::new_float(right)))
             }
             _ => Err(self.context.error(InterpretErrorKind::NotImplemented)),
@@ -398,45 +403,31 @@ impl Interpreter {
     ) -> Result<ExprRefWithEnv, InterpretError> {
         match op {
             Operator::Declare => {
-                return if let Some(ident) = left.try_ident() {
-                    let eval_right = Self::evaluate(right.clone().into(), env)?;
-                    //debug!("Declare {:?} to {}", &eval_right, &ident.name);
-                    let env = eval_right.env.define(ident, eval_right.expr.clone());
-                    Ok(ExprRefWithEnv::new(eval_right.expr, env))
-                } else {
-                    Err(left
-                        .context
-                        .runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
-                };
+                // analyzed
+                let ident = left.try_ident().unwrap();
+                let eval_right = Self::evaluate(right.clone().into(), env)?;
+                debug!("Declare {:?} to {}", &eval_right, &ident.name);
+                let env = eval_right.env.define(ident, eval_right.expr.clone());
+                return Ok(ExprRefWithEnv::new(eval_right.expr, env));
             }
             Operator::Assign => {
-                return if let Some(ident) = left.try_ident() {
-                    let access = env.get_at(&ident.name, &left.context)?;
-                    if access.modifier != VarModifier::Mutable {
-                        return Err(left.context.runtime_error(&format!(
-                            "Invalid Assignment, '{}' Not mutable",
-                            &ident.name
-                        )));
-                    }
+                let ident = left.try_ident().unwrap();
+                // access enforced during analysis
+                let access = env.get_at(&ident.name, &left.context)?;
+                let eval_right = Self::evaluate(right.clone().into(), env)?;
+                //debug!("Assign {:?} to {}", &eval_right, &ident.name);
+                let expr = access
+                    .expr
+                    .mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
 
-                    let eval_right = Self::evaluate(right.clone().into(), env)?;
-                    //debug!("Assign {:?} to {}", &eval_right, &ident.name);
-                    let expr = access
-                        .expr
-                        .mutate(Rc::try_unwrap(eval_right.expr.0).unwrap().into_inner());
-
-                    Ok(ExprRefWithEnv::new(expr, eval_right.env))
-                } else {
-                    Err(left
-                        .context
-                        .runtime_error(&format!("Invalid Assignment, LHS must be identifier")))
-                };
+                return Ok(ExprRefWithEnv::new(expr, eval_right.env));
             }
             _ => (),
         }
 
         let v_left = Self::evaluate(left.clone().into(), env)?;
         let v_right = Self::evaluate(right.clone().into(), v_left.env)?;
+        debug!("b{:?}", (&left, &right));
 
         let eval_left = v_left.expr.as_ref().borrow();
         let eval_right = v_right.expr.as_ref().borrow();
@@ -495,12 +486,11 @@ mod tests {
                 "
         # asdf should not be visible outside the block
         {
-                let asdf1 = 1
+                let asdf1 = 1;
         }
         ",
                 r.env,
-            )
-            .unwrap();
+            ).unwrap();
         program.print();
         assert!(r.env.resolve_value("asdf1").is_none());
 
@@ -575,11 +565,11 @@ mod tests {
 
     #[test]
     fn builtin() {
-        println!("x");
         let mut program = Program::new();
         let env = Environment::default();
         let r = program.eval("showstack()", env).unwrap();
         program.print();
         debug!("x {:?}", r.expr);
     }
+
 }

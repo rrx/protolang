@@ -3,7 +3,7 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::parser::{tag_token, take_one_any, PResult};
+use crate::parser::{tag_token, take_one_any, PResult, Unparse};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use log::debug;
 use nom::error::{context, ErrorKind};
@@ -204,7 +204,8 @@ impl Op {
         //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
-                //debug!("handle semicolon: {:?}", i.expand_toks());
+                //let (i, t) = take_one_any(i)?;
+                debug!("handle semicolon: {:?}", i.expand_toks());
                 let mut x = x.clone();
                 x.context.append(token.expand_toks());
                 // escape, we are done
@@ -316,11 +317,53 @@ impl Op {
                             let node = i.node(expr);
 
                             // check if there's a chaining binary operator here
-                            let n = i.peek().unwrap();
-                            let maybe_next_op = n.tok.op();
-                            if n.tok == Tok::EOF {
+                            debug!("peek: {:?}", (&node.unlex(), i.expand_toks()));
+                            let nr = i.peek();
+                            match nr {
+                                Some(n) if n.tok == Tok::EOF => (i, node),
+                                None => (i, node),
+                                Some(n) => {
+                                    let maybe_next_op = n.tok.op();
+                                    if let Some(next_op) = maybe_next_op {
+                                        //debug!("chain next: {:?}", (self, &n));
+                                        if is_chain && self.lbp == next_op.lbp {
+                                            // consume
+                                            let (i, _) = take_one_any(i.clone())?;
+                                            let (i, t) = self.left_denotation(i, &right, &n, depth)?;
+                                            //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
+
+                                            // merge node and t which can both be binary chains
+                                            let mut exprs = vec![];
+                                            if let Expr::BinaryChain(mut nexprs) = node.value.clone() {
+                                                exprs.append(&mut nexprs);
+                                            } else {
+                                                exprs.push(node);
+                                            }
+
+                                            if let Expr::BinaryChain(mut texprs) = t.value.clone() {
+                                                exprs.append(&mut texprs);
+                                            } else {
+                                                exprs.push(t);
+                                            }
+                                            let node = i.node(Expr::BinaryChain(exprs));
+                                            (i, node)
+                                        } else {
+                                            //debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
+                                            (i, node)
+                                        }
+                                    } else {
+                                        (i, node)
+                                    }
+                                }
+                            }
+
+                            //let n = i.peek().unwrap();
+                            //let maybe_next_op = n.tok.op();
+                            //if n.tok == Tok::EOF {
                                 //debug!("chain: got eof");
-                                (i, node)
+                                //(i, node)
+                                //
+                            /*
                             } else if let Some(next_op) = maybe_next_op {
                                 //debug!("chain next: {:?}", (self, &n));
                                 if is_chain && self.lbp == next_op.lbp {
@@ -352,6 +395,7 @@ impl Op {
                                 //debug!("chain drop2: {:?}", (self.lbp, &n, &node));
                                 (i, node)
                             }
+                            */
                         }
                     }
                 } else {
@@ -476,7 +520,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
     let n = i.tok[0].tok.clone();
     let token = &i.tok[0];
 
-    //debug!("P {:?}", (&n));
+    debug!("P {:?}", (&n));
 
     let rbp = n.op().map_or(None, |t| t.rbp);
 
@@ -493,6 +537,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let value = Expr::Prefix(op, Box::new(t));
             let mut node = i.node(value);
             node.context.prepend(op_tokens.expand_toks());
+            debug!("P1 {:?}", (&node));
             Ok((i, node))
         }
 
@@ -610,6 +655,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         Some(Tok::SemiColon) => {
             //gobble up semicolons
+            debug!(": Phandle semicolon2: {:?}", i.expand_toks());
             let (i, pre) = take_one_any(i)?;
             let mut node = ExprNode::new(Expr::Void, &i.to_location());
             node.context.prepend(pre.expand_toks());
@@ -636,6 +682,13 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     let r = 127;
 
     //debug!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
+    match i.tok[0].tok {
+        Tok::Let => {
+            // consume variable
+            return ExprNode::parse_declaration(i);
+        }
+        _ => ()
+    }
 
     // The P parser starts with an N token, and goes with it, returning a Node
     // This is the first element of the expression
@@ -659,8 +712,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // Given the p-node p, parse when follows.  p becomes the LHS, and we want to see what follows
     // It could be a postfix operator, or a binary/ternary op
     // G will parse what's next recursively, until we find something that has a lower precedence
-    let (i, (r, t)) = extra_recursive(i, r, p, prec, 0)?;
-
+    let (i, (_, t)) = extra_recursive(i, r, p, prec, 0)?;
     //debug!("E2 {:?}", (&t, r, depth, i.toks()));
     Ok((i, t))
 }
@@ -668,7 +720,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
 fn extra_recursive<'a>(
     i: Tokens,
     r: i8,
-    t: ExprNode,
+    mut t: ExprNode,
     prec: Prec,
     depth: usize,
 ) -> PResult<Tokens, (i8, ExprNode)> {
@@ -689,12 +741,11 @@ fn extra_recursive<'a>(
     }
     let token = &i.tok[0];
 
-    /*
-    if token.tok == Tok::SemiColon {
-        let (i, _) = take_one_any(i)?;
+    if token.tok == Tok::SemiColon && false {
+        let (i, end) = take_one_any(i)?;
+        t.context.append(end.expand_toks());
         return Ok((i, (r, t)));
     }
-    */
 
     // get op from left
     // it could be any token
@@ -729,7 +780,9 @@ fn extra_recursive<'a>(
         // left_denotation, parse the RHS, and return the appropriate node
         let t1 = t.clone();
         let (i, t) = op.left_denotation(i, &t, &token, depth)?;
-        //debug!("left_denotation: {:?} -> {:?}", (&t1, &token), &t);
+        debug!("left_denotation: {:?} -> {:?}", (&t1.unparse(), &token.tok), &t.unparse());
+        debug!("left_denotation: op {:?}", (op));
+        debug!("left_denotation: next {:?}", (&i.toks()));
 
         // set r = NBP of op
         match op.nbp {
@@ -738,12 +791,12 @@ fn extra_recursive<'a>(
                 extra_recursive(i, new_r, t, prec, depth + 1)
             }
             None => {
-                //debug!("r exit: {:?}", &i.toks());
+                debug!("r exit: {:?}", &i.toks());
                 Ok((i, (r, t)))
             }
         }
     } else {
-        //debug!("guard exit: {:?}", &i.toks());
+        debug!("guard exit: {:?}", &i.toks());
         Ok((i, (r, t)))
     }
 }
@@ -769,32 +822,6 @@ pub fn parse_expr<'a>(i: Tokens) -> RNode {
 pub fn parse_expr_extra<'a>(i: Tokens) -> RNode {
     i.extra(Some(0), 0)
 }
-
-/*
-pub fn parse<'a>(i: Tokens) -> RNode {
-    // if we try to parse an expression, and we get EOF, then the response is void
-    if i.is_eof() {
-        let loc = i.to_location();
-        return Ok((i, ExprNode::new(Expr::Void, &loc)));
-    }
-
-    match parse_expr(i) {
-        Ok((i, node)) => {
-            debug!("EXPR {:?}", (&node, &i.toks()));
-            let (i, eof) = tag_token(Tok::EOF)(i)?;
-            debug!("EOF {:?}", (eof));
-            Ok((i, node))
-        }
-        Err(nom::Err::Error(e)) => {
-            for (tokens, err) in &e.errors {
-                debug!("error {:?}", (&err, tokens.toks()));
-            }
-            Err(nom::Err::Error(e))
-        }
-        _ => unreachable!(),
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {
@@ -904,9 +931,11 @@ mod tests {
             ("{-1;-2}", "(block (- 1) (- 2))"),
             ("{+1;+2}", "(block (+ 1) (+ 2))"),
             ("{1;2}", "(block 1 2)"),
-            ("{1\n2}", "(block 1 2)"),
-            ("{+1\n\t+2}\n", "(block (+ 1) (+ 2))"),
+            ("{1;\n2}", "(block 1 2)"),
+            ("{+1;\n\t+2}\n", "(block (+ 1) (+ 2))"),
             ("{+1;\n+2}", "(block (+ 1) (+ 2))"),
+            ("{let mut x = 1;\n\t(x+1);}", "(block (let x 1) (+ x 1))"),
+            ("{\n\tlet mut x = 2;\n\t(x+1);\n}", "(block (let x 2) (+ x 1))"),
             ("+1", "(+ 1)"),
             ("+ 1", "(+ 1)"),
             ("123", "123"),

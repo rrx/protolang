@@ -7,7 +7,7 @@ use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
-use crate::eval::{TypeSig, TypeModifier};
+use crate::eval::{TypeSig};
 use log::debug;
 use std::fmt;
 use std::fmt::Write;
@@ -120,6 +120,14 @@ impl Expr {
 
     pub fn try_callable(&self) -> Option<Box<dyn Callable>> {
         if let Expr::Callable(s) = self {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn try_lambda(&self) -> Option<Lambda> {
+        if let Expr::Lambda(s) = self {
             Some(s.clone())
         } else {
             None
