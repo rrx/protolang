@@ -1,7 +1,7 @@
-use crate::ast::*;
-use crate::ast::{CallTable};
-use crate::results::InterpretError;
 use super::RefTypeSig;
+use crate::ast::CallTable;
+use crate::ast::*;
+use crate::results::InterpretError;
 use log::debug;
 use rpds::HashTrieMap;
 use std::cell::{Ref, RefCell};
@@ -269,8 +269,7 @@ impl Environment {
     }
 
     pub fn resolve_type(&self, name: &str) -> Option<RefTypeSig> {
-        self
-            .stack
+        self.stack
             .iter()
             .find(|layer| layer.types.contains_key(name))
             .map(|layer| layer.get_type(name))

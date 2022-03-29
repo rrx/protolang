@@ -1,7 +1,7 @@
+use protolang::eval::Environment;
+use protolang::program::Program;
 use protolang::repl::*;
 use std::error::Error;
-use protolang::program::Program;
-use protolang::eval::Environment;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -15,4 +15,3 @@ fn main() -> Result<(), Box<dyn Error>> {
     program.diagnostics.clear();
     Ok(())
 }
-

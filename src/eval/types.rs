@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use std::cell::{Ref, RefCell};
+use std::rc::Rc;
 
 #[derive(Clone, PartialEq)]
 pub enum TypeModifier {
@@ -50,7 +50,6 @@ impl Default for TypeSig {
     }
 }
 
-
 impl TypeSig {
     fn value(t: TypeSig) -> Self {
         Self {
@@ -60,7 +59,6 @@ impl TypeSig {
             err: vec![],
             traits: vec![],
         }
-
     }
 
     fn void() -> Self {
@@ -97,7 +95,6 @@ impl std::ops::Deref for RefTypeSig {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct Trait {
     pub sigs: Vec<TypeSig>,
@@ -113,4 +110,3 @@ impl std::ops::Deref for RefTrait {
         &self.0.as_ref()
     }
 }
-

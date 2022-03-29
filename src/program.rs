@@ -14,16 +14,12 @@ type FileId = usize;
 impl LangError {
     pub fn diagnostic(&self, file_id: FileId) -> Diagnostic<FileId> {
         match &self.kind {
-            LangErrorKind::Warning(msg) | LangErrorKind::Error(msg) => {
-                Diagnostic::warning()
-                    .with_message(msg)
-                    .with_labels(vec![Label::primary(file_id, self.context.range())])
-            }
-            _ => {
-                Diagnostic::warning()
-                    .with_message(&format!("{}", &self))
-                    .with_labels(vec![Label::primary(file_id, self.context.range())])
-            }
+            LangErrorKind::Warning(msg) | LangErrorKind::Error(msg) => Diagnostic::warning()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+            _ => Diagnostic::warning()
+                .with_message(&format!("{}", &self))
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
         }
     }
 }
@@ -100,12 +96,7 @@ impl Program {
         self._analyze("<repl>", v, env)
     }
 
-    fn _analyze(
-        &mut self,
-        filename: &str,
-        v: &str,
-        mut env: Environment,
-    ) -> Environment {
+    fn _analyze(&mut self, filename: &str, v: &str, mut env: Environment) -> Environment {
         use crate::lexer::LexerState;
         use crate::tokens::*;
         let mut lexer = LexerState::from_str_eof(v).unwrap();
@@ -115,8 +106,9 @@ impl Program {
         let file_id = self.add_source(filename.into(), v.to_string());
         tokens.iter_elements().for_each(|t| {
             if let Tok::Invalid(s) = &t.tok {
-                let error =
-                    t.to_context().lang_error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
+                let error = t
+                    .to_context()
+                    .lang_error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
                 let diagnostic = error.diagnostic(file_id);
                 self.push(diagnostic);
             }
@@ -182,8 +174,9 @@ impl Program {
         let file_id = self.add_source(filename.into(), v.to_string());
         tokens.iter_elements().for_each(|t| {
             if let Tok::Invalid(s) = &t.tok {
-                let error =
-                    t.to_context().lang_error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
+                let error = t
+                    .to_context()
+                    .lang_error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
                 let diagnostic = error.diagnostic(file_id);
                 self.push(diagnostic);
             }

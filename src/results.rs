@@ -37,10 +37,16 @@ impl std::fmt::Display for LangError {
 
 impl LangError {
     pub fn warning(message: String, context: MaybeNodeContext) -> Self {
-        Self { context, kind: LangErrorKind::Warning(message) }
+        Self {
+            context,
+            kind: LangErrorKind::Warning(message),
+        }
     }
     pub fn error(message: String, context: MaybeNodeContext) -> Self {
-        Self { context, kind: LangErrorKind::Error(message) }
+        Self {
+            context,
+            kind: LangErrorKind::Error(message),
+        }
     }
 }
 

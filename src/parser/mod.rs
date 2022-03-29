@@ -230,13 +230,13 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, t) = context(
         "parse-expr",
         alt((
-            context("expr-eof", map(tag_token(Tok::EOF), |t| ExprNode::new_with_token(Expr::Void, &t.tok[0]))),
+            //context("expr-eof", map(tag_token(Tok::EOF), |t| ExprNode::new_with_token(Expr::Void, &t.tok[0]))),
             context("pratt-expr", pratt::parse_expr),
             context("declaration", ExprNode::parse_declaration),
             context("expr-lambda", ExprNode::parse_lambda),
         )),
     )(i)?;
-    debug!("got expr: {:?}", t.unparse());
+    //debug!("got expr: {:?}", t.unparse());
     Ok((i, t))
 }
 
@@ -619,7 +619,7 @@ mod tests {
         ];
         r.iter_mut().for_each(|(q, a)| {
             debug!("q {:?}", (&q));
-            //a.push(Tok::EOF);
+            a.push(Tok::EOF);
             let mut lexer = LexerState::from_str_eof(q).unwrap();
             let tokens = lexer.tokens();
             debug!("tokens: {:?}", (&tokens.toks()));

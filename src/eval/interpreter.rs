@@ -1,12 +1,14 @@
 use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
+use crate::parser::Unparse;
 use crate::results::{InterpretError, InterpretErrorKind};
+use crate::sexpr::SExpr;
 use crate::tokens::Tok;
+use log::debug;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
-use log::debug;
 
 pub struct Interpreter {}
 
@@ -40,13 +42,13 @@ impl ExprNode {
                     .runtime_error(&format!("Expecting a number1: {:?}", a))),
             },
             //Expr::Callable(_) => Err(self
-                //.context
-                //.runtime_error(&format!("Expecting a callable: {:?}", self))),
+            //.context
+            //.runtime_error(&format!("Expecting a callable: {:?}", self))),
             _ => {
                 //panic!();
                 Err(a
-                .context
-                .runtime_error(&format!("Expecting a number2: {:?}", a)))
+                    .context
+                    .runtime_error(&format!("Expecting a number2: {:?}", a)))
             }
         }
     }
@@ -277,7 +279,8 @@ impl Interpreter {
             Expr::Lambda(e) => {
                 //debug!("Lambda({:?})", &e);
                 Ok(ExprRefWithEnv::new(
-                    Expr::Callable(Box::new(e.clone())).into(),
+                    //Expr::Callable(Box::new(e.clone())).into(),
+                    Expr::Lambda(e.clone()).into(),
                     env,
                 ))
             }
@@ -307,6 +310,10 @@ impl Interpreter {
                         let expr = x.expr.as_ref().borrow();
                         if let Some(cb) = expr.try_callback() {
                             let result = cb(newenv.clone(), eval_args)?;
+                            Some(Ok(result))
+                        } else if let Some(cb) = expr.try_lambda() {
+                            let result = cb.call(newenv.clone(), eval_args)?;
+                            //debug!("Call Result {:?}", &result);
                             Some(Ok(result))
                         } else if let Some(cb) = expr.try_callable() {
                             //debug!("Calling context {:?}", (&x, &expr));
@@ -406,7 +413,7 @@ impl Interpreter {
                 // analyzed
                 let ident = left.try_ident().unwrap();
                 let eval_right = Self::evaluate(right.clone().into(), env)?;
-                debug!("Declare {:?} to {}", &eval_right, &ident.name);
+                debug!("Declare {:?} to {}", &right.unlex(), &ident.name);
                 let env = eval_right.env.define(ident, eval_right.expr.clone());
                 return Ok(ExprRefWithEnv::new(eval_right.expr, env));
             }
@@ -427,7 +434,7 @@ impl Interpreter {
 
         let v_left = Self::evaluate(left.clone().into(), env)?;
         let v_right = Self::evaluate(right.clone().into(), v_left.env)?;
-        debug!("b{:?}", (&left, &right));
+        //debug!("b{:?}", (&left, &right));
 
         let eval_left = v_left.expr.as_ref().borrow();
         let eval_right = v_right.expr.as_ref().borrow();
@@ -490,7 +497,8 @@ mod tests {
         }
         ",
                 r.env,
-            ).unwrap();
+            )
+            .unwrap();
         program.print();
         assert!(r.env.resolve_value("asdf1").is_none());
 
@@ -541,6 +549,10 @@ mod tests {
             .unwrap();
         program.print();
         assert!(r.env.resolve_value("super_local").is_none());
+
+        let r = program.eval("1", r.env).unwrap();
+        program.print();
+        assert!(r.expr.borrow().value.try_literal().unwrap() == Tok::IntLiteral(1));
     }
 
     #[test]
@@ -571,5 +583,4 @@ mod tests {
         program.print();
         debug!("x {:?}", r.expr);
     }
-
 }

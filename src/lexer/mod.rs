@@ -262,7 +262,11 @@ mod tests {
             (" $\t", vec![/* IndentOpen, */ Invalid("$".into()), EOF]),
             (
                 " $\nasdf",
-                vec![/* IndentOpen, */ Invalid("$".into()), Ident("asdf".into()), EOF],
+                vec![
+                    /* IndentOpen, */ Invalid("$".into()),
+                    Ident("asdf".into()),
+                    EOF,
+                ],
             ),
             (
                 "$\nasdf",

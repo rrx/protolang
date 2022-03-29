@@ -1,13 +1,13 @@
-use crate::results::*;
 use crate::ast::*;
 use crate::eval::*;
+use crate::results::*;
 use crate::tokens::Tok;
 //use std::ops::Deref;
 //use std::rc::Rc;
 use crate::parser::Unparse;
 
 pub struct Analysis {
-    pub results: Vec<LangError>
+    pub results: Vec<LangError>,
 }
 
 impl Analysis {
@@ -15,11 +15,7 @@ impl Analysis {
         Self { results: vec![] }
     }
 
-    pub fn analyze(
-        &mut self,
-        exprref: ExprRef,
-        env: Environment,
-    ) -> Environment {
+    pub fn analyze(&mut self, exprref: ExprRef, env: Environment) -> Environment {
         //let e = exprref.clone();
         let node = exprref.borrow();
         let expr = &node.value;
@@ -29,13 +25,12 @@ impl Analysis {
         };
 
         //let mut push_error = |v| {
-            //self.results.push(node.context.lang_error(LangErrorKind::Error(v)));
+        //self.results.push(node.context.lang_error(LangErrorKind::Error(v)));
         //};
 
         //let mut push_warning = |v| {
-            //self.results.push(node.context.lang_error(LangErrorKind::Warning(v)));
+        //self.results.push(node.context.lang_error(LangErrorKind::Warning(v)));
         //};
-
 
         match expr {
             Expr::Void => env,
@@ -44,7 +39,11 @@ impl Analysis {
                 if let Some(_) = env.resolve_value(&ident.name) {
                 } else {
                     env.debug();
-                    self.results.push(node.context.lang_error(LangErrorKind::Error(format!("Not found: {:?}", node.unlex()))));
+                    self.results
+                        .push(node.context.lang_error(LangErrorKind::Error(format!(
+                            "Not found: {:?}",
+                            node.unlex()
+                        ))));
                 }
                 env.clone()
             }
@@ -59,7 +58,8 @@ impl Analysis {
 
             Expr::BinaryChain(exprs) => {
                 if exprs.len() < 2 {
-                    self.results.push(node.context.lang_error(LangErrorKind::Invalid));
+                    self.results
+                        .push(node.context.lang_error(LangErrorKind::Invalid));
                     unreachable!();
                 }
                 let mut newenv = env;
@@ -69,9 +69,7 @@ impl Analysis {
                 newenv
             }
 
-            Expr::Binary(op, left, right) => {
-                self.evaluate_binary(op, left, right, env)
-            }
+            Expr::Binary(op, left, right) => self.evaluate_binary(op, left, right, env),
 
             Expr::List(elements) => {
                 let mut newenv = env;
@@ -86,9 +84,7 @@ impl Analysis {
                 env.clone()
             }
 
-            Expr::Lambda(_) => {
-                env.clone()
-            }
+            Expr::Lambda(_) => env.clone(),
 
             Expr::Index(_ident, _args) => {
                 push(LangErrorKind::NotImplemented);
@@ -105,23 +101,34 @@ impl Analysis {
                             } else if let Some(_) = expr.try_callable() {
                             } else if let Some(_) = expr.try_lambda() {
                             } else {
-                                self.results.push(expr.context.lang_error(LangErrorKind::Error(format!("Not a function1: {:?}", expr))));
+                                self.results
+                                    .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                                        "Not a function1: {:?}",
+                                        expr
+                                    ))));
                             }
                         } else {
-                            self.results.push(expr.context.lang_error(LangErrorKind::Error(format!("Function not found: {:?}", expr.unlex()))));
+                            self.results
+                                .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                                    "Function not found: {:?}",
+                                    expr.unlex()
+                                ))));
                         }
 
                         for arg in args {
                             newenv = self.analyze(arg.clone().into(), newenv);
                         }
-
                     }
                     _ => {
-                        self.results.push(expr.context.lang_error(LangErrorKind::Error(format!("Not a function2: {:?}", expr.unlex()))));
+                        self.results
+                            .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                                "Not a function2: {:?}",
+                                expr.unlex()
+                            ))));
                     }
                 }
 
-                // drop args from environment on return 
+                // drop args from environment on return
                 env
             }
 
@@ -130,7 +137,7 @@ impl Analysis {
                 for expr in exprs {
                     newenv = self.analyze(expr.clone().into(), newenv);
                 }
-                // drop args from environment on return 
+                // drop args from environment on return
                 env
             }
 
@@ -180,10 +187,14 @@ impl Analysis {
             Operator::Declare => {
                 return if let Some(ident) = left.try_ident() {
                     // add the RHS to env
-                    log::debug!("Declare {:?} to {}", &right, &ident.name);
+                    //log::debug!("Declare {:?} to {}", &right, &ident.name);
+                    log::debug!("Declare {:?} to {}", &right.unlex(), &ident.name);
                     env.define(ident, right.clone().into())
                 } else {
-                    self.results.push(left.context.lang_error(LangErrorKind::Error(format!("Invalid Assignment, LHS must be identifier"))));
+                    self.results
+                        .push(left.context.lang_error(LangErrorKind::Error(format!(
+                            "Invalid Assignment, LHS must be identifier"
+                        ))));
                     env
                 };
             }
@@ -193,10 +204,11 @@ impl Analysis {
                     match env.resolve_value(&ident.name) {
                         Some(access) => {
                             if access.modifier != VarModifier::Mutable {
-                                self.results.push(left.context.lang_error(LangErrorKind::Error(format!(
-                                            "Invalid Assignment, '{}' Not mutable",
-                                            &ident.name
-                                            ))));
+                                self.results
+                                    .push(left.context.lang_error(LangErrorKind::Error(format!(
+                                        "Invalid Assignment, '{}' Not mutable",
+                                        &ident.name
+                                    ))));
                             }
 
                             self.analyze(right.clone().into(), env)
@@ -207,7 +219,10 @@ impl Analysis {
                         }
                     }
                 } else {
-                    self.results.push(left.context.lang_error(LangErrorKind::Error(format!("Invalid Assignment, LHS must be identifier"))));
+                    self.results
+                        .push(left.context.lang_error(LangErrorKind::Error(format!(
+                            "Invalid Assignment, LHS must be identifier"
+                        ))));
                     env
                 };
             }
@@ -228,14 +243,16 @@ impl Analysis {
                     Operator::Equal => (),
                     Operator::NotEqual => (),
                     _ => {
-                        self.results.push(left
-                                          .context.lang_error(LangErrorKind::Error(format!("Unimplemented expression op: Operator::{:?}", op))));
+                        self.results
+                            .push(left.context.lang_error(LangErrorKind::Error(format!(
+                                "Unimplemented expression op: Operator::{:?}",
+                                op
+                            ))));
                     }
                 }
                 env
             }
         }
-
     }
 
     fn check_bool(expr: &ExprNode) -> Result<bool, LangError> {
@@ -254,13 +271,19 @@ impl Analysis {
                 Tok::IntLiteral(_) => (),
                 Tok::FloatLiteral(_) => (),
                 _ => {
-                    self.results.push(expr.context.lang_error(LangErrorKind::Error(format!("Expecting a number: {:?}", expr))));
+                    self.results
+                        .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                            "Expecting a number: {:?}",
+                            expr
+                        ))));
                 }
             },
             _ => {
-                self.results.push(expr
-                .context
-                .lang_error(LangErrorKind::Error(format!("Expecting a callable: {:?}", expr))));
+                self.results
+                    .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                        "Expecting a callable: {:?}",
+                        expr
+                    ))));
             }
         }
     }
@@ -271,7 +294,8 @@ impl Analysis {
             Operator::Plus => (),
             Operator::Minus => (),
             _ => {
-                self.results.push(expr.context.lang_error(LangErrorKind::NotImplemented));
+                self.results
+                    .push(expr.context.lang_error(LangErrorKind::NotImplemented));
             }
         }
     }
@@ -281,7 +305,8 @@ impl Analysis {
         match op {
             Operator::Bang => (),
             _ => {
-                self.results.push(expr.context.lang_error(LangErrorKind::NotImplemented));
+                self.results
+                    .push(expr.context.lang_error(LangErrorKind::NotImplemented));
             }
         }
     }
@@ -298,7 +323,7 @@ mod tests {
         let mut program = Program::new();
         let mut env = Environment::default();
         env = program.analyze(
-                "
+            "
         # asdf should not be visible outside the block
         {
                 let mut asdf1 = 1;
@@ -307,10 +332,9 @@ mod tests {
                 assert(asdf1 == 2);
         }
         ",
-                env,
-            );
+            env,
+        );
         program.print();
         assert!(env.resolve_value("asdf1").is_none());
-    } 
-
+    }
 }

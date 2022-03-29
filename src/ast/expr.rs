@@ -3,11 +3,11 @@ use super::node::{Context, Context2, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
 use crate::ast::Callback;
+use crate::eval::TypeSig;
 use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::{Tok, Token};
-use crate::eval::{TypeSig};
 use log::debug;
 use std::fmt;
 use std::fmt::Write;
@@ -75,7 +75,6 @@ impl Default for Expr {
         Expr::Void
     }
 }
-
 
 impl Expr {
     pub fn is_void(&self) -> bool {
@@ -207,17 +206,25 @@ impl ExprNode {
         Self {
             context: MaybeNodeContext::from_location(loc),
             value,
-            t: TypeSig::default()
+            t: TypeSig::default(),
         }
     }
 
     pub fn new_with_context(value: Expr, context: MaybeNodeContext) -> Self {
-        Self { context, value, t: TypeSig::default() }
+        Self {
+            context,
+            value,
+            t: TypeSig::default(),
+        }
     }
 
     pub fn new_with_token(value: Expr, token: &Token) -> Self {
         let context = MaybeNodeContext::from_token(token);
-        Self { context, value, t: TypeSig::default() }
+        Self {
+            context,
+            value,
+            t: TypeSig::default(),
+        }
     }
 
     pub fn debug(&self) {
@@ -233,7 +240,7 @@ impl From<Expr> for ExprNode {
         Self {
             context: MaybeNodeContext::default(),
             value,
-            t: TypeSig::default()
+            t: TypeSig::default(),
         }
     }
 }
@@ -508,5 +515,3 @@ impl ExprVisitor<String> for ExprFormatter {
         Ok(())
     }
 }
-
-

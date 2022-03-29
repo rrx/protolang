@@ -205,7 +205,7 @@ impl Op {
         let (i, mut t) = match token.tok {
             Tok::SemiColon => {
                 //let (i, t) = take_one_any(i)?;
-                debug!("handle semicolon: {:?}", i.expand_toks());
+                //debug!("handle semicolon: {:?}", i.expand_toks());
                 let mut x = x.clone();
                 x.context.append(token.expand_toks());
                 // escape, we are done
@@ -317,7 +317,7 @@ impl Op {
                             let node = i.node(expr);
 
                             // check if there's a chaining binary operator here
-                            debug!("peek: {:?}", (&node.unlex(), i.expand_toks()));
+                            //debug!("peek: {:?}", (&node.unlex(), i.expand_toks()));
                             let nr = i.peek();
                             match nr {
                                 Some(n) if n.tok == Tok::EOF => (i, node),
@@ -329,12 +329,15 @@ impl Op {
                                         if is_chain && self.lbp == next_op.lbp {
                                             // consume
                                             let (i, _) = take_one_any(i.clone())?;
-                                            let (i, t) = self.left_denotation(i, &right, &n, depth)?;
+                                            let (i, t) =
+                                                self.left_denotation(i, &right, &n, depth)?;
                                             //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
 
                                             // merge node and t which can both be binary chains
                                             let mut exprs = vec![];
-                                            if let Expr::BinaryChain(mut nexprs) = node.value.clone() {
+                                            if let Expr::BinaryChain(mut nexprs) =
+                                                node.value.clone()
+                                            {
                                                 exprs.append(&mut nexprs);
                                             } else {
                                                 exprs.push(node);
@@ -360,9 +363,9 @@ impl Op {
                             //let n = i.peek().unwrap();
                             //let maybe_next_op = n.tok.op();
                             //if n.tok == Tok::EOF {
-                                //debug!("chain: got eof");
-                                //(i, node)
-                                //
+                            //debug!("chain: got eof");
+                            //(i, node)
+                            //
                             /*
                             } else if let Some(next_op) = maybe_next_op {
                                 //debug!("chain next: {:?}", (self, &n));
@@ -520,7 +523,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
     let n = i.tok[0].tok.clone();
     let token = &i.tok[0];
 
-    debug!("P {:?}", (&n));
+    //debug!("P {:?}", (&n));
 
     let rbp = n.op().map_or(None, |t| t.rbp);
 
@@ -537,7 +540,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let value = Expr::Prefix(op, Box::new(t));
             let mut node = i.node(value);
             node.context.prepend(op_tokens.expand_toks());
-            debug!("P1 {:?}", (&node));
+            //debug!("P1 {:?}", (&node));
             Ok((i, node))
         }
 
@@ -655,7 +658,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         Some(Tok::SemiColon) => {
             //gobble up semicolons
-            debug!(": Phandle semicolon2: {:?}", i.expand_toks());
+            //debug!(": Phandle semicolon2: {:?}", i.expand_toks());
             let (i, pre) = take_one_any(i)?;
             let mut node = ExprNode::new(Expr::Void, &i.to_location());
             node.context.prepend(pre.expand_toks());
@@ -687,7 +690,7 @@ fn extra<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
             // consume variable
             return ExprNode::parse_declaration(i);
         }
-        _ => ()
+        _ => (),
     }
 
     // The P parser starts with an N token, and goes with it, returning a Node
@@ -780,9 +783,9 @@ fn extra_recursive<'a>(
         // left_denotation, parse the RHS, and return the appropriate node
         let t1 = t.clone();
         let (i, t) = op.left_denotation(i, &t, &token, depth)?;
-        debug!("left_denotation: {:?} -> {:?}", (&t1.unparse(), &token.tok), &t.unparse());
-        debug!("left_denotation: op {:?}", (op));
-        debug!("left_denotation: next {:?}", (&i.toks()));
+        //debug!("left_denotation: {:?} -> {:?}", (&t1.unparse(), &token.tok), &t.unparse());
+        //debug!("left_denotation: op {:?}", (op));
+        //debug!("left_denotation: next {:?}", (&i.toks()));
 
         // set r = NBP of op
         match op.nbp {
@@ -791,12 +794,12 @@ fn extra_recursive<'a>(
                 extra_recursive(i, new_r, t, prec, depth + 1)
             }
             None => {
-                debug!("r exit: {:?}", &i.toks());
+                //debug!("r exit: {:?}", &i.toks());
                 Ok((i, (r, t)))
             }
         }
     } else {
-        debug!("guard exit: {:?}", &i.toks());
+        //debug!("guard exit: {:?}", &i.toks());
         Ok((i, (r, t)))
     }
 }
@@ -935,7 +938,10 @@ mod tests {
             ("{+1;\n\t+2}\n", "(block (+ 1) (+ 2))"),
             ("{+1;\n+2}", "(block (+ 1) (+ 2))"),
             ("{let mut x = 1;\n\t(x+1);}", "(block (let x 1) (+ x 1))"),
-            ("{\n\tlet mut x = 2;\n\t(x+1);\n}", "(block (let x 2) (+ x 1))"),
+            (
+                "{\n\tlet mut x = 2;\n\t(x+1);\n}",
+                "(block (let x 2) (+ x 1))",
+            ),
             ("+1", "(+ 1)"),
             ("+ 1", "(+ 1)"),
             ("123", "123"),
