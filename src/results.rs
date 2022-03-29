@@ -21,6 +21,8 @@ pub enum LangErrorKind {
     NotFound,
     #[error("Invalid")]
     Invalid,
+    #[error("Invalid number of arguments")]
+    InvalidNumberArgs,
 }
 
 #[derive(Debug, Error, Clone)]

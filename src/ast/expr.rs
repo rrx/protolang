@@ -2,8 +2,8 @@ use super::function::{Callable, Lambda};
 use super::node::{Context, Context2, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
-use crate::ast::Callback;
-use crate::eval::TypeSig;
+use crate::ast::{CallWithType, Callback};
+use crate::eval::{TypeSig};
 use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;
@@ -56,7 +56,7 @@ pub enum Expr {
     //NAry(Operator, Vec<ExprNode>),
     Lambda(Lambda),
     Callable(Box<dyn Callable>),
-    Callback(Callback),
+    Callback(CallWithType),
     List(Vec<ExprNode>),
     Chain(Operator, Vec<ExprNode>),
     BinaryChain(Vec<ExprNode>),
@@ -109,7 +109,7 @@ impl Expr {
         }
     }
 
-    pub fn try_callback(&self) -> Option<Callback> {
+    pub fn try_callback(&self) -> Option<CallWithType> {
         if let Expr::Callback(s) = self {
             Some(s.clone())
         } else {

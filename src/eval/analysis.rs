@@ -97,7 +97,10 @@ impl Analysis {
                         let mut newenv = env.clone();
                         if let Some(x) = newenv.resolve_value(&ident.name) {
                             let expr = x.expr.as_ref().borrow();
-                            if let Some(_) = expr.try_callback() {
+                            if let Some(cb) = expr.try_callback() {
+                                if !cb.t.arity.is_valid_arity(args.len()) {
+                                    self.results.push(expr.context.lang_error(LangErrorKind::InvalidNumberArgs));
+                                }
                             } else if let Some(_) = expr.try_callable() {
                             } else if let Some(_) = expr.try_lambda() {
                             } else {

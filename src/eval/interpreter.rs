@@ -309,7 +309,7 @@ impl Interpreter {
                         let x: ExprAccessRef = newenv.get_at(&ident.name, &node.context)?.clone();
                         let expr = x.expr.as_ref().borrow();
                         if let Some(cb) = expr.try_callback() {
-                            let result = cb(newenv.clone(), eval_args)?;
+                            let result = (cb.f)(newenv.clone(), eval_args)?;
                             Some(Ok(result))
                         } else if let Some(cb) = expr.try_lambda() {
                             let result = cb.call(newenv.clone(), eval_args)?;

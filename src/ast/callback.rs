@@ -2,13 +2,25 @@ use crate::eval::*;
 use std::fmt;
 use std::rc::Rc;
 
+#[derive(Clone, Debug)]
+pub struct CallWithType {
+    pub f: Callback,
+    pub t: TypeSig
+}
+
+impl CallWithType {
+    pub fn new(f: Callback, t: TypeSig) -> Self {
+        Self { f, t }
+    }
+}
+
 // This was a great help in figuring out how to do callbacks.  The trick is to ensure that the
 // function is 'static
 // https://gist.github.com/aisamanra/da7cdde67fc3dfee00d3
 //
 #[derive(Clone, Debug)]
 pub struct CallTable {
-    funcs: im::HashMap<String, Callback>,
+    funcs: im::HashMap<String, CallWithType>,
 }
 
 impl CallTable {
@@ -18,12 +30,12 @@ impl CallTable {
         }
     }
 
-    pub fn add(&mut self, name: String, cb: Callback) -> Self {
-        self.funcs.insert(name, cb);
+    pub fn add(&mut self, name: String, cb: Callback, t: TypeSig) -> Self {
+        self.funcs.insert(name, CallWithType::new(cb, t));
         self.clone()
     }
 
-    pub fn get(&self, name: &str) -> Option<&Callback> {
+    pub fn get(&self, name: &str) -> Option<&CallWithType> {
         self.funcs.get(name)
     }
 
@@ -35,7 +47,7 @@ impl CallTable {
     ) -> Result<ExprRefWithEnv, InterpretError> {
         match self.get(name) {
             Some(cb) => {
-                let result = cb(env, args)?;
+                let result = (cb.f)(env, args)?;
                 Ok(result)
             }
             _ => unreachable!(),
@@ -44,7 +56,7 @@ impl CallTable {
 }
 
 impl std::ops::Deref for CallTable {
-    type Target = im::HashMap<String, Callback>;
+    type Target = im::HashMap<String, CallWithType>;
 
     fn deref(&self) -> &Self::Target {
         &self.funcs

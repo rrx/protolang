@@ -1,6 +1,6 @@
 use crate::{
     ast::{CallTable, Callable, Callback, Expr},
-    eval::{Environment, ExprRef, ExprRefWithEnv, InterpretError},
+    eval::{Environment, ExprRef, ExprRefWithEnv, InterpretError, TypeSig},
     tokens::Tok,
 };
 use std::fmt;
@@ -13,6 +13,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                 env.debug();
                 Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
             }),
+            TypeSig::void()
         )
         .add(
             "assert".into(),
@@ -34,6 +35,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                         .into()),
                 }
             }),
+            TypeSig::with_arity(1)
         )
         .add(
             "sexpr".into(),
@@ -56,6 +58,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                 }
                 Ok(ExprRefWithEnv::new(Expr::List(out).into(), env))
             }),
+            TypeSig::void()
         )
         .add(
             "clock".into(),
@@ -71,9 +74,11 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                     env,
                 ))
             }),
+            TypeSig::void()
         )
 }
 
+/*
 #[derive(Clone, Debug)]
 pub struct ShowStack;
 impl ShowStack {
@@ -190,3 +195,4 @@ impl Callable for Assert {
         Box::new((*self).clone())
     }
 }
+*/

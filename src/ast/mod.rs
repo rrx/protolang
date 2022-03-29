@@ -14,4 +14,4 @@ mod op;
 pub use op::{Operator, OperatorNode};
 
 mod callback;
-pub use callback::{CallTable, Callback, CallbackFn};
+pub use callback::{CallTable, Callback, CallbackFn, CallWithType};

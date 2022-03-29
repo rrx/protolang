@@ -27,9 +27,22 @@ pub enum Arity {
     // Allow curry
     Curry(usize),
 }
+impl Arity {
+    pub fn is_valid_arity(&self, arity: usize) -> bool {
+        match self {
+            Self::NMore(n) => &arity <= n,
+            Self::N(n) => &arity == n,
+            Self::Curry(n) => &arity <= n
+        }
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct TypeSig {
+    // can be anonymous
+    name: Option<String>,
+
     modifier: FunctionModifier,
     pub arity: Arity,
     // 0 args is just a value
@@ -41,6 +54,7 @@ pub struct TypeSig {
 impl Default for TypeSig {
     fn default() -> Self {
         Self {
+            name: None,
             modifier: FunctionModifier::Default,
             arity: Arity::N(0),
             args: vec![],
@@ -51,18 +65,26 @@ impl Default for TypeSig {
 }
 
 impl TypeSig {
-    fn value(t: TypeSig) -> Self {
+    pub fn set_name(&self, name: String) -> Self {
+        let mut s = self.clone();
+        s.name = Some(name);
+        s
+    }
+
+    pub fn value(t: TypeSig) -> Self {
         Self {
+            name: None,
             modifier: FunctionModifier::Pure,
             arity: Arity::N(0),
-            args: vec![],
+            args: vec![t],
             err: vec![],
             traits: vec![],
         }
     }
 
-    fn void() -> Self {
+    pub fn void() -> Self {
         Self {
+            name: None,
             modifier: FunctionModifier::Default,
             arity: Arity::N(0),
             args: vec![],
@@ -71,10 +93,22 @@ impl TypeSig {
         }
     }
 
+    pub fn with_arity(n: usize) -> Self {
+        Self {
+            name: None,
+            modifier: FunctionModifier::Default,
+            arity: Arity::N(n),
+            args: vec![],
+            err: vec![],
+            traits: vec![],
+        }
+    }
+
     // A -> A
-    fn single_pure(arg: TypeSig) -> Self {
+    pub fn single_pure(arg: TypeSig) -> Self {
         let ret = arg.clone();
         Self {
+            name: None,
             modifier: FunctionModifier::Pure,
             arity: Arity::N(1),
             args: vec![arg, ret],
@@ -98,6 +132,12 @@ impl std::ops::Deref for RefTypeSig {
 #[derive(Clone, Debug)]
 pub struct Trait {
     pub sigs: Vec<TypeSig>,
+}
+
+impl Trait {
+    pub fn bool() -> Self {
+        Self { sigs: vec![] }
+    }
 }
 
 #[derive(Clone, Debug)]
