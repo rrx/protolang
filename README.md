@@ -36,11 +36,13 @@ TODO
 - [x] sexpr transpiler
 - [x] interpreter
 - [x] REPL
-- [x] lazy evaluation
 - [x] error handling
+- [x] recursion
+- [ ] basic static analysis
 - [ ] closures
-- [ ] branching and control flow
-- [ ] recursion
+- [ ] branching and control flow, including logical and/or, loops
+- [ ] call stack traces
+- [ ] lazy evaluation
 - [ ] integrated unit testing
 - [ ] syntax highlighter
 - [ ] code formatter
