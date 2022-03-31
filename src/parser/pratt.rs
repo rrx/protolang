@@ -205,6 +205,7 @@ impl Op {
         let n = i.peek().unwrap();
         //let (i, left) = take_one_any(i.clone())?;
         let (i, mut t) = match n.tok {//left.tok[0].tok {
+            /*
             Tok::SemiColon => {
                 let (i, t) = take_one_any(i)?;
                 //debug!("handle semicolon: {:?}", i.expand_toks());
@@ -213,6 +214,7 @@ impl Op {
                 // escape, we are done
                 return Ok((i, left));
             }
+            */
 
             // chaining
             Tok::Question => {
@@ -413,15 +415,22 @@ impl Op {
                         }
                     }
                 } else {
-                    let (i, t) = take_one_any(i)?;
+                    //let (i, t) = take_one_any(i)?;
                     // postfix just returns, there's no RHS
                     //debug!("Postfix: {:?}", (&x, &token));
-                    let op = OperatorNode::from_postfix_token(token.clone()).unwrap();
-                    let t = Expr::Postfix(op, Box::new(left.clone()));
-                    let mut node = i.node(t);
-                    node.context.append(token.expand_toks());
+                    match OperatorNode::from_postfix_token(token.clone()) {
+                        Some(op) => {
+                            let (i, _) = take_one_any(i)?;
+                            let t = Expr::Postfix(op, Box::new(left.clone()));
+                            let mut node = i.node(t);
+                            node.context.append(token.expand_toks());
 
-                    (i, node)
+                            (i, node)
+                        }
+                        None => {
+                            (i, left.clone())
+                        }
+                    }
                 }
             }
         };
@@ -884,7 +893,7 @@ mod tests {
             "-x ?: y ",
             "x+1 && y+2",
             "(x)",
-            "[x]",
+            "[x, y]",
             //"(1",
             "x ?: y",      // elvis
             "x ?: y ?: z", // chaining elvis

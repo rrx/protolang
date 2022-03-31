@@ -227,7 +227,7 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, t) = context(
+    let (i, mut node) = context(
         "parse-expr",
         alt((
             //context("expr-eof", map(tag_token(Tok::EOF), |t| ExprNode::new_with_token(Expr::Void, &t.tok[0]))),
@@ -236,8 +236,14 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
             context("expr-lambda", ExprNode::parse_lambda),
         )),
     )(i)?;
-    //debug!("got expr: {:?}", t.unparse());
-    Ok((i, t))
+
+    // optionally end with a semicolon
+    let (i, end) = many0(tag_token(Tok::SemiColon))(i)?;
+    end.iter().for_each(|t| {
+        node.context.append(t.expand_toks());
+    });
+
+    Ok((i, node))
 }
 
 pub fn parse_block(i: Tokens) -> PResult<Tokens, ExprNode> {
@@ -317,6 +323,9 @@ pub fn parse_list(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, node))
 }
 
+pub fn parse_empty_stmt(i: Tokens) -> PResult<Tokens, Tokens> {
+    tag_token(Tok::SemiColon)(i)
+}
 
 impl ExprNode {
     pub(crate) fn parse_declaration(i: Tokens) -> PResult<Tokens, ExprNode> {
