@@ -292,7 +292,17 @@ pub fn parse_group(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, node))
 }
 
-pub fn parse_index(i: Tokens) -> PResult<Tokens, ExprNode> {
+pub fn parse_index_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, left) = tag_token(Tok::LBracket)(i)?;
+    // Parse a full expression
+    let (i, mut node) = parse_expr(i)?;
+    let (i, right) = tag_token(Tok::RBracket)(i)?;
+    node.context.prepend(left.expand_toks());
+    node.context.append(right.expand_toks());
+    Ok((i, node))
+}
+
+pub fn parse_list(i: Tokens) -> PResult<Tokens, ExprNode> {
     // consume LBracket
     let (i, left) = tag_token(Tok::LBracket)(i)?;
     //debug!("prefix bracket1: {:?}", (&i, &n, &left));

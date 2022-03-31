@@ -272,6 +272,11 @@ impl Op {
                 // application is slightly different than binary.  The RHS is optional
             }
 
+            Tok::LBracket => {
+                let (i, index_expr) = crate::parser::parse_index_expr(i)?;
+                let node = ExprNode::new(Expr::Index(Box::new(left.clone()), Box::new(index_expr)), &i.to_location());
+                (i, node)
+            }
             /*
             Tok::IndentOpen => {
                 println!("handle open: {:?}", i.toks());
@@ -432,12 +437,12 @@ impl Op {
                 t.context.s.append(right.expand_toks());
                 i
             }
-            */
             Tok::LBracket => {
                 let (i, right) = tag_token(Tok::RBracket)(i)?;
                 t.context.append(right.expand_toks());
                 i
             }
+            */
 
             Tok::IndentOpen => {
                 let (i, right) = take_one_any(i)?;
@@ -601,7 +606,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         // Array
         Some(Tok::LBracket) => {
-            crate::parser::parse_index(i)
+            crate::parser::parse_list(i)
             /*
             // consume LBracket
             let (i, left) = take_one_any(i)?;
@@ -921,7 +926,10 @@ mod tests {
                     assert_eq!(v, &r);
                     assert_eq!(i.toks(), vec![Tok::EOF]);
                 }
-                _ => assert!(false),
+                Err(e) => {
+                    debug!("{:?}", e);
+                    assert!(false);
+                }
             }
         });
     }
