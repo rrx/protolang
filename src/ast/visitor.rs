@@ -92,11 +92,15 @@ impl Expr {
                     out.push(Box::new(arg.clone()));
                 }
             }
-            Expr::Block(exprs) | Expr::Program(exprs) => {
+            Expr::Block(exprs) | Expr::Program(exprs) | Expr::Loop(exprs) => {
                 for e in exprs {
                     out.push(Box::new(e.clone()));
                 }
             }
+            Expr::Break(e) => {
+                out.push(e.clone());
+            }
+            Expr::Continue => {}
             Expr::Ident(_) => {}
             Expr::Literal(_) => {}
             Expr::Lambda(_) => {}
@@ -157,10 +161,16 @@ pub fn visit_expr<N>(e: &ExprNode, f: &mut impl ExprVisitor<N>, n: &mut N) -> VR
                 visit_expr(&arg, f, n)?;
             }
         }
-        Expr::Block(exprs) | Expr::Program(exprs) => {
+        Expr::Block(exprs) | Expr::Program(exprs) | Expr::Loop(exprs) => {
             for e in exprs {
                 visit_expr(&e, f, n)?;
             }
+        }
+        Expr::Break(e) => {
+            f.leaf(e, n)?;
+        }
+        Expr::Continue => {
+            f.leaf(e, n)?;
         }
         Expr::Ident(x) => {
             f.ident(x, n)?;

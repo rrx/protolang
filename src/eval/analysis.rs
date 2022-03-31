@@ -137,6 +137,15 @@ impl Analysis {
                 env
             }
 
+            Expr::Loop(exprs) => {
+                let mut newenv = env.clone();
+                for expr in exprs {
+                    newenv = self.analyze(expr.clone().into(), newenv);
+                }
+                // drop args from environment on return
+                env
+            }
+
             Expr::Block(exprs) => {
                 let mut newenv = env.clone();
                 for expr in exprs {
@@ -152,6 +161,14 @@ impl Analysis {
                     newenv = self.analyze(expr.clone().into(), newenv);
                 }
                 newenv
+            }
+
+            Expr::Break(e) => {
+                self.analyze(e.clone().into(), env)
+            }
+
+            Expr::Continue => {
+                env
             }
 
             Expr::Ternary(op, x, y, z) => match op {

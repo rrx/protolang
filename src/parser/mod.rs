@@ -117,6 +117,14 @@ pub fn print_result<
 }
 
 pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
+    verify(take_one_any, move |tokens: &Tokens<'a>| {
+        let v = &tokens.tok[0].tok;
+        v == &t
+    })
+}
+
+// this function is super slow
+pub(crate) fn tag_token2<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     let s = t.into();
     context(
         s,
@@ -197,7 +205,7 @@ pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i1, expr))
 }
 
-pub fn parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
+pub fn _parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, (mut ident, assign, mut expr, nl)) = tuple((
         ExprNode::parse_ident_expr,
         tag_token(Tok::Assign),
@@ -297,7 +305,7 @@ pub fn parse_list(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, node))
 }
 
-pub fn parse_empty_stmt(i: Tokens) -> PResult<Tokens, Tokens> {
+pub fn _parse_empty_stmt(i: Tokens) -> PResult<Tokens, Tokens> {
     tag_token(Tok::SemiColon)(i)
 }
 
@@ -586,7 +594,7 @@ mod tests {
             let (i, exprs) = many1(ExprNode::parse_declaration)(tokens).unwrap();
             let expr = exprs.get(0).unwrap();
             match &expr.value {
-                Expr::Binary(op, left, right) => {
+                Expr::Binary(_, left, _) => {
                     let ident = left.try_ident().unwrap();
                     assert_eq!(ident.is_mut(), *is_mut);
                 }

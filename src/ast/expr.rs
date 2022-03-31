@@ -24,6 +24,7 @@ pub struct Identifier {
     pub modifier: VarModifier,
 }
 
+
 impl Identifier {
     pub fn new(name: String, modifier: VarModifier) -> Self {
         Self { name, modifier }
@@ -65,6 +66,9 @@ pub enum Expr {
     Apply(Box<ExprNode>, Vec<ExprNode>),
     Index(Box<ExprNode>, Box<ExprNode>),
     Block(Vec<ExprNode>),
+    Loop(Vec<ExprNode>),
+    Continue,
+    Break(Box<ExprNode>),
     Program(Vec<ExprNode>),
     Invalid(String),
     Void,
@@ -336,6 +340,13 @@ impl Unparse for ExprNode {
             Expr::Lambda(e) => {
                 out.append(&mut e.unparse());
             }
+
+            Expr::Break(e) => {
+                out.append(&mut e.unparse());
+            }
+
+            Expr::Continue => {}
+
             Expr::Callback(_) => {
                 unimplemented!();
             }
@@ -352,9 +363,10 @@ impl Unparse for ExprNode {
                     out.append(&mut arg.unparse());
                 }
             }
-            Expr::Block(exprs) | Expr::Program(exprs) => {
+            Expr::Block(exprs) | Expr::Program(exprs) | Expr::Loop(exprs) => {
                 out.append(&mut exprs.into_iter().map(|s| s.unparse()).flatten().collect());
             }
+
             Expr::Invalid(s) => {
                 out.push(Tok::Invalid(s.clone()));
             }
@@ -436,6 +448,12 @@ impl SExpr for ExprNode {
                 "block".into(),
                 exprs.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
             )),
+            Loop(exprs) => Ok(S::Cons(
+                "loop".into(),
+                exprs.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
+            )),
+            Break(e) => Ok(S::Cons("break".into(), vec![e.sexpr()?])),
+            Continue => Ok(S::Cons("continue".into(), vec![])),
             Program(exprs) => Ok(S::Cons(
                 "program".into(),
                 exprs.into_iter().filter_map(|s| s.sexpr().ok()).collect(),
@@ -466,6 +484,12 @@ impl ExprVisitor<String> for ExprFormatter {
             Expr::BinaryChain(_) => {
                 write!(f, "{}{}\n", indent, s)
             }
+            Expr::Break(_) => {
+                write!(f, "{}{}\n", indent, s)
+            }
+            Expr::Continue => {
+                write!(f, "{}{}\n", indent, s)
+            }
             Expr::Prefix(op, _) => {
                 write!(f, "{}{}({:?})\n", indent, s, op.value)
             }
@@ -490,7 +514,7 @@ impl ExprVisitor<String> for ExprFormatter {
             Expr::Apply(_, _) => {
                 write!(f, "{}{}\n", indent, s)
             }
-            Expr::Block(exprs) | Expr::Program(exprs) => {
+            Expr::Block(exprs) | Expr::Program(exprs) | Expr::Loop(exprs) => {
                 write!(f, "{}{}(len={})\n", indent, s, exprs.len())
             }
             Expr::Ident(x) => {

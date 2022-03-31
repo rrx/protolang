@@ -339,6 +339,32 @@ impl Interpreter {
                 }
             }
 
+            Expr::Loop(exprs) => {
+                // push flow control marker, so break and continue know where to go
+                // A single run of the loop is stored in the environment
+                // At the end of the loop, it calls the continue function
+                // break calls the exit function, which is a continuation of everything after the
+                // loop
+              
+                //loop {
+                    //Self::evaluate_block(exprs, env.clone());
+                //}
+
+                //return the original env
+                //Ok(ExprRefWithEnv::new(result.into(), original_env))
+                unimplemented!();
+            }
+
+            Expr::Break(e) => {
+                // resolve control marker, and execute
+                unimplemented!();
+            }
+
+            Expr::Continue => {
+                // resolve control marker, and execute
+                unimplemented!();
+            }
+
             Expr::Block(exprs) => {
                 // default return value for a block is void
                 let mut result = Expr::Void.into();
@@ -399,6 +425,26 @@ impl Interpreter {
                 .runtime_error(&format!("Invalid expr: {:?}", s))),
             Expr::Void => Ok(ExprRefWithEnv::new(Expr::Void.into(), env)),
         }
+    }
+
+
+    fn evaluate_block(exprs: &Vec<ExprNode>, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+        let mut result = Expr::Void.into();
+        let original_env = env.clone();
+        let mut newenv = env;
+        for expr in exprs {
+            let r = Self::evaluate(expr.clone().into(), newenv);
+            match r {
+                Ok(v) => {
+                    newenv = v.env;
+                    result = v.expr;
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+        Ok(ExprRefWithEnv::new(result.into(), original_env))
     }
 
     fn evaluate_binary(
