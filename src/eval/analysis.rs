@@ -69,7 +69,7 @@ impl Analysis {
                 newenv
             }
 
-            Expr::Binary(op, left, right) => self.evaluate_binary(op, left, right, env),
+            Expr::Binary(op, left, right) => self.analyze_binary(op, left, right, env),
 
             Expr::List(elements) => {
                 let mut newenv = env;
@@ -198,7 +198,7 @@ impl Analysis {
         }
     }
 
-    fn evaluate_binary(
+    fn analyze_binary(
         &mut self,
         op: &Operator,
         left: &ExprNode,
