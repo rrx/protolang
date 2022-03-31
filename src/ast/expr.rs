@@ -3,7 +3,7 @@ use super::node::{Context, Context2, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
 use crate::ast::{CallWithType, Callback};
-use crate::eval::{TypeSig};
+use crate::eval::TypeSig;
 use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;

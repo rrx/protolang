@@ -13,7 +13,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                 env.debug();
                 Ok(ExprRefWithEnv::new(Expr::Void.into(), env))
             }),
-            TypeSig::void()
+            TypeSig::void(),
         )
         .add(
             "assert".into(),
@@ -35,7 +35,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                         .into()),
                 }
             }),
-            TypeSig::with_arity(1)
+            TypeSig::with_arity(1),
         )
         .add(
             "sexpr".into(),
@@ -58,7 +58,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                 }
                 Ok(ExprRefWithEnv::new(Expr::List(out).into(), env))
             }),
-            TypeSig::void()
+            TypeSig::void(),
         )
         .add(
             "clock".into(),
@@ -74,7 +74,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                     env,
                 ))
             }),
-            TypeSig::void()
+            TypeSig::void(),
         )
 }
 

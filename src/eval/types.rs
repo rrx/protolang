@@ -32,11 +32,10 @@ impl Arity {
         match self {
             Self::NMore(n) => &arity <= n,
             Self::N(n) => &arity == n,
-            Self::Curry(n) => &arity <= n
+            Self::Curry(n) => &arity <= n,
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct TypeSig {

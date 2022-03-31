@@ -5,7 +5,7 @@ use std::rc::Rc;
 #[derive(Clone, Debug)]
 pub struct CallWithType {
     pub f: Callback,
-    pub t: TypeSig
+    pub t: TypeSig,
 }
 
 impl CallWithType {

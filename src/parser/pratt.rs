@@ -95,7 +95,7 @@ impl Op {
             Tok::Elvis => Some(Self::new_left_assoc(op, 35)),
             Tok::Comma => Some(Self::new_left_assoc(op, 1)),
             //Tok::SemiColon => Some(Self::new(op, Some(0), Some(127), None)),
-            Tok::SemiColon => Some(Self::new(op, Some(0), None, None, OpType::Default)),
+            //Tok::SemiColon => Some(Self::new(op, Some(0), None, None, OpType::Default)),
 
             // Conditional
             Tok::Question => Some(Self::new_left_chain(op, 35)),
@@ -195,16 +195,15 @@ impl Op {
         &self,
         i: Tokens<'a>,
         left: &ExprNode,
-        token: &Token,
+        //token: &Token,
         depth: usize,
     ) -> RNode<'a> {
         // Given the LHS, and an op (token), return a Node
         //
         //debug!("left_denotation x: {:?}", (&x));
         //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
-        let n = i.peek().unwrap();
-        //let (i, left) = take_one_any(i.clone())?;
-        let (i, mut t) = match n.tok {//left.tok[0].tok {
+        let token = &i.tok[0]; //peek().unwrap();
+        let (i, mut t) = match token.tok {
             /*
             Tok::SemiColon => {
                 let (i, t) = take_one_any(i)?;
@@ -215,21 +214,19 @@ impl Op {
                 return Ok((i, left));
             }
             */
-
             // chaining
             Tok::Question => {
                 // Ternary operator (x ? y : z)
-                let (i, t) = take_one_any(i)?;
+                let (i, _) = take_one_any(i)?;
 
                 // match any precedence
-                let (i, mut y) = pratt(i, Some(0), depth + 1)?;
+                let (i, mut y) = crate::parser::parse_expr(i)?; //, Some(0), depth + 1)?;
 
                 let (i, sep) = tag_token(Tok::Colon)(i)?;
 
                 // match any precedence
-                let (i, z) = pratt(i, Some(0), depth + 1)?;
+                let (i, z) = crate::parser::parse_expr(i)?; //, Some(0), depth + 1)?;
 
-                //let op = Binary::from_location(&i, Operator::Conditional);
                 y.context.prepend(token.expand_toks());
                 y.context.append(sep.expand_toks());
                 let value = Expr::Ternary(
@@ -260,9 +257,11 @@ impl Op {
             Tok::LParen => {
                 //(i, node) = crate::parser::parse_apply(i)?;
 
-                let (i, t) = take_one_any(i)?;
-                let (i, (nodes, end)) =
-                    sequence::pair(multi::many0(crate::parser::parse_expr), tag_token(Tok::RParen))(i)?;
+                let (i, _) = take_one_any(i)?;
+                let (i, (nodes, end)) = sequence::pair(
+                    multi::many0(crate::parser::parse_expr),
+                    tag_token(Tok::RParen),
+                )(i)?;
                 //debug!("nodes: {:?}", (&nodes, &end));
                 //let op = Operator::Call;
                 let mut f = left.clone();
@@ -276,7 +275,10 @@ impl Op {
 
             Tok::LBracket => {
                 let (i, index_expr) = crate::parser::parse_index_expr(i)?;
-                let node = ExprNode::new(Expr::Index(Box::new(left.clone()), Box::new(index_expr)), &i.to_location());
+                let node = ExprNode::new(
+                    Expr::Index(Box::new(left.clone()), Box::new(index_expr)),
+                    &i.to_location(),
+                );
                 (i, node)
             }
             /*
@@ -288,7 +290,7 @@ impl Op {
             */
             _ => {
                 if token.tok.is_binary() {
-                    let (i, t) = take_one_any(i)?;
+                    let (i, _) = take_one_any(i)?;
                     // binary parses the RHS, and returns a binary node
                     let (i, y) = pratt(i, self.rbp, depth + 1)?;
                     let op = Operator::from_tok(&token.tok).unwrap();
@@ -343,7 +345,7 @@ impl Op {
                                         if is_chain && self.lbp == next_op.lbp {
                                             // consume
                                             let (i, t) =
-                                                self.left_denotation(i.clone(), &right, &n, depth)?;
+                                                self.left_denotation(i.clone(), &right, depth)?;
                                             //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
 
                                             // merge node and t which can both be binary chains
@@ -427,9 +429,7 @@ impl Op {
 
                             (i, node)
                         }
-                        None => {
-                            (i, left.clone())
-                        }
+                        None => (i, left.clone()),
                     }
                 }
             }
@@ -452,7 +452,6 @@ impl Op {
                 i
             }
             */
-
             Tok::IndentOpen => {
                 let (i, right) = take_one_any(i)?;
                 t.context.append(right.expand_toks());
@@ -485,35 +484,6 @@ impl Tok {
             false
         }
     }
-
-    /*
-    fn is_variable(&self) -> bool {
-        match self {
-            Tok::IntLiteral(_) => true,
-            Tok::Ident(_) => true,
-            _ => false,
-        }
-    }
-
-    fn nbp(&self) -> Prec {
-        match self.op() {
-            Some(op) => op.nbp,
-            None => None,
-        }
-    }
-    fn rbp(&self) -> Prec {
-        match self.op() {
-            Some(op) => op.rbp,
-            None => None,
-        }
-    }
-    fn lbp(&self) -> Prec {
-        match self.op() {
-            Some(op) => op.lbp,
-            None => None,
-        }
-    }
-    */
 }
 
 impl<'a> Tokens<'a> {
@@ -576,7 +546,6 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             ExprNode::parse_declaration(i)
         }
         */
-
         Some(
             Tok::IntLiteral(_) | Tok::StringLiteral(_) | Tok::FloatLiteral(_) | Tok::BoolLiteral(_),
         ) => {
@@ -687,6 +656,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             Ok((i, p))
         }
 
+        /*
         Some(Tok::SemiColon) => {
             //gobble up semicolons
             //debug!(": Phandle semicolon2: {:?}", i.expand_toks());
@@ -695,7 +665,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             node.context.prepend(pre.expand_toks());
             Ok((i, node))
         }
-
+        */
         _ => {
             //debug!("got unexpected token {:?}", &n);
             Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Tag)))
@@ -712,35 +682,9 @@ fn pratt<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // precondition p >= 0
     let _ = prec.unwrap();
 
-    // r = +inf
-    let r = 127;
-
-    //debug!("E0 {:?}, prec: {:?}, depth:{}", i.toks(), prec, depth);
-    /*
-    match i.tok[0].tok {
-        Tok::Let => {
-            // consume variable
-            return ExprNode::parse_declaration(i);
-        }
-        _ => (),
-    }
-    */
-
     // The P parser starts with an N token, and goes with it, returning a Node
     // This is the first element of the expression
     let (i, p) = i.primary(depth)?;
-
-    if i.is_eof() {
-        return Ok((i, p));
-    }
-
-    //debug!(
-    //"E1 {:?}, prec: {:?}, P:{:?}, depth:{}",
-    //i.toks(),
-    //prec,
-    //&p,
-    //depth
-    //);
 
     // get a chain of subsequent expressions
     // What follows could be a postfix operator, a binary operator, or a ternary operator
@@ -748,15 +692,62 @@ fn pratt<'a>(i: Tokens, prec: Prec, depth: usize) -> RNode {
     // Given the p-node p, parse when follows.  p becomes the LHS, and we want to see what follows
     // It could be a postfix operator, or a binary/ternary op
     // G will parse what's next recursively, until we find something that has a lower precedence
-    let (i, (_, t)) = pratt_recursive(i, r, p, prec, 0)?;
+
+    //let r = 127;
+    //if i.is_eof() {
+    //return Ok((i, p));
+    //}
+    //let (i, (_, t)) = pratt_recursive(i, r, p, prec, 0)?;
+    //Ok((i, t))
+    pratt_nonrecursive(i, p, prec, 0)
     //debug!("E2 {:?}", (&t, r, depth, i.toks()));
-    Ok((i, t))
+}
+
+fn pratt_nonrecursive<'a>(
+    mut i: Tokens,
+    mut left: ExprNode,
+    prec: Prec,
+    depth: usize,
+) -> PResult<Tokens, ExprNode> {
+    let mut r = 127;
+    loop {
+        if i.is_eof() {
+            break;
+        }
+        let token = i.peek().unwrap();
+        let maybe_op = token.tok.op();
+        let op = if let Some(op) = maybe_op {
+            op
+        } else {
+            Op::new_default_left()
+        };
+        let lbp = op.lbp.unwrap_or(-1);
+        if prec.unwrap() <= lbp && lbp <= r {
+            // left_denotation, parse the RHS, and return the appropriate node
+            let (new_i, new_left) = op.left_denotation(i, &left, depth)?;
+            i = new_i;
+            left = new_left;
+
+            // set r = NBP of op
+            match op.nbp {
+                Some(new_r) => {
+                    r = new_r;
+                }
+                None => {
+                    break;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    Ok((i, left))
 }
 
 fn pratt_recursive<'a>(
     i: Tokens,
     r: i8,
-    mut t: ExprNode,
+    t: ExprNode,
     prec: Prec,
     depth: usize,
 ) -> PResult<Tokens, (i8, ExprNode)> {
@@ -777,19 +768,21 @@ fn pratt_recursive<'a>(
     }
     let token = &i.tok[0];
 
+    /*
     if token.tok == Tok::SemiColon && false {
         let (i, end) = take_one_any(i)?;
         t.context.append(end.expand_toks());
         return Ok((i, (r, t)));
     }
+    */
 
     // get op from left
     // it could be any token
     let maybe_op = token.tok.op();
-    let (i, op) = if let Some(op) = maybe_op {
-        (i, op)
+    let op = if let Some(op) = maybe_op {
+        op
     } else {
-        (i, Op::new_default_left())
+        Op::new_default_left()
     };
 
     //debug!("op: {:?}", (&token, &op));
@@ -815,7 +808,7 @@ fn pratt_recursive<'a>(
 
         // left_denotation, parse the RHS, and return the appropriate node
         //let t1 = t.clone();
-        let (i, t) = op.left_denotation(i, &t, &token, depth)?;
+        let (i, t) = op.left_denotation(i, &t, depth)?;
         //debug!("left_denotation: {:?} -> {:?}", (&t1.unparse(), &token.tok), &t.unparse());
         //debug!("left_denotation: op {:?}", (op));
         //debug!("left_denotation: next {:?}", (&i.toks()));
@@ -836,25 +829,6 @@ fn pratt_recursive<'a>(
         Ok((i, (r, t)))
     }
 }
-/*
-pub fn peek_eof<'a>(i: Tokens) -> PResult<Tokens, Tokens> {
-    if i.is_eof() {
-        Err(nom::Err::Error(nom::error_position!(i, ErrorKind::Eof)))
-    } else {
-        Ok((i.clone(), i))
-    }
-}
-*/
-/*
-pub fn _parse_expr<'a>(i: Tokens) -> RNode {
-    let (i, (mut node, end)) =
-        sequence::pair(parse_expr_pratt, multi::many0(tag_token(Tok::SemiColon)))(i)?;
-    node.context
-        .append(end.into_iter().map(|t| t.expand_toks()).flatten().collect());
-
-    Ok((i, node))
-}
-*/
 
 pub fn parse_expr_pratt<'a>(i: Tokens) -> RNode {
     i.pratt(Some(0), 0)

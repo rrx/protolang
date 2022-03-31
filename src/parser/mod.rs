@@ -249,11 +249,6 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 pub fn parse_block(i: Tokens) -> PResult<Tokens, ExprNode> {
     // consume LBrace
     let (i, left) = tag_token(Tok::LBrace)(i)?;
-    //debug!(
-    //"prefix brace1: {:?}",
-    //(&i.expand_toks(), &i.toks(), &n, &left)
-    //);
-    //
     // Parse a full expression
     let p = |i| parse_expr(i);
 
@@ -261,37 +256,18 @@ pub fn parse_block(i: Tokens) -> PResult<Tokens, ExprNode> {
         sequence::pair(multi::many0(p), context("r-brace", tag_token(Tok::RBrace)))(i)?;
     let t = Expr::Block(t);
     let mut node = i.node(t);
-    //debug!("block: {:?}", (&t.debug()));
-    //debug!("prefix brace2: {:?}", (&i.expand_toks()));
     node.context.prepend(left.expand_toks());
     node.context.append(right.expand_toks());
     Ok((i, node))
 }
 
-/*
-pub fn parse_apply(i: Tokens) -> PResult<Tokens, Vec<ExprNode>> {
-    let (i, t) = tag_token(Tok::LParen)(i)?;
-    let (i, (nodes, end)) =
-        sequence::pair(multi::many0(parse_expr), tag_token(Tok::RParen))(i)?;
-    //debug!("nodes: {:?}", (&nodes, &end));
-    //let op = Operator::Call;
-    let mut f = x.clone();
-    f.context.append(token.expand_toks());
-    let mut node = ExprNode::new(Expr::Apply(Box::new(f), nodes), &i.to_location());
-    node.context.append(end.expand_toks());
-    Ok((i, node))
-}
-*/
-
 pub fn parse_group(i: Tokens) -> PResult<Tokens, ExprNode> {
     // consume LParen
     let (i, left) = tag_token(Tok::LParen)(i)?;
-    //debug!("prefix paren1: {:?}", (&i.toks(), &left.toks()));
 
     // consume anything inside the parents, bp = 0
-    let (i, mut node) = parse_expr(i)?;//i.extra(Some(0), depth + 1)?;
+    let (i, mut node) = parse_expr(i)?;
 
-    //debug!("prefix paren2: {:?}", (&i.toks(), &node));
     let (i, right) = context("r-paren", tag_token(Tok::RParen))(i)?;
     node.context.prepend(left.expand_toks());
     node.context.append(right.expand_toks());
@@ -311,9 +287,7 @@ pub fn parse_index_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 pub fn parse_list(i: Tokens) -> PResult<Tokens, ExprNode> {
     // consume LBracket
     let (i, left) = tag_token(Tok::LBracket)(i)?;
-    //debug!("prefix bracket1: {:?}", (&i, &n, &left));
-    let (i, t) = parse_expr(i)?;//i.extra(Some(0), depth + 1)?;
-    //debug!("prefix bracket2: {:?}", (&i, &t));
+    let (i, t) = parse_expr(i)?;
     // consume RBracket
     let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
     let t = Expr::List(vec![t]);
