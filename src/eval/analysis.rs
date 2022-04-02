@@ -163,13 +163,9 @@ impl Analysis {
                 newenv
             }
 
-            Expr::Break(e) => {
-                self.analyze(e.clone().into(), env)
-            }
+            Expr::Break(e) => self.analyze(e.clone().into(), env),
 
-            Expr::Continue => {
-                env
-            }
+            Expr::Continue => env,
 
             Expr::Ternary(op, x, y, z) => match op {
                 Operator::Conditional => {

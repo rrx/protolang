@@ -345,9 +345,9 @@ impl Interpreter {
                 // At the end of the loop, it calls the continue function
                 // break calls the exit function, which is a continuation of everything after the
                 // loop
-              
+
                 //loop {
-                    //Self::evaluate_block(exprs, env.clone());
+                //Self::evaluate_block(exprs, env.clone());
                 //}
 
                 //return the original env
@@ -427,8 +427,10 @@ impl Interpreter {
         }
     }
 
-
-    fn evaluate_block(exprs: &Vec<ExprNode>, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+    fn evaluate_block(
+        exprs: &Vec<ExprNode>,
+        env: Environment,
+    ) -> Result<ExprRefWithEnv, InterpretError> {
         let mut result = Expr::Void.into();
         let original_env = env.clone();
         let mut newenv = env;

@@ -3,6 +3,9 @@ name = "protolang"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+bench = false
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -11,7 +14,7 @@ codespan = "0.11"
 codespan-reporting = "0.11"
 nom = "7"
 nom_locate = "4"
-anyhow = { version = "1", feature = ["backtrace"] }
+anyhow = "1"
 rustyline = "9.1"
 itertools = "0.10"
 strum_macros = "0.24"
@@ -23,6 +26,7 @@ im = "15"
 #ariadne = "0.1"
 miette = { version = "3.1", features = ["fancy"] }
 thiserror = "*"
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm13-0"] }
 
 [dev-dependencies]
 criterion = "0.3"

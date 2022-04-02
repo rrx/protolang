@@ -234,6 +234,15 @@ pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, value))
 }
 
+pub fn parse_program_fn(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, p) = parse_program(i)?;
+    let loc = p.context.to_location();
+    let params = Params::new(vec![], &loc);
+    let f = Lambda::new(params, p, &loc);
+    let mut value = ExprNode::new(Expr::Lambda(f), &i.to_location());
+    Ok((i, value))
+}
+
 pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, mut node) = context(
         "parse-expr",
