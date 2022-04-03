@@ -16,7 +16,7 @@ use inkwell::values::{
 use inkwell::{FloatPredicate, OptimizationLevel};
 
 use crate::eval::Environment;
-use crate::ast::{Expr, Operator};
+use crate::ast::{Expr, ExprNode, Operator};
 use crate::tokens::Tok;
 
 /// Defines the prototype (name and parameters) of a function.
@@ -40,7 +40,6 @@ pub struct Function {
 pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
     pub builder: &'a Builder<'ctx>,
-    pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     pub module: &'a Module<'ctx>,
     pub function: &'a Function,
 
@@ -92,6 +91,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
 
+            Expr::Block(exprs) => {
+                let mut results = vec![];
+                for e in exprs {
+                    let v = self.compile_expr(&e)?;
+                    results.push(v);
+                }
+                if results.len() == 0 {
+                    Ok(self.context.f64_type().const_float(0.0))
+                } else {
+                    Ok(*results.last().unwrap())
+                }
+            }
+
             Expr::Literal(Tok::FloatLiteral(nb)) => Ok(self.context.f64_type().const_float(*nb)),
             //Expr::Literal(Tok::IntLiteral(nb)) => Ok(self.context.i64_type().const_int(*nb, false)),
 
@@ -135,7 +147,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             },
             */
 
-            Expr::Binary(op, ref left, right) => {
+            Expr::Binary(op, left, right) => {
                 if op == &Operator::Declare {
                     // handle declaration
                     let var_name = match &left.value {
@@ -147,12 +159,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     let alloca = self.create_entry_block_alloca(var_name);
 
-                    let var_val = self.compile_expr(right)?;
-                    self.builder.build_store(alloca, var_val);
-
-
-                    self.variables.insert(var_name.into(), alloca);
-                    Ok(var_val)
+                    if let Ok(var_val) = self.compile_expr(right) {
+                        self.builder.build_store(alloca, var_val);
+                        self.variables.insert(var_name.into(), alloca);
+                        Ok(var_val)
+                    } else {
+                        Err("Unable to compile RHS")
+                    }
                 } else if op == &Operator::Assign {
                     // handle assignment
                     let var_name = match &left.value {
@@ -214,7 +227,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 match &f.value {
                     Expr::Ident(ident) => {
                         let fn_name = &ident.name;
-                        match self.get_function(fn_name.as_str()) {
+                        match self.module.get_function(fn_name.as_str()) {
                             Some(fun) => {
                                 let mut compiled_args = Vec::with_capacity(args.len());
 
@@ -229,7 +242,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                     None => Err("Invalid call produced.")
                                 }
                             },
-                            None => Err("Unknown function.")
+                            None => {
+                                println!("unknown function: {}", fn_name);
+                                Err("Unknown function.")
+                            }
                         }
                     }
                     _ => unimplemented!()
@@ -335,8 +351,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         */
             _ => {
-                println!("unimplemented {:?}", expr);
-                unimplemented!()
+                //println!("unimplemented {:?}", expr);
+                Err("unimplemented")//&format!("Unimplemented: {:?}", expr).to_string())
+                //unimplemented!()
             }
         }
     }
@@ -396,52 +413,37 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.build_return(Some(&body));
 
-        // return the whole thing after verification and optimization
-        if function.verify(true) {
-            self.fpm.run_on(&function);
-
-            Ok(function)
-        } else {
-            unsafe {
-                function.delete();
-            }
-
-            Err("Invalid generated function.")
-        }
+        Ok(function)
     }
 
     /// Compiles the specified `Function` in the given `Context` and using the specified `Builder`, `PassManager`, and `Module`.
     pub fn compile(
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
-        pass_manager: &'a PassManager<FunctionValue<'ctx>>,
         module: &'a Module<'ctx>,
         function: &Function,
     ) -> Result<FunctionValue<'ctx>, &'static str> {
         let mut compiler = Compiler {
             context: context,
             builder: builder,
-            fpm: pass_manager,
             module: module,
             function: function,
             fn_value_opt: None,
-            variables: HashMap::new()
+            variables: HashMap::new(),
         };
 
         compiler.compile_fn()
     }
 }
 
-pub fn parse_file(filename: &str) -> anyhow::Result<Function> {
+pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
     let contents = std::fs::read_to_string(filename.clone())
         .unwrap()
         .to_string();
     let mut lexer = crate::lexer::LexerState::default();
     let (_, _) = lexer.lex(contents.as_str()).unwrap();
     let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
-    let prototype = Prototype { name: "main".into(), args: vec![], is_op: false, prec: 0 };
-    let f = Function { prototype, body: Some(expr.value), is_anon: false };
-    Ok(f)
+    Ok(expr)
 }
 
 // macro used to print & flush without printing a new line
@@ -472,6 +474,61 @@ pub extern fn printd(x: f64) -> f64 {
 static EXTERNAL_FNS: [extern fn(f64) -> f64; 2] = [putchard, printd];
 
 
+fn handle_declare(expr: &Expr) -> Result<Option<Function>, &'static str> {
+    match expr {
+        Expr::Binary(op, left, right) => {
+            if op == &Operator::Declare {
+                // handle declaration
+                let var_name = match &left.value {
+                    Expr::Ident(i) => &i.name,
+                    _ => {
+                        return Err("Expected variable as left-hand operator of assignment.");
+                    }
+                };
+
+                match &right.value {
+                    Expr::Lambda(f) => {
+                        let params = f.params
+                            .value
+                            .iter()
+                            .map(|param| match param.value.try_ident() {
+                                Some(ident) => ident.name,
+                                None => panic!("Invalid Param")
+                            }).collect::<Vec<_>>();
+
+                        let prototype = Prototype { name: var_name.into(), args: params, is_op: false, prec: 0 };
+                        let f2 = Function { prototype, body: Some(f.expr.value.clone()), is_anon: false };
+                        println!("asdf:{:?}", &f2);
+                        return Ok(Some(f2));
+                    }
+                    _ => unimplemented!()
+                }
+            }
+        }
+        _ => unimplemented!()
+    }
+    Ok(None)
+}
+
+fn handle_program(expr: &Expr) -> Result<Vec<Function>, &'static str> {
+    let mut out = vec![];
+    match expr {
+        Expr::Program(exprs) => {
+            for e in exprs {
+                match handle_declare(e)? {
+                    Some(f) => {
+                        out.push(f);
+                    }
+                    None => ()
+                }
+            }
+        }
+        _ => unimplemented!()
+    }
+    Ok(out)
+}
+
+
 pub fn test(filename: &str) -> anyhow::Result<()> {
 
     let context = Context::create();
@@ -490,34 +547,33 @@ pub fn test(filename: &str) -> anyhow::Result<()> {
     fpm.add_reassociate_pass();
     fpm.initialize();
 
-    let f = parse_file(filename)?;
+    let expr = parse_file(filename)?;
+    let functions = handle_program(&expr).unwrap();
 
-    let (name, is_anon) = match Compiler::compile(&context, &builder, &fpm, &module, &f) {
-        Ok(f) => {
-            f.print_to_stderr();
-            (f.get_name().to_str().unwrap().to_string(), true)
-        }
-        Err(e) => {
-            println!("Error compiling: {}", e);
+    for f in functions {
+        let f2 = Compiler::compile(&context, &builder, &module, &f).unwrap();
+        if f2.verify(true) {
+            fpm.run_on(&f2);
+            f2.print_to_stderr();
+        } else {
+            println!("Verify failed");
             return Ok(());
         }
-    };
+    }
 
-    if is_anon {
-        let ee = module.create_jit_execution_engine(OptimizationLevel::None).unwrap();
+    let name = "main";
+    let ee = module.create_jit_execution_engine(OptimizationLevel::None).unwrap();
 
-        let maybe_fn = unsafe { ee.get_function::<unsafe extern "C" fn() -> f64>(name.as_str()) };
-        let compiled_fn = match maybe_fn {
-            Ok(f) => f,
-            Err(err) => {
-                println!("!> Error during execution: {:?}", err);
-                return Ok(());
-                //continue;
+    let maybe_fn = unsafe { ee.get_function::<unsafe extern "C" fn() -> f64>(name) };
+
+    match maybe_fn {
+        Ok(f) => {
+            unsafe {
+                println!("=> {}", f.call());
             }
-        };
-
-        unsafe {
-            println!("=> {}", compiled_fn.call());
+        }
+        Err(err) => {
+            println!("!> Error during execution: {:?}", err);
         }
     }
 

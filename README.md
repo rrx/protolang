@@ -26,7 +26,7 @@ The goal is to create a simple compiler that can also be used for:
 
 Ideas
 - null pointer exceptions should be impossible, unless the option is explicit (like Rust unwrap)
-
+- As a shortcut to compilation, transpile to Rust or Typescript
 
 TODO
 
