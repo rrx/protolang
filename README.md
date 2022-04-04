@@ -27,6 +27,7 @@ The goal is to create a simple compiler that can also be used for:
 Ideas
 - null pointer exceptions should be impossible, unless the option is explicit (like Rust unwrap)
 - As a shortcut to compilation, transpile to Rust or Typescript
+- Universal build determinism: https://blog.llvm.org/2019/11/deterministic-builds-with-clang-and-lld.html
 
 TODO
 
@@ -38,6 +39,7 @@ TODO
 - [x] REPL
 - [x] error handling
 - [x] recursion
+- [ ] compile to LLVM-IR
 - [ ] basic static analysis
 - [ ] closures
 - [ ] branching and control flow, including logical and/or, loops
@@ -53,6 +55,7 @@ TODO
 - [ ] basic polymorphism
 - [ ] FFI (https://docs.rs/libffi/latest/libffi/)
 - [ ] compile to machine code using LLVM
+- [ ] LLVM LTO (https://doc.rust-lang.org/rustc/linker-plugin-lto.html)
 - [ ] basic build and test tooling
 - [ ] parser combinator library
 - [ ] self-hosting language parser

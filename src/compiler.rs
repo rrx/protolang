@@ -4,10 +4,11 @@ use std::io::{self, Write};
 use std::iter::Peekable;
 use std::ops::DerefMut;
 use std::str::Chars;
+use std::path::{Path, PathBuf};
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::Module;
+use inkwell::module::{Module, Linkage};
 use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
 use inkwell::values::{
@@ -368,7 +369,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let args_types = args_types.as_slice();
 
         let fn_type = self.context.f64_type().fn_type(args_types, false);
-        let fn_val = self.module.add_function(proto.name.as_str(), fn_type, None);
+        let fn_val = self.module.add_function(proto.name.as_str(), fn_type, None);//Some(Linkage::Private));
 
         // set arguments names
         for (i, arg) in fn_val.get_param_iter().enumerate() {
@@ -474,6 +475,32 @@ pub extern fn printd(x: f64) -> f64 {
 static EXTERNAL_FNS: [extern fn(f64) -> f64; 2] = [putchard, printd];
 
 
+fn build_extern<'a, 'ctx>(
+    context: &'ctx Context,
+    module: &'a Module<'ctx>,
+    name: &str) -> FunctionValue<'ctx> {
+
+    let proto = Prototype { name: name.into(), args: vec!["one".into()], is_op: false, prec: 0 };
+    let ret_type = context.f64_type();
+
+    let args_types = std::iter::repeat(ret_type)
+        .take(proto.args.len())
+        .map(|f| f.into())
+        .collect::<Vec<BasicMetadataTypeEnum>>();
+    let args_types = args_types.as_slice();
+
+    let fn_type = context.f64_type().fn_type(args_types, false);
+    let fn_val = module.add_function(proto.name.as_str(), fn_type, None);
+
+    // set arguments names
+    for (i, arg) in fn_val.get_param_iter().enumerate() {
+        arg.into_float_value().set_name(proto.args[i].as_str());
+    }
+
+    // finally return built prototype
+    fn_val
+}
+
 fn handle_declare(expr: &Expr) -> Result<Option<Function>, &'static str> {
     match expr {
         Expr::Binary(op, left, right) => {
@@ -498,7 +525,7 @@ fn handle_declare(expr: &Expr) -> Result<Option<Function>, &'static str> {
 
                         let prototype = Prototype { name: var_name.into(), args: params, is_op: false, prec: 0 };
                         let f2 = Function { prototype, body: Some(f.expr.value.clone()), is_anon: false };
-                        println!("asdf:{:?}", &f2);
+                        //println!("asdf:{:?}", &f2);
                         return Ok(Some(f2));
                     }
                     _ => unimplemented!()
@@ -529,10 +556,10 @@ fn handle_program(expr: &Expr) -> Result<Vec<Function>, &'static str> {
 }
 
 
-pub fn test(filename: &str) -> anyhow::Result<()> {
+pub fn test(filenames: Vec<String>) -> anyhow::Result<()> {
 
     let context = Context::create();
-    let module = context.create_module("repl");
+    let module = context.create_module("main");
     let builder = context.create_builder();
 
     // Create FPM
@@ -547,24 +574,56 @@ pub fn test(filename: &str) -> anyhow::Result<()> {
     fpm.add_reassociate_pass();
     fpm.initialize();
 
-    let expr = parse_file(filename)?;
-    let functions = handle_program(&expr).unwrap();
+    // make sure they aren't removed from here
+    printd(0.0);
+    putchard(0.0);
 
-    for f in functions {
-        let f2 = Compiler::compile(&context, &builder, &module, &f).unwrap();
-        if f2.verify(true) {
-            fpm.run_on(&f2);
-            f2.print_to_stderr();
-        } else {
-            println!("Verify failed");
-            return Ok(());
-        }
-    }
-
-    let name = "main";
+    // initialize JIT execution engine
     let ee = module.create_jit_execution_engine(OptimizationLevel::None).unwrap();
 
-    let maybe_fn = unsafe { ee.get_function::<unsafe extern "C" fn() -> f64>(name) };
+    // create a module for each filename, and add it to the EE
+    for filename in filenames {
+        let mut output = PathBuf::from("target");
+        output.push(filename.clone());
+        output.set_extension("ll");
+
+        let module_name = output.file_stem().unwrap().to_str().unwrap();
+        let module = context.create_module(module_name);
+
+        // add runtime functions
+        build_extern(&context, &module, "putchard");
+        build_extern(&context, &module, "printd");
+
+        let expr = parse_file(&filename)?;
+        let functions = handle_program(&expr).unwrap();
+        let fns = functions.iter().map(|f| {
+            Compiler::compile(&context, &builder, &module, &f).unwrap()
+        }).collect::<Vec<_>>();
+
+        println!("BEFORE");
+        module.print_to_stderr();
+
+        if let Err(e) = module.print_to_file(output) {
+            println!("Unable to save file");
+        }
+
+        for f in fns {
+            if f.verify(true) {
+                fpm.run_on(&f);
+            } else {
+                println!("Verify failed");
+                return Ok(());
+            }
+        }
+
+        println!("AFTER");
+        module.print_to_stderr();
+        ee.add_module(&module);
+    }
+
+
+    // get the main function and execute it 
+    let maybe_fn = unsafe { ee.get_function::<unsafe extern "C" fn() -> f64>("main") };
 
     match maybe_fn {
         Ok(f) => {

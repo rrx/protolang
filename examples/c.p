@@ -11,5 +11,9 @@ let main = \ -> {
         let y = (1.0 > 0.) ? 1.0 : 2.0
         x > 0.0
         y
-        f(y + 0.1)
+        #printd(y)
+        let v = f(y + 0.1)
+        #printd(v)
+        printd(10000.1)
+        v
 }
