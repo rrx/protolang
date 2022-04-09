@@ -441,6 +441,23 @@ impl ExprNode {
     }
 }
 
+pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
+    let contents = std::fs::read_to_string(filename.clone())
+        .unwrap()
+        .to_string();
+    let mut lexer = crate::lexer::LexerState::default();
+    let (_, _) = lexer.lex(contents.as_str()).unwrap();
+    let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
+    Ok(expr)
+}
+
+pub fn parse_str(s: &str) -> anyhow::Result<ExprNode> {
+    let mut lexer = crate::lexer::LexerState::default();
+    let (_, _) = lexer.lex(s).unwrap();
+    let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
+    Ok(expr)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

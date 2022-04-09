@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::ops::DerefMut;
-use std::str::Chars;
 use std::path::{Path, PathBuf};
+use std::str::Chars;
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::{Module, Linkage};
+use inkwell::module::{Linkage, Module};
 use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
 use inkwell::values::{
@@ -16,8 +16,9 @@ use inkwell::values::{
 };
 use inkwell::{FloatPredicate, OptimizationLevel};
 
-use crate::eval::Environment;
 use crate::ast::{Expr, ExprNode, Operator};
+use crate::eval::Environment;
+use crate::parser::parse_file;
 use crate::tokens::Tok;
 
 /// Defines the prototype (name and parameters) of a function.
@@ -26,7 +27,7 @@ pub struct Prototype {
     pub name: String,
     pub args: Vec<String>,
     pub is_op: bool,
-    pub prec: usize
+    pub prec: usize,
 }
 
 /// Defines a user-defined or external function.
@@ -34,7 +35,7 @@ pub struct Prototype {
 pub struct Function {
     pub prototype: Prototype,
     pub body: Option<Expr>,
-    pub is_anon: bool
+    pub is_anon: bool,
 }
 
 /// Defines the `Expr` compiler.
@@ -45,7 +46,7 @@ pub struct Compiler<'a, 'ctx> {
     pub function: &'a Function,
 
     variables: HashMap<String, PointerValue<'ctx>>,
-    fn_value_opt: Option<FunctionValue<'ctx>>
+    fn_value_opt: Option<FunctionValue<'ctx>>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -69,7 +70,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         match entry.get_first_instruction() {
             Some(first_instr) => builder.position_before(&first_instr),
-            None => builder.position_at_end(entry)
+            None => builder.position_at_end(entry),
         }
 
         builder.build_alloca(self.context.f64_type(), name)
@@ -107,12 +108,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             Expr::Literal(Tok::FloatLiteral(nb)) => Ok(self.context.f64_type().const_float(*nb)),
             //Expr::Literal(Tok::IntLiteral(nb)) => Ok(self.context.i64_type().const_int(*nb, false)),
-
-            Expr::Ident(ident) => {
-                match self.variables.get(ident.name.as_str()) {
-                    Some(var) => Ok(self.builder.build_load(*var, ident.name.as_str()).into_float_value()),
-                    None => Err("Could not find a matching variable.")
-                }
+            Expr::Ident(ident) => match self.variables.get(ident.name.as_str()) {
+                Some(var) => Ok(self
+                    .builder
+                    .build_load(*var, ident.name.as_str())
+                    .into_float_value()),
+                None => Err("Could not find a matching variable."),
             },
 
             /*
@@ -147,7 +148,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Ok(body)
             },
             */
-
             Expr::Binary(op, left, right) => {
                 if op == &Operator::Declare {
                     // handle declaration
@@ -177,7 +177,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     };
 
                     let var_val = self.compile_expr(right)?;
-                    let var = self.variables.get(var_name.as_str()).ok_or("Undefined variable.")?;
+                    let var = self
+                        .variables
+                        .get(var_name.as_str())
+                        .ok_or("Undefined variable.")?;
 
                     self.builder.build_store(*var, var_val);
 
@@ -192,14 +195,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         Operator::Multiply => Ok(self.builder.build_float_mul(lhs, rhs, "tmpmul")),
                         Operator::Divide => Ok(self.builder.build_float_div(lhs, rhs, "tmpdiv")),
                         Operator::LessThan => Ok({
-                            let cmp = self.builder.build_float_compare(FloatPredicate::ULT, lhs, rhs, "tmpcmp");
+                            let cmp = self.builder.build_float_compare(
+                                FloatPredicate::ULT,
+                                lhs,
+                                rhs,
+                                "tmpcmp",
+                            );
 
-                            self.builder.build_unsigned_int_to_float(cmp, self.context.f64_type(), "tmpbool")
+                            self.builder.build_unsigned_int_to_float(
+                                cmp,
+                                self.context.f64_type(),
+                                "tmpbool",
+                            )
                         }),
                         Operator::GreaterThan => Ok({
-                            let cmp = self.builder.build_float_compare(FloatPredicate::ULT, rhs, lhs, "tmpcmp");
+                            let cmp = self.builder.build_float_compare(
+                                FloatPredicate::ULT,
+                                rhs,
+                                lhs,
+                                "tmpcmp",
+                            );
 
-                            self.builder.build_unsigned_int_to_float(cmp, self.context.f64_type(), "tmpbool")
+                            self.builder.build_unsigned_int_to_float(
+                                cmp,
+                                self.context.f64_type(),
+                                "tmpbool",
+                            )
                         }),
                         /*
                         custom => {
@@ -219,38 +240,45 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             }
                         }
                         */
-                        _ => unimplemented!()
+                        _ => unimplemented!(),
                     }
                 }
-            },
+            }
 
-            Expr::Apply(f, args) => {
-                match &f.value {
-                    Expr::Ident(ident) => {
-                        let fn_name = &ident.name;
-                        match self.module.get_function(fn_name.as_str()) {
-                            Some(fun) => {
-                                let mut compiled_args = Vec::with_capacity(args.len());
+            Expr::Apply(f, args) => match &f.value {
+                Expr::Ident(ident) => {
+                    let fn_name = &ident.name;
+                    match self.module.get_function(fn_name.as_str()) {
+                        Some(fun) => {
+                            let mut compiled_args = Vec::with_capacity(args.len());
 
-                                for arg in args {
-                                    compiled_args.push(self.compile_expr(arg)?);
-                                }
+                            for arg in args {
+                                compiled_args.push(self.compile_expr(arg)?);
+                            }
 
-                                let argsv: Vec<BasicMetadataValueEnum> = compiled_args.iter().by_ref().map(|&val| val.into()).collect();
+                            let argsv: Vec<BasicMetadataValueEnum> = compiled_args
+                                .iter()
+                                .by_ref()
+                                .map(|&val| val.into())
+                                .collect();
 
-                                match self.builder.build_call(fun, argsv.as_slice(), "tmp").try_as_basic_value().left() {
-                                    Some(value) => Ok(value.into_float_value()),
-                                    None => Err("Invalid call produced.")
-                                }
-                            },
-                            None => {
-                                println!("unknown function: {}", fn_name);
-                                Err("Unknown function.")
+                            match self
+                                .builder
+                                .build_call(fun, argsv.as_slice(), "tmp")
+                                .try_as_basic_value()
+                                .left()
+                            {
+                                Some(value) => Ok(value.into_float_value()),
+                                None => Err("Invalid call produced."),
                             }
                         }
+                        None => {
+                            println!("unknown function: {}", fn_name);
+                            Err("Unknown function.")
+                        }
                     }
-                    _ => unimplemented!()
                 }
+                _ => unimplemented!(),
             },
 
             Expr::Ternary(op, cond, consequence, alternative) => {
@@ -260,14 +288,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     // create condition by comparing without 0.0 and returning an int
                     let cond = self.compile_expr(cond)?;
-                    let cond = self.builder.build_float_compare(FloatPredicate::ONE, cond, zero_const, "ifcond");
+                    let cond = self.builder.build_float_compare(
+                        FloatPredicate::ONE,
+                        cond,
+                        zero_const,
+                        "ifcond",
+                    );
 
                     // build branch
                     let then_bb = self.context.append_basic_block(parent, "then");
                     let else_bb = self.context.append_basic_block(parent, "else");
                     let cont_bb = self.context.append_basic_block(parent, "ifcont");
 
-                    self.builder.build_conditional_branch(cond, then_bb, else_bb);
+                    self.builder
+                        .build_conditional_branch(cond, then_bb, else_bb);
 
                     // build then block
                     self.builder.position_at_end(then_bb);
@@ -288,73 +322,70 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     let phi = self.builder.build_phi(self.context.f64_type(), "iftmp");
 
-                    phi.add_incoming(&[
-                        (&then_val, then_bb),
-                        (&else_val, else_bb)
-                    ]);
+                    phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]);
 
                     Ok(phi.as_basic_value().into_float_value())
                 } else {
                     println!("unimplemented op: {:?}", op);
                     unimplemented!()
                 }
-            },
+            }
 
             /*
-            Expr::For { ref var_name, ref start, ref end, ref step, ref body } => {
-                let parent = self.fn_value();
+                Expr::For { ref var_name, ref start, ref end, ref step, ref body } => {
+                    let parent = self.fn_value();
 
-                let start_alloca = self.create_entry_block_alloca(var_name);
-                let start = self.compile_expr(start)?;
+                    let start_alloca = self.create_entry_block_alloca(var_name);
+                    let start = self.compile_expr(start)?;
 
-                self.builder.build_store(start_alloca, start);
+                    self.builder.build_store(start_alloca, start);
 
-                // go from current block to loop block
-                let loop_bb = self.context.append_basic_block(parent, "loop");
+                    // go from current block to loop block
+                    let loop_bb = self.context.append_basic_block(parent, "loop");
 
-                self.builder.build_unconditional_branch(loop_bb);
-                self.builder.position_at_end(loop_bb);
+                    self.builder.build_unconditional_branch(loop_bb);
+                    self.builder.position_at_end(loop_bb);
 
-                let old_val = self.variables.remove(var_name.as_str());
+                    let old_val = self.variables.remove(var_name.as_str());
 
-                self.variables.insert(var_name.to_owned(), start_alloca);
+                    self.variables.insert(var_name.to_owned(), start_alloca);
 
-                // emit body
-                self.compile_expr(body)?;
+                    // emit body
+                    self.compile_expr(body)?;
 
-                // emit step
-                let step = match *step {
-                    Some(ref step) => self.compile_expr(step)?,
-                    None => self.context.f64_type().const_float(1.0)
-                };
+                    // emit step
+                    let step = match *step {
+                        Some(ref step) => self.compile_expr(step)?,
+                        None => self.context.f64_type().const_float(1.0)
+                    };
 
-                // compile end condition
-                let end_cond = self.compile_expr(end)?;
+                    // compile end condition
+                    let end_cond = self.compile_expr(end)?;
 
-                let curr_var = self.builder.build_load(start_alloca, var_name);
-                let next_var = self.builder.build_float_add(curr_var.into_float_value(), step, "nextvar");
+                    let curr_var = self.builder.build_load(start_alloca, var_name);
+                    let next_var = self.builder.build_float_add(curr_var.into_float_value(), step, "nextvar");
 
-                self.builder.build_store(start_alloca, next_var);
+                    self.builder.build_store(start_alloca, next_var);
 
-                let end_cond = self.builder.build_float_compare(FloatPredicate::ONE, end_cond, self.context.f64_type().const_float(0.0), "loopcond");
-                let after_bb = self.context.append_basic_block(parent, "afterloop");
+                    let end_cond = self.builder.build_float_compare(FloatPredicate::ONE, end_cond, self.context.f64_type().const_float(0.0), "loopcond");
+                    let after_bb = self.context.append_basic_block(parent, "afterloop");
 
-                self.builder.build_conditional_branch(end_cond, loop_bb, after_bb);
-                self.builder.position_at_end(after_bb);
+                    self.builder.build_conditional_branch(end_cond, loop_bb, after_bb);
+                    self.builder.position_at_end(after_bb);
 
-                self.variables.remove(var_name);
+                    self.variables.remove(var_name);
 
-                if let Some(val) = old_val {
-                    self.variables.insert(var_name.to_owned(), val);
+                    if let Some(val) = old_val {
+                        self.variables.insert(var_name.to_owned(), val);
+                    }
+
+                    Ok(self.context.f64_type().const_float(0.0))
                 }
-
-                Ok(self.context.f64_type().const_float(0.0))
-            }
-        */
+            */
             _ => {
                 //println!("unimplemented {:?}", expr);
-                Err("unimplemented")//&format!("Unimplemented: {:?}", expr).to_string())
-                //unimplemented!()
+                Err("unimplemented") //&format!("Unimplemented: {:?}", expr).to_string())
+                                     //unimplemented!()
             }
         }
     }
@@ -369,7 +400,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let args_types = args_types.as_slice();
 
         let fn_type = self.context.f64_type().fn_type(args_types, false);
-        let fn_val = self.module.add_function(proto.name.as_str(), fn_type, None);//Some(Linkage::Private));
+        let fn_val = self.module.add_function(proto.name.as_str(), fn_type, None); //Some(Linkage::Private));
 
         // set arguments names
         for (i, arg) in fn_val.get_param_iter().enumerate() {
@@ -437,16 +468,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 }
 
-pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
-    let contents = std::fs::read_to_string(filename.clone())
-        .unwrap()
-        .to_string();
-    let mut lexer = crate::lexer::LexerState::default();
-    let (_, _) = lexer.lex(contents.as_str()).unwrap();
-    let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
-    Ok(expr)
-}
-
 // macro used to print & flush without printing a new line
 macro_rules! print_flush {
     ( $( $x:expr ),* ) => {
@@ -457,30 +478,33 @@ macro_rules! print_flush {
 }
 
 #[no_mangle]
-pub extern fn putchard(x: f64) -> f64 {
+pub extern "C" fn putchard(x: f64) -> f64 {
     print_flush!("{}", x as u8 as char);
     x
 }
 
 #[no_mangle]
-pub extern fn printd(x: f64) -> f64 {
+pub extern "C" fn printd(x: f64) -> f64 {
     println!("{}", x);
     x
-
 }
 
 // Adding the functions above to a global array,
 // so Rust compiler won't remove them.
 #[used]
-static EXTERNAL_FNS: [extern fn(f64) -> f64; 2] = [putchard, printd];
-
+static EXTERNAL_FNS: [extern "C" fn(f64) -> f64; 2] = [putchard, printd];
 
 fn build_extern<'a, 'ctx>(
     context: &'ctx Context,
     module: &'a Module<'ctx>,
-    name: &str) -> FunctionValue<'ctx> {
-
-    let proto = Prototype { name: name.into(), args: vec!["one".into()], is_op: false, prec: 0 };
+    name: &str,
+) -> FunctionValue<'ctx> {
+    let proto = Prototype {
+        name: name.into(),
+        args: vec!["one".into()],
+        is_op: false,
+        prec: 0,
+    };
     let ret_type = context.f64_type();
 
     let args_types = std::iter::repeat(ret_type)
@@ -515,24 +539,35 @@ fn handle_declare(expr: &Expr) -> Result<Option<Function>, &'static str> {
 
                 match &right.value {
                     Expr::Lambda(f) => {
-                        let params = f.params
+                        let params = f
+                            .params
                             .value
                             .iter()
                             .map(|param| match param.value.try_ident() {
                                 Some(ident) => ident.name,
-                                None => panic!("Invalid Param")
-                            }).collect::<Vec<_>>();
+                                None => panic!("Invalid Param"),
+                            })
+                            .collect::<Vec<_>>();
 
-                        let prototype = Prototype { name: var_name.into(), args: params, is_op: false, prec: 0 };
-                        let f2 = Function { prototype, body: Some(f.expr.value.clone()), is_anon: false };
+                        let prototype = Prototype {
+                            name: var_name.into(),
+                            args: params,
+                            is_op: false,
+                            prec: 0,
+                        };
+                        let f2 = Function {
+                            prototype,
+                            body: Some(f.expr.value.clone()),
+                            is_anon: false,
+                        };
                         //println!("asdf:{:?}", &f2);
                         return Ok(Some(f2));
                     }
-                    _ => unimplemented!()
+                    _ => unimplemented!(),
                 }
             }
         }
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
     Ok(None)
 }
@@ -546,18 +581,16 @@ fn handle_program(expr: &Expr) -> Result<Vec<Function>, &'static str> {
                     Some(f) => {
                         out.push(f);
                     }
-                    None => ()
+                    None => (),
                 }
             }
         }
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
     Ok(out)
 }
 
-
-pub fn test(filenames: Vec<String>) -> anyhow::Result<()> {
-
+pub fn compile_and_execute(filenames: Vec<String>) -> anyhow::Result<()> {
     let context = Context::create();
     let module = context.create_module("main");
     let builder = context.create_builder();
@@ -579,7 +612,9 @@ pub fn test(filenames: Vec<String>) -> anyhow::Result<()> {
     putchard(0.0);
 
     // initialize JIT execution engine
-    let ee = module.create_jit_execution_engine(OptimizationLevel::None).unwrap();
+    let ee = module
+        .create_jit_execution_engine(OptimizationLevel::None)
+        .unwrap();
 
     // create a module for each filename, and add it to the EE
     for filename in filenames {
@@ -596,9 +631,10 @@ pub fn test(filenames: Vec<String>) -> anyhow::Result<()> {
 
         let expr = parse_file(&filename)?;
         let functions = handle_program(&expr).unwrap();
-        let fns = functions.iter().map(|f| {
-            Compiler::compile(&context, &builder, &module, &f).unwrap()
-        }).collect::<Vec<_>>();
+        let fns = functions
+            .iter()
+            .map(|f| Compiler::compile(&context, &builder, &module, &f).unwrap())
+            .collect::<Vec<_>>();
 
         println!("BEFORE");
         module.print_to_stderr();
@@ -621,16 +657,13 @@ pub fn test(filenames: Vec<String>) -> anyhow::Result<()> {
         ee.add_module(&module);
     }
 
-
-    // get the main function and execute it 
+    // get the main function and execute it
     let maybe_fn = unsafe { ee.get_function::<unsafe extern "C" fn() -> f64>("main") };
 
     match maybe_fn {
-        Ok(f) => {
-            unsafe {
-                println!("=> {}", f.call());
-            }
-        }
+        Ok(f) => unsafe {
+            println!("=> {}", f.call());
+        },
         Err(err) => {
             println!("!> Error during execution: {:?}", err);
         }

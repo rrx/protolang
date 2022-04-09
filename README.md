@@ -41,8 +41,8 @@ TODO
 - [x] recursion
 - [ ] compile to LLVM-IR
 - [ ] basic static analysis
-- [ ] closures
 - [ ] branching and control flow, including logical and/or, loops
+- [ ] closures
 - [ ] call stack traces
 - [ ] lazy evaluation
 - [ ] integrated unit testing

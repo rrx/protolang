@@ -24,7 +24,6 @@ pub struct Identifier {
     pub modifier: VarModifier,
 }
 
-
 impl Identifier {
     pub fn new(name: String, modifier: VarModifier) -> Self {
         Self { name, modifier }
