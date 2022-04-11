@@ -1,7 +1,7 @@
 use log::debug;
 use rpds::HashTrieMap;
 use std::fmt;
-use std::hash::{Hash};
+use std::hash::Hash;
 use std::rc::Rc;
 
 pub trait LayerKey: Hash + Eq + fmt::Display + fmt::Debug + Clone {}
@@ -82,7 +82,7 @@ impl<T, I: Index> Registry<T, I> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnvLayers<K: LayerKey, V: LayerValue> {
-    enclosing: Option<Rc<EnvLayers<K, V>>>,
+    enclosing: Option<Box<EnvLayers<K, V>>>,
     layers: im::vector::Vector<Layer<K, V>>,
 }
 
@@ -118,6 +118,17 @@ impl<K: LayerKey, V: LayerValue> EnvLayers<K, V> {
             }
         }
         EnvLayersIterator { values }
+    }
+
+    pub fn push(self) -> Self {
+        Self {
+            enclosing: Some(Box::new(self)),
+            layers: im::Vector::new(),
+        }
+    }
+
+    pub fn pop(mut self) -> Option<Self> {
+        self.enclosing.map(|v| *v)
     }
 
     pub fn define(&mut self, name: K, value: V) {

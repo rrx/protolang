@@ -6,12 +6,12 @@ use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 #[derive(Debug)]
-struct Registries {
+pub struct Registries {
     types: Registry<TypeSpec, TypeId>,
 }
 
 impl Registries {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             types: Registry::new(),
         }
@@ -23,21 +23,21 @@ impl Registries {
             id: TypeId::create(0),
         })
     }
-    fn add_type_composite(&mut self, c: CompositeTypeSpec) -> TypeId {
+    pub fn add_type_composite(&mut self, c: CompositeTypeSpec) -> TypeId {
         let id = self.add();
         self.types
             .replace(&id, TypeSpec::new_composite(id.clone(), c));
         id
     }
 
-    fn add_type_function(&mut self, c: FunctionSpec) -> TypeId {
+    pub fn add_type_function(&mut self, c: FunctionSpec) -> TypeId {
         let id = self.add();
         self.types
             .replace(&id, TypeSpec::new_function(id.clone(), c));
         id
     }
 
-    fn add_type_simple(&mut self, c: Type) -> TypeId {
+    pub fn add_type_simple(&mut self, c: Type) -> TypeId {
         let id = self.add();
         self.types.replace(&id, TypeSpec::new_simple(id.clone(), c));
         id
