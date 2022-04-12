@@ -1,6 +1,6 @@
 use super::cps::Type;
 use super::env::*;
-use std::cell::{Ref, RefCell};
+use std::cell::RefCell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -64,20 +64,17 @@ impl Registries {
 
         let t = self.types.get(id);
         match &t.value {
+            TypeSpecValue::Bool => Some(size_of::<bool>()),
             TypeSpecValue::Simple(t) => match t {
                 Type::TInt => Some(size_of::<i64>()),
                 _ => unreachable!(),
             },
-            TypeSpecValue::Composite(c) => {
-                c.as_ref()
-                    .borrow()
-                    .sig
-                    .iter()
-                    .try_fold(0, |acc, (k, t_id)| {
-                        //acc + self.type_size(t_id)
-                        self.type_size(t_id).map(|x| x + acc)
-                    })
-            }
+            TypeSpecValue::Composite(c) => c
+                .as_ref()
+                .borrow()
+                .sig
+                .iter()
+                .try_fold(0, |acc, (_, t_id)| self.type_size(t_id).map(|x| x + acc)),
             TypeSpecValue::Function(_) => Some(size_of::<usize>()),
             TypeSpecValue::Void => Some(0),
         }
@@ -118,6 +115,7 @@ pub struct TypeSpec {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum TypeSpecValue {
+    Bool,
     Function(FunctionSpec),
     Simple(Type),
     Composite(Rc<RefCell<CompositeTypeSpec>>),
@@ -128,6 +126,9 @@ impl fmt::Debug for TypeSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use TypeSpecValue::*;
         match &self.value {
+            Bool => {
+                write!(f, "TypeSpec({}, Bool)", self.id)
+            }
             Composite(c) => {
                 write!(f, "TypeSpec({}, {:?})", self.id, c.as_ref().borrow().sig)
             }

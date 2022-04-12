@@ -40,10 +40,14 @@ pub enum Type {
     TBool,
     TInt,
     TFloat,
-    TPointer,
+    //TPointer,
+    TAggregate,
     TFunction,
     TComposite,
-    Eval,
+    TModule,
+    TFile,
+    TType,
+    //Eval,
     TVoid,
     Unknown,
 }
@@ -62,214 +66,18 @@ pub struct TypeAccess {
     spec: TypeSpec,
     loc: StoreLocation,
 }
-/*
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FunctionSpec {
-    sig: Vec<Type>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CompositeTypeSpec {
-    sig: Rc<RefCell<HashMap<String, Rc<TypeSpec>>>>,
-}
-impl CompositeTypeSpec {
-    pub fn new() -> Self {
-        Self {
-            sig: Rc::new(RefCell::new(HashMap::new())),
-        }
-    }
-    pub fn add(self, name: String, ty: Rc<TypeSpec>) -> Self {
-        self.sig.as_ref().borrow_mut().insert(name, ty);
-        Self { sig: self.sig }
-    }
-}
-impl Hash for CompositeTypeSpec {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.sig.as_ref().borrow().iter().for_each(|(_, v)| {
-            v.hash(state);
-        });
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeSpec(Rc<RefCell<TypeSpecInner>>);
-impl TypeSpec {
-    fn is_recursive(&self) -> bool {
-        let subs = self.as_ref().borrow().subtypes();
-        subs.contains(self) || subs.iter().any(|v| v.is_recursive())
-    }
-
-    fn new_composite() -> Self {
-        TypeSpec(Rc::new(RefCell::new(TypeSpecInner::Composite(
-            CompositeTypeSpec::new(),
-        ))))
-    }
-
-    //fn get_composite_ref(&self) -> Rc<RefCell<HashMap<String, Rc<TypeSpec>>>> {
-    //match self {
-    //TypeSpecInner::Composite(c) => c.sig.clone(),
-    //_ => unreachable!()
-    //}
-    //}
-
-    fn new_function(c: FunctionSpec) -> Self {
-        TypeSpec(Rc::new(RefCell::new(TypeSpecInner::Function(c))))
-    }
-    fn new_simple(c: Type) -> Self {
-        TypeSpec(Rc::new(RefCell::new(TypeSpecInner::Simple(c.into()))))
-    }
-
-    //pub fn add(self, name: String, ty: Rc<TypeSpec>) -> Self {
-    //(*self).get_mut().add_inner(name, ty);
-    //let inner: &mut TypeSpecInner = self.as_ref().get_mut();
-
-    //match inner {
-    //TypeSpecInner::Composite(c) => {
-    //c.add(name, ty);
-    //}
-    //_ => unreachable!()
-    //}
-    //(*self).borrow_mut().add(name, ty);
-    //self //.clone()
-    //Rc::get_mut(self).unwrap().borrow_mut().add(name, ty);
-    //}
-}
-
-impl Hash for TypeSpec {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.as_ref().borrow().hash(state);
-    }
-}
-
-impl std::ops::Deref for TypeSpec {
-    type Target = Rc<RefCell<TypeSpecInner>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for TypeSpec {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum TypeSpecInner {
-    Function(FunctionSpec),
-    Simple(Type),
-    Composite(CompositeTypeSpec),
-    Void,
-}
-impl TypeSpecInner {
-    fn get_type(&self) -> Type {
-        match self {
-            Self::Simple(t) => t.clone(),
-            Self::Composite(_) => Type::TComposite,
-            Self::Function(_) => Type::TFunction,
-            Self::Void => Type::TVoid,
-        }
-    }
-
-    fn subtypes(&self) -> HashSet<Rc<TypeSpec>> {
-        match self {
-            Self::Composite(c) => {
-                let mut acc = HashSet::new();
-                for (_, v) in c.sig.as_ref().borrow().iter() {
-                    acc.insert(v.clone());
-                }
-                acc
-            }
-            _ => HashSet::new(),
-        }
-    }
-
-    //fn make_composite(mut self) -> Self {
-    //}
-
-    pub fn add_inner(self, name: String, ty: Rc<TypeSpec>) {
-        match self {
-            TypeSpecInner::Composite(c) => {
-                c.add(name, ty);
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn new_pair(a: Rc<TypeSpec>, b: Rc<TypeSpec>) -> Self {
-        let comp = CompositeTypeSpec::new()
-            .add("0".into(), a)
-            .add("1".into(), b);
-        Self::Composite(comp)
-    }
-
-    pub fn size(&self) -> Option<usize> {
-        use std::mem::size_of;
-        match self {
-            Self::Simple(t) => match t {
-                Type::TInt => Some(size_of::<i64>()),
-                _ => unreachable!(),
-            },
-            Self::Composite(c) => c
-                .sig
-                .as_ref()
-                .borrow()
-                .iter()
-                .try_fold(0, |acc, (k, v)| v.as_ref().borrow().size().map(|x| x + acc)),
-            Self::Function(_) => Some(size_of::<usize>()),
-            Self::Void => Some(0),
-        }
-    }
-}
-
-//impl From<CompositeTypeSpec> for Rc<TypeSpec> {
-//fn from(item: CompositeTypeSpec) -> Self {
-//Rc::new(TypeSpec::new_composite(item))
-//}
-//}
-
-//impl From<CompositeTypeSpec> for TypeSpec {
-//fn from(item: CompositeTypeSpec) -> Self {
-//TypeSpec::new_composite(item)
-//}
-//}
-
-impl From<FunctionSpec> for TypeSpec {
-    fn from(item: FunctionSpec) -> Self {
-        TypeSpec::new_function(item)
-    }
-}
-
-impl TryFrom<Type> for Rc<TypeSpec> {
-    type Error = &'static str;
-
-    fn try_from(item: Type) -> Result<Self, Self::Error> {
-        let t: TypeSpec = TypeSpec::try_from(item)?;
-        Ok(Rc::new(t))
-    }
-}
-
-impl TryFrom<Type> for TypeSpec {
-    type Error = &'static str;
-
-    fn try_from(item: Type) -> Result<Self, Self::Error> {
-        match item {
-            Type::TBool | Type::TInt | Type::TFloat => Ok(TypeSpec::new_simple(item)),
-            _ => Err("Not simple type"),
-        }
-    }
-}
-*/
 
 #[derive(Clone, Debug)]
 pub enum TypedValue {
     Bool(bool),
     Int(i64),
     Float(f64),
-    Pointer(String),
+    Type(Type),
+    Agg(usize, Box<TypedValue>),
+    Composite(Vec<TypedValue>),
+    //Pointer(String),
     Function(Extern),
-    Eval(String),
+    //Eval(String),
     Void,
 }
 impl TypedValue {
@@ -277,13 +85,20 @@ impl TypedValue {
         Self::Function(ext)
     }
 
+    pub fn new_agg(len: usize, ty: TypedValue) -> Self {
+        Self::Agg(len, Box::new(ty))
+    }
+
     pub fn infer_type(&self) -> Type {
         match self {
             Self::Bool(_) => Type::TBool,
             Self::Int(_) => Type::TInt,
             Self::Float(_) => Type::TFloat,
-            Self::Pointer(_) => Type::TPointer,
-            Self::Eval(_) => Type::Eval,
+            Self::Type(_) => Type::TType,
+            Self::Agg(_, _) => Type::TAggregate,
+            Self::Composite(_) => Type::TComposite,
+            //Self::Pointer(_) => Type::TPointer,
+            //Self::Eval(_) => Type::Eval,
             Self::Function(_) => Type::TFunction,
             Self::Void => Type::TVoid,
         }
@@ -494,13 +309,13 @@ pub enum CPSIR {
 impl CPSIR {
     pub fn infer_type(&self) -> Type {
         match self {
-            Self::Goto(_) | Self::Label(_) => Type::TPointer,
+            //Self::Goto(_) | Self::Label(_) => Type::TPointer,
             Self::Value(tv) => tv.infer_type(),
             Self::Call(op) => op.infer_type(),
             Self::Extern(_, e) => e.infer_type(),
             Self::Load(st) => st.infer_type(),
             Self::Store(st) => st.infer_type(),
-            Self::Exit => Type::Unknown,
+            _ => Type::Unknown,
         }
     }
 }
@@ -522,7 +337,6 @@ impl Counter {
 pub struct CPSBuilder {
     pub labels: Counter,
     pub symbols: Counter,
-    pub env: Environment,
     pub scope: Environment,
     pub builtins: CallTable,
 }
@@ -532,7 +346,6 @@ impl CPSBuilder {
         Self {
             labels: Counter::new(),
             symbols: Counter::new(),
-            env: Environment::default(),
             scope: Environment::default(),
             builtins: crate::eval::builtins::builtins(CallTable::new()),
         }
@@ -543,23 +356,6 @@ impl CPSBuilder {
     pub fn next_label(&mut self) -> Label {
         self.labels.next()
     }
-
-    /*
-    fn define(&mut self, name: Ident, value: StoredType) {
-        self.env = self.env.clone().define(name, value);
-    }
-
-    fn resolve(&self, name: Ident) -> StoredType {
-        match self.env.resolve(&name) {
-            Some(st) => st,
-            None => {
-                let b = self.builtins.get(name).unwrap();
-                let st = StoredType {};
-                st
-            }
-        }
-    }
-    */
 
     fn from_expr(&mut self, item: Expr, scope: Environment) -> (Vec<CPSIR>, Type, Environment) {
         match item {
@@ -674,54 +470,6 @@ impl CPSBuilder {
     }
 }
 
-/*
-#[derive(Clone, Debug)]
-pub struct CPSScope {
-    enclosing: Option<Rc<CPSScope>>,
-    env: Environment,
-}
-impl Default for CPSScope {
-    fn default() -> Self {
-        let st = StoredType::new_extern();
-        Self {
-            enclosing: None,
-            env: Environment::default(),
-        }
-        .define("assert".into(), st)
-    }
-}
-impl CPSScope {
-    pub fn push(self) -> Self {
-        Self {
-            enclosing: Some(Rc::new(self)),
-            env: Environment::default(),
-        }
-    }
-
-    pub fn pop(self) -> Option<Rc<Self>> {
-        self.enclosing
-    }
-
-    pub fn define(self, name: Ident, value: StoredType) -> Self {
-        let env = self.env.types.define(name, value);
-        Self {
-            enclosing: self.enclosing,
-            env,
-        }
-    }
-
-    pub fn resolve(&self, name: &Ident) -> Option<StoredType> {
-        match self.env.resolve(name) {
-            Some(st) => Some(st),
-            None => match &self.enclosing {
-                Some(scope) => scope.resolve(name),
-                None => None,
-            },
-        }
-    }
-}
-i*/
-
 pub type Ident = String;
 
 #[derive(Clone)]
@@ -783,66 +531,6 @@ impl Environment {
         Self { types, values }
     }
 }
-
-/*
-#[derive(Debug, Clone)]
-pub struct Environment {
-    stack: im::vector::Vector<Layer>,
-}
-
-impl Default for Environment {
-    fn default() -> Self {
-        let mut stack = im::Vector::new();
-
-        let layer = Layer {
-            values: HashTrieMap::new(),
-        };
-
-        stack.push_front(layer);
-        Self { stack }
-    }
-}
-
-impl Environment {
-    pub fn define(mut self, name: Ident, value: StoredType) -> Self {
-        if self.stack.len() > 0 && self.stack.front().unwrap().contains(&name) {
-            let layer = Layer::default().define(name, value);
-            self.stack.push_front(layer);
-            self
-        } else {
-            match self.stack.pop_front() {
-                Some(layer) => {
-                    let layer = layer.define(name, value);
-                    self.stack.push_front(layer);
-                    self
-                }
-                None => {
-                    let layer = Layer::default().define(name, value);
-                    self.stack.push_front(layer);
-                    self
-                }
-            }
-        }
-    }
-
-    pub fn resolve(&self, name: &Ident) -> Option<StoredType> {
-        self.stack
-            .iter()
-            .find(|layer| layer.values.contains_key(name))
-            .map(|layer| layer.get(name))
-            .flatten()
-    }
-
-    pub fn debug(&self) {
-        self.stack.iter().enumerate().for_each(|(i, layer)| {
-            debug!("Layer: {:?}", i);
-            layer.values.iter().for_each(|(k, v)| {
-                debug!("\t{}: {:?}", k, v);
-            });
-        })
-    }
-}
-*/
 
 pub struct CPSInterp {}
 
