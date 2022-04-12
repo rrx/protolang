@@ -1,19 +1,40 @@
-use super::cps::Type;
 use super::env::*;
 use std::cell::RefCell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Type {
+    TBool,
+    TInt,
+    TFloat,
+    //TPointer,
+    TAggregate,
+    TFunction,
+    TComposite,
+    TModule,
+    TFile,
+    TType,
+    TAny,
+    //Eval,
+    TVoid,
+    TUnknown,
+}
+impl Type {}
+
+
 #[derive(Debug)]
 pub struct Registries {
-    types: Registry<TypeSpec, TypeId>,
+    pub types: Registry<TypeSpec, TypeId>,
+    pub values: Registry<TypeSpec, ValueId>,
 }
 
 impl Registries {
     pub fn new() -> Self {
         Self {
             types: Registry::new(),
+            values: Registry::new(),
         }
     }
 
@@ -21,6 +42,7 @@ impl Registries {
         self.types.add(TypeSpec {
             value: TypeSpecValue::Void,
             id: TypeId::create(0),
+            access: Access::Default,
         })
     }
     pub fn add_type_composite(&mut self, c: CompositeTypeSpec) -> TypeId {
@@ -81,11 +103,6 @@ impl Registries {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-struct Environment {
-    types: EnvLayers<Ident, TypeId>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FunctionSpec {
     sig: Vec<Type>,
@@ -107,19 +124,45 @@ impl CompositeTypeSpec {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct TypeSpec {
-    value: TypeSpecValue,
-    id: TypeId,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Access {
+    Mutable,
+    Default,
 }
 
 #[derive(Clone, PartialEq, Eq)]
+pub struct TypeSpec {
+    value: TypeSpecValue,
+    pub id: TypeId,
+    access: Access
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeSpecValue {
     Bool,
     Function(FunctionSpec),
     Simple(Type),
     Composite(Rc<RefCell<CompositeTypeSpec>>),
     Void,
+}
+
+impl TypeSpecValue {
+    pub fn infer_type(&self) -> Type {
+        match self {
+            Self::Bool => Type::TBool,
+            Self::Simple(t) => t.clone(),
+            //Self::Int(_) => Type::TInt,
+            //Self::Float(_) => Type::TFloat,
+            //Self::Any(_) => Type::TAny,
+            //Self::Agg(_, _) => Type::TAggregate,
+            Self::Composite(_) => Type::TComposite,
+            //Self::Type(_) => Type::TType,
+            //Self::Pointer(_) => Type::TPointer,
+            //Self::Eval(_) => Type::Eval,
+            Self::Function(_) => Type::TFunction,
+            Self::Void => Type::TVoid,
+        }
+    }
 }
 
 impl fmt::Debug for TypeSpec {
@@ -162,10 +205,15 @@ impl Hash for TypeSpec {
 }
 
 impl TypeSpec {
+    pub fn infer_type(&self) -> Type {
+        self.value.infer_type()
+    }
+
     fn new_composite(id: TypeId, c: CompositeTypeSpec) -> Self {
         TypeSpec {
             id,
             value: TypeSpecValue::Composite(Rc::new(RefCell::new(c))),
+            access: Access::Default,
         }
     }
 
@@ -173,6 +221,7 @@ impl TypeSpec {
         TypeSpec {
             id,
             value: TypeSpecValue::Function(c),
+            access: Access::Default,
         }
     }
 
@@ -180,6 +229,7 @@ impl TypeSpec {
         TypeSpec {
             id,
             value: TypeSpecValue::Simple(c.into()),
+            access: Access::Default,
         }
     }
 
@@ -192,6 +242,15 @@ impl TypeSpec {
             _ => unreachable!(),
         }
         self
+    }
+    
+    pub fn make_mut(&mut self) -> &mut Self {
+        self.access = Access::Mutable;
+        self
+    }
+
+    pub fn is_mut(&self) -> bool {
+        self.access == Access::Mutable
     }
 
     fn is_recursive(&self, id: &TypeId) -> bool {
@@ -217,6 +276,12 @@ impl TypeSpec {
             _ => h,
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Environment {
+    pub types: EnvLayers<Ident, TypeId>,
+    pub values: EnvLayers<Ident, ValueId>,
 }
 
 #[cfg(test)]

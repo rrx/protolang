@@ -1,17 +1,14 @@
 use super::env::*;
 use super::types::*;
+use super::values::*;
 use crate::ast::CallTable;
-use crate::ast::{Expr, ExprNode, Operator};
+use crate::ast::{Expr, Operator};
 use crate::tokens::Tok;
-use log::debug;
 use rpds::HashTrieMap;
-use std::borrow::BorrowMut;
-use std::cell::{Ref, RefCell};
-use std::collections::{HashMap, HashSet};
-use std::convert::{From, TryFrom};
+use std::collections::{HashMap};
+use std::convert::{From};
 use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::rc::Rc;
+use std::hash::{Hash};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Scope {
@@ -35,98 +32,12 @@ pub enum StoreLocation {
     Extern,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Type {
-    TBool,
-    TInt,
-    TFloat,
-    //TPointer,
-    TAggregate,
-    TFunction,
-    TComposite,
-    TModule,
-    TFile,
-    TType,
-    //Eval,
-    TVoid,
-    Unknown,
-}
-impl Type {}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Access {
-    Mutable,
-    Default,
-}
-
 #[derive(Clone, Debug)]
 pub struct TypeAccess {
     access: Access,
     is_ref: bool,
     spec: TypeSpec,
     loc: StoreLocation,
-}
-
-#[derive(Clone, Debug)]
-pub enum TypedValue {
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Type(Type),
-    Agg(usize, Box<TypedValue>),
-    Composite(Vec<TypedValue>),
-    //Pointer(String),
-    Function(Extern),
-    //Eval(String),
-    Void,
-}
-impl TypedValue {
-    pub fn new_extern(ext: Extern) -> Self {
-        Self::Function(ext)
-    }
-
-    pub fn new_agg(len: usize, ty: TypedValue) -> Self {
-        Self::Agg(len, Box::new(ty))
-    }
-
-    pub fn infer_type(&self) -> Type {
-        match self {
-            Self::Bool(_) => Type::TBool,
-            Self::Int(_) => Type::TInt,
-            Self::Float(_) => Type::TFloat,
-            Self::Type(_) => Type::TType,
-            Self::Agg(_, _) => Type::TAggregate,
-            Self::Composite(_) => Type::TComposite,
-            //Self::Pointer(_) => Type::TPointer,
-            //Self::Eval(_) => Type::Eval,
-            Self::Function(_) => Type::TFunction,
-            Self::Void => Type::TVoid,
-        }
-    }
-
-    pub fn try_bool(&self) -> Option<bool> {
-        if let Self::Bool(u) = self {
-            Some(*u)
-        } else {
-            None
-        }
-    }
-
-    pub fn try_int(&self) -> Option<i64> {
-        if let Self::Int(u) = self {
-            Some(*u)
-        } else {
-            None
-        }
-    }
-
-    pub fn try_float(&self) -> Option<f64> {
-        if let Self::Float(u) = self {
-            Some(*u)
-        } else {
-            None
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -162,7 +73,7 @@ impl StoredType {
         self
     }
 }
-
+/*
 #[derive(Clone, Debug)]
 pub struct StoredValue {
     pub value: TypedValue,
@@ -174,6 +85,7 @@ impl StoredValue {
         self.value.infer_type()
     }
 }
+*/
 
 #[derive(Clone, Debug)]
 pub struct Pointer {
@@ -202,12 +114,13 @@ impl Op {
     pub fn prefix(
         builder: &mut CPSBuilder,
         scope: Environment,
+        r: &mut Registries,
         op: Operator,
         value: Expr,
     ) -> (Vec<CPSIR>, Type, Environment) {
         match op {
             Operator::Plus | Operator::Minus => {
-                let (value, t_value, scope) = builder.from_expr(value, scope);
+                let (value, t_value, scope) = builder.from_expr(value, scope, r);
                 let f = Op {
                     kind: op,
                     args: vec![t_value.clone()],
@@ -229,6 +142,7 @@ impl Op {
     pub fn binary(
         builder: &mut CPSBuilder,
         scope: Environment,
+        r: &mut Registries,
         op: Operator,
         left: Expr,
         right: Expr,
@@ -237,23 +151,27 @@ impl Op {
             Operator::Declare => {
                 let ident = left.try_ident().unwrap();
                 //let v = StoredValue { value: TypedValue
-                let (mut out, t_right, mut scope) = builder.from_expr(right, scope);
-                let mut st = StoredType::new(t_right.clone());
+                let (mut out, t_right, mut scope) = builder.from_expr(right, scope, r);
+                //let mut t = r.types.get(&t_right);
+                //let mut st = TypedSpec::new(t_right.clone());
                 if ident.is_mut() {
-                    st = st.make_mut();
+                    //t = &t.make_mut();
                 }
-                scope.values.define(ident.name, st.clone());
-                out.push(CPSIR::Store(st));
+                //let mut v_id = r.values.add(t.clone());
+                //scope.values.define(ident.name, v_id);
+                //out.push(CPSIR::Store(st));
                 (out, t_right, scope)
             }
             Operator::Assign => {
                 let ident = left.try_ident().unwrap();
-                let st = scope.values.resolve(&ident.name).unwrap();
-                (vec![CPSIR::Load(st.clone())], st.infer_type(), scope)
+                let v_id = scope.values.resolve(&ident.name).unwrap();
+                let v = r.values.get(&v_id);
+                (vec![], v.infer_type(), scope)
+                //(vec![CPSIR::Load(st.clone())], st.infer_type(), scope)
             }
             _ => {
-                let (left, t_left, scope) = builder.from_expr(left, scope);
-                let (right, t_right, scope) = builder.from_expr(right, scope);
+                let (left, t_left, scope) = builder.from_expr(left, scope, r);
+                let (right, t_right, scope) = builder.from_expr(right, scope, r);
                 let f = Op {
                     kind: op,
                     args: vec![t_left.clone(), t_right],
@@ -272,6 +190,7 @@ impl Op {
     }
 }
 
+/*
 #[derive(Clone, Debug)]
 pub struct Extern {
     args: Vec<Type>,
@@ -291,13 +210,14 @@ impl Extern {
 
     pub fn interpret(interp: &CPSInterp) {}
 }
+*/
 
 pub type Label = u64;
 
 #[derive(Clone, Debug)]
 pub enum CPSIR {
     Value(TypedValue),
-    Extern(String, Extern),
+    Extern(String, Vec<TypeSpecValue>),
     Call(Op),
     Goto(Label),
     Label(Label),
@@ -311,11 +231,11 @@ impl CPSIR {
         match self {
             //Self::Goto(_) | Self::Label(_) => Type::TPointer,
             Self::Value(tv) => tv.infer_type(),
-            Self::Call(op) => op.infer_type(),
-            Self::Extern(_, e) => e.infer_type(),
+            //Self::Call(op) => op.infer_type(),
+            Self::Extern(_, e) => Type::TFunction,
             Self::Load(st) => st.infer_type(),
             Self::Store(st) => st.infer_type(),
-            _ => Type::Unknown,
+            _ => Type::TUnknown,
         }
     }
 }
@@ -357,12 +277,15 @@ impl CPSBuilder {
         self.labels.next()
     }
 
-    fn from_expr(&mut self, item: Expr, scope: Environment) -> (Vec<CPSIR>, Type, Environment) {
+    fn from_expr(&mut self, item: Expr, scope: Environment, r: &mut Registries) -> (Vec<CPSIR>, Type, Environment) {
         match item {
             Expr::Ident(ident) => {
                 println!("scope: {:?}", (&scope, &ident.name));
-                let st = scope.values.resolve(&ident.name).unwrap();
-                (vec![CPSIR::Load(st.clone())], st.infer_type(), scope)
+                let v_id = scope.values.resolve(&ident.name).unwrap();
+                let v = r.values.get(v_id);
+                //let t_id = v.id;//infer_type();
+                //(vec![CPSIR::Load(st.clone())], t_id, scope)
+                (vec![], v.infer_type(), scope)
             }
             Expr::Literal(Tok::IntLiteral(u)) => (
                 vec![CPSIR::Value(TypedValue::Int(u.try_into().unwrap()))],
@@ -374,16 +297,16 @@ impl CPSBuilder {
                 Type::TFloat,
                 scope,
             ),
-            Expr::Prefix(e_op, e_value) => Op::prefix(self, scope, e_op.value, e_value.value),
+            Expr::Prefix(e_op, e_value) => Op::prefix(self, scope, r, e_op.value, e_value.value),
             Expr::Binary(e_op, e_left, e_right) => {
-                Op::binary(self, scope, e_op, e_left.value, e_right.value)
+                Op::binary(self, scope, r, e_op, e_left.value, e_right.value)
             }
             Expr::Lambda(lambda) => {
                 //let a = lambda.params.arity();
                 let start = self.next_label();
                 let end = self.next_label();
                 let original_scope = scope.clone();
-                let mut block_scope = scope.push();
+                let mut block_scope = scope;
                 let param_idents = lambda
                     .params
                     .value
@@ -397,14 +320,14 @@ impl CPSBuilder {
                     })
                     .collect::<Vec<_>>();
                 for p in param_idents {
-                    block_scope.values.define(p, StoredType::new(Type::Unknown));
+                    //block_scope.values.define(p, StoredType::new(Type::TUnknown));
                 }
 
                 let mut out = vec![CPSIR::Goto(end), CPSIR::Label(start)];
-                let (mut vs, ty, scope) = self.from_expr(lambda.expr.value, block_scope);
+                let (mut vs, ty, scope) = self.from_expr(lambda.expr.value, block_scope, r);
                 out.append(&mut vs);
                 out.push(CPSIR::Label(end));
-                let st = StoredType::new(Type::Unknown);
+                let st = StoredType::new(Type::TUnknown);
                 (out, ty, original_scope)
             }
 
@@ -415,32 +338,31 @@ impl CPSBuilder {
                 println!("st: {:?}", &st);
                 let mut out = vec![];
                 for arg in args {
-                    //let (mut vs, ty, s) = self.from_expr(arg.value, scope);
+                    //let (mut vs, ty, s) = self.from_expr(arg.value, scope, r);
                     //scope = s;
                     //out.append(&mut vs);
                 }
+                /*
                 match st.loc {
                     StoreLocation::Extern => {
-                        let ext = Extern {
-                            args: vec![Type::TBool],
-                            ret: Type::TVoid,
-                        };
-                        out.push(CPSIR::Extern(ident.name, ext));
+                        let params = vec![TypeSpecValue::Bool, TypeSpecValue::Void];
+                        out.push(CPSIR::Extern(ident.name, params));
                     }
                     _ => unimplemented!(),
                 }
+                */
 
-                (out, Type::Unknown, scope)
+                (out, Type::TUnknown, scope)
             }
 
             Expr::Block(exprs) => {
                 let original_scope = scope.clone();
-                let mut block_scope = scope.push();
+                let mut block_scope = scope;
                 let start = self.next_label();
                 let mut out = vec![CPSIR::Label(start)];
                 let mut out_ty = None;
                 for e in exprs {
-                    let (mut vs, ty, scope) = self.from_expr(e.value, block_scope);
+                    let (mut vs, ty, scope) = self.from_expr(e.value, block_scope, r);
                     block_scope = scope;
                     out.append(&mut vs);
                     out_ty = Some(ty);
@@ -449,12 +371,12 @@ impl CPSBuilder {
             }
             Expr::Program(exprs) => {
                 let original_scope = scope.clone();
-                let mut block_scope = scope.push();
+                let mut block_scope = scope;
                 let start = self.next_label();
                 let mut out = vec![CPSIR::Label(start)];
                 let mut out_ty = None;
                 for e in exprs {
-                    let (mut vs, ty, scope) = self.from_expr(e.value, block_scope);
+                    let (mut vs, ty, scope) = self.from_expr(e.value, block_scope, r);
                     block_scope = scope;
                     out.append(&mut vs);
                     out_ty = Some(ty);
@@ -509,26 +431,6 @@ impl Layer {
             Some(expr) => Some(expr.clone()),
             None => None,
         }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Environment {
-    types: EnvLayers<Ident, StoredType>,
-    values: EnvLayers<Ident, StoredType>,
-}
-
-impl Environment {
-    pub fn push(self) -> Self {
-        let types = self.types.push();
-        let values = self.values.push();
-        Self { types, values }
-    }
-
-    pub fn pop(mut self) -> Self {
-        let types = self.types.pop().unwrap();
-        let values = self.values.pop().unwrap();
-        Self { types, values }
     }
 }
 
@@ -722,7 +624,7 @@ impl CPSInterp {
         blocks: &HashMap<Label, usize>,
         stack: &mut Vec<TypedValue>,
         name: &String,
-        ext: &Extern,
+        ext: &Vec<TypeSpecValue>,
     ) -> usize {
         match name.as_str() {
             "assert" => {
@@ -766,6 +668,7 @@ mod tests {
     use super::*;
     use crate::parser::parse_str;
     use test_log::test;
+    use log::debug;
 
     #[test]
     fn test() {
@@ -788,8 +691,9 @@ mod tests {
             debug!("{:?}", p);
             let mut b = CPSBuilder::new();
             let mut scope = Environment::default();
+            let mut r = Registries::new();
             //let start = b.next_label();
-            let (vs, ty, scope) = b.from_expr(p.value, scope);
+            let (vs, ty, scope) = b.from_expr(p.value, scope, &mut r);
             println!("v: {:?}", v);
             for v in &vs {
                 println!("\t{:?}", v);
