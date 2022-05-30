@@ -2,7 +2,7 @@ pub mod function;
 pub use function::{Callable, CallableNode, Lambda, Params};
 
 mod node;
-pub use node::{Context, Context2, MaybeNodeContext, NodeContext, NodeContextNull};
+pub use node::{Context, FromContext, MaybeNodeContext, NodeContext, NodeContextNull};
 
 mod visitor;
 pub use visitor::{visit_expr, ExprVisitor, VResult, VisitError};

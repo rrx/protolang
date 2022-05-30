@@ -1,5 +1,5 @@
 use super::function::{Callable, Lambda};
-use super::node::{Context, Context2, MaybeNodeContext};
+use super::node::{Context, FromContext, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
 use crate::ast::{CallWithType, Callback};

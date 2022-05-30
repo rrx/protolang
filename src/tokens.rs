@@ -1,4 +1,4 @@
-use crate::ast::{Context2, MaybeNodeContext};
+use crate::ast::{FromContext, MaybeNodeContext};
 use crate::lexer::{Location, Surround};
 use crate::results::LangError;
 use nom::*;

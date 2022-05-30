@@ -1,7 +1,7 @@
 use crate::parser::Unparse;
 use crate::tokens::{Tok, Token};
 
-use super::{Context2, MaybeNodeContext};
+use super::{FromContext, MaybeNodeContext};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct OperatorNode {

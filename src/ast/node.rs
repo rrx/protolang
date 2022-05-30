@@ -3,7 +3,7 @@ use crate::tokens::{Tok, Token};
 use std::fmt::{Debug, Display};
 use std::marker::Sized;
 
-pub trait Context2: Debug + Display + Clone {
+pub trait FromContext: Debug + Display + Clone {
     fn from_location(loc: &Location) -> Self
     where
         Self: Sized;
@@ -45,7 +45,7 @@ impl std::fmt::Display for NodeContextWithLocation {
     }
 }
 
-impl Context2 for NodeContextWithLocation {
+impl FromContext for NodeContextWithLocation {
     fn from_location(loc: &Location) -> Self {
         Self {
             s: Surround::default(),
@@ -142,7 +142,7 @@ impl std::fmt::Display for MaybeNodeContext {
     }
 }
 
-impl Context2 for MaybeNodeContext {
+impl FromContext for MaybeNodeContext {
     fn from_location(v: &Location) -> Self {
         MaybeNodeContext(Some(NodeContext::from_location(v)))
     }
@@ -172,7 +172,7 @@ impl Context for MaybeNodeContext {
 #[derive(PartialEq, Debug, Clone)]
 pub struct NodeContextNull {}
 
-impl Context2 for NodeContextNull {
+impl FromContext for NodeContextNull {
     fn from_location(_: &Location) -> Self {
         Self {}
     }

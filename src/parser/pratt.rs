@@ -32,7 +32,7 @@ struct Op {
     // Only applicable for binary, or ternary operators
     rbp: Prec,
 
-    op_type: OpType,
+    _op_type: OpType,
 }
 
 #[derive(Clone, Debug)]
@@ -45,13 +45,13 @@ pub enum OpType {
 }
 
 impl Op {
-    pub fn new(op: &Tok, lbp: Prec, nbp: Prec, rbp: Prec, op_type: OpType) -> Self {
+    pub fn new(op: &Tok, lbp: Prec, nbp: Prec, rbp: Prec, _op_type: OpType) -> Self {
         Self {
             op: op.clone(),
             lbp,
             nbp,
             rbp,
-            op_type,
+            _op_type,
         }
     }
 
@@ -59,7 +59,7 @@ impl Op {
         Self::new(op, Some(p), Some(p + 1), Some(p + 2), OpType::LeftChain)
     }
 
-    pub fn new_right_chain(op: &Tok, p: i8) -> Self {
+    pub fn _new_right_chain(op: &Tok, p: i8) -> Self {
         Self::new(op, Some(p), Some(p + 1), Some(p + 2), OpType::RightChain)
     }
 
