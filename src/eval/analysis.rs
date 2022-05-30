@@ -2,8 +2,6 @@ use crate::ast::*;
 use crate::eval::*;
 use crate::results::*;
 use crate::tokens::Tok;
-//use std::ops::Deref;
-//use std::rc::Rc;
 use crate::parser::Unparse;
 
 pub struct Analysis {
@@ -329,11 +327,11 @@ impl Analysis {
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::program::Program;
-    use log::debug;
     use test_log::test;
 
     #[test]
