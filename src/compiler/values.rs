@@ -63,5 +63,3 @@ impl TypedValue {
         }
     }
 }
-
-

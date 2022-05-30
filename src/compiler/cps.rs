@@ -5,10 +5,10 @@ use crate::ast::CallTable;
 use crate::ast::{Expr, Operator};
 use crate::tokens::Tok;
 use rpds::HashTrieMap;
-use std::collections::{HashMap};
-use std::convert::{From};
+use std::collections::HashMap;
+use std::convert::From;
 use std::fmt;
-use std::hash::{Hash};
+use std::hash::Hash;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Scope {
@@ -277,7 +277,12 @@ impl CPSBuilder {
         self.labels.next()
     }
 
-    fn from_expr(&mut self, item: Expr, scope: Environment, r: &mut Registries) -> (Vec<CPSIR>, Type, Environment) {
+    fn from_expr(
+        &mut self,
+        item: Expr,
+        scope: Environment,
+        r: &mut Registries,
+    ) -> (Vec<CPSIR>, Type, Environment) {
         match item {
             Expr::Ident(ident) => {
                 println!("scope: {:?}", (&scope, &ident.name));
@@ -667,8 +672,8 @@ impl CPSInterp {
 mod tests {
     use super::*;
     use crate::parser::parse_str;
-    use test_log::test;
     use log::debug;
+    use test_log::test;
 
     #[test]
     fn test() {

@@ -23,7 +23,6 @@ pub enum Type {
 }
 impl Type {}
 
-
 #[derive(Debug)]
 pub struct Registries {
     pub types: Registry<TypeSpec, TypeId>,
@@ -134,7 +133,7 @@ pub enum Access {
 pub struct TypeSpec {
     value: TypeSpecValue,
     pub id: TypeId,
-    access: Access
+    access: Access,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,7 +242,7 @@ impl TypeSpec {
         }
         self
     }
-    
+
     pub fn make_mut(&mut self) -> &mut Self {
         self.access = Access::Mutable;
         self
