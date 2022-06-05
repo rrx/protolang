@@ -9,7 +9,5 @@ pub mod builtins;
 pub mod types;
 pub use types::*;
 
-pub use crate::results::InterpretError;
-
 mod analysis;
 pub use analysis::Analysis;

@@ -31,6 +31,8 @@ pub enum LangErrorKind {
     Runtime(String),
     #[error("Analysis Failed")]
     AnalysisFailed,
+    #[error("Assertion")]
+    Assertion,
 }
 
 #[derive(Debug, Error, Clone)]
@@ -77,26 +79,6 @@ impl LangError {
                 .with_labels(vec![Label::primary(file_id, self.context.range())]),
         }
     }
-}
-
-#[derive(Debug, Error, Clone)]
-pub struct InterpretError {
-    pub context: MaybeNodeContext,
-    pub kind: InterpretErrorKind,
-}
-
-impl std::fmt::Display for InterpretError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)
-    }
-}
-
-#[derive(Debug, Error, Clone)]
-pub enum InterpretErrorKind {
-    #[error("Invalid error")]
-    Invalid,
-    #[error("Assertion")]
-    Assertion,
 }
 
 impl MaybeNodeContext {
