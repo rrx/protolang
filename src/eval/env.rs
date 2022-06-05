@@ -1,7 +1,7 @@
 use super::RefTypeSig;
 use crate::ast::CallTable;
 use crate::ast::*;
-use crate::results::InterpretError;
+use crate::results::LangError;
 use log::debug;
 use rpds::HashTrieMap;
 use std::cell::{Ref, RefCell};
@@ -319,7 +319,7 @@ impl Environment {
         &self,
         name: &str,
         context: &MaybeNodeContext,
-    ) -> Result<ExprAccessRef, InterpretError> {
+    ) -> Result<ExprAccessRef, LangError> {
         if let Some(value) = self.resolve_value(name) {
             return Ok(value);
         }

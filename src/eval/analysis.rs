@@ -20,7 +20,7 @@ impl Analysis {
         let expr = &node.value;
 
         let mut push = |v| {
-            self.results.push(node.context.lang_error(v));
+            self.results.push(node.context.error(v));
         };
 
         //let mut push_error = |v| {
@@ -39,7 +39,7 @@ impl Analysis {
                 } else {
                     env.debug();
                     self.results
-                        .push(node.context.lang_error(LangErrorKind::Error(format!(
+                        .push(node.context.error(LangErrorKind::Error(format!(
                             "Not found: {:?}",
                             node.unlex()
                         ))));
@@ -58,7 +58,7 @@ impl Analysis {
             Expr::BinaryChain(exprs) => {
                 if exprs.len() < 2 {
                     self.results
-                        .push(node.context.lang_error(LangErrorKind::Invalid));
+                        .push(node.context.error(LangErrorKind::Invalid));
                     unreachable!();
                 }
                 let mut newenv = env;
@@ -99,21 +99,21 @@ impl Analysis {
                             if let Some(cb) = expr.try_callback() {
                                 if !cb.t.arity.is_valid_arity(args.len()) {
                                     self.results.push(
-                                        expr.context.lang_error(LangErrorKind::InvalidNumberArgs),
+                                        expr.context.error(LangErrorKind::InvalidNumberArgs),
                                     );
                                 }
                             } else if let Some(_) = expr.try_callable() {
                             } else if let Some(_) = expr.try_lambda() {
                             } else {
                                 self.results
-                                    .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                                    .push(expr.context.error(LangErrorKind::Error(format!(
                                         "Not a function1: {:?}",
                                         expr
                                     ))));
                             }
                         } else {
                             self.results
-                                .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                                .push(expr.context.error(LangErrorKind::Error(format!(
                                     "Function not found: {:?}",
                                     expr.unlex()
                                 ))));
@@ -125,7 +125,7 @@ impl Analysis {
                     }
                     _ => {
                         self.results
-                            .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                            .push(expr.context.error(LangErrorKind::Error(format!(
                                 "Not a function2: {:?}",
                                 expr.unlex()
                             ))));
@@ -209,7 +209,7 @@ impl Analysis {
                     env.define(ident, right.clone().into())
                 } else {
                     self.results
-                        .push(left.context.lang_error(LangErrorKind::Error(format!(
+                        .push(left.context.error(LangErrorKind::Error(format!(
                             "Invalid Assignment, LHS must be identifier"
                         ))));
                     env
@@ -222,7 +222,7 @@ impl Analysis {
                         Some(access) => {
                             if access.modifier != VarModifier::Mutable {
                                 self.results
-                                    .push(left.context.lang_error(LangErrorKind::Error(format!(
+                                    .push(left.context.error(LangErrorKind::Error(format!(
                                         "Invalid Assignment, '{}' Not mutable",
                                         &ident.name
                                     ))));
@@ -231,13 +231,13 @@ impl Analysis {
                             self.analyze(right.clone().into(), env)
                         }
                         None => {
-                            left.context.lang_error(LangErrorKind::NotFound);
+                            left.context.error(LangErrorKind::NotFound);
                             env
                         }
                     }
                 } else {
                     self.results
-                        .push(left.context.lang_error(LangErrorKind::Error(format!(
+                        .push(left.context.error(LangErrorKind::Error(format!(
                             "Invalid Assignment, LHS must be identifier"
                         ))));
                     env
@@ -261,7 +261,7 @@ impl Analysis {
                     Operator::NotEqual => (),
                     _ => {
                         self.results
-                            .push(left.context.lang_error(LangErrorKind::Error(format!(
+                            .push(left.context.error(LangErrorKind::Error(format!(
                                 "Unimplemented expression op: Operator::{:?}",
                                 op
                             ))));
@@ -276,9 +276,9 @@ impl Analysis {
         match &expr.value {
             Expr::Literal(t) => match t {
                 Tok::BoolLiteral(b) => Ok(*b),
-                _ => Err(expr.context.lang_error(LangErrorKind::ExpectBool)),
+                _ => Err(expr.context.error(LangErrorKind::ExpectBool)),
             },
-            _ => Err(expr.context.lang_error(LangErrorKind::ExpectBool)),
+            _ => Err(expr.context.error(LangErrorKind::ExpectBool)),
         }
     }
 
@@ -289,7 +289,7 @@ impl Analysis {
                 Tok::FloatLiteral(_) => (),
                 _ => {
                     self.results
-                        .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                        .push(expr.context.error(LangErrorKind::Error(format!(
                             "Expecting a number: {:?}",
                             expr
                         ))));
@@ -297,7 +297,7 @@ impl Analysis {
             },
             _ => {
                 self.results
-                    .push(expr.context.lang_error(LangErrorKind::Error(format!(
+                    .push(expr.context.error(LangErrorKind::Error(format!(
                         "Expecting a callable: {:?}",
                         expr
                     ))));
@@ -312,7 +312,7 @@ impl Analysis {
             Operator::Minus => (),
             _ => {
                 self.results
-                    .push(expr.context.lang_error(LangErrorKind::NotImplemented));
+                    .push(expr.context.error(LangErrorKind::NotImplemented));
             }
         }
     }
@@ -323,7 +323,7 @@ impl Analysis {
             Operator::Bang => (),
             _ => {
                 self.results
-                    .push(expr.context.lang_error(LangErrorKind::NotImplemented));
+                    .push(expr.context.error(LangErrorKind::NotImplemented));
             }
         }
     }

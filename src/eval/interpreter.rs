@@ -2,7 +2,7 @@ use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
 use crate::parser::Unparse;
-use crate::results::{InterpretError, InterpretErrorKind};
+use crate::results::{LangError, LangErrorKind};
 use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use log::debug;
@@ -19,20 +19,20 @@ impl fmt::Debug for Interpreter {
 }
 
 impl ExprNode {
-    fn check_bool(&self) -> Result<bool, InterpretError> {
+    fn check_bool(&self) -> Result<bool, LangError> {
         match &self.value {
             Expr::Literal(t) => match t {
                 Tok::BoolLiteral(b) => Ok(*b),
-                _ => Err(self.context.error(InterpretErrorKind::ExpectBool)),
+                _ => Err(self.context.error(LangErrorKind::ExpectBool)),
             },
-            _ => Err(InterpretError::runtime(&format!(
+            _ => Err(LangError::runtime(&format!(
                 "Expecting a literal: {:?}",
                 self
             ))),
         }
     }
 
-    fn check_number(a: &Self) -> Result<f64, InterpretError> {
+    fn check_number(a: &Self) -> Result<f64, LangError> {
         match &a.value {
             Expr::Literal(t) => match t {
                 Tok::IntLiteral(u) => Ok(*u as f64),
@@ -53,7 +53,7 @@ impl ExprNode {
         }
     }
 
-    fn check_numbers(a: &Self, b: &Self) -> Result<(f64, f64), InterpretError> {
+    fn check_numbers(a: &Self, b: &Self) -> Result<(f64, f64), LangError> {
         let a = Self::check_number(a)?;
         let b = Self::check_number(b)?;
         Ok((a, b))
@@ -63,54 +63,54 @@ impl ExprNode {
         ExprNode::new_with_context(expr, self.context.clone())
     }
 
-    pub fn plus(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn plus(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_float(left + right)))
     }
 
-    pub fn minus(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn minus(&self, other: &Self) -> Result<Self, LangError> {
         debug!("{:?}", (self, other));
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_float(left - right)))
     }
 
-    pub fn exp(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn exp(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_float(left.powf(right))))
     }
 
-    pub fn multiply(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn multiply(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_float(left * right)))
     }
 
-    pub fn divide(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn divide(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_float(left / right)))
     }
 
-    pub fn lte(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn lte(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_bool(left <= right)))
     }
 
-    pub fn lt(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn lt(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_bool(left < right)))
     }
 
-    pub fn gte(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn gte(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_bool(left >= right)))
     }
 
-    pub fn gt(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn gt(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_bool(left > right)))
     }
 
     /*
-    pub fn eq_chain(args: Vec<Self>) -> Result<Self, InterpretError> {
+    pub fn eq_chain(args: Vec<Self>) -> Result<Self, LangError> {
         let mut numbers = vec![];
         for arg in args {
             numbers.push(arg.check_number()?);
@@ -121,28 +121,28 @@ impl ExprNode {
     }
     */
 
-    pub fn eq(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn eq(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_bool(left == right)))
     }
 
-    pub fn ne(&self, other: &Self) -> Result<Self, InterpretError> {
+    pub fn ne(&self, other: &Self) -> Result<Self, LangError> {
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_bool(left != right)))
     }
 
-    pub fn postfix(&self, op: &Operator) -> Result<Self, InterpretError> {
+    pub fn postfix(&self, op: &Operator) -> Result<Self, LangError> {
         match op {
             Operator::Bang => {
                 let _ = Self::check_number(self)?;
                 // TODO: Fib not yet implemented
-                Err(self.context.error(InterpretErrorKind::NotImplemented))
+                Err(self.context.error(LangErrorKind::NotImplemented))
             }
-            _ => Err(self.context.error(InterpretErrorKind::NotImplemented)),
+            _ => Err(self.context.error(LangErrorKind::NotImplemented)),
         }
     }
 
-    pub fn prefix(&self, prefix: &Operator) -> Result<Self, InterpretError> {
+    pub fn prefix(&self, prefix: &Operator) -> Result<Self, LangError> {
         match prefix {
             Operator::Plus => {
                 let right = Self::check_number(self)?;
@@ -152,7 +152,7 @@ impl ExprNode {
                 let right = Self::check_number(self)?;
                 Ok(self.new_expr(Expr::new_float(right)))
             }
-            _ => Err(self.context.error(InterpretErrorKind::NotImplemented)),
+            _ => Err(self.context.error(LangErrorKind::NotImplemented)),
         }
     }
 }
@@ -165,7 +165,7 @@ impl Interpreter {
         params: &Params,
         args: &Vec<ExprRef>,
         expr: ExprRef,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         if args.len() != f.arity() {
             return Err(params.context.runtime_error(&format!(
                 "Mismatched params on function. Expecting {}, got {}",
@@ -186,8 +186,8 @@ impl Interpreter {
             .collect::<Vec<_>>();
 
         let (p, e): (
-            Vec<Result<_, InterpretError>>,
-            Vec<Result<_, InterpretError>>,
+            Vec<Result<_, LangError>>,
+            Vec<Result<_, LangError>>,
         ) = param_idents.into_iter().partition(|p| p.is_ok());
 
         if e.len() > 0 {
@@ -212,7 +212,7 @@ impl Interpreter {
         //&mut self,
         exprref: ExprRef,
         env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         let e = exprref.clone();
         let node = exprref.borrow();
         let expr = &node.value;
@@ -287,7 +287,7 @@ impl Interpreter {
 
             Expr::Index(ident, _args) => {
                 // TODO: not yet implemented
-                Err(ident.context.error(InterpretErrorKind::NotImplemented))
+                Err(ident.context.error(LangErrorKind::NotImplemented))
             }
 
             Expr::Apply(expr, args) => {
@@ -430,7 +430,7 @@ impl Interpreter {
     fn evaluate_block(
         exprs: &Vec<ExprNode>,
         env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         let mut result = Expr::Void.into();
         let original_env = env.clone();
         let mut newenv = env;
@@ -455,7 +455,7 @@ impl Interpreter {
         left: &ExprNode,
         right: &ExprNode,
         env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         match op {
             Operator::Declare => {
                 // analyzed
@@ -608,7 +608,7 @@ mod tests {
         let env = Environment::default();
         let mut program = Program::new();
         let r = program.eval("assert(1)", env);
-        if let Err(InterpretError { kind: _, context }) = r {
+        if let Err(LangError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
             unreachable!();
@@ -616,7 +616,7 @@ mod tests {
 
         let env = Environment::default();
         let r = program.eval("a", env);
-        if let Err(InterpretError { kind: _, context }) = r {
+        if let Err(LangError { kind: _, context }) = r {
             assert!(context.has_location());
         } else {
             unreachable!();

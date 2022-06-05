@@ -75,6 +75,21 @@ impl fmt::Debug for IR {
     }
 }
 
+impl fmt::Display for IR {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.value {
+            IRValue::Block(exprs) => {
+                write!(f, "Block({})", self.ty)?;
+                for expr in exprs {
+                    write!(f, "\t{}", expr)?;
+                }
+                Ok(())
+            }
+            _ => write!(f, "{:?}", &self)
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum IRValue {
     Type(Type),
@@ -234,11 +249,12 @@ pub struct TypeEquation {
     left: Type,
     right: Type,
     node: IR,
+    env: Environment,
 }
 
 impl TypeEquation {
-    fn new(left: Type, right: Type, node: IR) -> Self {
-        Self { left, right, node }
+    fn new(left: Type, right: Type, node: IR, env: Environment) -> Self {
+        Self { left, right, node, env }
     }
 }
 
@@ -267,28 +283,33 @@ impl TypeChecker {
         format!("t{}", self.next_type_counter())
     }
 
-    fn generate_equations(&mut self, node: &IR) {
+    fn generate_equations(&mut self, node: &IR, mut env: Environment) -> Environment {
         match &node.value {
+            // already typed
             IRValue::Type(_) => (),
             IRValue::Literal(_) => {
-                //self.type_equations.push(TypeEquation::new(node.ty.clone(), node.ty.clone(), node.clone()));
             }
             IRValue::Ident(_) => (),
 
             IRValue::Declare(ident, expr) => {
-                self.generate_equations(&expr);
-                self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone()));
+                env.define(ident.clone(), *expr.clone());
+                env = self.generate_equations(&expr, env);
+                self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone(), env.clone()));
             }
 
             IRValue::Assign(ident, expr) => {
-                self.generate_equations(&expr);
-                self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone()));
+                if let Some(v) = env.resolve(ident) {
+                    env = self.generate_equations(&expr, env);
+                    self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone(), env.clone()));
+                } else {
+                    self.results.push(LangError::error("Not found".into(), node.context.clone()));
+                }
             }
 
             IRValue::Apply(f, params) => {
-                self.generate_equations(f);
+                env = self.generate_equations(f, env);
                 for p in params {
-                    self.generate_equations(p);
+                    env = self.generate_equations(p, env);
                 }
             }
 
@@ -297,14 +318,14 @@ impl TypeChecker {
                 let mut arg_types = args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
 
                 // function has a function type
-                self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone()));
+                self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone(), env.clone()));
             }
 
             IRValue::Function(body, args) => {
                 //for arg in args {
                     //self.generate_equations(&arg);
                 //}
-                self.generate_equations(body);
+                env = self.generate_equations(body, env);
 
                 // generate type signature for function
                 let mut arg_types = args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
@@ -312,21 +333,22 @@ impl TypeChecker {
                 arg_types.push(node.ty.clone());
 
                 // function has a function type
-                self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone()));
+                self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone(), env.clone()));
             }
 
             IRValue::Block(exprs) => {
                 for e in exprs {
-                    self.generate_equations(&e);
+                    env = self.generate_equations(&e, env);
                 }
                 let last = exprs.last().unwrap();
-                self.type_equations.push(TypeEquation::new(node.ty.clone(), last.ty.clone(), node.clone()));
+                self.type_equations.push(TypeEquation::new(node.ty.clone(), last.ty.clone(), node.clone(), env.clone()));
             }
             //_ => {
                 //debug!("Unimplemented: {:?}", &node);
                 //unimplemented!()
             //}
         }
+        env.clone()
     }
 
     fn assign_typenames(&mut self, ir: &mut IR, mut syms: SymbolTable) -> SymbolTable {
@@ -338,7 +360,7 @@ impl TypeChecker {
                     ir.ty = ty.clone();
                     syms
                 } else {
-                    self.results.diagnostics.push(LangError::error("Not found".into(), ir.context.clone()).diagnostic());
+                    self.results.push(LangError::error("Not found".into(), ir.context.clone()));
                     syms
                 }
             }
@@ -520,6 +542,7 @@ mod tests {
 
     #[test]
     fn analyze() {
+        let env = base_env();
         let mut c = TypeChecker::default();
         let s = SymbolTable::default();
         let mut ir = c.parse_str("1+1").unwrap();
@@ -535,8 +558,8 @@ let mut x = 1.
 let z = f(2)
 ").unwrap();
         let s = c.assign_typenames(&mut ir, s);
-        c.generate_equations(&ir);
-        debug!("{:?}", ir);
+        let env = c.generate_equations(&ir, env);
+        debug!("{}", ir);
         debug!("{:?}", s);
         c.results.print();
         for e in c.type_equations {

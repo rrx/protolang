@@ -4,6 +4,7 @@ use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::sexpr::*;
 use crate::tokens::Tok;
+use crate::results::LangError;
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
@@ -29,7 +30,7 @@ pub trait Callable: Debug + Display {
         &self,
         env: Environment,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError>;
+    ) -> Result<ExprRefWithEnv, LangError>;
     fn box_clone(&self) -> Box<dyn Callable>;
 }
 
@@ -120,7 +121,7 @@ impl Callable for Lambda {
         &self,
         env: Environment,
         args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         Interpreter::call(env, self, &self.params, &args, self.expr.clone().into())
     }
 

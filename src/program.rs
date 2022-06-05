@@ -62,9 +62,8 @@ impl Program {
             if let Tok::Invalid(s) = &t.tok {
                 let error = t
                     .to_context()
-                    .lang_error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
-                let diagnostic = error.diagnostic();
-                self.results.diagnostics.push(diagnostic);
+                    .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
+                self.results.push(error);
             }
         });
 
@@ -80,25 +79,20 @@ impl Program {
                 // Analyze it
                 let mut a = Analysis::new();
                 env = a.analyze(expr.clone().into(), env);
-                let mut has_errors = false;
                 a.results.iter().for_each(|r| {
-                    if let LangErrorKind::Warning(_) = r.kind {
-                    } else {
-                        has_errors = true;
-                    }
-                    self.results.diagnostics.push(r.diagnostic());
+                    self.results.push(r.clone());
                 });
+                let has_errors = self.results.has_errors;
             }
             Err(e) => {
-                let error = InterpretError::runtime(&format!("Error parsing: {:?}", e));
-                let diagnostic = error.diagnostic();
-                self.results.diagnostics.push(diagnostic);
+                let error = LangError::runtime(&format!("Error parsing: {:?}", e));
+                self.results.push(error);
             }
         }
         env
     }
 
-    pub fn eval(&mut self, v: &str, env: Environment) -> Result<ExprRefWithEnv, InterpretError> {
+    pub fn eval(&mut self, v: &str, env: Environment) -> Result<ExprRefWithEnv, LangError> {
         self._eval_file("<repl>", v, env)
     }
 
@@ -106,7 +100,7 @@ impl Program {
         &mut self,
         filename: &str,
         env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         let contents = std::fs::read_to_string(filename.clone())
             .unwrap()
             .to_string();
@@ -118,7 +112,7 @@ impl Program {
         filename: &str,
         v: &str,
         env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         use crate::lexer::LexerState;
         use crate::tokens::*;
         let file_id = self.results.add_source(filename.into(), v.to_string());
@@ -131,9 +125,8 @@ impl Program {
             if let Tok::Invalid(s) = &t.tok {
                 let error = t
                     .to_context()
-                    .lang_error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
-                let diagnostic = error.diagnostic();
-                self.results.diagnostics.push(diagnostic);
+                    .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
+                self.results.push(error);
             }
         });
 
@@ -149,25 +142,19 @@ impl Program {
                 // Analyze it
                 let mut a = Analysis::new();
                 let env = a.analyze(expr.clone().into(), env);
-                let mut has_errors = false;
                 a.results.iter().for_each(|r| {
-                    if let LangErrorKind::Warning(_) = r.kind {
-                    } else {
-                        has_errors = true;
-                    }
-                    self.results.diagnostics.push(r.diagnostic());
+                    self.results.push(r.clone());
                 });
 
-                if has_errors {
-                    return Err(expr.context.error(InterpretErrorKind::AnalysisFailed));
+                if self.results.has_errors {
+                    return Err(expr.context.error(LangErrorKind::AnalysisFailed));
                 }
 
                 match Interpreter::evaluate(expr.into(), env) {
                     Ok(v) => Ok(v),
-                    Err(InterpretError { context, kind }) => {
-                        let error = InterpretError { context, kind };
-                        let diagnostic = error.diagnostic();
-                        self.results.diagnostics.push(diagnostic);
+                    Err(LangError { context, kind }) => {
+                        let error = LangError { context, kind };
+                        self.results.push(error.clone());
                         Err(error)
                     }
                 }
@@ -176,15 +163,13 @@ impl Program {
                 for (tokens, err) in e.errors {
                     debug!("error {:?}", (&err, tokens.toks()));
                 }
-                let error = InterpretError::runtime("Error parsing");
-                let diagnostic = error.diagnostic();
-                self.results.diagnostics.push(diagnostic);
+                let error = LangError::runtime("Error parsing");
+                self.results.push(error.clone());
                 Err(error)
             }
             Err(e) => {
-                let error = InterpretError::runtime(&format!("Error parsing: {:?}", e));
-                let diagnostic = error.diagnostic();
-                self.results.diagnostics.push(diagnostic);
+                let error = LangError::runtime(&format!("Error parsing: {:?}", e));
+                self.results.push(error.clone());
                 Err(error)
             }
         }

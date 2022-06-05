@@ -21,7 +21,7 @@ pub fn cli() -> anyhow::Result<()> {
                 break;
             }
         }
-        program.results.diagnostics.clear();
+        program.results.clear();
     }
     Ok(())
 }
@@ -51,7 +51,7 @@ pub fn repl() -> anyhow::Result<()> {
                         program.results.print();
                     }
                 }
-                program.results.diagnostics.clear();
+                program.results.clear();
             }
 
             Err(ReadlineError::Interrupted) => {

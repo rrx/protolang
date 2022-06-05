@@ -1,6 +1,7 @@
 use crate::{
-    ast::{CallTable, Callable, Callback, Expr},
-    eval::{Environment, ExprRef, ExprRefWithEnv, InterpretError, TypeSig},
+    ast::{CallTable, Callback, Expr},
+    eval::{ExprRefWithEnv, TypeSig},
+    results::LangError,
     tokens::Tok,
 };
 use std::fmt;
@@ -49,7 +50,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                             println!("SEXPR: {}", sexpr);
                         }
                         Err(e) => {
-                            return Err(InterpretError::runtime(&format!(
+                            return Err(LangError::runtime(&format!(
                                 "unable to parse: {:?}",
                                 e
                             )));

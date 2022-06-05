@@ -1,6 +1,7 @@
 use crate::eval::*;
 use std::fmt;
 use std::rc::Rc;
+use crate::results::LangError;
 
 #[derive(Clone, Debug)]
 pub struct CallWithType {
@@ -44,7 +45,7 @@ impl CallTable {
         name: &str,
         args: Vec<ExprRef>,
         env: Environment,
-    ) -> Result<ExprRefWithEnv, InterpretError> {
+    ) -> Result<ExprRefWithEnv, LangError> {
         match self.get(name) {
             Some(cb) => {
                 let result = (cb.f)(env, args)?;
@@ -64,7 +65,7 @@ impl std::ops::Deref for CallTable {
 }
 
 pub type CallbackFn =
-    dyn Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static;
+    dyn Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, LangError> + 'static;
 
 #[derive(Clone)]
 pub struct Callback {
@@ -75,7 +76,7 @@ pub struct Callback {
 impl Callback {
     pub fn new<F>(f: F) -> Callback
     where
-        F: Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, InterpretError> + 'static,
+        F: Fn(Environment, Vec<ExprRef>) -> Result<ExprRefWithEnv, LangError> + 'static,
     {
         Callback {
             cb: Rc::new(f),

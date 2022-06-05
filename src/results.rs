@@ -1,6 +1,5 @@
 use crate::tokens::FileId;
-use crate::ast::{Expr, MaybeNodeContext};
-use crate::eval::{Environment, ExprRefWithEnv};
+use crate::ast::{MaybeNodeContext};
 use thiserror::Error;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -25,6 +24,13 @@ pub enum LangErrorKind {
     Invalid,
     #[error("Invalid number of arguments")]
     InvalidNumberArgs,
+
+
+    // Interpret Errors
+    #[error("Runtime error: {0}")]
+    Runtime(String),
+    #[error("Analysis Failed")]
+    AnalysisFailed,
 }
 
 #[derive(Debug, Error, Clone)]
@@ -53,10 +59,17 @@ impl LangError {
         }
     }
 
+    pub fn runtime(m: &str) -> Self {
+        Self {
+            kind: LangErrorKind::Runtime(m.to_string()),
+            context: MaybeNodeContext::default(),
+        }
+    }
+
     pub fn diagnostic(&self) -> Diagnostic<FileId> {
         let file_id = self.context.get_file_id();
         match &self.kind {
-            LangErrorKind::Warning(msg) | LangErrorKind::Error(msg) => Diagnostic::warning()
+            LangErrorKind::Warning(msg) | LangErrorKind::Error(msg) | LangErrorKind::Runtime(msg) => Diagnostic::warning()
                 .with_message(msg)
                 .with_labels(vec![Label::primary(file_id, self.context.range())]),
             _ => Diagnostic::warning()
@@ -82,54 +95,18 @@ impl std::fmt::Display for InterpretError {
 pub enum InterpretErrorKind {
     #[error("Invalid error")]
     Invalid,
-    #[error("Runtime error: {0}")]
-    Runtime(String),
-    #[error("Expecting boolean")]
-    ExpectBool,
     #[error("Assertion")]
     Assertion,
-    #[error("Not Implemented")]
-    NotImplemented,
-    #[error("Analysis Failed")]
-    AnalysisFailed,
 }
-
-impl InterpretError {
-    pub fn runtime(m: &str) -> Self {
-        Self {
-            kind: InterpretErrorKind::Runtime(m.to_string()),
-            context: MaybeNodeContext::default(),
-        }
-    }
-
-    pub fn diagnostic(&self) -> Diagnostic<FileId> {
-        let file_id = self.context.get_file_id();
-        match &self.kind {
-            InterpretErrorKind::Runtime(message) => Diagnostic::error()
-                .with_message(message)
-                .with_labels(vec![Label::primary(file_id, self.context.range())]),
-            _ => Diagnostic::error()
-                .with_message(format!("{}", self))
-                .with_labels(vec![Label::primary(file_id, self.context.range())]),
-        }
-    }
-}
-
 
 impl MaybeNodeContext {
-    pub fn runtime_error(&self, m: &str) -> InterpretError {
-        InterpretError {
-            kind: InterpretErrorKind::Runtime(m.to_string()),
+    pub fn runtime_error(&self, m: &str) -> LangError {
+        LangError {
+            kind: LangErrorKind::Runtime(m.to_string()),
             context: self.clone(),
         }
     }
-    pub fn error(&self, kind: InterpretErrorKind) -> InterpretError {
-        InterpretError {
-            kind,
-            context: self.clone(),
-        }
-    }
-    pub fn lang_error(&self, kind: LangErrorKind) -> LangError {
+    pub fn error(&self, kind: LangErrorKind) -> LangError {
         LangError {
             kind,
             context: self.clone(),
@@ -138,13 +115,17 @@ impl MaybeNodeContext {
 }
 
 pub struct CompileResults {
-    pub diagnostics: Vec<Diagnostic<FileId>>,
-    pub files: SimpleFiles<String, String>,
+    results: Vec<LangError>,
+    diagnostics: Vec<Diagnostic<FileId>>,
+    files: SimpleFiles<String, String>,
+    pub has_errors: bool
 }
 
 impl Default for CompileResults {
     fn default() -> Self {
         Self {
+            has_errors: false,
+            results: vec![],
             diagnostics: vec![],
             files: SimpleFiles::new(),
         }
@@ -152,8 +133,24 @@ impl Default for CompileResults {
 }
 
 impl CompileResults {
+    pub fn clear(&mut self) {
+        self.results.clear();
+        self.diagnostics.clear();
+        self.has_errors = false;
+    }
+
     pub fn add_source(&mut self, filename: String, source: String) -> FileId {
         self.files.add(filename, source)
+    }
+
+    pub fn push(&mut self, r: LangError) {
+        if let LangErrorKind::Warning(_) = r.kind {
+        } else {
+            self.has_errors = true;
+        }
+
+        self.results.push(r.clone());
+        self.diagnostics.push(r.diagnostic());
     }
 
     pub fn print(&self) {

@@ -12,6 +12,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         env.debug();
     }
     program.results.print();
-    program.results.diagnostics.clear();
+    program.results.clear();
     Ok(())
 }
