@@ -351,7 +351,7 @@ mod tests {
         ",
             env,
         );
-        program.results.print();
+        program.print();
         assert!(env.resolve_value("asdf1").is_none());
     }
 }

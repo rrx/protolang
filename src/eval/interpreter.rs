@@ -3,7 +3,6 @@ use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
 use crate::parser::Unparse;
 use crate::results::{LangError, LangErrorKind};
-use crate::sexpr::SExpr;
 use crate::tokens::Tok;
 use log::debug;
 use std::fmt;
@@ -532,7 +531,7 @@ mod tests {
                 env,
             )
             .unwrap();
-        program.results.print();
+        program.print();
         assert!(r.env.resolve_value("x").unwrap().is_mut());
 
         // blocks should hide visibility
@@ -547,7 +546,7 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.results.print();
+        program.print();
         assert!(r.env.resolve_value("asdf1").is_none());
 
         let r = program
@@ -562,7 +561,7 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.results.print();
+        program.print();
 
         let r = program
             .eval(
@@ -578,7 +577,7 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.results.print();
+        program.print();
 
         let r = program
             .eval(
@@ -595,11 +594,11 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.results.print();
+        program.print();
         assert!(r.env.resolve_value("super_local").is_none());
 
         let r = program.eval("1", r.env).unwrap();
-        program.results.print();
+        program.print();
         assert!(r.expr.borrow().value.try_literal().unwrap() == Tok::IntLiteral(1));
     }
 
@@ -628,7 +627,7 @@ mod tests {
         let mut program = Program::new();
         let env = Environment::default();
         let r = program.eval("showstack()", env).unwrap();
-        program.results.print();
+        program.print();
         debug!("x {:?}", r.expr);
     }
 }

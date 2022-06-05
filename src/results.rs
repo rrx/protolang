@@ -136,7 +136,7 @@ impl CompileResults {
     }
 
     pub fn print(&self) {
-        let writer = StandardStream::stderr(ColorChoice::Always);
+        let writer = StandardStream::stdout(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
         for diagnostic in self.diagnostics.iter() {
             let _ = term::emit(&mut writer.lock(), &config, &self.files, &diagnostic);

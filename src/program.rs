@@ -2,18 +2,19 @@ use crate::ast::*;
 use crate::eval::*;
 use crate::results::*;
 use crate::sexpr::SExpr;
+use crate::ir::TypeChecker;
 
 use log::debug;
 
 pub struct Program {
-    pub results: CompileResults,
+    checker: TypeChecker,
     pub value: ExprRefWithEnv,
 }
 
 impl Program {
     pub fn new() -> Self {
         Self {
-            results: CompileResults::default(),
+            checker: TypeChecker::default(),
             value: ExprRefWithEnv::new(Expr::Void.into(), Environment::default()),
         }
     }
@@ -53,7 +54,7 @@ impl Program {
     fn _analyze(&mut self, filename: &str, v: &str, mut env: Environment) -> Environment {
         use crate::lexer::LexerState;
         use crate::tokens::*;
-        let file_id = self.results.add_source(filename.into(), v.to_string());
+        let file_id = self.checker.results.add_source(filename.into(), v.to_string());
         let mut lexer = LexerState::from_str_eof(v).unwrap().set_file_id(file_id);
         let tokens = lexer.tokens();
         use nom::InputIter;
@@ -63,7 +64,7 @@ impl Program {
                 let error = t
                     .to_context()
                     .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
-                self.results.push(error);
+                self.checker.results.push(error);
             }
         });
 
@@ -80,13 +81,13 @@ impl Program {
                 let mut a = Analysis::new();
                 env = a.analyze(expr.clone().into(), env);
                 a.results.iter().for_each(|r| {
-                    self.results.push(r.clone());
+                    self.checker.results.push(r.clone());
                 });
-                let has_errors = self.results.has_errors;
+                let has_errors = self.checker.results.has_errors;
             }
             Err(e) => {
                 let error = LangError::runtime(&format!("Error parsing: {:?}", e));
-                self.results.push(error);
+                self.checker.results.push(error);
             }
         }
         env
@@ -115,7 +116,7 @@ impl Program {
     ) -> Result<ExprRefWithEnv, LangError> {
         use crate::lexer::LexerState;
         use crate::tokens::*;
-        let file_id = self.results.add_source(filename.into(), v.to_string());
+        let file_id = self.checker.results.add_source(filename.into(), v.to_string());
         let mut lexer = LexerState::from_str_eof(v).unwrap().set_file_id(file_id);
 
         let tokens = lexer.tokens();
@@ -126,7 +127,7 @@ impl Program {
                 let error = t
                     .to_context()
                     .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
-                self.results.push(error);
+                self.checker.results.push(error);
             }
         });
 
@@ -139,14 +140,17 @@ impl Program {
                     debug!("program rest {:?}", end);
                 }
 
+                //let check_env = crate::ir::base_env();
+                //let ir = self.checker.parse_ast(&expr, check_env);
+
                 // Analyze it
                 let mut a = Analysis::new();
                 let env = a.analyze(expr.clone().into(), env);
                 a.results.iter().for_each(|r| {
-                    self.results.push(r.clone());
+                    self.checker.results.push(r.clone());
                 });
 
-                if self.results.has_errors {
+                if self.checker.results.has_errors {
                     return Err(expr.context.error(LangErrorKind::AnalysisFailed));
                 }
 
@@ -154,7 +158,7 @@ impl Program {
                     Ok(v) => Ok(v),
                     Err(LangError { context, kind }) => {
                         let error = LangError { context, kind };
-                        self.results.push(error.clone());
+                        self.checker.results.push(error.clone());
                         Err(error)
                     }
                 }
@@ -164,15 +168,23 @@ impl Program {
                     debug!("error {:?}", (&err, tokens.toks()));
                 }
                 let error = LangError::runtime("Error parsing");
-                self.results.push(error.clone());
+                self.checker.results.push(error.clone());
                 Err(error)
             }
             Err(e) => {
                 let error = LangError::runtime(&format!("Error parsing: {:?}", e));
-                self.results.push(error.clone());
+                self.checker.results.push(error.clone());
                 Err(error)
             }
         }
+    }
+
+    pub fn print(&self) {
+        self.checker.results.print();
+    }
+
+    pub fn clear(&mut self) {
+        self.checker.results.clear();
     }
 }
 

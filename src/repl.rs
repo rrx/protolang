@@ -5,23 +5,23 @@ use log::debug;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-pub fn cli() -> anyhow::Result<()> {
+pub fn cli(args: Vec<String>) -> anyhow::Result<()> {
     let mut program = Program::new();
     let mut env = Environment::default();
     for filename in std::env::args().skip(1) {
         match program.eval_file(filename.as_str(), env.clone()) {
             Ok(r) => {
                 env = r.env;
-                program.results.print();
+                program.print();
                 println!("> {:?}", r.expr);
             }
             Err(_) => {
-                program.results.print();
+                program.print();
                 println!("> {:?}", &program.value.expr);
                 break;
             }
         }
-        program.results.clear();
+        program.clear();
     }
     Ok(())
 }
@@ -43,15 +43,15 @@ pub fn repl() -> anyhow::Result<()> {
                 rl.add_history_entry(line.as_str());
                 match program.eval(&line, env.clone()) {
                     Ok(r) => {
-                        program.results.print();
+                        program.print();
                         println!("> {}", r.expr.borrow().unlex());
                         env = r.env;
                     }
                     _ => {
-                        program.results.print();
+                        program.print();
                     }
                 }
-                program.results.clear();
+                program.clear();
             }
 
             Err(ReadlineError::Interrupted) => {
