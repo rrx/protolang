@@ -642,6 +642,8 @@ impl TypeChecker {
                         let name = op_name(op);
                         let ir_left = self.parse_ast(left, env.clone());
                         let ir_right = self.parse_ast(right, env.clone());
+                        self.make_apply_by_name(name, vec![ir_left, ir_right], node.context.clone(), env)
+                        /*
                         let ret_ty = self.new_unknown_type();
                         let f_ty = Type::Func(vec![ir_left.ty.clone(), ir_right.ty.clone(), ret_ty.clone()]);
                         let f = IR::new_with_context(
@@ -651,6 +653,7 @@ impl TypeChecker {
                             env.clone());
                         //let f = self.make_func_from_name(name, f_ty, node.context.clone(), env.clone()); 
                         self.make_apply(f, vec![ir_left, ir_right], env)
+                        */
                     }
                     _ => {
                         debug!("Unimplemented: {:?}", &node);
@@ -741,9 +744,26 @@ impl TypeChecker {
         }
     }
 
-    fn make_apply(&mut self, ir_func: IR, ir_args: Vec<IR>, env: Environment) -> IR {
-        //let mut fn_types = HashSet::new();
+    fn make_apply_by_name(&mut self, name: String, ir_args: Vec<IR>, context: MaybeNodeContext, env: Environment) -> IR {
+        let ret_ty = self.new_unknown_type();
+        let mut f_types = ir_args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
+        f_types.push(ret_ty.clone());
+        let f_ty = Type::Func(f_types);
+        //let f = IR::new_with_context(
+            //IRValue::Ident(name.clone()),
+            //f_ty,
+            //context,
+            //env.clone());
+        let f = self.make_func_from_name(name.clone(), f_ty, context.clone(), env.clone());
+        IR::new_with_context(
+            IRValue::Apply(Box::new(f), ir_args),
+            ret_ty,
+            context,
+            env.clone())
+        //self.make_apply(f, ir_args, env)
+    }
 
+    fn make_apply(&mut self, ir_func: IR, ir_args: Vec<IR>, env: Environment) -> IR {
         let ret_ty = self.new_unknown_type();
         let ir_func = match &ir_func.value {
             IRValue::Ident(name) => {
@@ -752,13 +772,11 @@ impl TypeChecker {
                 let mut f_types = ir_args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
                 f_types.push(ret_ty.clone());
                 let f_ty = Type::Func(f_types);
-                //fn_types.insert(f_ty.clone());
 
                 // make a node with that signature
                 self.make_func_from_name(name.clone(), f_ty, ir_func.context.clone(), env.clone())
             }
             IRValue::Extern(_) | IRValue::Function(_, _) => {
-                //fn_types.insert(ir_func.ty.clone());
                 ir_func
             }
             IRValue::Error(_) => ir_func,
@@ -769,19 +787,11 @@ impl TypeChecker {
         };
 
         let context = ir_func.context.clone();
-        let app = IR::new_with_context(
+        IR::new_with_context(
             IRValue::Apply(Box::new(ir_func), ir_args),
             ret_ty,
             context,
-            env.clone());
-
-        /*
-        self.type_equations.push(TypeEquation::new(
-                HashSet::from([app.ty.clone()]),
-                fn_types,
-                app.clone(), env));
-        */
-        app
+            env.clone())
     }
 
     pub fn parse_str(&mut self, s: &str, env: Environment) -> anyhow::Result<IR> {
