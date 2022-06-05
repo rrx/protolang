@@ -1,5 +1,5 @@
 use crate::lexer::{Location, Surround};
-use crate::tokens::{Tok, Token};
+use crate::tokens::{Tok, Token, FileId};
 use std::fmt::{Debug, Display};
 use std::marker::Sized;
 
@@ -90,6 +90,10 @@ impl MaybeNodeContext {
 
     pub fn has_location(&self) -> bool {
         self.0.is_some()
+    }
+
+    pub fn get_file_id(&self) -> FileId{
+        self.to_location().file_id
     }
 
     pub fn to_location(&self) -> Location {

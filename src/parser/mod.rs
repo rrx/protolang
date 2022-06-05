@@ -535,17 +535,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_whitespace_or_eof() {
-        let pos = crate::tokens::Span::new("".into());
-        let toks = vec![Token::new(Tok::EOF, pos)];
-        let i = Tokens::new(&toks[..]);
-        assert_eq!(
-            _parse_whitespace_or_eof(i).unwrap().1.toks(),
-            vec![Tok::EOF]
-        );
-    }
-
-    #[test]
     fn expressions() {
         let r = vec![
             "\n1",

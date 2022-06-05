@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         env = program.analyze_file(filename.as_str(), env.clone());
         env.debug();
     }
-    program.print();
-    program.diagnostics.clear();
+    program.results.print();
+    program.results.diagnostics.clear();
     Ok(())
 }

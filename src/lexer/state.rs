@@ -1,5 +1,5 @@
 use super::*;
-use crate::tokens::Token;
+use crate::tokens::{FileId, Token};
 use log::debug;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +52,7 @@ pub struct LexerState<'a> {
     whitespace: Vec<Token<'a>>,
     indent_state: IndentState,
     indent_stack: Vec<Token<'a>>,
+    file_id: FileId
 }
 
 impl<'a> Default for LexerState<'a> {
@@ -62,6 +63,7 @@ impl<'a> Default for LexerState<'a> {
             indent_size: 0,
             indent_state: IndentState::LineNotIndented,
             indent_stack: vec![],
+            file_id: 0
         }
     }
 }
@@ -104,8 +106,14 @@ impl<'a> LexerState<'a> {
         }
     }
 
+    pub fn set_file_id(mut self, file_id: FileId) -> Self {
+        self.file_id = file_id;
+        self
+    }
+
     pub fn push_token(&mut self, mut token: Token<'a>) {
         token.indent = self.indent_size;
+        token = token.set_file_id(self.file_id);
         token.s.prepend(
             self.whitespace
                 .drain(..)
@@ -115,17 +123,6 @@ impl<'a> LexerState<'a> {
         );
         self.acc.push(token);
     }
-
-    //pub fn toks(&mut self) -> Vec<Tok> {
-    //vec![]
-    //if self.whitespace.len() > 0 && self.acc.len() == 0 {
-    //self.whitespace.iter().map(|t| {
-    //let mut token = t.clone();
-    //Tok::Invalid(t.tok.unlex())
-    //token
-    //}).collect::<Vec<_>>()
-    //}
-    //}
 
     pub fn final_toks(&mut self) -> Vec<Tok> {
         self.flush();
@@ -164,14 +161,13 @@ impl<'a> LexerState<'a> {
 
     pub fn tokens(&'a mut self) -> Tokens<'a> {
         self.flush();
-        //self.dump();
-        Tokens::new(&self.acc[..])
+        Tokens::new(&self.acc[..], self.file_id)
     }
 
     pub fn tokens2(&mut self) -> Tokens {
         self.flush();
         //self.dump();
-        Tokens::new(&self.acc[..]).clone()
+        Tokens::new(&self.acc[..], self.file_id).clone()
     }
 
     pub fn _token_vec(&mut self) -> Vec<Token<'a>> {
@@ -321,7 +317,7 @@ impl<'a> LexerState<'a> {
         // flush before pushing EOF
         // we only want surround on EOF if we have a whitespace file
         self.flush();
-        self.push_token(token(Tok::EOF, pos));
+        self.push_token(Token::new(Tok::EOF, pos));
         self.eof();
         Ok((i, ()))
     }

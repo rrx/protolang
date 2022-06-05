@@ -157,6 +157,14 @@ impl<K: LayerKey, V: LayerValue> EnvLayers<K, V> {
             .flatten()
     }
 
+    pub fn resolve_all(&self, name: &K) -> Vec<&V> {
+        self.layers
+            .iter()
+            .filter(|layer| layer.values.contains_key(name))
+            .map(|layer| layer.get(name).unwrap())
+            .collect()
+    }
+
     pub fn debug(&self) {
         self.layers.iter().enumerate().for_each(|(i, layer)| {
             debug!("Layer: {:?}", i);
@@ -249,6 +257,9 @@ mod tests {
         env.types.define("Asdf".into(), t2_id.clone());
         assert_eq!(Some(&t2_id), env.types.resolve(&"Asdf".into()));
         println!("{:?}", (&env));
+
+        let all_asdf = env.types.resolve_all(&"Asdf".to_string());
+        assert_eq!(all_asdf.len(), 2);
 
         let env1 = env.clone();
         let env2 = env1.clone();

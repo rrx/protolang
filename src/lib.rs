@@ -8,4 +8,5 @@ pub mod program;
 pub mod repl;
 pub mod results;
 pub mod sexpr;
+pub mod ir;
 pub mod tokens;

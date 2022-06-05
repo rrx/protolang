@@ -12,16 +12,16 @@ pub fn cli() -> anyhow::Result<()> {
         match program.eval_file(filename.as_str(), env.clone()) {
             Ok(r) => {
                 env = r.env;
-                program.print();
+                program.results.print();
                 println!("> {:?}", r.expr);
             }
             Err(_) => {
-                program.print();
+                program.results.print();
                 println!("> {:?}", &program.value.expr);
                 break;
             }
         }
-        program.diagnostics.clear();
+        program.results.diagnostics.clear();
     }
     Ok(())
 }
@@ -43,15 +43,15 @@ pub fn repl() -> anyhow::Result<()> {
                 rl.add_history_entry(line.as_str());
                 match program.eval(&line, env.clone()) {
                     Ok(r) => {
-                        program.print();
+                        program.results.print();
                         println!("> {}", r.expr.borrow().unlex());
                         env = r.env;
                     }
                     _ => {
-                        program.print();
+                        program.results.print();
                     }
                 }
-                program.diagnostics.clear();
+                program.results.diagnostics.clear();
             }
 
             Err(ReadlineError::Interrupted) => {

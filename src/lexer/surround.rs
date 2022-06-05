@@ -1,4 +1,4 @@
-use crate::tokens::Tok;
+use crate::tokens::{Tok, FileId};
 use miette::SourceSpan;
 use std::fmt;
 
@@ -8,6 +8,7 @@ pub struct Location {
     pub line: usize,
     pub col: usize,
     pub fragment: String,
+    pub file_id: FileId
 }
 
 impl fmt::Debug for Location {
@@ -26,6 +27,7 @@ impl Default for Location {
             line: 0,
             col: 0,
             fragment: "".into(),
+            file_id: 0
         }
     }
 }
@@ -37,8 +39,15 @@ impl Location {
             line,
             col,
             fragment,
+            file_id: 0
         }
     }
+
+    pub fn set_file_id(mut self, file_id: FileId) -> Self {
+        self.file_id = file_id;
+        self
+    }
+
     //pub fn span(&self) -> SourceSpan {
     //SourceSpan::new(self.offset, self.fragment.len())
     //}

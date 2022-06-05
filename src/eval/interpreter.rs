@@ -532,7 +532,7 @@ mod tests {
                 env,
             )
             .unwrap();
-        program.print();
+        program.results.print();
         assert!(r.env.resolve_value("x").unwrap().is_mut());
 
         // blocks should hide visibility
@@ -547,7 +547,7 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.print();
+        program.results.print();
         assert!(r.env.resolve_value("asdf1").is_none());
 
         let r = program
@@ -562,7 +562,7 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.print();
+        program.results.print();
 
         let r = program
             .eval(
@@ -578,7 +578,7 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.print();
+        program.results.print();
 
         let r = program
             .eval(
@@ -595,11 +595,11 @@ mod tests {
                 r.env,
             )
             .unwrap();
-        program.print();
+        program.results.print();
         assert!(r.env.resolve_value("super_local").is_none());
 
         let r = program.eval("1", r.env).unwrap();
-        program.print();
+        program.results.print();
         assert!(r.expr.borrow().value.try_literal().unwrap() == Tok::IntLiteral(1));
     }
 
@@ -628,7 +628,7 @@ mod tests {
         let mut program = Program::new();
         let env = Environment::default();
         let r = program.eval("showstack()", env).unwrap();
-        program.print();
+        program.results.print();
         debug!("x {:?}", r.expr);
     }
 }

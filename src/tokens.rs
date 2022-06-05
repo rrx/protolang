@@ -9,6 +9,7 @@ use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
 //use strum::{EnumProperty, VariantNames};
 use strum_macros;
 
+pub type FileId = usize;
 pub type Span<'a> = LocatedSpan<&'a str>;
 
 #[derive(
@@ -193,6 +194,7 @@ pub struct Token<'a> {
     pub indent: usize,
     pub tok: Tok,
     pub pos: Span<'a>,
+    pub file_id: Option<FileId>
 }
 
 impl<'a> fmt::Debug for Token<'a> {
@@ -215,7 +217,13 @@ impl<'a> Token<'a> {
             indent: 0,
             tok,
             pos,
+            file_id: None
         }
+    }
+
+    pub fn set_file_id(mut self, file_id: FileId) -> Self {
+        self.file_id = Some(file_id);
+        self
     }
 
     pub fn is_indent_open(&self) -> bool {
@@ -247,7 +255,7 @@ impl<'a> Token<'a> {
             self.pos.location_line() as usize,
             self.pos.get_utf8_column(),
             self.pos.fragment().to_string(),
-        )
+        ).set_file_id(self.file_id.unwrap())
     }
 
     pub fn to_context(&self) -> MaybeNodeContext {
@@ -271,10 +279,6 @@ impl<'a> Token<'a> {
     }
 }
 
-pub fn token(tok: Tok, pos: Span) -> Token {
-    Token::new(tok, pos)
-}
-
 pub trait TokensList {
     fn is_eof(&self) -> bool;
     fn to_location(&self) -> Location;
@@ -291,6 +295,7 @@ pub struct Tokens<'a> {
     pub tok: &'a [Token<'a>],
     pub start: usize,
     pub end: usize,
+    pub file_id: FileId,
     //pub results: Vec<LangError>,
 }
 
@@ -301,9 +306,9 @@ impl<'a> TokensList for Tokens<'a> {
 
     fn to_location(&self) -> Location {
         if self.tok.len() > 0 {
-            self.tok[0].to_location()
+            self.tok[0].to_location().set_file_id(self.file_id)
         } else {
-            Location::new(0, 0, 0, "EOF".into())
+            Location::new(0, 0, 0, "EOF".into()).set_file_id(self.file_id)
         }
     }
 
@@ -323,11 +328,12 @@ impl<'a> TokensList for Tokens<'a> {
 }
 
 impl<'a> Tokens<'a> {
-    pub fn new(vec: &'a [Token]) -> Self {
+    pub fn new(vec: &'a [Token], file_id: FileId) -> Self {
         Tokens {
             tok: vec,
             start: 0,
             end: vec.len(),
+            file_id
             //results: vec![],
         }
     }
@@ -381,6 +387,7 @@ impl<'a> InputTake for Tokens<'a> {
             tok: &self.tok[0..count],
             start: 0,
             end: count,
+            file_id: self.file_id,
             //results: vec![],
         }
     }
@@ -392,12 +399,14 @@ impl<'a> InputTake for Tokens<'a> {
             tok: prefix,
             start: 0,
             end: prefix.len(),
+            file_id: self.file_id,
             //results: vec![],
         };
         let second = Tokens {
             tok: suffix,
             start: 0,
             end: suffix.len(),
+            file_id: self.file_id,
             //results: vec![],
         };
         (second, first)
@@ -418,6 +427,7 @@ impl<'a> Slice<Range<usize>> for Tokens<'a> {
             tok: self.tok.slice(range.clone()),
             start: self.start + range.start,
             end: self.start + range.end,
+            file_id: self.file_id,
             //results: vec![],
         }
     }
@@ -444,6 +454,7 @@ impl<'a> Slice<RangeFull> for Tokens<'a> {
             tok: self.tok,
             start: self.start,
             end: self.end,
+            file_id: self.file_id,
             //results: vec![],
         }
     }

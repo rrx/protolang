@@ -1,3 +1,4 @@
+use crate::tokens::FileId;
 use crate::ast::{Expr, MaybeNodeContext};
 use crate::eval::{Environment, ExprRefWithEnv};
 use thiserror::Error;
@@ -6,6 +7,7 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+
 
 #[derive(Error, Debug, Clone)]
 pub enum LangErrorKind {
@@ -50,6 +52,18 @@ impl LangError {
             kind: LangErrorKind::Error(message),
         }
     }
+
+    pub fn diagnostic(&self) -> Diagnostic<FileId> {
+        let file_id = self.context.get_file_id();
+        match &self.kind {
+            LangErrorKind::Warning(msg) | LangErrorKind::Error(msg) => Diagnostic::warning()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+            _ => Diagnostic::warning()
+                .with_message(&format!("{}", &self))
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+        }
+    }
 }
 
 #[derive(Debug, Error, Clone)]
@@ -87,7 +101,20 @@ impl InterpretError {
             context: MaybeNodeContext::default(),
         }
     }
+
+    pub fn diagnostic(&self) -> Diagnostic<FileId> {
+        let file_id = self.context.get_file_id();
+        match &self.kind {
+            InterpretErrorKind::Runtime(message) => Diagnostic::error()
+                .with_message(message)
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+            _ => Diagnostic::error()
+                .with_message(format!("{}", self))
+                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+        }
+    }
 }
+
 
 impl MaybeNodeContext {
     pub fn runtime_error(&self, m: &str) -> InterpretError {
@@ -109,3 +136,32 @@ impl MaybeNodeContext {
         }
     }
 }
+
+pub struct CompileResults {
+    pub diagnostics: Vec<Diagnostic<FileId>>,
+    pub files: SimpleFiles<String, String>,
+}
+
+impl Default for CompileResults {
+    fn default() -> Self {
+        Self {
+            diagnostics: vec![],
+            files: SimpleFiles::new(),
+        }
+    }
+}
+
+impl CompileResults {
+    pub fn add_source(&mut self, filename: String, source: String) -> FileId {
+        self.files.add(filename, source)
+    }
+
+    pub fn print(&self) {
+        let writer = StandardStream::stderr(ColorChoice::Always);
+        let config = codespan_reporting::term::Config::default();
+        for diagnostic in self.diagnostics.iter() {
+            let _ = term::emit(&mut writer.lock(), &config, &self.files, &diagnostic);
+        }
+    }
+}
+

@@ -2,6 +2,7 @@ use crate::ast::*;
 use crate::eval::*;
 use crate::results::*;
 use crate::tokens::Tok;
+//use std::rc::Rc;
 use crate::parser::Unparse;
 
 pub struct Analysis {
@@ -350,7 +351,7 @@ mod tests {
         ",
             env,
         );
-        program.print();
+        program.results.print();
         assert!(env.resolve_value("asdf1").is_none());
     }
 }
