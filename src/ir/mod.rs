@@ -331,6 +331,7 @@ impl TypeChecker {
         format!("t{}", self.next_type_counter())
     }
 
+    /*
     fn make_binary_function(&mut self, name: String, mut env: Environment) -> IR {
         let left_ty = self.new_unknown_type();
         let right_ty = self.new_unknown_type();
@@ -362,9 +363,9 @@ impl TypeChecker {
 
         node
     }
+    */
 
-
-
+    /*
     fn generate_equations(&mut self, node: &IR) {
         match &node.value {
             // already typed
@@ -477,6 +478,7 @@ impl TypeChecker {
             }
         }
     }
+*/
 
 
     fn new_unknown_type(&mut self) -> Type {
@@ -570,20 +572,7 @@ impl TypeChecker {
                     ir_exprs.push(node);
                 }
 
-                let last_ty = ir_exprs.last().unwrap().ty.clone();
-
-                let block_ty = self.new_unknown_type();
-                let block = IR::new_with_context(
-                    IRValue::Block(ir_exprs),
-                    block_ty.clone(),
-                    node.context.clone(), env);
-            
-                let env = block.env.clone();
-                self.type_equations.push(TypeEquation::new(
-                        HashSet::from([block_ty]),
-                        HashSet::from([last_ty]),
-                        block.clone(), env));
-                block
+                self.make_block(ir_exprs, node.context.clone(), env)
             }
 
             Expr::Binary(op, left, right) => {
@@ -598,7 +587,6 @@ impl TypeChecker {
                         let name = left.try_ident().unwrap().name;
                         let ir_right = self.parse_ast(right, env.clone());
                         self.make_declare(name, ir_right, node.context.clone(), env)
-
                     }
 
                     Operator::Plus | Operator::Minus | Operator::Exp => {
@@ -619,6 +607,21 @@ impl TypeChecker {
                 unimplemented!()
             }
         }
+    }
+
+    fn make_block(&mut self, nodes: Vec<IR>, context: MaybeNodeContext, env: Environment) -> IR {
+        let block_ty = nodes.last().unwrap().ty.clone();
+        let block = IR::new_with_context(
+            IRValue::Block(nodes),
+            block_ty.clone(),
+            context.clone(), env);
+    
+        //let env = block.env.clone();
+        //self.type_equations.push(TypeEquation::new(
+                //HashSet::from([block_ty]),
+                //HashSet::from([last_ty]),
+                //block.clone(), env));
+        block
     }
 
     fn make_assign(&mut self, name: String, node: IR, context: MaybeNodeContext, env: Environment) -> IR {
