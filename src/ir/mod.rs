@@ -590,52 +590,15 @@ impl TypeChecker {
                 match op {
                     Operator::Assign => {
                         let name = left.try_ident().unwrap().name;
-                        if let Some(v) = env.resolve(&name) {
-                            let left_ty = v.ty.clone();
-                            let ir_right = self.parse_ast(right, env.clone());
-                            let right_ty = ir_right.ty.clone();
-                            let result_ty = self.new_unknown_type();
-                            let result = IR::new_with_context(
-                                IRValue::Assign(name, Box::new(ir_right.clone())),
-                                result_ty.clone(),
-                                node.context.clone(), env.clone());
-
-                            self.type_equations.push(TypeEquation::new(
-                                    HashSet::from([left_ty]),
-                                    HashSet::from([right_ty.clone()]),
-                                    ir_right.clone(), env.clone()));
-
-                            self.type_equations.push(TypeEquation::new(
-                                    HashSet::from([result_ty]),
-                                    HashSet::from([right_ty]),
-                                    result.clone(), env));
-                            result
-                        } else {
-                            self.results.push(LangError::error("Not found".into(), node.context.clone()));
-                            IR::new_with_context(
-                                IRValue::Error("Not found".into()),
-                                Type::Error,
-                                node.context.clone(),
-                                env)
-                        }
+                        let ir_right = self.parse_ast(right, env.clone());
+                        self.make_assign(name, ir_right, node.context.clone(), env.clone())
                     }
 
                     Operator::Declare => {
-                        let mut local_env = env.clone();
                         let name = left.try_ident().unwrap().name;
-                        let ir_right = self.parse_ast(right, env);
-                        let right_ty = ir_right.ty.clone();
-                        local_env.define(name.clone(), ir_right.clone());
-                        let expr = IR::new_with_context(
-                            IRValue::Declare(name, Box::new(ir_right)),
-                            right_ty.clone(),
-                            node.context.clone(), local_env);
-                        let env = expr.env.clone();
-                        //self.type_equations.push(TypeEquation::new(
-                                //HashSet::from([expr.ty.clone()]),
-                                //HashSet::from([right_ty]),
-                                //expr.clone(), env));
-                        expr
+                        let ir_right = self.parse_ast(right, env.clone());
+                        self.make_declare(name, ir_right, node.context.clone(), env)
+
                     }
 
                     Operator::Plus | Operator::Minus | Operator::Exp => {
@@ -643,31 +606,12 @@ impl TypeChecker {
                         let ir_left = self.parse_ast(left, env.clone());
                         let ir_right = self.parse_ast(right, env.clone());
                         self.make_apply_by_name(name, vec![ir_left, ir_right], node.context.clone(), env)
-                        /*
-                        let ret_ty = self.new_unknown_type();
-                        let f_ty = Type::Func(vec![ir_left.ty.clone(), ir_right.ty.clone(), ret_ty.clone()]);
-                        let f = IR::new_with_context(
-                            IRValue::Ident(name.clone()),
-                            f_ty,
-                            node.context.clone(),
-                            env.clone());
-                        //let f = self.make_func_from_name(name, f_ty, node.context.clone(), env.clone()); 
-                        self.make_apply(f, vec![ir_left, ir_right], env)
-                        */
                     }
                     _ => {
                         debug!("Unimplemented: {:?}", &node);
                         unimplemented!()
                     }
                 }
-                //let f = op_name(op);
-                //IR::Apply()
-                    //f,
-                //let t = infer_binary_type(op, left, right, env);
-                //if t != Type::Error {
-                    //Self::Apply(
-                //}
-                //infer_binary_type(op, left, right, env)
             }
 
             _ => {
@@ -675,6 +619,56 @@ impl TypeChecker {
                 unimplemented!()
             }
         }
+    }
+
+    fn make_assign(&mut self, name: String, node: IR, context: MaybeNodeContext, env: Environment) -> IR {
+        if let Some(v) = env.resolve(&name) {
+            let left_ty = v.ty.clone();
+            let right_ty = node.ty.clone();
+            let result_ty = self.new_unknown_type();
+            let result = IR::new_with_context(
+                IRValue::Assign(name, Box::new(node.clone())),
+                result_ty.clone(),
+                node.context.clone(), env.clone());
+
+            self.type_equations.push(TypeEquation::new(
+                    HashSet::from([left_ty]),
+                    HashSet::from([right_ty.clone()]),
+                    node.clone(), env.clone()));
+
+            self.type_equations.push(TypeEquation::new(
+                    HashSet::from([result_ty]),
+                    HashSet::from([right_ty]),
+                    result.clone(), env));
+            result
+        } else {
+            self.make_error(format!("Not found: {}", name), context, env)
+        }
+    }
+
+    fn make_declare(&mut self, name: String, node: IR, context: MaybeNodeContext, env: Environment) -> IR {
+        let mut local_env = env.clone();
+        let right_ty = node.ty.clone();
+        local_env.define(name.clone(), node.clone());
+        let expr = IR::new_with_context(
+            IRValue::Declare(name, Box::new(node)),
+            right_ty.clone(),
+            context, local_env);
+        //let env = expr.env.clone();
+        //self.type_equations.push(TypeEquation::new(
+                //HashSet::from([expr.ty.clone()]),
+                //HashSet::from([right_ty]),
+                //expr.clone(), env));
+        expr
+    }
+
+    fn make_error(&mut self, msg: String, context: MaybeNodeContext, env: Environment) -> IR {
+        self.results.push(LangError::error(msg.clone(), context.clone()));
+        IR::new_with_context(
+            IRValue::Error(msg),
+            Type::Error,
+            context.clone(),
+            env)
     }
 
     fn make_func_from_name(&mut self, name: String, ty: Type, context: MaybeNodeContext, env: Environment) -> IR {
@@ -689,13 +683,8 @@ impl TypeChecker {
             }
         }
         if fn_types.len() == 0 {
-            let err = format!("Function Not found: {}", name);
-            self.results.push(LangError::error(err.clone(), context.clone()));
-            IR::new_with_context(
-                IRValue::Error(err),
-                Type::Error,
-                context,
-                env)
+            let msg = format!("Function Not found: {}", name);
+            self.make_error(msg, context, env)
         } else {
             let result = IR::new_with_context(
                 IRValue::Ident(name),
@@ -723,12 +712,7 @@ impl TypeChecker {
                     result.clone(), env.clone()));
             result
         } else {
-            self.results.push(LangError::error("Not found".into(), context.clone()));
-            IR::new_with_context(
-                IRValue::Error("Not found".into()),
-                Type::Error,
-                context,
-                env)
+            self.make_error(format!("Not found: {}", name), context, env)
         }
     }
 
