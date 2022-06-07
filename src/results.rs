@@ -98,7 +98,7 @@ impl MaybeNodeContext {
 
 pub struct CompileResults {
     results: Vec<LangError>,
-    diagnostics: Vec<Diagnostic<FileId>>,
+    pub diagnostics: Vec<Diagnostic<FileId>>,
     files: SimpleFiles<String, String>,
     pub has_errors: bool
 }
@@ -139,7 +139,8 @@ impl CompileResults {
         let writer = StandardStream::stdout(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
         for diagnostic in self.diagnostics.iter() {
-            let _ = term::emit(&mut writer.lock(), &config, &self.files, &diagnostic);
+            //println!("{:?}", diagnostic);
+            term::emit(&mut writer.lock(), &config, &self.files, &diagnostic).unwrap();
         }
     }
 }

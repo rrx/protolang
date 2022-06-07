@@ -30,9 +30,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("{}", ir);
                     //println!("{:?}", s);
                 }
-                for e in c.type_equations {
+                for e in &c.type_equations {
                     println!("E: {}", e);
                 }
+                let s = c.unify_all().unwrap();
+                for x in &s {
+                    println!("subst: {:?}", x);
+                }
+                println!("has_errors: {}", c.results.has_errors);
                 c.results.print();
             }
             _ => unimplemented!()
