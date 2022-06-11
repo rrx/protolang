@@ -2,9 +2,9 @@ use crate::ast::*;
 use crate::eval::*;
 use crate::lexer::Location;
 use crate::parser::Unparse;
+use crate::results::LangError;
 use crate::sexpr::*;
 use crate::tokens::Tok;
-use crate::results::LangError;
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
@@ -26,11 +26,7 @@ pub trait Callable: Debug + Display {
     fn arity(&self) -> usize {
         0
     }
-    fn call<'a>(
-        &self,
-        env: Environment,
-        args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, LangError>;
+    fn call<'a>(&self, env: Environment, args: Vec<ExprRef>) -> Result<ExprRefWithEnv, LangError>;
     fn box_clone(&self) -> Box<dyn Callable>;
 }
 
@@ -117,11 +113,7 @@ impl Callable for Lambda {
         self.params.value.len()
     }
 
-    fn call<'a>(
-        &self,
-        env: Environment,
-        args: Vec<ExprRef>,
-    ) -> Result<ExprRefWithEnv, LangError> {
+    fn call<'a>(&self, env: Environment, args: Vec<ExprRef>) -> Result<ExprRefWithEnv, LangError> {
         Interpreter::call(env, self, &self.params, &args, self.expr.clone().into())
     }
 

@@ -1,6 +1,5 @@
 use crate::ast::{FromContext, MaybeNodeContext};
 use crate::lexer::{Location, Surround};
-use crate::results::LangError;
 use nom::*;
 use nom_locate::LocatedSpan;
 use std::fmt;
@@ -194,7 +193,7 @@ pub struct Token<'a> {
     pub indent: usize,
     pub tok: Tok,
     pub pos: Span<'a>,
-    pub file_id: Option<FileId>
+    pub file_id: Option<FileId>,
 }
 
 impl<'a> fmt::Debug for Token<'a> {
@@ -205,6 +204,7 @@ impl<'a> fmt::Debug for Token<'a> {
             .field("post", &self.s.post)
             .field("line", &self.pos.location_line())
             .field("col", &self.pos.get_column())
+            .field("pos", &self.pos)
             .field("indent", &self.indent)
             .finish()
     }
@@ -217,7 +217,7 @@ impl<'a> Token<'a> {
             indent: 0,
             tok,
             pos,
-            file_id: None
+            file_id: None,
         }
     }
 
@@ -255,7 +255,8 @@ impl<'a> Token<'a> {
             self.pos.location_line() as usize,
             self.pos.get_utf8_column(),
             self.pos.fragment().to_string(),
-        ).set_file_id(self.file_id.unwrap())
+        )
+        .set_file_id(self.file_id.unwrap())
     }
 
     pub fn to_context(&self) -> MaybeNodeContext {
@@ -333,8 +334,7 @@ impl<'a> Tokens<'a> {
             tok: vec,
             start: 0,
             end: vec.len(),
-            file_id
-            //results: vec![],
+            file_id, //results: vec![],
         }
     }
 

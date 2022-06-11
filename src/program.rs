@@ -1,10 +1,12 @@
 use crate::ast::*;
 use crate::eval::*;
+use crate::ir::TypeChecker;
 use crate::results::*;
 use crate::sexpr::SExpr;
-use crate::ir::TypeChecker;
+use crate::tokens::{FileId, Tok, TokensList};
+use nom::InputIter;
 
-use log::debug;
+use log::*;
 
 pub struct Program {
     checker: TypeChecker,
@@ -19,25 +21,57 @@ impl Program {
         }
     }
 
+    pub fn print(&self) {
+        self.checker.print();
+    }
+
+    pub fn clear(&mut self) {
+        self.checker.clear();
+    }
+
     pub fn add_result(&mut self, value: ExprRefWithEnv) {
         self.value = value;
     }
 
-    pub fn parse(s: &str) -> anyhow::Result<ExprNode> {
+    pub fn parse(&mut self, s: &str, file_id: FileId) -> anyhow::Result<ExprNode> {
         let mut lexer = crate::lexer::LexerState::default();
-        let (_, _) = lexer.lex(s).unwrap();
-        let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
-        Ok(expr)
+        if let Err(e) = lexer.lex(s) {
+            //return Err(LangErrorKind::LexerFailed.into_error().into());
+            return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into());
+        }
+        let mut lexer = lexer.set_file_id(file_id);
+        let tokens = lexer.tokens();
+
+        tokens.iter_elements().for_each(|t| {
+            if let Tok::Invalid(s) = &t.tok {
+                let error = t
+                    .to_context()
+                    .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
+                self.checker.push_error(error);
+            }
+        });
+
+        match crate::parser::parse_program(tokens) {
+            Ok((_, expr)) => Ok(expr),
+            Err(nom::Err::Error(e)) => {
+                for (tokens, err) in e.errors {
+                    error!("error {:?}", (&err, tokens.toks()));
+                }
+                let error = LangError::runtime("Error parsing");
+                self.checker.push_error(error.clone());
+                Err(error.into())
+            }
+            Err(e) => {
+                //Err(LangErrorKind::ParserFailed.into_error().into())
+                Err(LangError::runtime(&format!("Error parsing: {:?}", e)).into())
+            }
+        }
     }
 
-    pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
-        let contents = std::fs::read_to_string(filename.clone())
-            .unwrap()
-            .to_string();
-        let mut lexer = crate::lexer::LexerState::default();
-        let (_, _) = lexer.lex(contents.as_str()).unwrap();
-        let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
-        Ok(expr)
+    pub fn parse_file(&mut self, filename: &str) -> anyhow::Result<ExprNode> {
+        let contents = std::fs::read_to_string(filename.clone())?.to_string();
+        let file_id = self.checker.add_source(filename.into(), contents.clone());
+        self.parse(&contents, file_id)
     }
 
     pub fn analyze_file(&mut self, filename: &str, env: Environment) -> Environment {
@@ -52,42 +86,24 @@ impl Program {
     }
 
     fn _analyze(&mut self, filename: &str, v: &str, mut env: Environment) -> Environment {
-        use crate::lexer::LexerState;
-        use crate::tokens::*;
-        let file_id = self.checker.results.add_source(filename.into(), v.to_string());
-        let mut lexer = LexerState::from_str_eof(v).unwrap().set_file_id(file_id);
-        let tokens = lexer.tokens();
-        use nom::InputIter;
-
-        tokens.iter_elements().for_each(|t| {
-            if let Tok::Invalid(s) = &t.tok {
-                let error = t
-                    .to_context()
-                    .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
-                self.checker.results.push(error);
-            }
-        });
-
-        match crate::parser::parse_program(tokens) {
-            Ok((end, expr)) => {
+        let file_id = self.checker.add_source(filename.into(), v.to_string());
+        match self.parse(v, file_id) {
+            Ok(expr) => {
                 debug!("SEXPR: {}", expr.sexpr().unwrap());
-                //debug!("program has {} expressions", exprs.len());
-                use nom::InputLength;
-                if end.input_len() > 0 {
-                    debug!("program rest {:?}", end);
-                }
-
                 // Analyze it
                 let mut a = Analysis::new();
                 env = a.analyze(expr.clone().into(), env);
                 a.results.iter().for_each(|r| {
-                    self.checker.results.push(r.clone());
+                    self.checker.push_error(r.clone());
                 });
-                let has_errors = self.checker.results.has_errors;
+                if self.checker.has_errors() {
+                    self.checker
+                        .push_error(expr.context.error(LangErrorKind::AnalysisFailed));
+                }
             }
             Err(e) => {
-                let error = LangError::runtime(&format!("Error parsing: {:?}", e));
-                self.checker.results.push(error);
+                let error = LangError::runtime(&format!("Error analyzing: {:?}", e));
+                self.checker.push_error(error);
             }
         }
         env
@@ -114,43 +130,22 @@ impl Program {
         v: &str,
         env: Environment,
     ) -> Result<ExprRefWithEnv, LangError> {
-        use crate::lexer::LexerState;
-        use crate::tokens::*;
-        let file_id = self.checker.results.add_source(filename.into(), v.to_string());
-        let mut lexer = LexerState::from_str_eof(v).unwrap().set_file_id(file_id);
-
-        let tokens = lexer.tokens();
-        use nom::InputIter;
-
-        tokens.iter_elements().for_each(|t| {
-            if let Tok::Invalid(s) = &t.tok {
-                let error = t
-                    .to_context()
-                    .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
-                self.checker.results.push(error);
-            }
-        });
-
-        match crate::parser::parse_program(tokens) {
-            Ok((end, expr)) => {
-                debug!("SEXPR: {}", expr.sexpr().unwrap());
-                //debug!("program has {} expressions", exprs.len());
-                use nom::InputLength;
-                if end.input_len() > 0 {
-                    debug!("program rest {:?}", end);
-                }
-
-                //let check_env = crate::ir::base_env();
-                //let ir = self.checker.parse_ast(&expr, check_env);
-
+        let file_id = self.checker.add_source(filename.into(), v.to_string());
+        match self.parse(v, file_id) {
+            Ok(expr) => {
+                //debug!("SEXPR: {}", expr.sexpr().unwrap());
                 // Analyze it
+                let check_env = crate::ir::base_env();
+                let ir = self.checker.parse_ast(&expr, check_env);
+                //debug!("ir {:?}", &ir);
+
                 let mut a = Analysis::new();
                 let env = a.analyze(expr.clone().into(), env);
                 a.results.iter().for_each(|r| {
-                    self.checker.results.push(r.clone());
+                    self.checker.push_error(r.clone());
                 });
-
-                if self.checker.results.has_errors {
+                if self.checker.has_errors() {
+                    self.checker.print();
                     return Err(expr.context.error(LangErrorKind::AnalysisFailed));
                 }
 
@@ -158,33 +153,17 @@ impl Program {
                     Ok(v) => Ok(v),
                     Err(LangError { context, kind }) => {
                         let error = LangError { context, kind };
-                        self.checker.results.push(error.clone());
+                        self.checker.push_error(error.clone());
                         Err(error)
                     }
                 }
             }
-            Err(nom::Err::Error(e)) => {
-                for (tokens, err) in e.errors {
-                    debug!("error {:?}", (&err, tokens.toks()));
-                }
-                let error = LangError::runtime("Error parsing");
-                self.checker.results.push(error.clone());
-                Err(error)
-            }
             Err(e) => {
-                let error = LangError::runtime(&format!("Error parsing: {:?}", e));
-                self.checker.results.push(error.clone());
-                Err(error)
+                let error = LangError::runtime(&format!("Eval Error: {:?}", e));
+                self.checker.push_error(error.clone());
+                Err(error.into())
             }
         }
-    }
-
-    pub fn print(&self) {
-        self.checker.results.print();
-    }
-
-    pub fn clear(&mut self) {
-        self.checker.results.clear();
     }
 }
 
@@ -210,14 +189,17 @@ mod tests {
     use test_log::test;
     #[test]
     fn parse() {
-        let _ = Program::parse_file("examples/test.p").unwrap();
+        let mut p = Program::new();
+        let _ = p.parse_file("examples/test.p").unwrap();
     }
 
     #[test]
     fn eval_example() {
         let mut program = Program::new();
         let env = Environment::default();
-        program.eval_file("examples/test.p", env).unwrap();
+        let r = program.eval_file("examples/test.p", env);
+        program.checker.print();
+        r.unwrap();
     }
 
     #[test]

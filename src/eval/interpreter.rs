@@ -184,10 +184,8 @@ impl Interpreter {
             })
             .collect::<Vec<_>>();
 
-        let (p, e): (
-            Vec<Result<_, LangError>>,
-            Vec<Result<_, LangError>>,
-        ) = param_idents.into_iter().partition(|p| p.is_ok());
+        let (p, e): (Vec<Result<_, LangError>>, Vec<Result<_, LangError>>) =
+            param_idents.into_iter().partition(|p| p.is_ok());
 
         if e.len() > 0 {
             return Err(params

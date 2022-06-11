@@ -1,13 +1,10 @@
 use crate::ast::*;
-use crate::eval::*;
-use crate::tokens::Tok;
-use crate::program::Program;
 use crate::results::*;
+use crate::tokens::{FileId, Tok};
 use log::*;
-use std::fmt;
+use nom::InputIter;
 use rpds::HashTrieMap;
-use std::collections::HashSet;
-
+use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
@@ -19,11 +16,12 @@ pub enum Type {
     Int,
     Float,
     Bool,
+    String,
     Unknown(String),
     Void,
     Error,
     Func(FunctionSig),
-    Type(String)
+    Type(String),
 }
 
 type FunctionSig = Vec<Type>;
@@ -31,14 +29,19 @@ struct TypeSig(Vec<Type>);
 
 impl TypeSig {
     fn substitute(&self, subst: &SymbolTable) -> Self {
-        Self(self.0.iter().map(|v| {
-            if let Type::Unknown(name) = v {
-                if subst.contains_key(name) {
-                    return subst.get(name).unwrap().clone();
-                }
-            }
-            v.clone()
-        }).collect::<Vec<_>>())
+        Self(
+            self.0
+                .iter()
+                .map(|v| {
+                    if let Type::Unknown(name) = v {
+                        if subst.contains_key(name) {
+                            return subst.get(name).unwrap().clone();
+                        }
+                    }
+                    v.clone()
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 }
 
@@ -48,6 +51,7 @@ impl fmt::Display for Type {
             Self::Unknown(s) => write!(f, "T:{}", s),
             Self::Int => write!(f, "T:Int"),
             Self::Bool => write!(f, "T:Bool"),
+            Self::String => write!(f, "T:String"),
             Self::Float => write!(f, "T:Float"),
             Self::Void => write!(f, "T:Void"),
             Self::Error => write!(f, "T:Error"),
@@ -69,11 +73,11 @@ impl Type {
             false
         }
     }
-        
+
     fn flatten(&self) -> TypeSig {
         match self {
             Type::Func(args) => TypeSig(args.clone()),
-            _ => TypeSig(vec![self.clone()])
+            _ => TypeSig(vec![self.clone()]),
         }
     }
 }
@@ -86,7 +90,8 @@ type SymbolTable = HashTrieMap<String, Type>;
 pub enum Literal {
     Bool(bool),
     Int(u64),
-    Float(f64)
+    Float(f64),
+    String(String),
 }
 
 #[derive(Clone, PartialEq)]
@@ -94,7 +99,7 @@ pub struct IR {
     ty: Type,
     value: IRValue,
     context: MaybeNodeContext,
-    env: Environment
+    env: Environment,
 }
 
 impl fmt::Debug for IR {
@@ -116,7 +121,7 @@ impl fmt::Display for IR {
                 }
                 Ok(())
             }
-            _ => write!(f, "{:?}", &self)
+            _ => write!(f, "{:?}", &self),
         }
     }
 }
@@ -158,7 +163,12 @@ impl IR {
     }
 
     fn new_with_context(v: IRValue, ty: Type, context: MaybeNodeContext, env: Environment) -> Self {
-        Self { value: v, ty, context, env }
+        Self {
+            value: v,
+            ty,
+            context,
+            env,
+        }
     }
 
     /*
@@ -179,33 +189,28 @@ fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment) -> 
     let right_ty = args.get(1).unwrap().clone();
     let ret_ty = args.get(2).unwrap().clone();
 
-    let left = IR::new(
-        IRValue::Ident("left".into()),
-        left_ty.clone(),
-        env.clone());
+    let left = IR::new(IRValue::Ident("left".into()), left_ty.clone(), env.clone());
 
     let right = IR::new(
         IRValue::Ident("right".into()),
         right_ty.clone(),
-        env.clone());
+        env.clone(),
+    );
 
-    let ret = IR::new(
-        IRValue::Ident("ret".into()),
-        ret_ty.clone(),
-        env.clone());
+    let ret = IR::new(IRValue::Ident("ret".into()), ret_ty.clone(), env.clone());
 
     let args = vec![left, right, ret];
 
     let mut node = IR::new(
         IRValue::Extern(args),
         Type::Func(vec![left_ty, right_ty, ret_ty]),
-        env.clone());
+        env.clone(),
+    );
 
     env.define(name, node.clone());
-    node.env = env; 
+    node.env = env;
     node
 }
-
 
 pub fn base_env() -> Environment {
     let mut env = Environment::default();
@@ -213,11 +218,27 @@ pub fn base_env() -> Environment {
     env = node.env;
     let node = make_binary_function("+".into(), vec![Type::Float, Type::Float, Type::Float], env);
     env = node.env;
+    let node = make_binary_function("+".into(), vec![Type::Int, Type::Float, Type::Float], env);
+    env = node.env;
+    let node = make_binary_function("+".into(), vec![Type::Float, Type::Int, Type::Float], env);
+    env = node.env;
+
     let node = make_binary_function("-".into(), vec![Type::Int, Type::Int, Type::Int], env);
     env = node.env;
     let node = make_binary_function("-".into(), vec![Type::Float, Type::Float, Type::Float], env);
     env = node.env;
+    let node = make_binary_function("-".into(), vec![Type::Int, Type::Float, Type::Float], env);
+    env = node.env;
+    let node = make_binary_function("-".into(), vec![Type::Float, Type::Int, Type::Float], env);
+    env = node.env;
+
     let node = make_binary_function("^".into(), vec![Type::Int, Type::Int, Type::Int], env);
+    env = node.env;
+    let node = make_binary_function("^".into(), vec![Type::Float, Type::Int, Type::Float], env);
+    env = node.env;
+    let node = make_binary_function(">".into(), vec![Type::Int, Type::Int, Type::Bool], env);
+    env = node.env;
+    let node = make_binary_function(">".into(), vec![Type::Float, Type::Float, Type::Bool], env);
     env = node.env;
     env
 }
@@ -227,7 +248,19 @@ fn op_name(op: &Operator) -> String {
         Operator::Plus => "+".into(),
         Operator::Minus => "-".into(),
         Operator::Exp => "^".into(),
-        _ => unimplemented!()
+        Operator::Multiply => "*".into(),
+        Operator::Divide => "/".into(),
+        Operator::GreaterThan => ">".into(),
+        Operator::GreaterThanEqual => ">=".into(),
+        Operator::LessThan => "<".into(),
+        Operator::LessThanEqual => "<=".into(),
+        Operator::Equal => "==".into(),
+        _ => {
+            debug!("Not implemented: {:?}", op);
+            //let msg = format!("Op Not Implemented: {}", name);
+            //self.make_error(msg, node.context.clone(), env)
+            unimplemented!()
+        }
     }
 }
 
@@ -335,7 +368,6 @@ impl From<Type> for PreparedType {
 }
 */
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeEquation {
     left: Type,
@@ -347,27 +379,58 @@ pub struct TypeEquation {
 
 impl TypeEquation {
     fn new(left: Type, right: Vec<Type>, node: IR, env: Environment) -> Self {
-        Self { left, right, node, env }
+        Self {
+            left,
+            right,
+            node,
+            env,
+        }
     }
 }
 
 impl fmt::Display for TypeEquation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?} :: {:?}, from: {:?}", self.left, self.right, &self.node.context.to_location())
+        write!(
+            f,
+            "{:?} :: {:?}, from: {:?}",
+            self.left,
+            self.right,
+            &self.node.context.to_location()
+        )
     }
 }
 
 #[derive(Default)]
 pub struct TypeChecker {
-    pub results: CompileResults,
+    results: CompileResults,
     pub type_equations: Vec<TypeEquation>,
-    type_counter: usize
+    type_counter: usize,
 }
 
 impl TypeChecker {
+    pub fn print(&self) {
+        self.results.print();
+    }
+
+    pub fn clear(&mut self) {
+        self.results.clear();
+    }
+
+    pub fn push_error(&mut self, r: LangError) {
+        self.results.push(r);
+    }
+
+    pub fn add_source(&mut self, filename: String, source: String) -> FileId {
+        self.results.add_source(filename, source)
+    }
+
+    pub fn has_errors(&self) -> bool {
+        self.results.has_errors
+    }
+
     fn next_type_counter(&mut self) -> usize {
         let x = self.type_counter;
-        self.type_counter+=1;
+        self.type_counter += 1;
         x
     }
 
@@ -387,7 +450,7 @@ impl TypeChecker {
     // Does ty1 occur in ty2?
     fn occurs_check(ty1: &Type, ty2: &Type, subst: &SymbolTable) -> bool {
         if ty1 == ty2 {
-            return true
+            return true;
         }
 
         assert!(!ty1.is_unknown());
@@ -395,14 +458,12 @@ impl TypeChecker {
         let ty2 = Self::subs_if_exists(ty2, &subst);
 
         if ty1 == ty2 {
-            return true
+            return true;
         }
 
         // if ty1 occurs in any of a functions parameters
         if let Type::Func(sig) = ty2 {
-            return sig.iter().any(|s| {
-                Self::occurs_check(ty1, s, subst)
-            })
+            return sig.iter().any(|s| Self::occurs_check(ty1, s, subst));
         }
         false
     }
@@ -423,11 +484,11 @@ impl TypeChecker {
         //if !ty1.is_unknown() && !ty2.is_unknown()
         if let Type::Unknown(name) = ty1 {
             //if !ty2.is_unknown() {
-                return Some(subst.insert(name.clone(), ty2.clone()));
+            return Some(subst.insert(name.clone(), ty2.clone()));
             //}
         } else if let Type::Unknown(name) = ty2 {
             //if !ty1.is_unknown() {
-                return Some(subst.insert(name.clone(), ty1.clone()));
+            return Some(subst.insert(name.clone(), ty1.clone()));
             //}
         }
 
@@ -449,10 +510,14 @@ impl TypeChecker {
 
         None
         //Some(subst)
- 
     }
 
-    fn unify_fn(&self, sig1: &Vec<Type>, sig2: &Vec<Type>, mut subst: SymbolTable) -> Option<SymbolTable> {
+    fn unify_fn(
+        &self,
+        sig1: &Vec<Type>,
+        sig2: &Vec<Type>,
+        mut subst: SymbolTable,
+    ) -> Option<SymbolTable> {
         debug!("unify_fn: {:?} :: {:?}", sig1, sig2);
 
         if sig1.len() != sig2.len() {
@@ -474,17 +539,22 @@ impl TypeChecker {
         for (k, v) in local_subst.iter() {
             subst = subst.insert(k.clone(), v.clone());
         }
-        
+
         debug!("unify_fn: {:?}", &subst);
         Some(subst)
         //if solutions.len() == 1 {
-            //Some(solutions.get(0).unwrap().clone())
+        //Some(solutions.get(0).unwrap().clone())
         //} else {
-            //subst
+        //subst
         //}
     }
 
-    pub fn unify(&self, left: &Type, right: &Vec<Type>, mut subst: Option<SymbolTable>) -> Option<SymbolTable> {
+    pub fn unify(
+        &self,
+        left: &Type,
+        right: &Vec<Type>,
+        mut subst: Option<SymbolTable>,
+    ) -> Option<SymbolTable> {
         debug!("unify: {:?} :: {:?}", left, right);
         if subst == None {
             return None;
@@ -501,17 +571,17 @@ impl TypeChecker {
         // return the solution if it was found
         local_subst
         //if local_subst == None {
-            //None
+        //None
         //} else {
-            //local_subst
+        //local_subst
         //}
 
-       //assert_eq!(eq.left.len(), 1);
+        //assert_eq!(eq.left.len(), 1);
         //assert!(eq.left.size() >= 1);
         //subst
         //match subst {
-            //None => None,
-            //Some(
+        //None => None,
+        //Some(
         //}
     }
 
@@ -524,7 +594,7 @@ impl TypeChecker {
             match self.unify(&eq.left, &eq.right, subst.clone()) {
                 Some(s) => {
                     //for x in &s {
-                        //debug!("subst: {:?}", x)
+                    //debug!("subst: {:?}", x)
                     //}
                     subst = Some(s);
                 }
@@ -537,12 +607,13 @@ impl TypeChecker {
         }
         for eq in errors {
             let msg = format!("Unable to unify: {:?} :: {:?}", &eq.left, &eq.right);
-            self.results.push(LangError::error(msg.clone(), eq.node.context.clone()));
+            self.results
+                .push(LangError::error(msg.clone(), eq.node.context.clone()));
             //IR::new_with_context(
-                //IRValue::Error(msg),
-                //Type::Error,
-                //eq.node.context.clone(),
-                //eq.env);
+            //IRValue::Error(msg),
+            //Type::Error,
+            //eq.node.context.clone(),
+            //eq.env);
             //self.make_error(format!("Unable to unify: {:?} :: {:?}", &eq.left, &eq.right), eq.node.context.clone(), eq.env.clone());
         }
         subst
@@ -583,120 +654,119 @@ impl TypeChecker {
     */
 
     /*
-    fn generate_equations(&mut self, node: &IR) {
-        match &node.value {
-            // already typed
-            IRValue::Type(_) => (),
-            IRValue::Literal(_) => {
-            }
-            IRValue::Ident(_) => (),
-
-            IRValue::Declare(ident, expr) => {
-                //env.define(ident.clone(), *expr.clone());
-                self.generate_equations(&expr);
-                //self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone(), node.env.clone()));
-            }
-
-            IRValue::Assign(ident, expr) => {
-                let v = node.env.resolve(ident).unwrap();
-                self.generate_equations(&expr);
-                //self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone(), node.env.clone()));
-                //} else {
-                    //self.results.push(LangError::error("Not found".into(), node.context.clone()));
-                //}
-            }
-
-            IRValue::Apply(f, params) => {
-                self.generate_equations(f);
-                for p in params {
-                    self.generate_equations(p);
+        fn generate_equations(&mut self, node: &IR) {
+            match &node.value {
+                // already typed
+                IRValue::Type(_) => (),
+                IRValue::Literal(_) => {
                 }
-            }
+                IRValue::Ident(_) => (),
 
-            IRValue::Extern(args) => {
-                // generate type signature for function
-                let mut arg_types = args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
-
-                // function has a function type
-                //self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone(), node.env.clone()));
-            }
-
-            IRValue::Function(body, args) => {
-                //for arg in args {
-                    //self.generate_equations(&arg);
-                //}
-                self.generate_equations(body);
-
-                // generate type signature for function
-                let mut arg_types = args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
-                // append return type
-                arg_types.push(node.ty.clone());
-
-                // function has a function type
-                //self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone(), node.env.clone()));
-            }
-
-            /*
-            IRValue::Block(exprs) => {
-                for e in exprs {
-                    self.generate_equations(&e);
+                IRValue::Declare(ident, expr) => {
+                    //env.define(ident.clone(), *expr.clone());
+                    self.generate_equations(&expr);
+                    //self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone(), node.env.clone()));
                 }
-                let last = exprs.last().unwrap();
-                self.type_equations.push(TypeEquation::new(node.ty.clone(), last.ty.clone(), node.clone(), node.env.clone()));
-            }
-            */
-            _ => {
-                debug!("Unimplemented: {:?}", &node);
-                unimplemented!()
-            }
-        }
-    }
 
-    fn assign_typenames(&mut self, ir: &mut IR, mut syms: SymbolTable) -> SymbolTable {
-        match &mut ir.value {
-
-            IRValue::Ident(s) => {
-                // check if the identifier is in the symbol table
-                if let Some(ty) = syms.get(s) {
-                    ir.ty = ty.clone();
-                    syms
-                } else {
-                    self.results.push(LangError::error("Not found".into(), ir.context.clone()));
-                    syms
+                IRValue::Assign(ident, expr) => {
+                    let v = node.env.resolve(ident).unwrap();
+                    self.generate_equations(&expr);
+                    //self.type_equations.push(TypeEquation::new(expr.ty.clone(), node.ty.clone(), node.clone(), node.env.clone()));
+                    //} else {
+                        //self.results.push(LangError::error("Not found".into(), node.context.clone()));
+                    //}
                 }
-            }
 
-            IRValue::Function(f, args) => {
-                for arg in args {
-                    match &arg.value {
-                        IRValue::Ident(s) => {
-                            syms = syms.insert(s.clone(), arg.ty.clone());
-                        }
-                        _ => unimplemented!()
+                IRValue::Apply(f, params) => {
+                    self.generate_equations(f);
+                    for p in params {
+                        self.generate_equations(p);
                     }
                 }
-                syms = self.assign_typenames(f, syms);
-                syms
-            }
 
-            IRValue::Apply(f, args) => {
-                syms
-            }
+                IRValue::Extern(args) => {
+                    // generate type signature for function
+                    let mut arg_types = args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
 
-            IRValue::Block(_) => {
-                syms
-            }
-            
-            // already typed, and no children
-            IRValue::Literal(_) => syms,
-            _ => {
-                debug!("Unimplemented: {:?}", &ir);
-                unimplemented!()
+                    // function has a function type
+                    //self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone(), node.env.clone()));
+                }
+
+                IRValue::Function(body, args) => {
+                    //for arg in args {
+                        //self.generate_equations(&arg);
+                    //}
+                    self.generate_equations(body);
+
+                    // generate type signature for function
+                    let mut arg_types = args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
+                    // append return type
+                    arg_types.push(node.ty.clone());
+
+                    // function has a function type
+                    //self.type_equations.push(TypeEquation::new(node.ty.clone(), Type::Func(arg_types), node.clone(), node.env.clone()));
+                }
+
+                /*
+                IRValue::Block(exprs) => {
+                    for e in exprs {
+                        self.generate_equations(&e);
+                    }
+                    let last = exprs.last().unwrap();
+                    self.type_equations.push(TypeEquation::new(node.ty.clone(), last.ty.clone(), node.clone(), node.env.clone()));
+                }
+                */
+                _ => {
+                    debug!("Unimplemented: {:?}", &node);
+                    unimplemented!()
+                }
             }
         }
-    }
-*/
 
+        fn assign_typenames(&mut self, ir: &mut IR, mut syms: SymbolTable) -> SymbolTable {
+            match &mut ir.value {
+
+                IRValue::Ident(s) => {
+                    // check if the identifier is in the symbol table
+                    if let Some(ty) = syms.get(s) {
+                        ir.ty = ty.clone();
+                        syms
+                    } else {
+                        self.results.push(LangError::error("Not found".into(), ir.context.clone()));
+                        syms
+                    }
+                }
+
+                IRValue::Function(f, args) => {
+                    for arg in args {
+                        match &arg.value {
+                            IRValue::Ident(s) => {
+                                syms = syms.insert(s.clone(), arg.ty.clone());
+                            }
+                            _ => unimplemented!()
+                        }
+                    }
+                    syms = self.assign_typenames(f, syms);
+                    syms
+                }
+
+                IRValue::Apply(f, args) => {
+                    syms
+                }
+
+                IRValue::Block(_) => {
+                    syms
+                }
+
+                // already typed, and no children
+                IRValue::Literal(_) => syms,
+                _ => {
+                    debug!("Unimplemented: {:?}", &ir);
+                    unimplemented!()
+                }
+            }
+        }
+    */
 
     fn new_unknown_type(&mut self) -> Type {
         Type::new_unknown(self.get_fresh_typename())
@@ -710,7 +780,7 @@ impl TypeChecker {
                 let mut local_env = env.clone();
                 for n in exprs {
                     let ir = self.parse_ast(n, local_env);
-                    local_env = ir.env.clone(); 
+                    local_env = ir.env.clone();
                     body.push(ir);
                 }
                 IR::new(IRValue::Block(body), self.new_unknown_type(), env)
@@ -731,15 +801,26 @@ impl TypeChecker {
                 IRValue::Literal(Literal::Float(*f)),
                 Type::Float,
                 node.context.clone(),
-                env),
+                env,
+            ),
             Expr::Literal(Tok::IntLiteral(i)) => IR::new_with_context(
                 IRValue::Literal(Literal::Int(*i)),
                 Type::Int,
-                node.context.clone(), env),
+                node.context.clone(),
+                env,
+            ),
             Expr::Literal(Tok::BoolLiteral(b)) => IR::new_with_context(
                 IRValue::Literal(Literal::Bool(*b)),
                 Type::Bool,
-                node.context.clone(), env),
+                node.context.clone(),
+                env,
+            ),
+            Expr::Literal(Tok::StringLiteral(s)) => IR::new_with_context(
+                IRValue::Literal(Literal::String(s.clone())),
+                Type::String,
+                node.context.clone(),
+                env,
+            ),
             Expr::Literal(_) => unimplemented!(),
 
             Expr::Ident(s) => {
@@ -747,10 +828,9 @@ impl TypeChecker {
                 self.make_ident_from_name(s.name.clone(), ty, node.context.clone(), env)
             }
             //IR::new_with_context(
-                //IRValue::Ident(s.name.clone()),
-                //self.new_unknown_type(),
-                //node.context.clone(), env),
-
+            //IRValue::Ident(s.name.clone()),
+            //self.new_unknown_type(),
+            //node.context.clone(), env),
             Expr::Apply(f, args) => {
                 let ir_func = self.parse_ast(f, env.clone());
 
@@ -781,7 +861,9 @@ impl TypeChecker {
                 IR::new_with_context(
                     IRValue::Function(Box::new(body), ir_args),
                     self.new_unknown_type(),
-                    node.context.clone(), env)
+                    node.context.clone(),
+                    env,
+                )
             }
 
             Expr::Block(exprs) | Expr::Program(exprs) => {
@@ -794,6 +876,12 @@ impl TypeChecker {
                 }
 
                 self.make_block(ir_exprs, node.context.clone(), env)
+            }
+
+            Expr::Prefix(op, right) => {
+                let name = op_name(op);
+                let ir_right = self.parse_ast(right, env.clone());
+                self.make_apply_by_name(name, vec![ir_right], node.context.clone(), env)
             }
 
             Expr::Binary(op, left, right) => {
@@ -810,17 +898,36 @@ impl TypeChecker {
                         self.make_declare(name, ir_right, node.context.clone(), env)
                     }
 
-                    Operator::Plus | Operator::Minus | Operator::Exp => {
+                    _ => {
                         let name = op_name(op);
                         let ir_left = self.parse_ast(left, env.clone());
                         let ir_right = self.parse_ast(right, env.clone());
-                        self.make_apply_by_name(name, vec![ir_left, ir_right], node.context.clone(), env)
-                    }
-                    _ => {
-                        debug!("Unimplemented: {:?}", &node);
-                        unimplemented!()
-                    }
+                        self.make_apply_by_name(
+                            name,
+                            vec![ir_left, ir_right],
+                            node.context.clone(),
+                            env,
+                        )
+                    } //_ => {
+                      //let name = op_name(op);
+                      //debug!("Unimplemented: {:?}", &node);
+                      //let msg = format!("Op Not Implemented: {}", name);
+                      //self.make_error(msg, node.context.clone(), env)
+                      //unimplemented!()
+                      //}
                 }
+            }
+
+            Expr::Ternary(Operator::Conditional, a, b, c) => {
+                let ir_a = self.parse_ast(a, env.clone());
+                let ir_b = self.parse_ast(b, env.clone());
+                let ir_c = self.parse_ast(c, env.clone());
+                self.make_apply_by_name(
+                    "cond".into(),
+                    vec![ir_a, ir_b, ir_c],
+                    node.context.clone(),
+                    env,
+                )
             }
 
             _ => {
@@ -835,17 +942,25 @@ impl TypeChecker {
         let block = IR::new_with_context(
             IRValue::Block(nodes),
             block_ty.clone(),
-            context.clone(), env);
-    
+            context.clone(),
+            env,
+        );
+
         //let env = block.env.clone();
         //self.type_equations.push(TypeEquation::new(
-                //HashSet::from([block_ty]),
-                //HashSet::from([last_ty]),
-                //block.clone(), env));
+        //HashSet::from([block_ty]),
+        //HashSet::from([last_ty]),
+        //block.clone(), env));
         block
     }
 
-    fn make_assign(&mut self, name: String, node: IR, context: MaybeNodeContext, env: Environment) -> IR {
+    fn make_assign(
+        &mut self,
+        name: String,
+        node: IR,
+        context: MaybeNodeContext,
+        env: Environment,
+    ) -> IR {
         if let Some(v) = env.resolve(&name) {
             let left_ty = v.ty.clone();
             let right_ty = node.ty.clone();
@@ -853,57 +968,74 @@ impl TypeChecker {
             let result = IR::new_with_context(
                 IRValue::Assign(name, Box::new(node.clone())),
                 result_ty.clone(),
-                node.context.clone(), env.clone());
+                node.context.clone(),
+                env.clone(),
+            );
 
             self.type_equations.push(TypeEquation::new(
-                    left_ty,
-                    Vec::from([right_ty.clone()]),
-                    node.clone(), env.clone()));
+                left_ty,
+                Vec::from([right_ty.clone()]),
+                node.clone(),
+                env.clone(),
+            ));
 
             self.type_equations.push(TypeEquation::new(
-                    result_ty,
-                    Vec::from([right_ty]),
-                    result.clone(), env));
+                result_ty,
+                Vec::from([right_ty]),
+                result.clone(),
+                env,
+            ));
             result
         } else {
             self.make_error(format!("Not found: {}", name), context, env)
         }
     }
 
-    fn make_declare(&mut self, name: String, node: IR, context: MaybeNodeContext, env: Environment) -> IR {
+    fn make_declare(
+        &mut self,
+        name: String,
+        node: IR,
+        context: MaybeNodeContext,
+        env: Environment,
+    ) -> IR {
         let mut local_env = env.clone();
         let right_ty = node.ty.clone();
         local_env.define(name.clone(), node.clone());
         let expr = IR::new_with_context(
             IRValue::Declare(name, Box::new(node)),
             right_ty.clone(),
-            context, local_env);
+            context,
+            local_env,
+        );
         //let env = expr.env.clone();
         //self.type_equations.push(TypeEquation::new(
-                //HashSet::from([expr.ty.clone()]),
-                //HashSet::from([right_ty]),
-                //expr.clone(), env));
+        //HashSet::from([expr.ty.clone()]),
+        //HashSet::from([right_ty]),
+        //expr.clone(), env));
         expr
     }
 
     fn make_error(&mut self, msg: String, context: MaybeNodeContext, env: Environment) -> IR {
-        self.results.push(LangError::error(msg.clone(), context.clone()));
-        IR::new_with_context(
-            IRValue::Error(msg),
-            Type::Error,
-            context.clone(),
-            env)
+        self.results
+            .push(LangError::error(msg.clone(), context.clone()));
+        IR::new_with_context(IRValue::Error(msg), Type::Error, context.clone(), env)
     }
 
-    fn make_func_from_name(&mut self, name: String, ty: Type, context: MaybeNodeContext, env: Environment) -> IR {
+    fn make_func_from_name(
+        &mut self,
+        name: String,
+        ty: Type,
+        context: MaybeNodeContext,
+        env: Environment,
+    ) -> IR {
         // get all of the types that match the name
         let mut fn_types = Vec::new();
         for f in env.resolve_all(&name) {
             match &f.value {
-                IRValue::Function(_,_) | IRValue::Extern(_) => {
+                IRValue::Function(_, _) | IRValue::Extern(_) => {
                     fn_types.push(f.ty.clone());
                 }
-                _ => ()
+                _ => (),
             }
         }
         if fn_types.len() == 0 {
@@ -913,27 +1045,41 @@ impl TypeChecker {
             let result = IR::new_with_context(
                 IRValue::Ident(name),
                 ty.clone(),
-                context.clone(), env.clone());
+                context.clone(),
+                env.clone(),
+            );
             self.type_equations.push(TypeEquation::new(
-                    ty.clone(),
-                    fn_types,
-                    result.clone(), env.clone()));
+                ty.clone(),
+                fn_types,
+                result.clone(),
+                env.clone(),
+            ));
             result
         }
     }
 
-    fn make_ident_from_name(&mut self, name: String, ty: Type, context: MaybeNodeContext, env: Environment) -> IR {
+    fn make_ident_from_name(
+        &mut self,
+        name: String,
+        ty: Type,
+        context: MaybeNodeContext,
+        env: Environment,
+    ) -> IR {
         if let Some(v) = env.resolve(&name) {
             let v_ty = v.ty.clone();
             let result = IR::new_with_context(
                 IRValue::Ident(name),
                 v_ty.clone(),
-                context.clone(), env.clone());
+                context.clone(),
+                env.clone(),
+            );
 
             self.type_equations.push(TypeEquation::new(
-                    ty.clone(),
-                    Vec::from([v_ty.clone()]),
-                    result.clone(), env.clone()));
+                ty.clone(),
+                Vec::from([v_ty.clone()]),
+                result.clone(),
+                env.clone(),
+            ));
             result
         } else {
             self.make_error(format!("Not found: {}", name), context, env)
@@ -952,22 +1098,29 @@ impl TypeChecker {
         }
     }
 
-    fn make_apply_by_name(&mut self, name: String, ir_args: Vec<IR>, context: MaybeNodeContext, env: Environment) -> IR {
+    fn make_apply_by_name(
+        &mut self,
+        name: String,
+        ir_args: Vec<IR>,
+        context: MaybeNodeContext,
+        env: Environment,
+    ) -> IR {
         let ret_ty = self.new_unknown_type();
         let mut f_types = ir_args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
         f_types.push(ret_ty.clone());
         let f_ty = Type::Func(f_types);
         //let f = IR::new_with_context(
-            //IRValue::Ident(name.clone()),
-            //f_ty,
-            //context,
-            //env.clone());
+        //IRValue::Ident(name.clone()),
+        //f_ty,
+        //context,
+        //env.clone());
         let f = self.make_func_from_name(name.clone(), f_ty, context.clone(), env.clone());
         IR::new_with_context(
             IRValue::Apply(Box::new(f), ir_args),
             ret_ty,
             context,
-            env.clone())
+            env.clone(),
+        )
         //self.make_apply(f, ir_args, env)
     }
 
@@ -975,7 +1128,6 @@ impl TypeChecker {
         let ret_ty = self.new_unknown_type();
         let ir_func = match &ir_func.value {
             IRValue::Ident(name) => {
-
                 // make function signature
                 let mut f_types = ir_args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
                 f_types.push(ret_ty.clone());
@@ -984,9 +1136,7 @@ impl TypeChecker {
                 // make a node with that signature
                 self.make_func_from_name(name.clone(), f_ty, ir_func.context.clone(), env.clone())
             }
-            IRValue::Extern(_) | IRValue::Function(_, _) => {
-                ir_func
-            }
+            IRValue::Extern(_) | IRValue::Function(_, _) => ir_func,
             IRValue::Error(_) => ir_func,
             _ => {
                 debug!("Unimplemented: {:?}", &ir_func);
@@ -999,7 +1149,8 @@ impl TypeChecker {
             IRValue::Apply(Box::new(ir_func), ir_args),
             ret_ty,
             context,
-            env.clone())
+            env.clone(),
+        )
     }
 
     pub fn parse_str(&mut self, s: &str, env: Environment) -> anyhow::Result<IR> {
@@ -1014,14 +1165,22 @@ impl TypeChecker {
     }
 
     fn _parse(&mut self, filename: &str, contents: &str, env: Environment) -> anyhow::Result<IR> {
-        let file_id = self.results.add_source(filename.into(), contents.to_string());
-        let mut lexer = crate::lexer::LexerState::from_str_eof(&contents).unwrap().set_file_id(file_id);
-        let (_, node) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
+        let file_id = self
+            .results
+            .add_source(filename.into(), contents.to_string());
+        let mut lexer = crate::lexer::LexerState::from_str_eof(&contents)
+            .unwrap()
+            .set_file_id(file_id);
+        let tokens = lexer.tokens();
+
+        for t in tokens.iter_elements() {
+            println!("T: {:?}", t);
+        }
+        let (_, node) = crate::parser::parse_program(tokens).unwrap();
         let ir = self.parse_ast(&node, env);
         Ok(ir)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1035,18 +1194,18 @@ mod tests {
         let mut c = TypeChecker::default();
         let s = SymbolTable::default();
         /*
-        let mut ir = c.parse_str("1+1").unwrap();
-        let s = c.assign_typenames(&mut ir, s);
-        debug!("{:?}", ir);
-        let mut ir = c.parse_str("1-1").unwrap();
-        let s = c.assign_typenames(&mut ir, s);
-        debug!("{:?}", ir);
-        let p = "
-let f = \\x -> { x^2; };
-y = 2
-let mut x = 1.
-let z = f(2)";
-        */
+                let mut ir = c.parse_str("1+1").unwrap();
+                let s = c.assign_typenames(&mut ir, s);
+                debug!("{:?}", ir);
+                let mut ir = c.parse_str("1-1").unwrap();
+                let s = c.assign_typenames(&mut ir, s);
+                debug!("{:?}", ir);
+                let p = "
+        let f = \\x -> { x^2; };
+        y = 2
+        let mut x = 1.
+        let z = f(2)";
+                */
         let p = "
 let x = 1
 y = 1
@@ -1074,7 +1233,8 @@ x + 2
                 Type::Func(vec![Type::Float, Type::Float]),
                 Type::Func(vec![Type::Int, Type::Int]),
             ],
-            Some(s));
+            Some(s),
+        );
         debug!("{:?}", out.as_ref().unwrap().iter().collect::<Vec<_>>());
         assert_eq!(out.unwrap().get("x".into()), Some(&Type::Int));
     }
@@ -1086,7 +1246,8 @@ x + 2
         let out = c.unify(
             &Type::Func(vec![Type::Float, Type::Unknown("x".into())]),
             &vec![Type::Func(vec![Type::Int, Type::Int])],
-            Some(s));
+            Some(s),
+        );
         assert_eq!(out, None)
     }
 
@@ -1094,10 +1255,7 @@ x + 2
     fn types_match() {
         let c = TypeChecker::default();
         let s = SymbolTable::default();
-        let out = c.unify(
-            &Type::Int,
-            &vec![Type::Float, Type::Int],
-            Some(s.clone()));
+        let out = c.unify(&Type::Int, &vec![Type::Float, Type::Int], Some(s.clone()));
         assert_eq!(out, Some(s));
     }
 
@@ -1105,10 +1263,7 @@ x + 2
     fn types_mismatch() {
         let c = TypeChecker::default();
         let s = SymbolTable::default();
-        let out = c.unify(
-            &Type::Int,
-            &vec![Type::Float],
-            Some(s));
+        let out = c.unify(&Type::Int, &vec![Type::Float], Some(s));
         assert_eq!(out, None);
     }
 
@@ -1116,24 +1271,25 @@ x + 2
     fn types_unknown() {
         let c = TypeChecker::default();
         let s = SymbolTable::default();
-        let out = c.unify(
-            &Type::Unknown("x".into()),
-            &vec![Type::Float],
-            Some(s));
+        let out = c.unify(&Type::Unknown("x".into()), &vec![Type::Float], Some(s));
         assert_eq!(out.unwrap().get("x".into()), Some(&Type::Float));
 
         let s = SymbolTable::default();
         let out = c.unify(
             &Type::Unknown("x".into()),
             &vec![Type::Float, Type::Int],
-            Some(s));
+            Some(s),
+        );
         assert_eq!(out.unwrap().get("x".into()), Some(&Type::Float));
 
         let s = SymbolTable::default();
-        let out = c.unify(
-            &Type::Unknown("x".into()),
-            &vec![Type::Unknown("y".into())],
-            Some(s)).unwrap();
+        let out = c
+            .unify(
+                &Type::Unknown("x".into()),
+                &vec![Type::Unknown("y".into())],
+                Some(s),
+            )
+            .unwrap();
         //assert_eq!(out.get("y".into()), Some(&Type::Float));
         assert_eq!(out.get("x".into()), Some(&Type::Unknown("y".into())));
 
@@ -1145,9 +1301,8 @@ x + 2
                 Type::Func(vec![Type::Float, Type::Float, Type::Float]),
                 Type::Func(vec![Type::Int, Type::Int, Type::Int]),
             ],
-            Some(s));
+            Some(s),
+        );
         assert_eq!(out, None);
     }
-
 }
-

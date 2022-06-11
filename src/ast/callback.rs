@@ -1,7 +1,7 @@
 use crate::eval::*;
+use crate::results::LangError;
 use std::fmt;
 use std::rc::Rc;
-use crate::results::LangError;
 
 #[derive(Clone, Debug)]
 pub struct CallWithType {

@@ -1,12 +1,11 @@
+use crate::ast::MaybeNodeContext;
 use crate::tokens::FileId;
-use crate::ast::{MaybeNodeContext};
 use thiserror::Error;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-
 
 #[derive(Error, Debug, Clone)]
 pub enum LangErrorKind {
@@ -25,14 +24,32 @@ pub enum LangErrorKind {
     #[error("Invalid number of arguments")]
     InvalidNumberArgs,
 
-
     // Interpret Errors
     #[error("Runtime error: {0}")]
     Runtime(String),
+    #[error("Lexer Failed")]
+    LexerFailed,
+    #[error("Parser Failed")]
+    ParserFailed,
     #[error("Analysis Failed")]
     AnalysisFailed,
     #[error("Assertion")]
     Assertion,
+}
+
+impl LangErrorKind {
+    pub fn error(&self) -> LangError {
+        LangError {
+            context: MaybeNodeContext::default(),
+            kind: self.clone(),
+        }
+    }
+    pub fn into_error(self) -> LangError {
+        LangError {
+            context: MaybeNodeContext::default(),
+            kind: self,
+        }
+    }
 }
 
 #[derive(Debug, Error, Clone)]
@@ -71,7 +88,9 @@ impl LangError {
     pub fn diagnostic(&self) -> Diagnostic<FileId> {
         let file_id = self.context.get_file_id();
         match &self.kind {
-            LangErrorKind::Warning(msg) | LangErrorKind::Error(msg) | LangErrorKind::Runtime(msg) => Diagnostic::warning()
+            LangErrorKind::Warning(msg)
+            | LangErrorKind::Error(msg)
+            | LangErrorKind::Runtime(msg) => Diagnostic::warning()
                 .with_message(msg)
                 .with_labels(vec![Label::primary(file_id, self.context.range())]),
             _ => Diagnostic::warning()
@@ -100,7 +119,7 @@ pub struct CompileResults {
     results: Vec<LangError>,
     pub diagnostics: Vec<Diagnostic<FileId>>,
     files: SimpleFiles<String, String>,
-    pub has_errors: bool
+    pub has_errors: bool,
 }
 
 impl Default for CompileResults {
@@ -144,4 +163,3 @@ impl CompileResults {
         }
     }
 }
-

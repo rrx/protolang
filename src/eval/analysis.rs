@@ -98,18 +98,15 @@ impl Analysis {
                             let expr = x.expr.as_ref().borrow();
                             if let Some(cb) = expr.try_callback() {
                                 if !cb.t.arity.is_valid_arity(args.len()) {
-                                    self.results.push(
-                                        expr.context.error(LangErrorKind::InvalidNumberArgs),
-                                    );
+                                    self.results
+                                        .push(expr.context.error(LangErrorKind::InvalidNumberArgs));
                                 }
                             } else if let Some(_) = expr.try_callable() {
                             } else if let Some(_) = expr.try_lambda() {
                             } else {
-                                self.results
-                                    .push(expr.context.error(LangErrorKind::Error(format!(
-                                        "Not a function1: {:?}",
-                                        expr
-                                    ))));
+                                self.results.push(expr.context.error(LangErrorKind::Error(
+                                    format!("Not a function1: {:?}", expr),
+                                )));
                             }
                         } else {
                             self.results
@@ -205,7 +202,7 @@ impl Analysis {
                 return if let Some(ident) = left.try_ident() {
                     // add the RHS to env
                     //log::debug!("Declare {:?} to {}", &right, &ident.name);
-                    log::debug!("Declare {:?} to {}", &right.unlex(), &ident.name);
+                    //log::debug!("Declare {:?} to {}", &right.unlex(), &ident.name);
                     env.define(ident, right.clone().into())
                 } else {
                     self.results
@@ -221,11 +218,9 @@ impl Analysis {
                     match env.resolve_value(&ident.name) {
                         Some(access) => {
                             if access.modifier != VarModifier::Mutable {
-                                self.results
-                                    .push(left.context.error(LangErrorKind::Error(format!(
-                                        "Invalid Assignment, '{}' Not mutable",
-                                        &ident.name
-                                    ))));
+                                self.results.push(left.context.error(LangErrorKind::Error(
+                                    format!("Invalid Assignment, '{}' Not mutable", &ident.name),
+                                )));
                             }
 
                             self.analyze(right.clone().into(), env)

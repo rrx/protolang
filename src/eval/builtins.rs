@@ -50,10 +50,7 @@ pub fn builtins(mut builtins: CallTable) -> CallTable {
                             println!("SEXPR: {}", sexpr);
                         }
                         Err(e) => {
-                            return Err(LangError::runtime(&format!(
-                                "unable to parse: {:?}",
-                                e
-                            )));
+                            return Err(LangError::runtime(&format!("unable to parse: {:?}", e)));
                         }
                     }
                 }
