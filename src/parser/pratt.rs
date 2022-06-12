@@ -3,7 +3,7 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::parser::{tag_token, take_one_any, PResult};
+use crate::parser::{parse_ident_expr, tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use nom::error::ErrorKind;
 use nom::{multi, sequence};
@@ -136,346 +136,343 @@ impl Op {
             _ => None,
         }
     }
+}
 
-    fn _chain_left_denotation<'a>(
-        &self,
-        i: Tokens<'a>,
-        x: &ExprNode,
-        token: &Token,
-        depth: usize,
-    ) -> RNode<'a> {
-        //debug!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
+fn _chain_left_denotation<'a>(
+    op: &Op,
+    i: Tokens<'a>,
+    x: &ExprNode,
+    token: &Token,
+    depth: usize,
+) -> RNode<'a> {
+    //debug!("chain_LeD1: {:?}", (&x, &token, &i.toks()));
 
-        // parse the RHS, making sure the expression we are getting stops when we reach
-        // a LBP that is equal to the current BP, this is why we pass in RBP+1
-        let (i, y) = pratt(i, Some(self.rbp.unwrap() + 1), depth + 1)?;
+    // parse the RHS, making sure the expression we are getting stops when we reach
+    // a LBP that is equal to the current BP, this is why we pass in RBP+1
+    let (i, y) = pratt(i, Some(op.rbp.unwrap() + 1), depth + 1)?;
 
-        //debug!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
+    //debug!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
 
-        let maybe_op = Operator::from_tok(&token.tok);
-        let op_loc = token.to_location();
-        let op = OperatorNode::new_with_location(maybe_op.unwrap(), op_loc.clone());
-        let (left_op, c) = match &x.value {
-            Expr::Chain(op, chain) => {
-                let mut c = chain.clone();
-                c.push(y.clone());
-                (op, c)
-            }
-            _ => (&op, vec![x.clone(), y.clone()]),
-        };
-
-        let n = i.peek().unwrap();
-        //debug!("chain_LeD2: {:?}", (&left_op, &c, &n));
-
-        if n.tok == Tok::EOF {
-            //debug!("chain: got eof");
-            //let loc = token.to_location();
-            //let op = OperatorNode::new_with_location(left_op.clone(), loc);
-            let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            let node = ExprNode::new(t, &op_loc);
-            return Ok((i, node));
+    let maybe_op = Operator::from_tok(&token.tok);
+    let op_loc = token.to_location();
+    let token_op = OperatorNode::new_with_location(maybe_op.unwrap(), op_loc.clone());
+    let (left_op, c) = match &x.value {
+        Expr::Chain(chain_op, chain) => {
+            let mut c = chain.clone();
+            c.push(y.clone());
+            (chain_op, c)
         }
+        _ => (&token_op, vec![x.clone(), y.clone()]),
+    };
 
-        let next_op = n.tok.op().unwrap();
-        //debug!("chain next: {:?}", (self, &n));
-        if self.lbp == next_op.lbp {
-            // consume
-            let (i, _) = take_one_any(i.clone())?;
-            let (i, t) = self._chain_left_denotation(i, &y, &n, depth)?;
-            //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
-            //let loc = token.to_location();
-            //let op = OperatorNode::new_with_location(left_op.clone(), loc);
-            let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+    let n = i.peek().unwrap();
+    //debug!("chain_LeD2: {:?}", (&left_op, &c, &n));
 
-            //let op = Operator::End;
-            let t = Expr::Chain(op.clone(), vec![i.node(t0), t]);
-            let node = ExprNode::new(t, &op_loc);
-            Ok((i, node))
-        } else {
-            let t = Expr::Chain(left_op.clone(), c);
-            //debug!("chain drop: {:?}", (self.lbp, next_op, &t));
-            let node = ExprNode::new(t, &op_loc);
-            Ok((i, node))
-        }
+    if n.tok == Tok::EOF {
+        //debug!("chain: got eof");
+        //let loc = token.to_location();
+        //let op = OperatorNode::new_with_location(left_op.clone(), loc);
+        let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+        let node = ExprNode::new(t, &op_loc);
+        return Ok((i, node));
     }
 
-    fn left_denotation<'a>(
-        &self,
-        i: Tokens<'a>,
-        left: &ExprNode,
-        //token: &Token,
-        depth: usize,
-    ) -> RNode<'a> {
-        // Given the LHS, and an op (token), return a Node
+    let next_op = n.tok.op().unwrap();
+    //debug!("chain next: {:?}", (self, &n));
+    if op.lbp == next_op.lbp {
+        // consume
+        let (i, _) = take_one_any(i.clone())?;
+        let (i, t) = _chain_left_denotation(op, i, &y, &n, depth)?;
+        //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
+        //let loc = token.to_location();
+        //let op = OperatorNode::new_with_location(left_op.clone(), loc);
+        let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
+
+        //let op = Operator::End;
+        let mut chain_node = ExprNode::new(t0, &i.to_location());
+        let t = Expr::Chain(token_op.clone(), vec![chain_node, t]);
+        let node = ExprNode::new(t, &op_loc);
+        Ok((i, node))
+    } else {
+        let t = Expr::Chain(left_op.clone(), c);
+        //debug!("chain drop: {:?}", (self.lbp, next_op, &t));
+        let node = ExprNode::new(t, &op_loc);
+        Ok((i, node))
+    }
+}
+
+fn left_denotation<'a>(
+    op: &Op,
+    i: Tokens<'a>,
+    left: &ExprNode,
+    //token: &Token,
+    depth: usize,
+) -> RNode<'a> {
+    // Given the LHS, and an op (token), return a Node
+    //
+    //debug!("left_denotation x: {:?}", (&x));
+    //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
+    let token = &i.tok[0]; //peek().unwrap();
+    let (i, mut t) = match token.tok {
+        /*
+        Tok::SemiColon => {
+            let (i, t) = take_one_any(i)?;
+            //debug!("handle semicolon: {:?}", i.expand_toks());
+            let mut left = left.clone();
+            left.context.append(token.expand_toks());
+            // escape, we are done
+            return Ok((i, left));
+        }
+        */
+        // chaining
+        Tok::Question => {
+            // Ternary operator (x ? y : z)
+            let (i, _) = take_one_any(i)?;
+
+            // match any precedence
+            let (i, mut y) = crate::parser::parse_expr(i)?; //, Some(0), depth + 1)?;
+
+            let (i, sep) = tag_token(Tok::Colon)(i)?;
+
+            // match any precedence
+            let (i, z) = crate::parser::parse_expr(i)?; //, Some(0), depth + 1)?;
+
+            y.context.prepend(token.expand_toks());
+            y.context.append(sep.expand_toks());
+            let loc = token.to_location();
+            let op = OperatorNode::new_with_location(Operator::Conditional, loc);
+            let value = Expr::Ternary(op, Box::new(left.clone()), Box::new(y), Box::new(z.clone()));
+            let mut node = ExprNode::new(value, &i.to_location());
+            (i, node)
+        }
+        /*
+        Tok::Elvis =>{
+            // match any precedence
+            let (i, y) = pratt(i, Some(0), depth + 1)?;
+            let op = Binary::from_location(&i, Operator::Elvis);
+            let value = Expr::Binary(op, Box::new(x.clone()), Box::new(y));
+            let node = i.node(value);
+            (i, node)
+        }
+        */
+        /*Tok::Assign |*/ //Tok::Comma => {//| Tok::LT | Tok::LTE | Tok::GT | Tok::GTE => {
+            //let (i, y) = op.chain_left_denotation(i, x, &token.tok, depth)?;
+            //(i, y)
+        //}
         //
-        //debug!("left_denotation x: {:?}", (&x));
-        //debug!("left_denotation: {:?}", (&x, &token, &i.toks()));
-        let token = &i.tok[0]; //peek().unwrap();
-        let (i, mut t) = match token.tok {
-            /*
-            Tok::SemiColon => {
-                let (i, t) = take_one_any(i)?;
-                //debug!("handle semicolon: {:?}", i.expand_toks());
-                let mut left = left.clone();
-                left.context.append(token.expand_toks());
-                // escape, we are done
-                return Ok((i, left));
-            }
-            */
-            // chaining
-            Tok::Question => {
-                // Ternary operator (x ? y : z)
+        // Call
+        Tok::LParen => {
+            //(i, node) = crate::parser::parse_apply(i)?;
+
+            let (i, _) = take_one_any(i)?;
+            let (i, (nodes, end)) = sequence::pair(
+                multi::many0(crate::parser::parse_expr),
+                tag_token(Tok::RParen),
+            )(i)?;
+            //debug!("nodes: {:?}", (&nodes, &end));
+            //let op = Operator::Call;
+            let mut f = left.clone();
+            f.context.append(token.expand_toks());
+            let mut node = ExprNode::new(Expr::Apply(Box::new(f), nodes), &i.to_location());
+            node.context.append(end.expand_toks());
+            (i, node)
+
+            // application is slightly different than binary.  The RHS is optional
+        }
+
+        Tok::LBracket => {
+            let (i, index_expr) = crate::parser::parse_index_expr(i)?;
+            let node = ExprNode::new(
+                Expr::Index(Box::new(left.clone()), Box::new(index_expr)),
+                &i.to_location(),
+            );
+            (i, node)
+        }
+        /*
+        Tok::IndentOpen => {
+            println!("handle open: {:?}", i.toks());
+            let (i, _) = take_one_any(i)?;
+            (i, x.clone())
+        }
+        */
+        _ => {
+            if token.tok.is_binary() {
                 let (i, _) = take_one_any(i)?;
+                // binary parses the RHS, and returns a binary node
+                let (i, mut right) = pratt(i, op.rbp, depth + 1)?;
+                let op_loc = token.to_location();
+                let token_op = Operator::from_tok(&token.tok).unwrap();
 
-                // match any precedence
-                let (i, mut y) = crate::parser::parse_expr(i)?; //, Some(0), depth + 1)?;
+                //debug!("Binary LHS: {:?}", &x);
+                //debug!("Binary Op: {:?}", &op);
+                //debug!("Binary RHS: {:?}", &y);
+                //debug!("Binary: lbp:{:?}, nbp:{:?}", &lbp, &nbp);
 
-                let (i, sep) = tag_token(Tok::Colon)(i)?;
+                let is_chain = token.tok.is_chain();
 
-                // match any precedence
-                let (i, z) = crate::parser::parse_expr(i)?; //, Some(0), depth + 1)?;
+                match left.value.clone() {
+                    Expr::Binary(left_op, a, b) if left_op.value == token_op && is_chain => {
+                        //debug!("chain binary");
+                        right.context.prepend(token.expand_toks());
+                        //let loc = a.context.to_location();
+                        //let end = b.context.to_location();
+                        let args = vec![*a, *b, right];
+                        //let loc = left_op.context.to_location();
+                        let expr = Expr::Chain(left_op, args);
+                        //let loc = Location::new(loc.start, end.end, loc.line, loc.col, "".into());
+                        let node = ExprNode::new(expr, &op_loc);
+                        //let node = i.node(expr);
+                        (i, node)
+                    }
+                    Expr::Chain(left_op, mut args) if left_op.value == token_op && is_chain => {
+                        //debug!("chain chain");
+                        //let mut right = y;
+                        right.context.prepend(token.expand_toks());
+                        args.push(right);
+                        let expr = Expr::Chain(left_op, args);
+                        let node = ExprNode::new(expr, &i.to_location());
+                        (i, node)
+                    }
+                    _ => {
+                        //debug!("XXX binary");
+                        let left = left.clone();
+                        //let mut right = y;
 
-                y.context.prepend(token.expand_toks());
-                y.context.append(sep.expand_toks());
-                let loc = token.to_location();
-                let op = OperatorNode::new_with_location(Operator::Conditional, loc);
-                let value =
-                    Expr::Ternary(op, Box::new(left.clone()), Box::new(y), Box::new(z.clone()));
-                let node = i.node(value);
-                (i, node)
-            }
-            /*
-            Tok::Elvis =>{
-                // match any precedence
-                let (i, y) = pratt(i, Some(0), depth + 1)?;
-                let op = Binary::from_location(&i, Operator::Elvis);
-                let value = Expr::Binary(op, Box::new(x.clone()), Box::new(y));
-                let node = i.node(value);
-                (i, node)
-            }
-            */
-            /*Tok::Assign |*/ //Tok::Comma => {//| Tok::LT | Tok::LTE | Tok::GT | Tok::GTE => {
-                //let (i, y) = self.chain_left_denotation(i, x, &token.tok, depth)?;
-                //(i, y)
-            //}
-            //
-            // Call
-            Tok::LParen => {
-                //(i, node) = crate::parser::parse_apply(i)?;
+                        // append to the right, so the operator is present in And
+                        right.context.prepend(token.expand_toks());
 
-                let (i, _) = take_one_any(i)?;
-                let (i, (nodes, end)) = sequence::pair(
-                    multi::many0(crate::parser::parse_expr),
-                    tag_token(Tok::RParen),
-                )(i)?;
-                //debug!("nodes: {:?}", (&nodes, &end));
-                //let op = Operator::Call;
-                let mut f = left.clone();
-                f.context.append(token.expand_toks());
-                let mut node = ExprNode::new(Expr::Apply(Box::new(f), nodes), &i.to_location());
-                node.context.append(end.expand_toks());
-                (i, node)
+                        //let loc = left.context.to_location();
+                        let op_node = OperatorNode::new_with_location(token_op, op_loc);
+                        let expr = Expr::Binary(op_node, Box::new(left), Box::new(right.clone()));
+                        let node = ExprNode::new(expr, &i.to_location());
 
-                // application is slightly different than binary.  The RHS is optional
-            }
+                        // check if there's a chaining binary operator here
+                        //debug!("peek: {:?}", (&node.unlex(), i.expand_toks()));
+                        let nr = i.peek();
+                        match nr {
+                            Some(n) if n.tok == Tok::EOF => (i, node),
+                            None => (i, node),
+                            Some(n) => {
+                                let maybe_next_op = n.tok.op();
+                                if let Some(next_op) = maybe_next_op {
+                                    //debug!("chain next: {:?}", (op, &n));
+                                    if is_chain && op.lbp == next_op.lbp {
+                                        // consume
+                                        let (i, t) = left_denotation(op, i.clone(), &right, depth)?;
+                                        //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
 
-            Tok::LBracket => {
-                let (i, index_expr) = crate::parser::parse_index_expr(i)?;
-                let node = ExprNode::new(
-                    Expr::Index(Box::new(left.clone()), Box::new(index_expr)),
-                    &i.to_location(),
-                );
-                (i, node)
-            }
-            /*
-            Tok::IndentOpen => {
-                println!("handle open: {:?}", i.toks());
-                let (i, _) = take_one_any(i)?;
-                (i, x.clone())
-            }
-            */
-            _ => {
-                if token.tok.is_binary() {
-                    let (i, _) = take_one_any(i)?;
-                    // binary parses the RHS, and returns a binary node
-                    let (i, mut right) = pratt(i, self.rbp, depth + 1)?;
-                    let op_loc = token.to_location();
-                    let op = Operator::from_tok(&token.tok).unwrap();
-
-                    //debug!("Binary LHS: {:?}", &x);
-                    //debug!("Binary Op: {:?}", &op);
-                    //debug!("Binary RHS: {:?}", &y);
-                    //debug!("Binary: lbp:{:?}, nbp:{:?}", &lbp, &nbp);
-
-                    let is_chain = token.tok.is_chain();
-
-                    match left.value.clone() {
-                        Expr::Binary(left_op, a, b) if left_op.value == op && is_chain => {
-                            //debug!("chain binary");
-                            right.context.prepend(token.expand_toks());
-                            //let loc = a.context.to_location();
-                            //let end = b.context.to_location();
-                            let args = vec![*a, *b, right];
-                            //let loc = left_op.context.to_location();
-                            let expr = Expr::Chain(left_op, args);
-                            //let loc = Location::new(loc.start, end.end, loc.line, loc.col, "".into());
-                            let node = ExprNode::new(expr, &op_loc);
-                            //let node = i.node(expr);
-                            (i, node)
-                        }
-                        Expr::Chain(left_op, mut args) if left_op.value == op && is_chain => {
-                            //debug!("chain chain");
-                            //let mut right = y;
-                            right.context.prepend(token.expand_toks());
-                            args.push(right);
-                            let expr = Expr::Chain(left_op, args);
-                            let node = i.node(expr);
-                            (i, node)
-                        }
-                        _ => {
-                            //debug!("XXX binary");
-                            let left = left.clone();
-                            //let mut right = y;
-
-                            // append to the right, so the operator is present in And
-                            right.context.prepend(token.expand_toks());
-
-                            //let loc = left.context.to_location();
-                            let op_node = OperatorNode::new_with_location(op, op_loc);
-                            let expr =
-                                Expr::Binary(op_node, Box::new(left), Box::new(right.clone()));
-                            let node = i.node(expr);
-
-                            // check if there's a chaining binary operator here
-                            //debug!("peek: {:?}", (&node.unlex(), i.expand_toks()));
-                            let nr = i.peek();
-                            match nr {
-                                Some(n) if n.tok == Tok::EOF => (i, node),
-                                None => (i, node),
-                                Some(n) => {
-                                    let maybe_next_op = n.tok.op();
-                                    if let Some(next_op) = maybe_next_op {
-                                        //debug!("chain next: {:?}", (self, &n));
-                                        if is_chain && self.lbp == next_op.lbp {
-                                            // consume
-                                            let (i, t) =
-                                                self.left_denotation(i.clone(), &right, depth)?;
-                                            //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
-
-                                            // merge node and t which can both be binary chains
-                                            let mut exprs = vec![];
-                                            if let Expr::BinaryChain(mut nexprs) =
-                                                node.value.clone()
-                                            {
-                                                exprs.append(&mut nexprs);
-                                            } else {
-                                                exprs.push(node);
-                                            }
-
-                                            if let Expr::BinaryChain(mut texprs) = t.value.clone() {
-                                                exprs.append(&mut texprs);
-                                            } else {
-                                                exprs.push(t);
-                                            }
-                                            let node = i.node(Expr::BinaryChain(exprs));
-                                            (i, node)
+                                        // merge node and t which can both be binary chains
+                                        let mut exprs = vec![];
+                                        if let Expr::BinaryChain(mut nexprs) = node.value.clone() {
+                                            exprs.append(&mut nexprs);
                                         } else {
-                                            //debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
-                                            (i, node)
+                                            exprs.push(node);
                                         }
+
+                                        if let Expr::BinaryChain(mut texprs) = t.value.clone() {
+                                            exprs.append(&mut texprs);
+                                        } else {
+                                            exprs.push(t);
+                                        }
+                                        let expr = Expr::BinaryChain(exprs);
+                                        let node = ExprNode::new(expr, &i.to_location());
+                                        (i, node)
                                     } else {
+                                        //debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
                                         (i, node)
                                     }
+                                } else {
+                                    (i, node)
                                 }
                             }
+                        }
 
-                            //let n = i.peek().unwrap();
-                            //let maybe_next_op = n.tok.op();
-                            //if n.tok == Tok::EOF {
-                            //debug!("chain: got eof");
-                            //(i, node)
-                            //
-                            /*
-                            } else if let Some(next_op) = maybe_next_op {
-                                //debug!("chain next: {:?}", (self, &n));
-                                if is_chain && self.lbp == next_op.lbp {
-                                    // consume
-                                    let (i, _) = take_one_any(i.clone())?;
-                                    let (i, t) = self.left_denotation(i, &right, &n, depth)?;
-                                    //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
+                        //let n = i.peek().unwrap();
+                        //let maybe_next_op = n.tok.op();
+                        //if n.tok == Tok::EOF {
+                        //debug!("chain: got eof");
+                        //(i, node)
+                        //
+                        /*
+                        } else if let Some(next_op) = maybe_next_op {
+                            //debug!("chain next: {:?}", (self, &n));
+                            if is_chain && self.lbp == next_op.lbp {
+                                // consume
+                                let (i, _) = take_one_any(i.clone())?;
+                                let (i, t) = self.left_denotation(i, &right, &n, depth)?;
+                                //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
 
-                                    // merge node and t which can both be binary chains
-                                    let mut exprs = vec![];
-                                    if let Expr::BinaryChain(mut nexprs) = node.value.clone() {
-                                        exprs.append(&mut nexprs);
-                                    } else {
-                                        exprs.push(node);
-                                    }
-
-                                    if let Expr::BinaryChain(mut texprs) = t.value.clone() {
-                                        exprs.append(&mut texprs);
-                                    } else {
-                                        exprs.push(t);
-                                    }
-                                    let node = i.node(Expr::BinaryChain(exprs));
-                                    (i, node)
+                                // merge node and t which can both be binary chains
+                                let mut exprs = vec![];
+                                if let Expr::BinaryChain(mut nexprs) = node.value.clone() {
+                                    exprs.append(&mut nexprs);
                                 } else {
-                                    //debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
-                                    (i, node)
+                                    exprs.push(node);
                                 }
+
+                                if let Expr::BinaryChain(mut texprs) = t.value.clone() {
+                                    exprs.append(&mut texprs);
+                                } else {
+                                    exprs.push(t);
+                                }
+                                let node = i.node(Expr::BinaryChain(exprs));
+                                (i, node)
                             } else {
-                                //debug!("chain drop2: {:?}", (self.lbp, &n, &node));
+                                //debug!("chain drop1: {:?}", (self.lbp, &next_op, &node));
                                 (i, node)
                             }
-                            */
-                        }
-                    }
-                } else {
-                    //let (i, t) = take_one_any(i)?;
-                    // postfix just returns, there's no RHS
-                    //debug!("Postfix: {:?}", (&x, &token));
-                    match OperatorNode::from_postfix_token(token.clone()) {
-                        Some(op) => {
-                            let (i, _) = take_one_any(i)?;
-                            let t = Expr::Postfix(op, Box::new(left.clone()));
-                            let mut node = i.node(t);
-                            node.context.append(token.expand_toks());
-
+                        } else {
+                            //debug!("chain drop2: {:?}", (self.lbp, &n, &node));
                             (i, node)
                         }
-                        None => (i, left.clone()),
+                        */
                     }
                 }
-            }
-        };
+            } else {
+                //let (i, t) = take_one_any(i)?;
+                // postfix just returns, there's no RHS
+                //debug!("Postfix: {:?}", (&x, &token));
+                match OperatorNode::from_postfix_token(token.clone()) {
+                    Some(op) => {
+                        let (i, _) = take_one_any(i)?;
+                        let t = Expr::Postfix(op, Box::new(left.clone()));
+                        let mut node = ExprNode::new(t, &i.to_location());
+                        node.context.append(token.expand_toks());
 
-        //
-        // parse closing delimiter
-        // we handle this as an exception, but it should be data driven
-        // some ops expect closure, some do not
-        let i = match &token.tok {
-            /*
-            Tok::LParen => {
-                let (i, right) = tag_token(Tok::RParen)(i)?;
-                t.context.s.append(right.expand_toks());
-                i
+                        (i, node)
+                    }
+                    None => (i, left.clone()),
+                }
             }
-            Tok::LBracket => {
-                let (i, right) = tag_token(Tok::RBracket)(i)?;
-                t.context.append(right.expand_toks());
-                i
-            }
-            */
-            Tok::IndentOpen => {
-                let (i, right) = take_one_any(i)?;
-                t.context.append(right.expand_toks());
-                i
-            }
-            _ => i,
-        };
+        }
+    };
 
-        Ok((i, t))
-    }
+    //
+    // parse closing delimiter
+    // we handle this as an exception, but it should be data driven
+    // some ops expect closure, some do not
+    let i = match &token.tok {
+        /*
+        Tok::LParen => {
+            let (i, right) = tag_token(Tok::RParen)(i)?;
+            t.context.s.append(right.expand_toks());
+            i
+        }
+        Tok::LBracket => {
+            let (i, right) = tag_token(Tok::RBracket)(i)?;
+            t.context.append(right.expand_toks());
+            i
+        }
+        */
+        Tok::IndentOpen => {
+            let (i, right) = take_one_any(i)?;
+            t.context.append(right.expand_toks());
+            i
+        }
+        _ => i,
+    };
+
+    Ok((i, t))
 }
 
 impl Tok {
@@ -501,9 +498,9 @@ impl Tok {
 }
 
 impl<'a> Tokens<'a> {
-    pub fn node(&self, value: Expr) -> ExprNode {
-        ExprNode::new(value, &self.to_location())
-    }
+    //pub fn node(&self, value: Expr) -> ExprNode {
+    //ExprNode::new(value, &self.to_location())
+    //}
 
     #[allow(dead_code)]
     pub fn node_success(self, value: Expr) -> RNode<'a> {
@@ -513,10 +510,6 @@ impl<'a> Tokens<'a> {
 
     fn primary(self, depth: usize) -> RNode<'a> {
         primary(self, depth)
-    }
-
-    fn pratt(self, prec: Prec, depth: usize) -> RNode<'a> {
-        pratt(self, prec, depth)
     }
 }
 
@@ -539,11 +532,11 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             let (i, op_tokens) = take_one_any(i)?;
 
             // parse RHS of prefix operation
-            let (i, t) = i.pratt(rbp, depth + 1)?;
+            let (i, t) = pratt(i, rbp, depth + 1)?;
 
             let op = OperatorNode::from_prefix_token(token).unwrap();
             let value = Expr::Prefix(op, Box::new(t));
-            let mut node = i.node(value);
+            let mut node = ExprNode::new(value, &i.to_location());
             node.context.prepend(op_tokens.expand_toks());
             //debug!("P1 {:?}", (&node));
             Ok((i, node))
@@ -551,7 +544,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         Some(Tok::Ident(_)) => {
             // consume variable
-            ExprNode::parse_ident_expr(i)
+            parse_ident_expr(i)
         }
 
         /*
@@ -738,7 +731,7 @@ fn pratt_nonrecursive<'a>(
         let lbp = op.lbp.unwrap_or(-1);
         if prec.unwrap() <= lbp && lbp <= r {
             // left_denotation, parse the RHS, and return the appropriate node
-            let (new_i, new_left) = op.left_denotation(i, &left, depth)?;
+            let (new_i, new_left) = left_denotation(&op, i, &left, depth)?;
             i = new_i;
             left = new_left;
 
@@ -846,7 +839,7 @@ fn pratt_recursive<'a>(
 */
 
 pub fn parse_expr_pratt<'a>(i: Tokens) -> RNode {
-    i.pratt(Some(0), 0)
+    pratt(i, Some(0), 0)
 }
 
 #[cfg(test)]

@@ -2,21 +2,35 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_while, take_while1},
     character::complete::{alpha1, alphanumeric1, crlf, digit0, digit1, u64},
-    combinator::{map, map_parser, recognize},
-    error::VerboseError,
+    combinator::{map, map_parser, recognize, verify},
+    error::{ErrorKind, VerboseError},
+    error_position,
     multi::many0,
     number::complete::double,
     sequence::{pair, tuple},
     IResult,
 };
 
+use super::state::{lex_next, LexNext};
 use super::string::lex_string;
 use crate::tokens::*;
 use nom_locate::position;
 
-pub(crate) type PResult<I, O> = IResult<I, O, VerboseError<I>>;
+pub(crate) type LResult<I, O> = IResult<I, O, VerboseError<I>>;
 
-pub fn lex_space(i: Span) -> PResult<Span, Token> {
+pub(crate) fn s_tag_token<'a>(t: Tok) -> impl FnMut(Span<'a>) -> LResult<Span<'a>, Token<'a>> {
+    verify(lex_token_any, move |t0: &Token<'a>| t == t0.tok)
+}
+
+pub(crate) fn lex_token_any<'a>(i: Span<'a>) -> LResult<Span<'a>, Token<'a>> {
+    let (i, next) = lex_next(i)?;
+    match next.into_token() {
+        Some(t) => Ok((i, t)),
+        None => Err(nom::Err::Error(error_position!(i, ErrorKind::Eof))),
+    }
+}
+
+pub fn lex_space(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, t) = map(recognize(take_while1(|c| c == ' ')), |s: Span| {
         Tok::Spaces(s.len())
@@ -24,7 +38,7 @@ pub fn lex_space(i: Span) -> PResult<Span, Token> {
     Ok((i, Token::new(t, pos, i)))
 }
 
-pub fn lex_tab(i: Span) -> PResult<Span, Token> {
+pub fn lex_tab(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, t) = map(recognize(take_while1(|c| c == '\t')), |s: Span| {
         Tok::Tabs(s.len())
@@ -32,7 +46,7 @@ pub fn lex_tab(i: Span) -> PResult<Span, Token> {
     Ok((i, Token::new(t, pos, i)))
 }
 
-pub fn lex_newline(i: Span) -> PResult<Span, Token> {
+pub fn lex_newline(i: Span) -> LResult<Span, Token> {
     use Tok::*;
     let (i, pos) = position(i)?;
     let (i, t) = alt((
@@ -43,7 +57,7 @@ pub fn lex_newline(i: Span) -> PResult<Span, Token> {
     Ok((i, Token::new(t, pos, i)))
 }
 
-pub fn lex_identifier_or_reserved(i: Span) -> PResult<Span, Token> {
+pub fn lex_identifier_or_reserved(i: Span) -> LResult<Span, Token> {
     use Tok::*;
     let (i, pos) = position(i)?;
     let (i, s) = recognize(pair(
@@ -64,17 +78,17 @@ pub fn lex_identifier_or_reserved(i: Span) -> PResult<Span, Token> {
     Ok((i, Token::new(t, pos, i)))
 }
 
-fn tag_token<'a>(s: &'a str, t: Tok) -> impl FnMut(Span<'a>) -> PResult<Span<'a>, Tok> {
+fn tag_token<'a>(s: &'a str, t: Tok) -> impl FnMut(Span<'a>) -> LResult<Span<'a>, Tok> {
     map(tag(s), move |_| t.clone())
 }
 
-pub fn lex_invalid(i: Span) -> PResult<Span, Token> {
+pub fn lex_invalid(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, v) = take(1usize)(i)?;
     Ok((i, Token::new(Tok::Invalid(v.to_string()), pos, i)))
 }
 
-pub fn lex_double(i: Span) -> PResult<Span, Token> {
+pub fn lex_double(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i_end, v) = map_parser(
         alt((
@@ -87,7 +101,7 @@ pub fn lex_double(i: Span) -> PResult<Span, Token> {
     Ok((i_end, Token::new(Tok::FloatLiteral(v), pos, i)))
 }
 
-pub fn lex_integer(i: Span) -> PResult<Span, Token> {
+pub fn lex_integer(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, v) = map_parser(
         alt((recognize(tuple((digit1, tag("u32")))), recognize(digit1))),
@@ -96,11 +110,11 @@ pub fn lex_integer(i: Span) -> PResult<Span, Token> {
     Ok((i, Token::new(Tok::IntLiteral(v), pos, i)))
 }
 
-fn lex_number(i: Span) -> PResult<Span, Token> {
+fn lex_number(i: Span) -> LResult<Span, Token> {
     alt((lex_double, lex_integer))(i)
 }
 
-fn lex_until_eol(i: Span) -> PResult<Span, Span> {
+fn lex_until_eol(i: Span) -> LResult<Span, Span> {
     // also return if we get EOF
     if i.len() == 0 {
         return Ok((i, i));
@@ -108,7 +122,7 @@ fn lex_until_eol(i: Span) -> PResult<Span, Span> {
     take_while(|c: char| c != '\n')(i)
 }
 
-pub fn lex_comments(i: Span) -> PResult<Span, Token> {
+pub fn lex_comments(i: Span) -> LResult<Span, Token> {
     use Tok::*;
     let (i, pos) = position(i)?;
     let (i, t) = recognize(pair(
@@ -118,7 +132,7 @@ pub fn lex_comments(i: Span) -> PResult<Span, Token> {
     Ok((i, Token::new(Tok::Comment(t.to_string()), pos, i)))
 }
 
-fn lex_punc(i: Span) -> PResult<Span, Token> {
+fn lex_punc(i: Span) -> LResult<Span, Token> {
     use Tok::*;
     let (i, pos) = position(i)?;
     let (i, t) = alt((
@@ -136,7 +150,7 @@ fn lex_punc(i: Span) -> PResult<Span, Token> {
     Ok((i, Token::new(t, pos, i)))
 }
 
-fn lex_op<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
+fn lex_op<'a>(i: Span<'a>) -> LResult<Span<'a>, Token<'a>> {
     use Tok::*;
     let (i, pos) = position(i)?;
     let (i, t) = alt((
@@ -163,7 +177,7 @@ fn lex_op<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
     Ok((i, Token::new(t, pos, i)))
 }
 
-fn lex_op_bool(i: Span) -> PResult<Span, Tok> {
+fn lex_op_bool(i: Span) -> LResult<Span, Tok> {
     alt((
         tag_token("==", Tok::Equals),
         tag_token("!=", Tok::NotEquals),
@@ -178,7 +192,7 @@ fn lex_op_bool(i: Span) -> PResult<Span, Tok> {
     ))(i)
 }
 
-pub fn lex_token<'a>(i: Span<'a>) -> PResult<Span<'a>, Token<'a>> {
+pub fn lex_token<'a>(i: Span<'a>) -> LResult<Span<'a>, Token<'a>> {
     alt((
         lex_comments,
         lex_op,
@@ -444,5 +458,16 @@ f +
             a.push(EOF);
             assert_eq!(toks, *a);
         });
+    }
+
+    #[test]
+    fn lex_token() {
+        let i = Span::new("1 2");
+        let (i, t) = lex_token_any(i).unwrap();
+        assert_eq!(t.tok, Tok::IntLiteral(1));
+        let (i, t) = lex_token_any(i).unwrap();
+        assert_eq!(t.tok, Tok::Spaces(1));
+        let (i, t) = lex_token_any(i).unwrap();
+        assert_eq!(t.tok, Tok::IntLiteral(2));
     }
 }

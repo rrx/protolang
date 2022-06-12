@@ -1,5 +1,5 @@
 use crate::results::{LangError, LangErrorKind};
-use crate::tokens::{FileId, Tok};
+use crate::tokens::{FileId, Span, Tok, Tokens, TokensList};
 use std::fmt;
 
 #[derive(PartialEq, Clone)]
@@ -56,6 +56,23 @@ impl Location {
 
     pub fn range(&self) -> std::ops::Range<usize> {
         self.start..self.end
+    }
+
+    pub fn from_tokens_position(start: Tokens, end: Tokens) -> Self {
+        let mut loc = start.to_location();
+        loc.end = end.to_location().end;
+        loc
+    }
+
+    pub fn from_position(start: &Span, end: &Span) -> Self {
+        Self {
+            start: start.location_offset(),
+            end: end.location_offset(),
+            line: 0,
+            col: 0,
+            fragment: "".into(),
+            file_id: 0,
+        }
     }
 
     //pub fn span(&self) -> SourceSpan {

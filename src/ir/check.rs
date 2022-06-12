@@ -1,10 +1,10 @@
+use super::*;
 use crate::lexer::Location;
 use crate::results::*;
 use crate::tokens::{FileId, Tok};
 use log::*;
 use nom::InputIter;
 use std::fmt;
-use super::*;
 
 pub type SymbolTable = HashTrieMap<usize, Type>;
 
@@ -315,33 +315,31 @@ impl TypeChecker {
                 self.make_apply_by_name(name, vec![ir_right], node.context.to_location(), env)
             }
 
-            Expr::Binary(op, left, right) => {
-                match &op.value {
-                    Operator::Assign => {
-                        let name = left.try_ident().unwrap().name;
-                        let ir_right = self.parse_ast(right, env.clone());
-                        self.make_assign(name, ir_right, node.context.to_location(), env.clone())
-                    }
-
-                    Operator::Declare => {
-                        let name = left.try_ident().unwrap().name;
-                        let ir_right = self.parse_ast(right, env.clone());
-                        self.make_declare(name, ir_right, node.context.to_location(), env)
-                    }
-
-                    _ => {
-                        let name = op_name(op);
-                        let ir_left = self.parse_ast(left, env.clone());
-                        let ir_right = self.parse_ast(right, env.clone());
-                        self.make_apply_by_name(
-                            name,
-                            vec![ir_left, ir_right],
-                            op.context.to_location(),
-                            env,
-                        )
-                    } 
+            Expr::Binary(op, left, right) => match &op.value {
+                Operator::Assign => {
+                    let name = left.try_ident().unwrap().name;
+                    let ir_right = self.parse_ast(right, env.clone());
+                    self.make_assign(name, ir_right, node.context.to_location(), env.clone())
                 }
-            }
+
+                Operator::Declare => {
+                    let name = left.try_ident().unwrap().name;
+                    let ir_right = self.parse_ast(right, env.clone());
+                    self.make_declare(name, ir_right, node.context.to_location(), env)
+                }
+
+                _ => {
+                    let name = op_name(op);
+                    let ir_left = self.parse_ast(left, env.clone());
+                    let ir_right = self.parse_ast(right, env.clone());
+                    self.make_apply_by_name(
+                        name,
+                        vec![ir_left, ir_right],
+                        op.context.to_location(),
+                        env,
+                    )
+                }
+            },
 
             Expr::Ternary(op, a, b, c) => match op.value {
                 Operator::Conditional => {
@@ -594,4 +592,3 @@ impl TypeChecker {
         Ok(ir)
     }
 }
-

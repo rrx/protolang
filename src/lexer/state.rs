@@ -20,6 +20,21 @@ pub enum IndentState {
 }
 
 impl<'a> LexNext<'a> {
+    pub fn into_token(self) -> Option<Token<'a>> {
+        match self {
+            LexNext::Token(t) => Some(t),
+            LexNext::Newline(t) => Some(t),
+            LexNext::Space(t) => Some(t),
+            LexNext::Tab(t) => Some(t),
+            LexNext::Comment(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    pub fn get_token(&self) -> Option<Token<'a>> {
+        self.clone().into_token()
+    }
+
     fn linespace_count(&self) -> usize {
         match self {
             Self::Space(t) | Self::Tab(t) => match t.tok {
@@ -32,7 +47,7 @@ impl<'a> LexNext<'a> {
     }
 }
 
-fn lex_next(i: Span) -> PResult<Span, LexNext> {
+pub fn lex_next(i: Span) -> LResult<Span, LexNext> {
     context(
         "next",
         alt((
@@ -303,7 +318,7 @@ impl<'a> LexerState<'a> {
         }
     }
 
-    pub fn lex(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
+    pub fn lex(&mut self, i: &'a str) -> LResult<Span<'a>, ()> {
         let (i, tokens) = many0(lex_next)(span(i))?;
         tokens.into_iter().for_each(|token| {
             self.push(token);
@@ -316,7 +331,7 @@ impl<'a> LexerState<'a> {
         self.push(LexNext::EOF);
     }
 
-    pub fn lex_eof(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
+    pub fn lex_eof(&mut self, i: &'a str) -> LResult<Span<'a>, ()> {
         let (i, _) = self.lex(i)?;
         //let (i, pos) = position(i)?;
         // flush before pushing EOF

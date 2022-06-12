@@ -101,5 +101,3 @@ pub(crate) fn print_result<
         }
     }
 }
-
-

@@ -13,7 +13,6 @@ pub use types::*;
 
 pub type Environment = crate::compiler::env::EnvLayers<String, IR>;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Bool(bool),
@@ -188,13 +187,12 @@ fn op_name(op: &Operator) -> String {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
+    use super::check::SymbolTable;
     use super::*;
     use log::debug;
     use test_log::test;
-    use super::check::SymbolTable;
 
     #[test]
     fn analyze() {
@@ -276,20 +274,12 @@ x + 2
         assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();
-        let out = c.unify(
-            &Type::Unknown(0),
-            &vec![Type::Float, Type::Int],
-            Some(s),
-        );
+        let out = c.unify(&Type::Unknown(0), &vec![Type::Float, Type::Int], Some(s));
         assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();
         let out = c
-            .unify(
-                &Type::Unknown(0),
-                &vec![Type::Unknown(1)],
-                Some(s),
-            )
+            .unify(&Type::Unknown(0), &vec![Type::Unknown(1)], Some(s))
             .unwrap();
         //assert_eq!(out.get("y".into()), Some(&Type::Float));
         assert_eq!(out.get(&0), Some(&Type::Unknown(1)));
