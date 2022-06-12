@@ -174,7 +174,8 @@ impl Op {
             //let loc = token.to_location();
             //let op = OperatorNode::new_with_location(left_op.clone(), loc);
             let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            return i.node_success(t);
+            let node = ExprNode::new(t, &op_loc);
+            return Ok((i, node));
         }
 
         let next_op = n.tok.op().unwrap();
@@ -192,11 +193,11 @@ impl Op {
             let t = Expr::Chain(op.clone(), vec![i.node(t0), t]);
             let node = ExprNode::new(t, &op_loc);
             Ok((i, node))
-            //i.node_success(t)
         } else {
             let t = Expr::Chain(left_op.clone(), c);
             //debug!("chain drop: {:?}", (self.lbp, next_op, &t));
-            i.node_success(t)
+            let node = ExprNode::new(t, &op_loc);
+            Ok((i, node))
         }
     }
 

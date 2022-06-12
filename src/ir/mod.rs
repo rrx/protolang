@@ -566,7 +566,7 @@ impl TypeChecker {
         &self,
         left: &Type,
         right: &Vec<Type>,
-        mut subst: Option<SymbolTable>,
+        subst: Option<SymbolTable>,
     ) -> Option<SymbolTable> {
         debug!("unify: {:?} :: {:?}", left, right);
         if subst == None {
@@ -1063,7 +1063,7 @@ impl TypeChecker {
             }
         }
         if fn_types.len() == 0 {
-            let msg = format!("Function Not found: {}: {:?}", name, context);
+            let msg = format!("Function Not found: {}", name);
             self.make_error(msg, context, env)
         } else {
             let result = IR::new_with_context(
@@ -1198,10 +1198,10 @@ impl TypeChecker {
         let tokens = lexer.tokens();
 
         for t in tokens.iter_elements() {
-            println!("T: {:?}", t);
+            debug!("T: {:?}", t);
         }
         let (_, node) = crate::parser::parse_program(tokens).unwrap();
-        println!("Node: {:?}", node);
+        debug!("Node: {:?}", node);
         let ir = self.parse_ast(&node, env);
         Ok(ir)
     }
@@ -1219,16 +1219,16 @@ impl TypeChecker {
 
     fn _check(&mut self, filename: &str, contents: &str, env: Environment) -> anyhow::Result<IR> {
         let ir = self._parse(filename, contents, env.clone()).unwrap();
-        println!("{}", ir);
+        debug!("{}", ir);
 
         for e in &self.type_equations {
-            println!("E: {}", e);
+            debug!("E: {}", e);
         }
         let s = self.unify_all().unwrap();
         for x in &s {
-            println!("subst: {:?}", x);
+            debug!("subst: {:?}", x);
         }
-        println!("has_errors: {}", self.has_errors());
+        debug!("has_errors: {}", self.has_errors());
         self.print();
         Ok(ir)
     }
@@ -1237,7 +1237,7 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::program::Program;
+    use log::debug;
     use test_log::test;
 
     #[test]
@@ -1246,13 +1246,6 @@ mod tests {
         let mut c = TypeChecker::default();
         let s = SymbolTable::default();
         /*
-                let mut ir = c.parse_str("1+1").unwrap();
-                let s = c.assign_typenames(&mut ir, s);
-                debug!("{:?}", ir);
-                let mut ir = c.parse_str("1-1").unwrap();
-                let s = c.assign_typenames(&mut ir, s);
-                debug!("{:?}", ir);
-                let p = "
         let f = \\x -> { x^2; };
         y = 2
         let mut x = 1.
@@ -1260,19 +1253,19 @@ mod tests {
                 */
         let p = "
 let x = 1
+1+1
+1-1
 y = 1
 x + 2
         ";
-        let mut ir = c.parse_str(p, env).unwrap();
-        //let s = c.assign_typenames(&mut ir, s);
-        //c.generate_equations(&ir);
-        println!("{}", p);
-        println!("{}", ir);
-        println!("{:?}", s);
-        for e in c.type_equations {
-            println!("E: {}", e);
+        let ir = c.parse_str(p, env).unwrap();
+        debug!("{}", p);
+        debug!("{}", ir);
+        debug!("{:?}", s);
+        for e in &c.type_equations {
+            debug!("E: {}", e);
         }
-        c.results.print();
+        c.print();
     }
 
     #[test]

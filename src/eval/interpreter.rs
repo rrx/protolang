@@ -68,7 +68,6 @@ impl ExprNode {
     }
 
     pub fn minus(&self, other: &Self) -> Result<Self, LangError> {
-        debug!("{:?}", (self, other));
         let (left, right) = Self::check_numbers(self, other)?;
         Ok(self.new_expr(Expr::new_float(left - right)))
     }
@@ -458,7 +457,7 @@ impl Interpreter {
                 // analyzed
                 let ident = left.try_ident().unwrap();
                 let eval_right = Self::evaluate(right.clone().into(), env)?;
-                debug!("Declare {:?} to {}", &right.unlex(), &ident.name);
+                //debug!("Declare {:?} to {}", &right.unlex(), &ident.name);
                 let env = eval_right.env.define(ident, eval_right.expr.clone());
                 return Ok(ExprRefWithEnv::new(eval_right.expr, env));
             }

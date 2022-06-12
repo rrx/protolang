@@ -43,7 +43,7 @@ impl Program {
         let tokens = lexer.tokens();
 
         tokens.iter_elements().for_each(|t| {
-            log::debug!("token: {:?}", &t);
+            //log::debug!("token: {:?}", &t);
             if let Tok::Invalid(s) = &t.tok {
                 let error = t
                     .to_context()
@@ -90,7 +90,7 @@ impl Program {
         let file_id = self.checker.add_source(filename.into(), v.to_string());
         match self.parse(v, file_id) {
             Ok(expr) => {
-                debug!("SEXPR: {}", expr.sexpr().unwrap());
+                //debug!("SEXPR: {}", expr.sexpr().unwrap());
                 // Analyze it
                 let mut a = Analysis::new();
                 env = a.analyze(expr.clone().into(), env);
