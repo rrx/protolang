@@ -1,5 +1,7 @@
 use crate::tokens::{FileId, Tok};
 use std::fmt;
+use crate::results::{LangError, LangErrorKind};
+
 #[derive(PartialEq, Clone)]
 pub struct Location {
     pub start: usize,
@@ -52,7 +54,31 @@ impl Location {
         self
     }
 
+    pub fn range(&self) -> std::ops::Range<usize> {
+        self.start..self.end
+    }
+
     //pub fn span(&self) -> SourceSpan {
     //SourceSpan::new(self.offset, self.fragment.len())
     //}
+    //
+    
+    pub fn runtime_error(&self, m: &str) -> LangError {
+        LangError {
+            kind: LangErrorKind::Runtime(m.to_string()),
+            loc: self.clone(),
+        }
+    }
+
+    pub fn into_error(self, kind: LangErrorKind) -> LangError {
+        LangError {
+            kind,
+            loc: self
+        }
+    }
+
+    pub fn error(&self, kind: LangErrorKind) -> LangError {
+        self.clone().into_error(kind)
+    }
 }
+

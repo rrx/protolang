@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::eval::*;
 use crate::ir::{self, TypeChecker, IR};
 use crate::results::*;
-use crate::sexpr::SExpr;
+//use crate::sexpr::SExpr;
 use crate::tokens::{FileId, Tok, TokensList};
 use nom::InputIter;
 
@@ -152,8 +152,8 @@ impl Program {
 
                 match Interpreter::evaluate(expr.into(), env) {
                     Ok(v) => Ok(v),
-                    Err(LangError { context, kind }) => {
-                        let error = LangError { context, kind };
+                    Err(LangError { loc, kind }) => {
+                        let error = LangError { loc, kind };
                         self.checker.push_error(error.clone());
                         Err(error)
                     }

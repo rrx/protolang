@@ -1,6 +1,7 @@
 use crate::ast::MaybeNodeContext;
 use crate::tokens::FileId;
 use thiserror::Error;
+use crate::lexer::Location;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
@@ -40,13 +41,13 @@ pub enum LangErrorKind {
 impl LangErrorKind {
     pub fn error(&self) -> LangError {
         LangError {
-            context: MaybeNodeContext::default(),
+            loc: Location::default(),
             kind: self.clone(),
         }
     }
     pub fn into_error(self) -> LangError {
         LangError {
-            context: MaybeNodeContext::default(),
+            loc: Location::default(),
             kind: self,
         }
     }
@@ -54,7 +55,7 @@ impl LangErrorKind {
 
 #[derive(Debug, Error, Clone)]
 pub struct LangError {
-    pub context: MaybeNodeContext,
+    pub loc: Location,
     pub kind: LangErrorKind,
 }
 
@@ -65,15 +66,15 @@ impl std::fmt::Display for LangError {
 }
 
 impl LangError {
-    pub fn warning(message: String, context: MaybeNodeContext) -> Self {
+    pub fn warning(message: String, loc: Location) -> Self {
         Self {
-            context,
+            loc,
             kind: LangErrorKind::Warning(message),
         }
     }
-    pub fn error(message: String, context: MaybeNodeContext) -> Self {
+    pub fn error(message: String, loc: Location) -> Self {
         Self {
-            context,
+            loc,
             kind: LangErrorKind::Error(message),
         }
     }
@@ -81,21 +82,21 @@ impl LangError {
     pub fn runtime(m: &str) -> Self {
         Self {
             kind: LangErrorKind::Runtime(m.to_string()),
-            context: MaybeNodeContext::default(),
+            loc: Location::default(),
         }
     }
 
     pub fn diagnostic(&self) -> Diagnostic<FileId> {
-        let file_id = self.context.get_file_id();
+        let file_id = self.loc.file_id;
         match &self.kind {
             LangErrorKind::Warning(msg)
             | LangErrorKind::Error(msg)
             | LangErrorKind::Runtime(msg) => Diagnostic::warning()
                 .with_message(msg)
-                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+                .with_labels(vec![Label::primary(file_id, self.loc.range())]),
             _ => Diagnostic::warning()
                 .with_message(&format!("{}", &self))
-                .with_labels(vec![Label::primary(file_id, self.context.range())]),
+                .with_labels(vec![Label::primary(file_id, self.loc.range())]),
         }
     }
 }
@@ -104,13 +105,13 @@ impl MaybeNodeContext {
     pub fn runtime_error(&self, m: &str) -> LangError {
         LangError {
             kind: LangErrorKind::Runtime(m.to_string()),
-            context: self.clone(),
+            loc: self.to_location(),
         }
     }
     pub fn error(&self, kind: LangErrorKind) -> LangError {
         LangError {
             kind,
-            context: self.clone(),
+            loc: self.to_location(),
         }
     }
 }

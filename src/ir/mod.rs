@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::results::*;
 use crate::tokens::{FileId, Tok};
+use crate::lexer::Location;
 use log::*;
 use nom::InputIter;
 use rpds::HashTrieMap;
@@ -98,7 +99,8 @@ pub enum Literal {
 pub struct IR {
     ty: Type,
     value: IRValue,
-    context: MaybeNodeContext,
+    loc: Location,
+    //context: MaybeNodeContext,
     env: Environment,
 }
 
@@ -159,14 +161,14 @@ impl crate::compiler::env::LayerValue for IR {}
 
 impl IR {
     fn new(v: IRValue, ty: Type, env: Environment) -> Self {
-        Self::new_with_context(v, ty, MaybeNodeContext::default(), env)
+        Self::new_with_location(v, ty, Location::default(), env)
     }
 
-    fn new_with_context(v: IRValue, ty: Type, context: MaybeNodeContext, env: Environment) -> Self {
+    fn new_with_location(v: IRValue, ty: Type, loc: Location, env: Environment) -> Self {
         Self {
             value: v,
             ty,
-            context,
+            loc,
             env,
         }
     }
@@ -404,7 +406,7 @@ impl fmt::Display for TypeEquation {
             "{:?} :: {:?}, from: {:?}",
             self.left,
             self.right,
-            &self.node.context.to_location()
+            &self.node.loc
         )
     }
 }
@@ -621,8 +623,8 @@ impl TypeChecker {
         for eq in errors {
             let msg = format!("Unable to unify: {:?} :: {:?}", &eq.left, &eq.right);
             self.results
-                .push(LangError::error(msg.clone(), eq.node.context.clone()));
-            //IR::new_with_context(
+                .push(LangError::error(msg.clone(), eq.node.loc.clone()));
+            //IR::new_with_location(
             //IRValue::Error(msg),
             //Type::Error,
             //eq.node.context.clone(),
@@ -810,37 +812,37 @@ impl TypeChecker {
                 */
             }
             */
-            Expr::Literal(Tok::FloatLiteral(f)) => IR::new_with_context(
+            Expr::Literal(Tok::FloatLiteral(f)) => IR::new_with_location(
                 IRValue::Literal(Literal::Float(*f)),
                 Type::Float,
-                node.context.clone(),
+                node.context.to_location(),
                 env,
             ),
-            Expr::Literal(Tok::IntLiteral(i)) => IR::new_with_context(
+            Expr::Literal(Tok::IntLiteral(i)) => IR::new_with_location(
                 IRValue::Literal(Literal::Int(*i)),
                 Type::Int,
-                node.context.clone(),
+                node.context.to_location(),
                 env,
             ),
-            Expr::Literal(Tok::BoolLiteral(b)) => IR::new_with_context(
+            Expr::Literal(Tok::BoolLiteral(b)) => IR::new_with_location(
                 IRValue::Literal(Literal::Bool(*b)),
                 Type::Bool,
-                node.context.clone(),
+                node.context.to_location(),
                 env,
             ),
-            Expr::Literal(Tok::StringLiteral(s)) => IR::new_with_context(
+            Expr::Literal(Tok::StringLiteral(s)) => IR::new_with_location(
                 IRValue::Literal(Literal::String(s.clone())),
                 Type::String,
-                node.context.clone(),
+                node.context.to_location(),
                 env,
             ),
             Expr::Literal(_) => unimplemented!(),
 
             Expr::Ident(s) => {
                 let ty = self.new_unknown_type();
-                self.make_ident_from_name(s.name.clone(), ty, node.context.clone(), env)
+                self.make_ident_from_name(s.name.clone(), ty, node.context.to_location(), env)
             }
-            //IR::new_with_context(
+            //IR::new_with_location(
             //IRValue::Ident(s.name.clone()),
             //self.new_unknown_type(),
             //node.context.clone(), env),
@@ -871,10 +873,10 @@ impl TypeChecker {
                 let body = self.parse_ast(&f.expr, local_env);
 
                 // use original context for the node
-                IR::new_with_context(
+                IR::new_with_location(
                     IRValue::Function(Box::new(body), ir_args),
                     self.new_unknown_type(),
-                    node.context.clone(),
+                    node.context.to_location(),
                     env,
                 )
             }
@@ -888,13 +890,13 @@ impl TypeChecker {
                     ir_exprs.push(node);
                 }
 
-                self.make_block(ir_exprs, node.context.clone(), env)
+                self.make_block(ir_exprs, node.context.to_location(), env)
             }
 
             Expr::Prefix(op, right) => {
                 let name = op_name(op);
                 let ir_right = self.parse_ast(right, env.clone());
-                self.make_apply_by_name(name, vec![ir_right], node.context.clone(), env)
+                self.make_apply_by_name(name, vec![ir_right], node.context.to_location(), env)
             }
 
             Expr::Binary(op, left, right) => {
@@ -902,13 +904,13 @@ impl TypeChecker {
                     Operator::Assign => {
                         let name = left.try_ident().unwrap().name;
                         let ir_right = self.parse_ast(right, env.clone());
-                        self.make_assign(name, ir_right, node.context.clone(), env.clone())
+                        self.make_assign(name, ir_right, node.context.to_location(), env.clone())
                     }
 
                     Operator::Declare => {
                         let name = left.try_ident().unwrap().name;
                         let ir_right = self.parse_ast(right, env.clone());
-                        self.make_declare(name, ir_right, node.context.clone(), env)
+                        self.make_declare(name, ir_right, node.context.to_location(), env)
                     }
 
                     _ => {
@@ -926,7 +928,7 @@ impl TypeChecker {
                         self.make_apply_by_name(
                             name,
                             vec![ir_left, ir_right],
-                            op.context.clone(),
+                            op.context.to_location(),
                             env,
                         )
                     } //_ => {
@@ -947,7 +949,7 @@ impl TypeChecker {
                     self.make_apply_by_name(
                         "cond".into(),
                         vec![ir_a, ir_b, ir_c],
-                        node.context.clone(),
+                        node.context.to_location(),
                         env,
                     )
                 }
@@ -961,12 +963,12 @@ impl TypeChecker {
         }
     }
 
-    fn make_block(&mut self, nodes: Vec<IR>, context: MaybeNodeContext, env: Environment) -> IR {
+    fn make_block(&mut self, nodes: Vec<IR>, loc: Location, env: Environment) -> IR {
         let block_ty = nodes.last().unwrap().ty.clone();
-        let block = IR::new_with_context(
+        let block = IR::new_with_location(
             IRValue::Block(nodes),
             block_ty.clone(),
-            context.clone(),
+            loc,
             env,
         );
 
@@ -982,17 +984,17 @@ impl TypeChecker {
         &mut self,
         name: String,
         node: IR,
-        context: MaybeNodeContext,
+        loc: Location,
         env: Environment,
     ) -> IR {
         if let Some(v) = env.resolve(&name) {
             let left_ty = v.ty.clone();
             let right_ty = node.ty.clone();
             let result_ty = self.new_unknown_type();
-            let result = IR::new_with_context(
+            let result = IR::new_with_location(
                 IRValue::Assign(name, Box::new(node.clone())),
                 result_ty.clone(),
-                node.context.clone(),
+                node.loc.clone(),
                 env.clone(),
             );
 
@@ -1011,7 +1013,7 @@ impl TypeChecker {
             ));
             result
         } else {
-            self.make_error(format!("Not found: {}", name), context, env)
+            self.make_error(format!("Not found: {}", name), loc, env)
         }
     }
 
@@ -1019,16 +1021,16 @@ impl TypeChecker {
         &mut self,
         name: String,
         node: IR,
-        context: MaybeNodeContext,
+        loc: Location,
         env: Environment,
     ) -> IR {
         let mut local_env = env.clone();
         let right_ty = node.ty.clone();
         local_env.define(name.clone(), node.clone());
-        let expr = IR::new_with_context(
+        let expr = IR::new_with_location(
             IRValue::Declare(name, Box::new(node)),
             right_ty.clone(),
-            context,
+            loc,
             local_env,
         );
         //let env = expr.env.clone();
@@ -1039,17 +1041,17 @@ impl TypeChecker {
         expr
     }
 
-    fn make_error(&mut self, msg: String, context: MaybeNodeContext, env: Environment) -> IR {
+    fn make_error(&mut self, msg: String, loc: Location, env: Environment) -> IR {
         self.results
-            .push(LangError::error(msg.clone(), context.clone()));
-        IR::new_with_context(IRValue::Error(msg), Type::Error, context.clone(), env)
+            .push(LangError::error(msg.clone(), loc.clone()));
+        IR::new_with_location(IRValue::Error(msg), Type::Error, loc, env)
     }
 
     fn make_func_from_name(
         &mut self,
         name: String,
         ty: Type,
-        context: MaybeNodeContext,
+        loc: Location,
         env: Environment,
     ) -> IR {
         // get all of the types that match the name
@@ -1064,12 +1066,12 @@ impl TypeChecker {
         }
         if fn_types.len() == 0 {
             let msg = format!("Function Not found: {}", name);
-            self.make_error(msg, context, env)
+            self.make_error(msg, loc, env)
         } else {
-            let result = IR::new_with_context(
+            let result = IR::new_with_location(
                 IRValue::Ident(name),
                 ty.clone(),
-                context.clone(),
+                loc,
                 env.clone(),
             );
             self.type_equations.push(TypeEquation::new(
@@ -1086,15 +1088,15 @@ impl TypeChecker {
         &mut self,
         name: String,
         ty: Type,
-        context: MaybeNodeContext,
+        loc: Location,
         env: Environment,
     ) -> IR {
         if let Some(v) = env.resolve(&name) {
             let v_ty = v.ty.clone();
-            let result = IR::new_with_context(
+            let result = IR::new_with_location(
                 IRValue::Ident(name),
                 v_ty.clone(),
-                context.clone(),
+                loc,
                 env.clone(),
             );
 
@@ -1106,14 +1108,14 @@ impl TypeChecker {
             ));
             result
         } else {
-            self.make_error(format!("Not found: {}", name), context, env)
+            self.make_error(format!("Not found: {}", name), loc, env)
         }
     }
 
     fn make_ident(&mut self, node: IR, env: Environment) -> IR {
         match &node.value {
             IRValue::Ident(name) => {
-                self.make_ident_from_name(name.clone(), node.ty.clone(), node.context.clone(), env)
+                self.make_ident_from_name(name.clone(), node.ty.clone(), node.loc, env)
             }
             _ => {
                 debug!("Unimplemented: {:?}", &node);
@@ -1126,23 +1128,23 @@ impl TypeChecker {
         &mut self,
         name: String,
         ir_args: Vec<IR>,
-        context: MaybeNodeContext,
+        loc: Location,
         env: Environment,
     ) -> IR {
         let ret_ty = self.new_unknown_type();
         let mut f_types = ir_args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
         f_types.push(ret_ty.clone());
         let f_ty = Type::Func(f_types);
-        //let f = IR::new_with_context(
+        //let f = IR::new_with_location(
         //IRValue::Ident(name.clone()),
         //f_ty,
         //context,
         //env.clone());
-        let f = self.make_func_from_name(name.clone(), f_ty, context.clone(), env.clone());
-        IR::new_with_context(
+        let f = self.make_func_from_name(name.clone(), f_ty, loc.clone(), env.clone());
+        IR::new_with_location(
             IRValue::Apply(Box::new(f), ir_args),
             ret_ty,
-            context,
+            loc,
             env.clone(),
         )
         //self.make_apply(f, ir_args, env)
@@ -1158,7 +1160,7 @@ impl TypeChecker {
                 let f_ty = Type::Func(f_types);
 
                 // make a node with that signature
-                self.make_func_from_name(name.clone(), f_ty, ir_func.context.clone(), env.clone())
+                self.make_func_from_name(name.clone(), f_ty, ir_func.loc, env.clone())
             }
             IRValue::Extern(_) | IRValue::Function(_, _) => ir_func,
             IRValue::Error(_) => ir_func,
@@ -1168,11 +1170,11 @@ impl TypeChecker {
             }
         };
 
-        let context = ir_func.context.clone();
-        IR::new_with_context(
+        let loc = ir_func.loc.clone();
+        IR::new_with_location(
             IRValue::Apply(Box::new(ir_func), ir_args),
             ret_ty,
-            context,
+            loc,
             env.clone(),
         )
     }

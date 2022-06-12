@@ -1,7 +1,7 @@
 use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
-use crate::parser::Unparse;
+//use crate::parser::Unparse;
 use crate::results::{LangError, LangErrorKind};
 use crate::tokens::Tok;
 use log::debug;
@@ -335,7 +335,7 @@ impl Interpreter {
                 }
             }
 
-            Expr::Loop(exprs) => {
+            Expr::Loop(_) => {
                 // push flow control marker, so break and continue know where to go
                 // A single run of the loop is stored in the environment
                 // At the end of the loop, it calls the continue function
@@ -351,7 +351,7 @@ impl Interpreter {
                 unimplemented!();
             }
 
-            Expr::Break(e) => {
+            Expr::Break(_) => {
                 // resolve control marker, and execute
                 unimplemented!();
             }
@@ -604,16 +604,16 @@ mod tests {
         let env = Environment::default();
         let mut program = Program::new();
         let r = program.eval("assert(1)", env);
-        if let Err(LangError { kind: _, context }) = r {
-            assert!(context.has_location());
+        if let Err(LangError { kind: _, loc }) = r {
+            //assert!(context.has_location());
         } else {
             unreachable!();
         }
 
         let env = Environment::default();
         let r = program.eval("a", env);
-        if let Err(LangError { kind: _, context }) = r {
-            assert!(context.has_location());
+        if let Err(LangError { kind: _, loc }) = r {
+            //assert!(context.has_location());
         } else {
             unreachable!();
         }
