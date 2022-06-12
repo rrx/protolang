@@ -9,7 +9,13 @@ use std::ops::{Range, RangeFrom, RangeFull, RangeTo};
 use strum_macros;
 
 pub type FileId = usize;
-pub type Span<'a> = LocatedSpan<&'a str>;
+
+#[derive(Clone, Debug)]
+pub struct SpanExtra {
+    pub file_id: FileId
+}
+
+pub type Span<'a> = LocatedSpan<&'a str, SpanExtra>;
 
 #[derive(
     Debug, strum::Display, Clone, PartialEq, strum_macros::EnumProperty, strum_macros::IntoStaticStr,
@@ -216,7 +222,7 @@ impl<'a> fmt::Debug for Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    pub fn new(tok: Tok, pos: Span<'a>, end: Span<'a>) -> Token<'a> {
+    pub fn new(tok: Tok, pos: &Span<'a>, end: &Span<'a>) -> Token<'a> {
         /*
         let start_offset = pos.location_offset();
         let end_offset = end.location_offset();
@@ -232,7 +238,7 @@ impl<'a> Token<'a> {
             s: Surround::default(),
             indent: 0,
             tok,
-            pos,
+            pos: pos.clone(),
             start: pos.location_offset(),
             end: end.location_offset(),
             file_id: None,

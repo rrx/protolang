@@ -18,7 +18,8 @@ use super::LResult;
 pub(crate) fn lex_string(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, s) = parse_str(i)?;
-    Ok((i, Token::new(Tok::StringLiteral(s), pos, i)))
+    let t = Token::new(Tok::StringLiteral(s), &pos, &i);
+    Ok((i, t))
 }
 
 // String parsing code was borrowed from: https://github.com/Geal/nom/blob/main/examples/string.rs
@@ -154,7 +155,7 @@ fn parse_string_with_context(i: &str) -> LResult<&str, String> {
 // Strings
 fn parse_str(i: Span) -> LResult<Span, String> {
     match parse_string_with_context(i.fragment()) {
-        Ok((i2, s)) => Ok((span(i2), s)),
+        Ok((i2, s)) => Ok((span(i2, i.extra.file_id), s)),
         //Err(e) => Err(error_position!(i, ErrorKind::Tag))
         Err(_) => Err(nom::Err::Error(error_position!(i, ErrorKind::Tag))),
     }

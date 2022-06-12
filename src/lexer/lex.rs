@@ -35,7 +35,8 @@ pub fn lex_space(i: Span) -> LResult<Span, Token> {
     let (i, t) = map(recognize(take_while1(|c| c == ' ')), |s: Span| {
         Tok::Spaces(s.len())
     })(i)?;
-    Ok((i, Token::new(t, pos, i)))
+    let t = Token::new(t, &pos, &i);
+    Ok((i, t))
 }
 
 pub fn lex_tab(i: Span) -> LResult<Span, Token> {
@@ -43,7 +44,8 @@ pub fn lex_tab(i: Span) -> LResult<Span, Token> {
     let (i, t) = map(recognize(take_while1(|c| c == '\t')), |s: Span| {
         Tok::Tabs(s.len())
     })(i)?;
-    Ok((i, Token::new(t, pos, i)))
+    let t = Token::new(t, &pos, &i);
+    Ok((i, t))
 }
 
 pub fn lex_newline(i: Span) -> LResult<Span, Token> {
@@ -54,7 +56,8 @@ pub fn lex_newline(i: Span) -> LResult<Span, Token> {
         map(recognize(take_while1(|c| c == '\r')), |s: Span| LF(s.len())),
         map(recognize(crlf), |s: Span| CRLF(s.len())),
     ))(i)?;
-    Ok((i, Token::new(t, pos, i)))
+    let t = Token::new(t, &pos, &i);
+    Ok((i, t))
 }
 
 pub fn lex_identifier_or_reserved(i: Span) -> LResult<Span, Token> {
@@ -75,7 +78,8 @@ pub fn lex_identifier_or_reserved(i: Span) -> LResult<Span, Token> {
         "false" => BoolLiteral(false),
         _ => Ident(s.to_string()),
     };
-    Ok((i, Token::new(t, pos, i)))
+    let t = Token::new(t, &pos, &i);
+    Ok((i, t))
 }
 
 fn tag_token<'a>(s: &'a str, t: Tok) -> impl FnMut(Span<'a>) -> LResult<Span<'a>, Tok> {
@@ -85,12 +89,13 @@ fn tag_token<'a>(s: &'a str, t: Tok) -> impl FnMut(Span<'a>) -> LResult<Span<'a>
 pub fn lex_invalid(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, v) = take(1usize)(i)?;
-    Ok((i, Token::new(Tok::Invalid(v.to_string()), pos, i)))
+    let t = Token::new(Tok::Invalid(v.to_string()), &pos, &i);
+    Ok((i, t))
 }
 
 pub fn lex_double(i: Span) -> LResult<Span, Token> {
     let (i, pos) = position(i)?;
-    let (i_end, v) = map_parser(
+    let (i, v) = map_parser(
         alt((
             recognize(tuple((tag("."), digit1))),
             recognize(tuple((digit1, tag("."), digit0))),
@@ -98,7 +103,8 @@ pub fn lex_double(i: Span) -> LResult<Span, Token> {
         )),
         double,
     )(i)?;
-    Ok((i_end, Token::new(Tok::FloatLiteral(v), pos, i)))
+    let t = Token::new(Tok::FloatLiteral(v), &pos, &i);
+    Ok((i, t))
 }
 
 pub fn lex_integer(i: Span) -> LResult<Span, Token> {
@@ -107,7 +113,8 @@ pub fn lex_integer(i: Span) -> LResult<Span, Token> {
         alt((recognize(tuple((digit1, tag("u32")))), recognize(digit1))),
         u64,
     )(i)?;
-    Ok((i, Token::new(Tok::IntLiteral(v), pos, i)))
+    let t = Token::new(Tok::IntLiteral(v), &pos, &i);
+    Ok((i, t))
 }
 
 fn lex_number(i: Span) -> LResult<Span, Token> {
@@ -117,7 +124,7 @@ fn lex_number(i: Span) -> LResult<Span, Token> {
 fn lex_until_eol(i: Span) -> LResult<Span, Span> {
     // also return if we get EOF
     if i.len() == 0 {
-        return Ok((i, i));
+        return Ok((i.clone(), i));
     }
     take_while(|c: char| c != '\n')(i)
 }
@@ -125,11 +132,12 @@ fn lex_until_eol(i: Span) -> LResult<Span, Span> {
 pub fn lex_comments(i: Span) -> LResult<Span, Token> {
     use Tok::*;
     let (i, pos) = position(i)?;
-    let (i, t) = recognize(pair(
+    let (i, s) = recognize(pair(
         alt((tag_token("//", DoubleSlash), tag_token("#", Pound))),
         lex_until_eol,
     ))(i)?;
-    Ok((i, Token::new(Tok::Comment(t.to_string()), pos, i)))
+    let t = Token::new(Tok::Comment(s.to_string()), &pos, &i);
+    Ok((i, t))
 }
 
 fn lex_punc(i: Span) -> LResult<Span, Token> {
@@ -147,7 +155,8 @@ fn lex_punc(i: Span) -> LResult<Span, Token> {
         tag_token(",", Comma),
         tag_token("\\", Tok::Backslash),
     ))(i)?;
-    Ok((i, Token::new(t, pos, i)))
+    let t = Token::new(t, &pos, &i);
+    Ok((i, t))
 }
 
 fn lex_op<'a>(i: Span<'a>) -> LResult<Span<'a>, Token<'a>> {
@@ -174,7 +183,8 @@ fn lex_op<'a>(i: Span<'a>) -> LResult<Span<'a>, Token<'a>> {
         tag_token("is", Is),
     ))(i)?;
 
-    Ok((i, Token::new(t, pos, i)))
+    let t = Token::new(t, &pos, &i);
+    Ok((i, t))
 }
 
 fn lex_op_bool(i: Span) -> LResult<Span, Tok> {
@@ -204,8 +214,8 @@ pub fn lex_token<'a>(i: Span<'a>) -> LResult<Span<'a>, Token<'a>> {
     ))(i)
 }
 
-pub fn span<'a>(s: &'a str) -> Span<'a> {
-    Span::new(s)
+pub fn span<'a>(s: &'a str, file_id: FileId) -> Span<'a> {
+    Span::new_extra(s, SpanExtra { file_id })
 }
 
 #[cfg(test)]
@@ -462,7 +472,7 @@ f +
 
     #[test]
     fn lex_token() {
-        let i = Span::new("1 2");
+        let i = span("1 2", 0);
         let (i, t) = lex_token_any(i).unwrap();
         assert_eq!(t.tok, Tok::IntLiteral(1));
         let (i, t) = lex_token_any(i).unwrap();

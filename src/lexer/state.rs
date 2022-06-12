@@ -264,14 +264,14 @@ impl<'a> LexerState<'a> {
                                 // close out
                                 let prev = self.indent_stack.pop().unwrap();
                                 let close =
-                                    crate::tokens::Token::new(Tok::IndentClose, prev.pos, prev.pos);
+                                    crate::tokens::Token::new(Tok::IndentClose, &prev.pos, &prev.pos);
                                 if false {
                                     self.push_token(close);
                                 } else {
                                     self.whitespace.push(close);
                                 }
                             } else if self.indent_size > prev_indent {
-                                let open = crate::tokens::Token::new(Tok::IndentOpen, t.pos, t.pos);
+                                let open = crate::tokens::Token::new(Tok::IndentOpen, &t.pos, &t.pos);
                                 if false {
                                     self.push_token(open);
                                 } else {
@@ -305,8 +305,8 @@ impl<'a> LexerState<'a> {
                                 // close out
                                 self.whitespace.push(crate::tokens::Token::new(
                                     Tok::IndentClose,
-                                    prev.pos,
-                                    prev.pos,
+                                    &prev.pos,
+                                    &prev.pos,
                                 ));
                             } else {
                                 break;
@@ -319,7 +319,7 @@ impl<'a> LexerState<'a> {
     }
 
     pub fn lex(&mut self, i: &'a str) -> LResult<Span<'a>, ()> {
-        let (i, tokens) = many0(lex_next)(span(i))?;
+        let (i, tokens) = many0(lex_next)(span(i, self.file_id))?;
         tokens.into_iter().for_each(|token| {
             self.push(token);
         });
@@ -337,7 +337,7 @@ impl<'a> LexerState<'a> {
         // flush before pushing EOF
         // we only want surround on EOF if we have a whitespace file
         self.flush();
-        self.push_token(Token::new(Tok::EOF, i, i));
+        self.push_token(Token::new(Tok::EOF, &i, &i));
         self.eof();
         Ok((i, ()))
     }
