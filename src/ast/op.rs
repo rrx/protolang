@@ -77,6 +77,7 @@ impl OperatorNode {
         }
     }
 
+    /*
     pub fn from_token(token: &Token) -> Option<Self> {
         match Operator::from_tok(&token.tok) {
             Some(prefix) => Some(Self {
@@ -96,6 +97,7 @@ impl OperatorNode {
             context,
         }
     }
+    */
 
     pub fn new_with_location(op: Operator, loc: Location) -> Self {
         Self {

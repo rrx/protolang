@@ -2,7 +2,6 @@ use crate::ast::*;
 use crate::eval::*;
 use crate::ir::{self, TypeChecker, IR};
 use crate::results::*;
-//use crate::sexpr::SExpr;
 use crate::tokens::{FileId, Tok, TokensList};
 use nom::InputIter;
 
@@ -36,14 +35,12 @@ impl Program {
     pub fn parse(&mut self, s: &str, file_id: FileId) -> anyhow::Result<ExprNode> {
         let mut lexer = crate::lexer::LexerState::default();
         if let Err(e) = lexer.lex(s) {
-            //return Err(LangErrorKind::LexerFailed.into_error().into());
             return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into());
         }
         let mut lexer = lexer.set_file_id(file_id);
         let tokens = lexer.tokens();
 
         tokens.iter_elements().for_each(|t| {
-            //log::debug!("token: {:?}", &t);
             if let Tok::Invalid(s) = &t.tok {
                 let error = t
                     .to_context()
@@ -62,10 +59,7 @@ impl Program {
                 self.checker.push_error(error.clone());
                 Err(error.into())
             }
-            Err(e) => {
-                //Err(LangErrorKind::ParserFailed.into_error().into())
-                Err(LangError::runtime(&format!("Error parsing: {:?}", e)).into())
-            }
+            Err(e) => Err(LangError::runtime(&format!("Error parsing: {:?}", e)).into()),
         }
     }
 
@@ -90,7 +84,9 @@ impl Program {
         let file_id = self.checker.add_source(filename.into(), v.to_string());
         match self.parse(v, file_id) {
             Ok(expr) => {
+                //use crate::sexpr::SExpr;
                 //debug!("SEXPR: {}", expr.sexpr().unwrap());
+
                 // Analyze it
                 let mut a = Analysis::new();
                 env = a.analyze(expr.clone().into(), env);

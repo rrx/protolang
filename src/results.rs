@@ -1,7 +1,7 @@
 use crate::ast::MaybeNodeContext;
+use crate::lexer::Location;
 use crate::tokens::FileId;
 use thiserror::Error;
-use crate::lexer::Location;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
