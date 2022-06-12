@@ -1,6 +1,6 @@
+use crate::lexer::Location;
 use crate::parser::Unparse;
 use crate::tokens::{Tok, Token};
-use crate::lexer::Location;
 
 use super::{FromContext, MaybeNodeContext};
 

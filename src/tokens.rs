@@ -274,7 +274,7 @@ impl<'a> Token<'a> {
             self.end,
             self.pos.location_line() as usize,
             self.pos.get_utf8_column(),
-            s
+            s,
         )
         .set_file_id(self.file_id.unwrap())
     }

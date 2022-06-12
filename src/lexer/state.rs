@@ -52,7 +52,7 @@ pub struct LexerState<'a> {
     whitespace: Vec<Token<'a>>,
     indent_state: IndentState,
     indent_stack: Vec<Token<'a>>,
-    file_id: FileId
+    file_id: FileId,
 }
 
 impl<'a> Default for LexerState<'a> {
@@ -63,7 +63,7 @@ impl<'a> Default for LexerState<'a> {
             indent_size: 0,
             indent_state: IndentState::LineNotIndented,
             indent_stack: vec![],
-            file_id: 0
+            file_id: 0,
         }
     }
 }
@@ -247,7 +247,8 @@ impl<'a> LexerState<'a> {
                             if self.indent_size < prev_indent {
                                 // close out
                                 let prev = self.indent_stack.pop().unwrap();
-                                let close = crate::tokens::Token::new(Tok::IndentClose, prev.pos, prev.pos);
+                                let close =
+                                    crate::tokens::Token::new(Tok::IndentClose, prev.pos, prev.pos);
                                 if false {
                                     self.push_token(close);
                                 } else {
@@ -286,8 +287,11 @@ impl<'a> LexerState<'a> {
                         loop {
                             if let Some(prev) = self.indent_stack.pop() {
                                 // close out
-                                self.whitespace
-                                    .push(crate::tokens::Token::new(Tok::IndentClose, prev.pos, prev.pos));
+                                self.whitespace.push(crate::tokens::Token::new(
+                                    Tok::IndentClose,
+                                    prev.pos,
+                                    prev.pos,
+                                ));
                             } else {
                                 break;
                             };

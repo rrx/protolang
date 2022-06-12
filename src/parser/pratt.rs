@@ -3,9 +3,9 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
+use crate::lexer::Location;
 use crate::parser::{tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
-use crate::lexer::Location;
 use log::debug;
 use nom::error::ErrorKind;
 use nom::{multi, sequence};
@@ -240,12 +240,8 @@ impl Op {
                 y.context.append(sep.expand_toks());
                 let loc = token.to_location();
                 let op = OperatorNode::new_with_location(Operator::Conditional, loc);
-                let value = Expr::Ternary(
-                    op,
-                    Box::new(left.clone()),
-                    Box::new(y),
-                    Box::new(z.clone()),
-                );
+                let value =
+                    Expr::Ternary(op, Box::new(left.clone()), Box::new(y), Box::new(z.clone()));
                 let node = i.node(value);
                 (i, node)
             }
@@ -323,7 +319,7 @@ impl Op {
                             let args = vec![*a, *b, right];
                             let loc = left_op.context.to_location();
                             let expr = Expr::Chain(left_op, args);
-                            //let loc = Location::new(loc.start, end.end, loc.line, loc.col, "".into()); 
+                            //let loc = Location::new(loc.start, end.end, loc.line, loc.col, "".into());
                             let node = ExprNode::new(expr, &op_loc);
                             //let node = i.node(expr);
                             (i, node)
@@ -347,7 +343,8 @@ impl Op {
 
                             //let loc = left.context.to_location();
                             let op_node = OperatorNode::new_with_location(op, op_loc);
-                            let expr = Expr::Binary(op_node, Box::new(left), Box::new(right.clone()));
+                            let expr =
+                                Expr::Binary(op_node, Box::new(left), Box::new(right.clone()));
                             let node = i.node(expr);
 
                             // check if there's a chaining binary operator here

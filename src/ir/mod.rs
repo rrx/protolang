@@ -913,7 +913,14 @@ impl TypeChecker {
 
                     _ => {
                         let name = op_name(op);
-                        log::debug!("{:?}", (&node.context.to_location(), &left.context.to_location(), &right.context.to_location()));
+                        log::debug!(
+                            "{:?}",
+                            (
+                                &node.context.to_location(),
+                                &left.context.to_location(),
+                                &right.context.to_location()
+                            )
+                        );
                         let ir_left = self.parse_ast(left, env.clone());
                         let ir_right = self.parse_ast(right, env.clone());
                         self.make_apply_by_name(
@@ -932,22 +939,20 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Ternary(op, a, b, c) => {
-                match op.value {
-                    Operator::Conditional => {
-                        let ir_a = self.parse_ast(a, env.clone());
-                        let ir_b = self.parse_ast(b, env.clone());
-                        let ir_c = self.parse_ast(c, env.clone());
-                        self.make_apply_by_name(
-                            "cond".into(),
-                            vec![ir_a, ir_b, ir_c],
-                            node.context.clone(),
-                            env,
-                        )
-                    }
-                    _ => unimplemented!()
+            Expr::Ternary(op, a, b, c) => match op.value {
+                Operator::Conditional => {
+                    let ir_a = self.parse_ast(a, env.clone());
+                    let ir_b = self.parse_ast(b, env.clone());
+                    let ir_c = self.parse_ast(c, env.clone());
+                    self.make_apply_by_name(
+                        "cond".into(),
+                        vec![ir_a, ir_b, ir_c],
+                        node.context.clone(),
+                        env,
+                    )
                 }
-            }
+                _ => unimplemented!(),
+            },
 
             _ => {
                 debug!("Unimplemented: {:?}", &node);
@@ -1212,7 +1217,7 @@ impl TypeChecker {
         self._check(filename, &contents, env)
     }
 
-    fn _check(&mut self, filename: &str, contents: &str, env: Environment) -> anyhow::Result<IR> { 
+    fn _check(&mut self, filename: &str, contents: &str, env: Environment) -> anyhow::Result<IR> {
         let ir = self._parse(filename, contents, env.clone()).unwrap();
         println!("{}", ir);
 

@@ -1,10 +1,10 @@
 use crate::ast::*;
 use crate::eval::*;
+use crate::ir::{self, TypeChecker, IR};
 use crate::results::*;
 use crate::sexpr::SExpr;
-use crate::ir::{self, IR, TypeChecker};
-use nom::InputIter;
 use crate::tokens::{FileId, Tok, TokensList};
+use nom::InputIter;
 
 use log::*;
 
@@ -37,7 +37,7 @@ impl Program {
         let mut lexer = crate::lexer::LexerState::default();
         if let Err(e) = lexer.lex(s) {
             //return Err(LangErrorKind::LexerFailed.into_error().into());
-            return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into())
+            return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into());
         }
         let mut lexer = lexer.set_file_id(file_id);
         let tokens = lexer.tokens();
@@ -51,7 +51,6 @@ impl Program {
                 self.checker.push_error(error);
             }
         });
-
 
         match crate::parser::parse_program(tokens) {
             Ok((_, expr)) => Ok(expr),
@@ -99,7 +98,8 @@ impl Program {
                     self.checker.push_error(r.clone());
                 });
                 if self.checker.has_errors() {
-                    self.checker.push_error(expr.context.error(LangErrorKind::AnalysisFailed));
+                    self.checker
+                        .push_error(expr.context.error(LangErrorKind::AnalysisFailed));
                 }
             }
             Err(e) => {

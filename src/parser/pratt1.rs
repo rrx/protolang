@@ -129,7 +129,11 @@ fn parse_infix_expr(i: Tokens, left: ExprNode) -> PResult<Tokens, ExprNode> {
             right.context.prepend(token.expand_toks());
             let loc = token.to_location();
             let node = ExprNode::new(
-                Expr::Binary(OperatorNode::new_with_location(infix, loc), Box::new(left), Box::new(right)),
+                Expr::Binary(
+                    OperatorNode::new_with_location(infix, loc),
+                    Box::new(left),
+                    Box::new(right),
+                ),
                 &i2.to_location(),
             );
             Ok((i2, node))

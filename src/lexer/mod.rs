@@ -207,8 +207,8 @@ mod tests {
     use super::*;
     use log::debug;
     use state::*;
-    use Tok::*;
     use test_log::test;
+    use Tok::*;
 
     #[test]
     fn tokens() {
