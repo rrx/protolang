@@ -5,8 +5,9 @@
  */
 use crate::parser::{tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
+use crate::lexer::Location;
 use log::debug;
-use nom::error::{context, ErrorKind};
+use nom::error::ErrorKind;
 use nom::{multi, sequence};
 
 use crate::ast::{Expr, ExprNode, Operator, OperatorNode};
@@ -154,7 +155,8 @@ impl Op {
         //debug!("chain_LeDx: {:?}", (&y, &token, &i.toks()));
 
         let maybe_op = Operator::from_tok(&token.tok);
-        let op = maybe_op.unwrap();
+        let op_loc = token.to_location();
+        let op = OperatorNode::new_with_location(maybe_op.unwrap(), op_loc.clone());
         let (left_op, c) = match &x.value {
             Expr::Chain(op, chain) => {
                 let mut c = chain.clone();
@@ -169,6 +171,8 @@ impl Op {
 
         if n.tok == Tok::EOF {
             //debug!("chain: got eof");
+            //let loc = token.to_location();
+            //let op = OperatorNode::new_with_location(left_op.clone(), loc);
             let t = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
             return i.node_success(t);
         }
@@ -180,10 +184,15 @@ impl Op {
             let (i, _) = take_one_any(i.clone())?;
             let (i, t) = self._chain_left_denotation(i, &y, &n, depth)?;
             //debug!("chain consume: {:?}", (self.lbp, next_op, &t));
+            //let loc = token.to_location();
+            //let op = OperatorNode::new_with_location(left_op.clone(), loc);
             let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
-            let op = Operator::End;
-            let t = Expr::Chain(op, vec![i.node(t0), t]);
-            i.node_success(t)
+
+            //let op = Operator::End;
+            let t = Expr::Chain(op.clone(), vec![i.node(t0), t]);
+            let node = ExprNode::new(t, &op_loc);
+            Ok((i, node))
+            //i.node_success(t)
         } else {
             let t = Expr::Chain(left_op.clone(), c);
             //debug!("chain drop: {:?}", (self.lbp, next_op, &t));
@@ -229,8 +238,10 @@ impl Op {
 
                 y.context.prepend(token.expand_toks());
                 y.context.append(sep.expand_toks());
+                let loc = token.to_location();
+                let op = OperatorNode::new_with_location(Operator::Conditional, loc);
                 let value = Expr::Ternary(
-                    Operator::Conditional,
+                    op,
                     Box::new(left.clone()),
                     Box::new(y),
                     Box::new(z.clone()),
@@ -292,7 +303,8 @@ impl Op {
                 if token.tok.is_binary() {
                     let (i, _) = take_one_any(i)?;
                     // binary parses the RHS, and returns a binary node
-                    let (i, y) = pratt(i, self.rbp, depth + 1)?;
+                    let (i, mut right) = pratt(i, self.rbp, depth + 1)?;
+                    let op_loc = token.to_location();
                     let op = Operator::from_tok(&token.tok).unwrap();
 
                     //debug!("Binary LHS: {:?}", &x);
@@ -303,18 +315,22 @@ impl Op {
                     let is_chain = token.tok.is_chain();
 
                     match left.value.clone() {
-                        Expr::Binary(left_op, a, b) if left_op == op && is_chain => {
+                        Expr::Binary(left_op, a, b) if left_op.value == op && is_chain => {
                             //debug!("chain binary");
-                            let mut right = y;
                             right.context.prepend(token.expand_toks());
+                            //let loc = a.context.to_location();
+                            //let end = b.context.to_location();
                             let args = vec![*a, *b, right];
+                            let loc = left_op.context.to_location();
                             let expr = Expr::Chain(left_op, args);
-                            let node = i.node(expr);
+                            //let loc = Location::new(loc.start, end.end, loc.line, loc.col, "".into()); 
+                            let node = ExprNode::new(expr, &op_loc);
+                            //let node = i.node(expr);
                             (i, node)
                         }
-                        Expr::Chain(left_op, mut args) if left_op == op && is_chain => {
+                        Expr::Chain(left_op, mut args) if left_op.value == op && is_chain => {
                             //debug!("chain chain");
-                            let mut right = y;
+                            //let mut right = y;
                             right.context.prepend(token.expand_toks());
                             args.push(right);
                             let expr = Expr::Chain(left_op, args);
@@ -324,12 +340,14 @@ impl Op {
                         _ => {
                             //debug!("XXX binary");
                             let left = left.clone();
-                            let mut right = y;
+                            //let mut right = y;
 
                             // append to the right, so the operator is present in And
                             right.context.prepend(token.expand_toks());
 
-                            let expr = Expr::Binary(op, Box::new(left), Box::new(right.clone()));
+                            //let loc = left.context.to_location();
+                            let op_node = OperatorNode::new_with_location(op, op_loc);
+                            let expr = Expr::Binary(op_node, Box::new(left), Box::new(right.clone()));
                             let node = i.node(expr);
 
                             // check if there's a chaining binary operator here

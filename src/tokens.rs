@@ -193,6 +193,8 @@ pub struct Token<'a> {
     pub indent: usize,
     pub tok: Tok,
     pub pos: Span<'a>,
+    pub start: usize,
+    pub end: usize,
     pub file_id: Option<FileId>,
 }
 
@@ -200,23 +202,39 @@ impl<'a> fmt::Debug for Token<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Token")
             .field("tok", &self.tok)
-            .field("pre", &self.s.pre)
-            .field("post", &self.s.post)
-            .field("line", &self.pos.location_line())
-            .field("col", &self.pos.get_column())
-            .field("pos", &self.pos)
-            .field("indent", &self.indent)
+            //.field("pre", &self.s.pre)
+            //.field("post", &self.s.post)
+            //.field("line", &self.pos.location_line())
+            //.field("col", &self.pos.get_column())
+            //.field("pos", &self.pos)
+            //.field("indent", &self.indent)
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("file_id", &self.file_id)
             .finish()
     }
 }
 
 impl<'a> Token<'a> {
-    pub fn new(tok: Tok, pos: Span) -> Token {
+    pub fn new(tok: Tok, pos: Span<'a>, end: Span<'a>) -> Token<'a> {
+        /*
+        let start_offset = pos.location_offset();
+        let end_offset = end.location_offset();
+        let size = end_offset - start_offset;
+        log::debug!("{:?}", (start_offset, end_offset, size, pos.input_len(), pos));
+        if size <= pos.input_len() {
+            log::debug!("{:?}", (&tok, pos.location_offset(), end.location_offset()));
+            let fragment = &pos[..size];
+            log::debug!("{:?}", fragment);
+        }
+        */
         Token {
             s: Surround::default(),
             indent: 0,
             tok,
             pos,
+            start: pos.location_offset(),
+            end: end.location_offset(),
             file_id: None,
         }
     }
@@ -250,11 +268,13 @@ impl<'a> Token<'a> {
     }
 
     pub fn to_location(&self) -> Location {
+        let s = self.pos.fragment().to_string();
         Location::new(
-            self.pos.location_offset(),
+            self.start,
+            self.end,
             self.pos.location_line() as usize,
             self.pos.get_utf8_column(),
-            self.pos.fragment().to_string(),
+            s
         )
         .set_file_id(self.file_id.unwrap())
     }
@@ -309,7 +329,7 @@ impl<'a> TokensList for Tokens<'a> {
         if self.tok.len() > 0 {
             self.tok[0].to_location().set_file_id(self.file_id)
         } else {
-            Location::new(0, 0, 0, "EOF".into()).set_file_id(self.file_id)
+            Location::new(0, 0, 0, 0, "EOF".into()).set_file_id(self.file_id)
         }
     }
 

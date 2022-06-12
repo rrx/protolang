@@ -7,7 +7,7 @@ use crate::tokens::*;
 use log::debug;
 use nom::branch::*;
 use nom::bytes::complete::take;
-use nom::combinator::{map, verify};
+use nom::combinator::verify;
 use nom::error::{context, ContextError, ErrorKind, VerboseErrorKind};
 use nom::multi::many0;
 use nom::sequence::*;
@@ -345,7 +345,8 @@ impl ExprNode {
         node.context.append(assign.expand_toks());
 
         let (i, rhs) = pratt::parse_expr_pratt(i)?;
-        let expr = Expr::Binary(Operator::Declare, Box::new(node), Box::new(rhs));
+        let loc = i.to_location(); 
+        let expr = Expr::Binary(OperatorNode::new_with_location(Operator::Declare, loc), Box::new(node), Box::new(rhs));
         let node = ExprNode::new(expr, &i.to_location());
         Ok((i, node))
     }
@@ -883,5 +884,13 @@ mod tests {
                 r.env,
             )
             .unwrap();
+    }
+
+    #[test]
+    fn locations() {
+        let env = crate::ir::base_env();
+        let mut program = Program::new();
+        let r = program.check_str("assert(1 == 1)", env).unwrap();
+        program.print();
     }
 }

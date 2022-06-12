@@ -1,8 +1,8 @@
 use super::function::{Callable, Lambda};
-use super::node::{Context, FromContext, MaybeNodeContext};
+use super::node::{FromContext, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
-use crate::ast::{CallWithType, Callback};
+use crate::ast::CallWithType;
 use crate::eval::TypeSig;
 use crate::lexer::Location;
 use crate::parser::Unparse;
@@ -51,14 +51,14 @@ pub enum Expr {
     Literal(Tok),
     Prefix(OperatorNode, Box<ExprNode>),
     Postfix(OperatorNode, Box<ExprNode>),
-    Binary(Operator, Box<ExprNode>, Box<ExprNode>),
-    Ternary(Operator, Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
+    Binary(OperatorNode, Box<ExprNode>, Box<ExprNode>),
+    Ternary(OperatorNode, Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
     //NAry(Operator, Vec<ExprNode>),
     Lambda(Lambda),
     Callable(Box<dyn Callable>),
     Callback(CallWithType),
     List(Vec<ExprNode>),
-    Chain(Operator, Vec<ExprNode>),
+    Chain(OperatorNode, Vec<ExprNode>),
     BinaryChain(Vec<ExprNode>),
 
     // Function application (the function, the params)
@@ -188,7 +188,13 @@ impl std::ops::DerefMut for ExprNode {
 
 impl fmt::Debug for ExprNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut out = f.debug_struct("ExprN");
+        let loc = self.context.to_location();
+        f.debug_struct("ExprN")
+            .field("v", &self.value)
+            .field("start", &loc.start)
+            .field("end", &loc.end)
+            .finish()
+        /*
         let pre = self.context.pre();
         let post = self.context.post();
         let mut out = if pre.len() > 0 {
@@ -200,7 +206,8 @@ impl fmt::Debug for ExprNode {
         if post.len() > 0 {
             out = out.field("post", &post);
         }
-        out.finish()
+        */
+        //out.finish()
     }
 }
 

@@ -1,10 +1,10 @@
 use crate::ast::*;
 use crate::eval::*;
-use crate::ir::TypeChecker;
 use crate::results::*;
 use crate::sexpr::SExpr;
-use crate::tokens::{FileId, Tok, TokensList};
+use crate::ir::{self, IR, TypeChecker};
 use nom::InputIter;
+use crate::tokens::{FileId, Tok, TokensList};
 
 use log::*;
 
@@ -37,12 +37,13 @@ impl Program {
         let mut lexer = crate::lexer::LexerState::default();
         if let Err(e) = lexer.lex(s) {
             //return Err(LangErrorKind::LexerFailed.into_error().into());
-            return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into());
+            return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into())
         }
         let mut lexer = lexer.set_file_id(file_id);
         let tokens = lexer.tokens();
 
         tokens.iter_elements().for_each(|t| {
+            log::debug!("token: {:?}", &t);
             if let Tok::Invalid(s) = &t.tok {
                 let error = t
                     .to_context()
@@ -50,6 +51,7 @@ impl Program {
                 self.checker.push_error(error);
             }
         });
+
 
         match crate::parser::parse_program(tokens) {
             Ok((_, expr)) => Ok(expr),
@@ -97,8 +99,7 @@ impl Program {
                     self.checker.push_error(r.clone());
                 });
                 if self.checker.has_errors() {
-                    self.checker
-                        .push_error(expr.context.error(LangErrorKind::AnalysisFailed));
+                    self.checker.push_error(expr.context.error(LangErrorKind::AnalysisFailed));
                 }
             }
             Err(e) => {
@@ -135,8 +136,8 @@ impl Program {
             Ok(expr) => {
                 //debug!("SEXPR: {}", expr.sexpr().unwrap());
                 // Analyze it
-                let check_env = crate::ir::base_env();
-                let ir = self.checker.parse_ast(&expr, check_env);
+                //let check_env = crate::ir::base_env();
+                //let ir = self.checker.parse_ast(&expr, check_env);
                 //debug!("ir {:?}", &ir);
 
                 let mut a = Analysis::new();
@@ -165,23 +166,15 @@ impl Program {
             }
         }
     }
-}
 
-/*
-impl std::ops::Deref for Program {
-    type Target = Vec<Diagnostic<FileId>>;
+    pub fn check_str(&mut self, s: &str, env: ir::Environment) -> anyhow::Result<IR> {
+        self.checker.check_str(s, env)
+    }
 
-    fn deref(&self) -> &Self::Target {
-        &self.diagnostics
+    pub fn check_file(&mut self, filename: &str, env: ir::Environment) -> anyhow::Result<IR> {
+        self.checker.check_file(filename, env)
     }
 }
-
-impl std::ops::DerefMut for Program {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.diagnostics
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {

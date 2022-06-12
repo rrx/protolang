@@ -4,7 +4,8 @@ use std::fmt;
 
 #[derive(PartialEq, Clone)]
 pub struct Location {
-    pub offset: usize,
+    pub start: usize,
+    pub end: usize,
     pub line: usize,
     pub col: usize,
     pub fragment: String,
@@ -14,8 +15,11 @@ pub struct Location {
 impl fmt::Debug for Location {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Loc")
-            .field("line", &self.line)
-            .field("col", &self.col)
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("frag", &self.fragment)
+            //.field("line", &self.line)
+            //.field("col", &self.col)
             .finish()
     }
 }
@@ -23,7 +27,8 @@ impl fmt::Debug for Location {
 impl Default for Location {
     fn default() -> Self {
         Self {
-            offset: 0,
+            start: 0,
+            end: 0,
             line: 0,
             col: 0,
             fragment: "".into(),
@@ -33,9 +38,10 @@ impl Default for Location {
 }
 
 impl Location {
-    pub fn new(offset: usize, line: usize, col: usize, fragment: String) -> Self {
+    pub fn new(start: usize, end: usize, line: usize, col: usize, fragment: String) -> Self {
         Self {
-            offset,
+            start,
+            end,
             line,
             col,
             fragment,

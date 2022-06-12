@@ -82,7 +82,7 @@ impl Type {
     }
 }
 
-type Environment = crate::compiler::env::EnvLayers<String, IR>;
+pub type Environment = crate::compiler::env::EnvLayers<String, IR>;
 
 type SymbolTable = HashTrieMap<String, Type>;
 
@@ -214,6 +214,15 @@ fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment) -> 
 
 pub fn base_env() -> Environment {
     let mut env = Environment::default();
+    let node = make_binary_function("*".into(), vec![Type::Int, Type::Int, Type::Int], env);
+    env = node.env;
+    let node = make_binary_function("*".into(), vec![Type::Float, Type::Float, Type::Float], env);
+    env = node.env;
+    let node = make_binary_function("*".into(), vec![Type::Int, Type::Float, Type::Float], env);
+    env = node.env;
+    let node = make_binary_function("*".into(), vec![Type::Float, Type::Int, Type::Float], env);
+    env = node.env;
+
     let node = make_binary_function("+".into(), vec![Type::Int, Type::Int, Type::Int], env);
     env = node.env;
     let node = make_binary_function("+".into(), vec![Type::Float, Type::Float, Type::Float], env);
@@ -408,6 +417,10 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
+    pub fn new_env() -> Environment {
+        base_env()
+    }
+
     pub fn print(&self) {
         self.results.print();
     }
@@ -885,7 +898,7 @@ impl TypeChecker {
             }
 
             Expr::Binary(op, left, right) => {
-                match op {
+                match &op.value {
                     Operator::Assign => {
                         let name = left.try_ident().unwrap().name;
                         let ir_right = self.parse_ast(right, env.clone());
@@ -900,12 +913,13 @@ impl TypeChecker {
 
                     _ => {
                         let name = op_name(op);
+                        log::debug!("{:?}", (&node.context.to_location(), &left.context.to_location(), &right.context.to_location()));
                         let ir_left = self.parse_ast(left, env.clone());
                         let ir_right = self.parse_ast(right, env.clone());
                         self.make_apply_by_name(
                             name,
                             vec![ir_left, ir_right],
-                            node.context.clone(),
+                            op.context.clone(),
                             env,
                         )
                     } //_ => {
@@ -918,16 +932,21 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Ternary(Operator::Conditional, a, b, c) => {
-                let ir_a = self.parse_ast(a, env.clone());
-                let ir_b = self.parse_ast(b, env.clone());
-                let ir_c = self.parse_ast(c, env.clone());
-                self.make_apply_by_name(
-                    "cond".into(),
-                    vec![ir_a, ir_b, ir_c],
-                    node.context.clone(),
-                    env,
-                )
+            Expr::Ternary(op, a, b, c) => {
+                match op.value {
+                    Operator::Conditional => {
+                        let ir_a = self.parse_ast(a, env.clone());
+                        let ir_b = self.parse_ast(b, env.clone());
+                        let ir_c = self.parse_ast(c, env.clone());
+                        self.make_apply_by_name(
+                            "cond".into(),
+                            vec![ir_a, ir_b, ir_c],
+                            node.context.clone(),
+                            env,
+                        )
+                    }
+                    _ => unimplemented!()
+                }
             }
 
             _ => {
@@ -1039,7 +1058,7 @@ impl TypeChecker {
             }
         }
         if fn_types.len() == 0 {
-            let msg = format!("Function Not found: {}", name);
+            let msg = format!("Function Not found: {}: {:?}", name, context);
             self.make_error(msg, context, env)
         } else {
             let result = IR::new_with_context(
@@ -1177,7 +1196,35 @@ impl TypeChecker {
             println!("T: {:?}", t);
         }
         let (_, node) = crate::parser::parse_program(tokens).unwrap();
+        println!("Node: {:?}", node);
         let ir = self.parse_ast(&node, env);
+        Ok(ir)
+    }
+
+    pub fn check_str(&mut self, s: &str, env: Environment) -> anyhow::Result<IR> {
+        self._check("<repl>", s, env)
+    }
+
+    pub fn check_file(&mut self, filename: &str, env: Environment) -> anyhow::Result<IR> {
+        let contents = std::fs::read_to_string(filename.clone())
+            .unwrap()
+            .to_string();
+        self._check(filename, &contents, env)
+    }
+
+    fn _check(&mut self, filename: &str, contents: &str, env: Environment) -> anyhow::Result<IR> { 
+        let ir = self._parse(filename, contents, env.clone()).unwrap();
+        println!("{}", ir);
+
+        for e in &self.type_equations {
+            println!("E: {}", e);
+        }
+        let s = self.unify_all().unwrap();
+        for x in &s {
+            println!("subst: {:?}", x);
+        }
+        println!("has_errors: {}", self.has_errors());
+        self.print();
         Ok(ir)
     }
 }

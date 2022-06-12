@@ -1,5 +1,6 @@
 use crate::parser::Unparse;
 use crate::tokens::{Tok, Token};
+use crate::lexer::Location;
 
 use super::{FromContext, MaybeNodeContext};
 
@@ -96,10 +97,17 @@ impl OperatorNode {
         }
     }
 
-    pub fn new(prefix: Operator) -> Self {
+    pub fn new_with_location(op: Operator, loc: Location) -> Self {
+        Self {
+            context: MaybeNodeContext::from_location(&loc),
+            value: op,
+        }
+    }
+
+    pub fn new(op: Operator) -> Self {
         Self {
             context: MaybeNodeContext::default(),
-            value: prefix,
+            value: op,
         }
     }
 

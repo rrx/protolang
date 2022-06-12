@@ -18,7 +18,7 @@ use super::PResult;
 pub(crate) fn lex_string(i: Span) -> PResult<Span, Token> {
     let (i, pos) = position(i)?;
     let (i, s) = parse_str(i)?;
-    Ok((i, Token::new(Tok::StringLiteral(s), pos)))
+    Ok((i, Token::new(Tok::StringLiteral(s), pos, i)))
 }
 
 // String parsing code was borrowed from: https://github.com/Geal/nom/blob/main/examples/string.rs

@@ -149,7 +149,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             },
             */
             Expr::Binary(op, left, right) => {
-                if op == &Operator::Declare {
+                if op.value == Operator::Declare {
                     // handle declaration
                     let var_name = match &left.value {
                         Expr::Ident(i) => &i.name,
@@ -167,7 +167,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     } else {
                         Err("Unable to compile RHS")
                     }
-                } else if op == &Operator::Assign {
+                } else if op.value == Operator::Assign {
                     // handle assignment
                     let var_name = match &left.value {
                         Expr::Ident(i) => &i.name,
@@ -189,7 +189,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let lhs = self.compile_expr(left)?;
                     let rhs = self.compile_expr(right)?;
 
-                    match op {
+                    match &op.value {
                         Operator::Plus => Ok(self.builder.build_float_add(lhs, rhs, "tmpadd")),
                         Operator::Minus => Ok(self.builder.build_float_sub(lhs, rhs, "tmpsub")),
                         Operator::Multiply => Ok(self.builder.build_float_mul(lhs, rhs, "tmpmul")),
@@ -282,7 +282,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             },
 
             Expr::Ternary(op, cond, consequence, alternative) => {
-                if op == &Operator::Conditional {
+                if &op.value == &Operator::Conditional {
                     let parent = self.fn_value();
                     let zero_const = self.context.f64_type().const_float(0.0);
 
@@ -528,7 +528,7 @@ fn build_extern<'a, 'ctx>(
 fn handle_declare(expr: &Expr) -> Result<Option<Function>, &'static str> {
     match expr {
         Expr::Binary(op, left, right) => {
-            if op == &Operator::Declare {
+            if &op.value == &Operator::Declare {
                 // handle declaration
                 let var_name = match &left.value {
                     Expr::Ident(i) => &i.name,

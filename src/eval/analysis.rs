@@ -163,7 +163,7 @@ impl Analysis {
 
             Expr::Continue => env,
 
-            Expr::Ternary(op, x, y, z) => match op {
+            Expr::Ternary(op, x, y, z) => match &op.value {
                 Operator::Conditional => {
                     // TODO: Check that the return type of conditional expr is bool
                     self.analyze(x.clone().into(), env.clone());

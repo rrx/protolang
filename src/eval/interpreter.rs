@@ -402,7 +402,7 @@ impl Interpreter {
                 Ok(ExprRefWithEnv::new(result.into(), newenv))
             }
 
-            Expr::Ternary(op, x, y, z) => match op {
+            Expr::Ternary(op, x, y, z) => match &op.value {
                 Operator::Conditional => {
                     let v = Self::evaluate(x.clone().into(), env)?;
                     let b = ExprNode::check_bool(&v.expr.as_ref().borrow())?;

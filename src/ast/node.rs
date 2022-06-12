@@ -132,11 +132,10 @@ impl MaybeNodeContext {
     }
 
     pub fn range(&self) -> std::ops::Range<usize> {
-        let offset = match &self.0 {
-            Some(c) => c.loc.offset,
-            None => 0,
-        };
-        offset..offset
+        match &self.0 {
+            Some(c) => c.loc.start..c.loc.end,
+            None => 0..0,
+        }
     }
 }
 

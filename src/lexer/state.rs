@@ -247,14 +247,14 @@ impl<'a> LexerState<'a> {
                             if self.indent_size < prev_indent {
                                 // close out
                                 let prev = self.indent_stack.pop().unwrap();
-                                let close = crate::tokens::Token::new(Tok::IndentClose, prev.pos);
+                                let close = crate::tokens::Token::new(Tok::IndentClose, prev.pos, prev.pos);
                                 if false {
                                     self.push_token(close);
                                 } else {
                                     self.whitespace.push(close);
                                 }
                             } else if self.indent_size > prev_indent {
-                                let open = crate::tokens::Token::new(Tok::IndentOpen, t.pos);
+                                let open = crate::tokens::Token::new(Tok::IndentOpen, t.pos, t.pos);
                                 if false {
                                     self.push_token(open);
                                 } else {
@@ -287,7 +287,7 @@ impl<'a> LexerState<'a> {
                             if let Some(prev) = self.indent_stack.pop() {
                                 // close out
                                 self.whitespace
-                                    .push(crate::tokens::Token::new(Tok::IndentClose, prev.pos));
+                                    .push(crate::tokens::Token::new(Tok::IndentClose, prev.pos, prev.pos));
                             } else {
                                 break;
                             };
@@ -313,11 +313,11 @@ impl<'a> LexerState<'a> {
 
     pub fn lex_eof(&mut self, i: &'a str) -> PResult<Span<'a>, ()> {
         let (i, _) = self.lex(i)?;
-        let (i, pos) = position(i)?;
+        //let (i, pos) = position(i)?;
         // flush before pushing EOF
         // we only want surround on EOF if we have a whitespace file
         self.flush();
-        self.push_token(Token::new(Tok::EOF, pos));
+        self.push_token(Token::new(Tok::EOF, i, i));
         self.eof();
         Ok((i, ()))
     }
