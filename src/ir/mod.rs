@@ -13,7 +13,6 @@ pub use types::*;
 
 pub type Environment = crate::compiler::env::EnvLayers<String, IR>;
 
-type SymbolTable = HashTrieMap<String, Type>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
@@ -195,6 +194,7 @@ mod tests {
     use super::*;
     use log::debug;
     use test_log::test;
+    use super::check::SymbolTable;
 
     #[test]
     fn analyze() {
@@ -229,7 +229,7 @@ x + 2
         let c = TypeChecker::default();
         let s = SymbolTable::default();
         let out = c.unify(
-            &Type::Func(vec![Type::Int, Type::Unknown("x".into())]),
+            &Type::Func(vec![Type::Int, Type::Unknown(0)]),
             &vec![
                 Type::Func(vec![Type::Float, Type::Float]),
                 Type::Func(vec![Type::Int, Type::Int]),
@@ -237,7 +237,7 @@ x + 2
             Some(s),
         );
         debug!("{:?}", out.as_ref().unwrap().iter().collect::<Vec<_>>());
-        assert_eq!(out.unwrap().get("x".into()), Some(&Type::Int));
+        assert_eq!(out.unwrap().get(&0), Some(&Type::Int));
     }
 
     #[test]
@@ -245,7 +245,7 @@ x + 2
         let c = TypeChecker::default();
         let s = SymbolTable::default();
         let out = c.unify(
-            &Type::Func(vec![Type::Float, Type::Unknown("x".into())]),
+            &Type::Func(vec![Type::Float, Type::Unknown(0)]),
             &vec![Type::Func(vec![Type::Int, Type::Int])],
             Some(s),
         );
@@ -272,32 +272,32 @@ x + 2
     fn types_unknown() {
         let c = TypeChecker::default();
         let s = SymbolTable::default();
-        let out = c.unify(&Type::Unknown("x".into()), &vec![Type::Float], Some(s));
-        assert_eq!(out.unwrap().get("x".into()), Some(&Type::Float));
+        let out = c.unify(&Type::Unknown(0), &vec![Type::Float], Some(s));
+        assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();
         let out = c.unify(
-            &Type::Unknown("x".into()),
+            &Type::Unknown(0),
             &vec![Type::Float, Type::Int],
             Some(s),
         );
-        assert_eq!(out.unwrap().get("x".into()), Some(&Type::Float));
+        assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();
         let out = c
             .unify(
-                &Type::Unknown("x".into()),
-                &vec![Type::Unknown("y".into())],
+                &Type::Unknown(0),
+                &vec![Type::Unknown(1)],
                 Some(s),
             )
             .unwrap();
         //assert_eq!(out.get("y".into()), Some(&Type::Float));
-        assert_eq!(out.get("x".into()), Some(&Type::Unknown("y".into())));
+        assert_eq!(out.get(&0), Some(&Type::Unknown(1)));
 
         // no match
         let s = SymbolTable::default();
         let out = c.unify(
-            &Type::Func(vec![Type::Int, Type::Float, Type::Unknown("x".into())]),
+            &Type::Func(vec![Type::Int, Type::Float, Type::Unknown(0)]),
             &vec![
                 Type::Func(vec![Type::Float, Type::Float, Type::Float]),
                 Type::Func(vec![Type::Int, Type::Int, Type::Int]),

@@ -11,7 +11,7 @@ pub enum Type {
     Float,
     Bool,
     String,
-    Unknown(String),
+    Unknown(usize),
     Void,
     Error,
     Func(FunctionSig),
@@ -58,7 +58,7 @@ impl fmt::Display for Type {
 }
 
 impl Type {
-    pub fn new_unknown(s: String) -> Self {
+    pub fn new_unknown(s: usize) -> Self {
         Self::Unknown(s)
     }
 
