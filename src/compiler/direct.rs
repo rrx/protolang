@@ -1,14 +1,14 @@
-use std::borrow::Borrow;
+//use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::io::{self, Write};
-use std::iter::Peekable;
-use std::ops::DerefMut;
-use std::path::{Path, PathBuf};
-use std::str::Chars;
+use std::io::Write;
+//use std::iter::Peekable;
+//use std::ops::DerefMut;
+use std::path::PathBuf;
+//use std::str::Chars;
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::{Linkage, Module};
+use inkwell::module::Module;
 use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
 use inkwell::values::{
@@ -16,8 +16,8 @@ use inkwell::values::{
 };
 use inkwell::{FloatPredicate, OptimizationLevel};
 
-use crate::ast::{Expr, ExprNode, Operator};
-use crate::eval::Environment;
+use crate::ast::{Expr, Operator};
+//use crate::eval::Environment;
 use crate::parser::parse_file;
 use crate::tokens::Tok;
 
@@ -654,7 +654,7 @@ pub fn compile_and_execute(filenames: Vec<String>) -> anyhow::Result<()> {
 
         println!("AFTER");
         module.print_to_stderr();
-        ee.add_module(&module);
+        let _ = ee.add_module(&module);
     }
 
     // get the main function and execute it

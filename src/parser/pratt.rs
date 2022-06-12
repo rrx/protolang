@@ -3,10 +3,8 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::lexer::Location;
 use crate::parser::{tag_token, take_one_any, PResult};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
-use log::debug;
 use nom::error::ErrorKind;
 use nom::{multi, sequence};
 
@@ -318,7 +316,7 @@ impl Op {
                             //let loc = a.context.to_location();
                             //let end = b.context.to_location();
                             let args = vec![*a, *b, right];
-                            let loc = left_op.context.to_location();
+                            //let loc = left_op.context.to_location();
                             let expr = Expr::Chain(left_op, args);
                             //let loc = Location::new(loc.start, end.end, loc.line, loc.col, "".into());
                             let node = ExprNode::new(expr, &op_loc);
@@ -759,7 +757,7 @@ fn pratt_nonrecursive<'a>(
     }
     Ok((i, left))
 }
-
+/*
 fn pratt_recursive<'a>(
     i: Tokens,
     r: i8,
@@ -845,6 +843,7 @@ fn pratt_recursive<'a>(
         Ok((i, (r, t)))
     }
 }
+*/
 
 pub fn parse_expr_pratt<'a>(i: Tokens) -> RNode {
     i.pratt(Some(0), 0)
@@ -857,6 +856,7 @@ mod tests {
     use crate::parser::print_result;
     use crate::parser::Unparse;
     use crate::sexpr::SExpr;
+    use log::debug;
     use nom::InputIter;
     use test_log::test;
 

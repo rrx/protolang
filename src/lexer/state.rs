@@ -1,6 +1,7 @@
-use super::*;
-use crate::tokens::{FileId, Token};
+use super::lex::*;
+use crate::tokens::{FileId, Span, Tok, Token, Tokens};
 use log::debug;
+use nom::{branch::alt, combinator::map, error::context, multi::many0};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LexNext<'a> {
@@ -72,16 +73,16 @@ impl<'a> LexerState<'a> {
     pub fn from_str_eof(s: &'a str) -> Option<Self> {
         let mut lexer = Self::default();
         match lexer.lex_eof(s.into()) {
-            Ok((rest, _)) => {
-                if rest.len() > 0 {
-                    //debug!("remaining {:?}", (&rest));
-                }
+            Ok((_, _)) => {
+                //if rest.len() > 0 {
+                //debug!("remaining {:?}", (&rest));
+                //}
                 Some(lexer)
             }
-            Err(nom::Err::Error(e)) => {
-                for (tokens, err) in e.errors {
-                    //debug!("error {:?}", (&err, tokens));
-                }
+            Err(nom::Err::Error(_)) => {
+                //for (tokens, err) in e.errors {
+                //debug!("error {:?}", (&err, tokens));
+                //}
                 None
             }
             _ => unreachable!(),
@@ -90,16 +91,16 @@ impl<'a> LexerState<'a> {
     pub fn from_str(s: &'a str) -> Option<Self> {
         let mut lexer = Self::default();
         match lexer.lex(s.into()) {
-            Ok((rest, _)) => {
-                if rest.len() > 0 {
-                    //debug!("remaining {:?}", (&rest));
-                }
+            Ok((_, _)) => {
+                //if rest.len() > 0 {
+                //debug!("remaining {:?}", (&rest));
+                //}
                 Some(lexer)
             }
-            Err(nom::Err::Error(e)) => {
-                for (tokens, err) in e.errors {
-                    //debug!("error {:?}", (&err, tokens));
-                }
+            Err(nom::Err::Error(_)) => {
+                //for (tokens, err) in e.errors {
+                //debug!("error {:?}", (&err, tokens));
+                //}
                 None
             }
             _ => unreachable!(),
