@@ -85,45 +85,6 @@ impl<'a> Default for LexerState<'a> {
 }
 
 impl<'a> LexerState<'a> {
-    /*
-    pub fn from_str_eof(s: &'a str) -> Option<Self> {
-        let mut lexer = Self::default();
-        match lexer.lex_eof(s.into()) {
-            Ok((_, _)) => {
-                //if rest.len() > 0 {
-                //debug!("remaining {:?}", (&rest));
-                //}
-                Some(lexer)
-            }
-            Err(nom::Err::Error(_)) => {
-                //for (tokens, err) in e.errors {
-                //debug!("error {:?}", (&err, tokens));
-                //}
-                None
-            }
-            _ => unreachable!(),
-        }
-    }
-    pub fn from_str(s: &'a str) -> Option<Self> {
-        let mut lexer = Self::default();
-        match lexer.lex(s.into()) {
-            Ok((_, _)) => {
-                //if rest.len() > 0 {
-                //debug!("remaining {:?}", (&rest));
-                //}
-                Some(lexer)
-            }
-            Err(nom::Err::Error(_)) => {
-                //for (tokens, err) in e.errors {
-                //debug!("error {:?}", (&err, tokens));
-                //}
-                None
-            }
-            _ => unreachable!(),
-        }
-    }
-    */
-
     pub fn set_file_id(mut self, file_id: FileId) -> Self {
         self.file_id = file_id;
         self
@@ -141,28 +102,6 @@ impl<'a> LexerState<'a> {
         );
         self.acc.push(token);
     }
-
-    /*
-    pub fn final_toks(&mut self) -> Vec<Tok> {
-        self.flush();
-        vec![&self.acc, &self.whitespace]
-            .into_iter()
-            .flatten()
-            .map(|v| v.toks())
-            .flatten()
-            .collect()
-    }
-
-    pub fn expand_toks(&mut self) -> Vec<Tok> {
-        self.flush();
-        vec![&self.acc, &self.whitespace]
-            .into_iter()
-            .flatten()
-            .map(|v| v.expand_toks())
-            .flatten()
-            .collect()
-    }
-    */
 
     fn flush(&mut self) {
         // we can only flush if we have at least one in acc

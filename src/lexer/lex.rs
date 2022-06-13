@@ -11,7 +11,7 @@ use nom::{
     IResult,
 };
 
-use super::state::{lex_next, LexNext};
+use super::state::lex_next;
 use super::string::lex_string;
 use crate::tokens::*;
 use nom_locate::position;
@@ -486,7 +486,7 @@ f +
         assert_eq!(t.tok, Tok::IntLiteral(1));
         let (i, t) = lex_token_any(i).unwrap();
         assert_eq!(t.tok, Tok::Spaces(1));
-        let (i, t) = lex_token_any(i).unwrap();
+        let (_, t) = lex_token_any(i).unwrap();
         assert_eq!(t.tok, Tok::IntLiteral(2));
     }
 }
