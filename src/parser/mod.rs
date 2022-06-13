@@ -17,7 +17,6 @@ use std::result::Result::*;
 
 mod error;
 mod pratt;
-mod pratt1;
 pub(crate) use error::{print_result, PResult};
 
 mod unparse;
@@ -173,8 +172,8 @@ pub fn token_expr(i: Span) -> LResult<Span, ExprNode> {
         "parse-expr",
         alt((
             context("pratt-expr", pratt::parse_expr_pratt),
-            context("declaration", ExprNode::parse_declaration),
-            context("expr-lambda", ExprNode::parse_lambda),
+            context("declaration", parse_declaration),
+            context("expr-lambda", parse_lambda),
         )),
     )(i)?;
     */
@@ -195,7 +194,7 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
             //context("expr-eof", map(tag_token(Tok::EOF), |t| ExprNode::new_with_token(Expr::Void, &t.tok[0]))),
             context("pratt-expr", pratt::parse_expr_pratt),
             context("declaration", parse_declaration),
-            context("expr-lambda", ExprNode::parse_lambda),
+            context("expr-lambda", parse_lambda),
         )),
     )(i)?;
 
@@ -417,47 +416,45 @@ fn parse_invalid_token(i: Tokens) -> PResult<Tokens, ExprNode> {
     }
 }
 
-impl ExprNode {
-    pub(crate) fn parse_literal(i: Tokens) -> PResult<Tokens, ExprNode> {
-        let (i, pos) = position(i)?;
-        let (i1, t1) = take_one_any(i)?;
-        let token = &t1.tok[0];
-        let tok = &token.tok;
+pub(crate) fn parse_literal(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos) = position(i)?;
+    let (i1, t1) = take_one_any(i)?;
+    let token = &t1.tok[0];
+    let tok = &token.tok;
 
-        if let Ok(lit) = tok.try_into() {
-            let mut litnode = ExprNode::new(lit, &token.to_location());
-            litnode.context.prepend(token.s.pre.clone());
-            litnode.context.append(token.s.post.clone());
-            Ok((i1, litnode))
-        } else {
-            Err(Err::Error(error_position!(i1, ErrorKind::Tag)))
-        }
+    if let Ok(lit) = tok.try_into() {
+        let mut litnode = ExprNode::new(lit, &token.to_location());
+        litnode.context.prepend(token.s.pre.clone());
+        litnode.context.append(token.s.post.clone());
+        Ok((i1, litnode))
+    } else {
+        Err(Err::Error(error_position!(i1, ErrorKind::Tag)))
     }
+}
 
-    fn parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
-        context("lambda-expr", Self::_parse_lambda)(i)
-    }
-    fn _parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
-        let (i, pos) = position(i)?;
-        let (i, (slash, idents, arrow)) = tuple((
-            tag_token(Tok::Backslash),
-            many0(parse_ident_expr),
-            tag_token(Tok::LeftArrow),
-        ))(i)?;
+fn parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
+    context("lambda-expr", _parse_lambda)(i)
+}
+fn _parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos) = position(i)?;
+    let (i, (slash, idents, arrow)) = tuple((
+        tag_token(Tok::Backslash),
+        many0(parse_ident_expr),
+        tag_token(Tok::LeftArrow),
+    ))(i)?;
 
-        let (i, mut body) = parse_expr(i)?;
-        //debug!("slash: {:?}", &slash);
-        //debug!("idents: {:?}", &idents);
-        //debug!("body: {:?}", &body);
-        let loc = slash.tok[0].to_location();
-        let mut params = Params::new(idents, &loc);
-        params.context.prepend(slash.tok[0].toks_post());
-        params.context.append(arrow.tok[0].toks_pre());
-        body.context.prepend(arrow.tok[0].toks_post());
-        let mut lambda: ExprNode = Lambda::new(params, body, &loc).into();
-        lambda.context.prepend(slash.tok[0].toks_pre());
-        Ok((i, lambda))
-    }
+    let (i, mut body) = parse_expr(i)?;
+    //debug!("slash: {:?}", &slash);
+    //debug!("idents: {:?}", &idents);
+    //debug!("body: {:?}", &body);
+    let loc = slash.tok[0].to_location();
+    let mut params = Params::new(idents, &loc);
+    params.context.prepend(slash.tok[0].toks_post());
+    params.context.append(arrow.tok[0].toks_pre());
+    body.context.prepend(arrow.tok[0].toks_post());
+    let mut lambda: ExprNode = Lambda::new(params, body, &loc).into();
+    lambda.context.prepend(slash.tok[0].toks_pre());
+    Ok((i, lambda))
 }
 
 pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
@@ -525,7 +522,7 @@ mod tests {
             let mut lexer = LexerState::default();
             let (_, tokens) = lexer.lex(v).unwrap();
             debug!("{:?}", (&tokens.toks()));
-            let (rest, result) = ExprNode::parse_literal(tokens).unwrap();
+            let (rest, result) = parse_literal(tokens).unwrap();
             debug!("lit {:?}", (&result, rest.toks()));
             let restored = result.unlex();
             debug!("restored {:?}", (&restored));

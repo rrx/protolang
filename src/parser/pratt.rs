@@ -3,7 +3,7 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::parser::{parse_ident_expr, tag_token, take_one_any, PResult, parse_invalid_token};
+use crate::parser::*;
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use nom::error::ErrorKind;
 use nom::{multi, sequence};
@@ -557,10 +557,10 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
             Tok::IntLiteral(_) | Tok::StringLiteral(_) | Tok::FloatLiteral(_) | Tok::BoolLiteral(_),
         ) => {
             // consume literal
-            ExprNode::parse_literal(i)
+            parse_literal(i)
         }
 
-        Some(Tok::Backslash) => ExprNode::parse_lambda(i),
+        Some(Tok::Backslash) => parse_lambda(i),
 
         // Expression Block
         Some(Tok::LBrace) => {
