@@ -6,7 +6,7 @@ use crate::tokens::TokensList;
 use crate::tokens::*;
 use log::debug;
 use nom::branch::*;
-use nom::bytes::complete::take;
+use nom::bytes::complete::{take, take_while};
 use nom::combinator::verify;
 use nom::error::{context, ErrorKind};
 use nom::multi::many0;
@@ -78,8 +78,21 @@ fn parse_newline<'a>(i: Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     })(i)
 }
 
+pub(crate) fn token_take_one_any(i: Span) -> LResult<Span, Span> {
+    take(1usize)(i)
+}
+
 pub(crate) fn take_one_any(i: Tokens) -> PResult<Tokens, Tokens> {
     take(1usize)(i)
+}
+
+
+fn token_not_stmt_end(i: Span) -> LResult<Span, Span> {
+    // also return if we get EOF
+    if i.len() == 0 {
+        return Ok((i.clone(), i));
+    }
+    take_while(|c: char| c != ';')(i)
 }
 
 fn parse_not_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
@@ -93,6 +106,14 @@ fn parse_not_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
     )(i)
 }
 
+fn token_stmt_end(i: Span) -> LResult<Span, Span> {
+    // also return if we get EOF
+    if i.len() == 0 {
+        return Ok((i.clone(), i));
+    }
+    take_while(|c: char| c == ';')(i)
+}
+
 fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
     context(
         "parse-stmt-end",
@@ -103,6 +124,20 @@ fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
             tag_token(Tok::SemiColon),
         )),
     )(i)
+}
+
+fn parse_invalid_token(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos) = position(i)?;
+    let (i, t1) = take_one_any(i)?;
+    let token = &t1.tok[0];
+    match &token.tok {
+        Tok::Invalid(s) => {
+            let expr = Expr::Invalid(s.clone());
+            let node = ExprNode::new_with_token(expr, &token);//new_loc_node_token(expr, &pos, &i);
+            Ok((i, node))
+        }
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
+    }
 }
 
 pub fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
@@ -396,20 +431,6 @@ fn _parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
             let expr = Expr::Ident(Identifier::new(s.clone(), VarModifier::Default));
             let node = ExprNode::new_with_token(expr, &token);//new_loc_node_token(expr, &pos, &i);
             log::debug!("t: {:?}", (&token, &node));
-            Ok((i, node))
-        }
-        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
-    }
-}
-
-fn parse_invalid_token(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, pos) = position(i)?;
-    let (i, t1) = take_one_any(i)?;
-    let token = &t1.tok[0];
-    match &token.tok {
-        Tok::Invalid(s) => {
-            let expr = Expr::Invalid(s.clone());
-            let node = ExprNode::new_with_token(expr, &token);//new_loc_node_token(expr, &pos, &i);
             Ok((i, node))
         }
         _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
