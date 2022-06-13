@@ -17,7 +17,7 @@ use std::result::Result::*;
 
 mod error;
 mod pratt;
-pub(crate) use error::{print_result, PResult};
+pub(crate) use error::PResult;
 
 mod unparse;
 pub use unparse::{unparse_expr, Unparse};
@@ -457,6 +457,7 @@ fn _parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
     Ok((i, lambda))
 }
 
+/*
 pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
     let contents = std::fs::read_to_string(filename.clone())
         .unwrap()
@@ -473,6 +474,7 @@ pub fn parse_str(s: &str) -> anyhow::Result<ExprNode> {
     let (_, expr) = crate::parser::parse_program(tokens).unwrap();
     Ok(expr)
 }
+*/
 
 #[cfg(test)]
 mod tests {
@@ -482,6 +484,7 @@ mod tests {
     use crate::sexpr::SExpr;
     use nom::multi::many1;
     use test_log::test;
+    use super::error::print_result;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);

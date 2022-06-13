@@ -18,7 +18,8 @@ use inkwell::{FloatPredicate, OptimizationLevel};
 
 use crate::ast::{Expr, Operator};
 //use crate::eval::Environment;
-use crate::parser::parse_file;
+//use crate::parser::parse_file;
+use crate::program::Program;
 use crate::tokens::Tok;
 
 /// Defines the prototype (name and parameters) of a function.
@@ -594,6 +595,7 @@ pub fn compile_and_execute(filenames: Vec<String>) -> anyhow::Result<()> {
     let context = Context::create();
     let module = context.create_module("main");
     let builder = context.create_builder();
+    let mut program = Program::new();
 
     // Create FPM
     let fpm = PassManager::create(&module);
@@ -629,7 +631,7 @@ pub fn compile_and_execute(filenames: Vec<String>) -> anyhow::Result<()> {
         build_extern(&context, &module, "putchard");
         build_extern(&context, &module, "printd");
 
-        let expr = parse_file(&filename)?;
+        let expr = program.parse_file(&filename)?;
         let functions = handle_program(&expr).unwrap();
         let fns = functions
             .iter()

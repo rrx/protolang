@@ -846,7 +846,7 @@ pub fn parse_expr_pratt<'a>(i: Tokens) -> RNode {
 mod tests {
     use super::*;
     use crate::lexer::*;
-    use crate::parser::print_result;
+    use crate::parser::error::print_result;
     use crate::parser::Unparse;
     use crate::sexpr::SExpr;
     use log::debug;
