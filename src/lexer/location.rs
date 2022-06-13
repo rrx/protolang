@@ -58,7 +58,7 @@ impl Location {
         self.start..self.end
     }
 
-    pub fn from_tokens_position(start: Tokens, end: Tokens) -> Self {
+    pub fn from_tokens_position(start: &Tokens, end: &Tokens) -> Self {
         let mut loc = start.to_location();
         loc.end = end.to_location().end;
         loc
@@ -71,7 +71,7 @@ impl Location {
             line: 0,
             col: 0,
             fragment: "".into(),
-            file_id: 0,
+            file_id: start.extra.file_id,
         }
     }
 

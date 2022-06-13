@@ -23,6 +23,16 @@ pub(crate) use error::{print_result, PResult};
 mod unparse;
 pub use unparse::{unparse_expr, Unparse};
 
+fn new_loc_node(expr: Expr, start: &Span, end: &Span) -> ExprNode {
+    let loc = Location::from_position(&start, &end);
+    ExprNode::new(expr, &loc)
+}
+
+fn new_loc_node_token(expr: Expr, start: &Tokens, end: &Tokens) -> ExprNode {
+    let loc = Location::from_tokens_position(start, end);
+    ExprNode::new(expr, &loc)
+}
+
 pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     verify(take_one_any, move |tokens: &Tokens<'a>| {
         let v = &tokens.tok[0].tok;
@@ -31,7 +41,7 @@ pub(crate) fn tag_token<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<
 }
 
 // this function is super slow
-pub(crate) fn tag_token2<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
+pub(crate) fn _tag_token2<'a>(t: Tok) -> impl FnMut(Tokens<'a>) -> PResult<Tokens<'a>, Tokens<'a>> {
     let s = t.into();
     context(
         s,
@@ -100,18 +110,18 @@ pub fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("parse-invalid", _parse_invalid)(i)
 }
 pub fn _parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos) = position(i)?;
     // Don't return invalid if we have EOF
     if i.is_eof() {
         return Err(Err::Error(error_position!(i, ErrorKind::Eof)));
     }
 
-    let loc = i.to_location().clone();
-    let (i1, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
+    let (i, (r, end)) = pair(many0(parse_not_stmt_end), parse_stmt_end)(i)?;
     let s = r.iter().map(|t| t.unlex()).collect::<Vec<_>>().join("");
-    let mut expr = ExprNode::new(Expr::Invalid(s), &loc);
+    let mut expr = new_loc_node_token(Expr::Invalid(s), &pos, &i);
     // handle trailing newline
     expr.context.append(end.expand_toks());
-    Ok((i1, expr))
+    Ok((i, expr))
 }
 
 pub fn _parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
@@ -133,12 +143,13 @@ pub fn _parse_assignment_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 pub fn parse_program(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos) = position(i)?;
     let (i, (exprs, end)) = pair(
         context("program-start", many0(alt((parse_expr, parse_invalid)))),
         context("program-end", combinator::rest), //many0(parse_whitespace_or_eof)),
     )(i)?;
 
-    let mut value = ExprNode::new(Expr::Program(exprs), &i.to_location());
+    let mut value = new_loc_node_token(Expr::Program(exprs), &pos, &i);
     value.context.append(end.expand_toks());
     Ok((i, value))
 }
@@ -153,6 +164,7 @@ pub fn parse_program_fn(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 pub fn token_expr(i: Span) -> LResult<Span, ExprNode> {
+    //let (i, pos) = position(i)?;
     let t = Expr::Void;
     let mut node = ExprNode::new(t, &Location::default());
 
@@ -199,22 +211,19 @@ pub fn parse_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 pub fn token_block(i: Span) -> LResult<Span, ExprNode> {
     // consume LBrace
     let (i, pos) = position(i)?;
-    let (i, left) = s_tag_token(Tok::LBrace)(i)?;
-    // Parse a full expression
-    let p = |i| token_expr(i);
-
-    let (i, (t, right)) = sequence::pair(
-        multi::many0(p),
-        context("r-brace", s_tag_token(Tok::RBrace)),
-    )(i)?;
-    let t = Expr::Block(t);
-    let loc = Location::from_position(&pos, &i);
-    let mut node = ExprNode::new(t, &loc);
+    let (i, (left, expressions, right)) = tuple((
+        s_tag_token(Tok::LBrace),
+        many0(token_expr),
+        s_tag_token(Tok::RBrace),
+    ))(i)?;
+    let t = Expr::Block(expressions);
+    let mut node = new_loc_node(t, &pos, &i);
     node.context.prepend(left.expand_toks());
     node.context.append(right.expand_toks());
     Ok((i, node))
 }
 
+/*
 pub fn parse_block2(i: Tokens) -> PResult<Tokens, ExprNode> {
     // consume LBrace
     let (i, left) = tag_token(Tok::LBrace)(i)?;
@@ -229,6 +238,7 @@ pub fn parse_block2(i: Tokens) -> PResult<Tokens, ExprNode> {
     node.context.append(right.expand_toks());
     Ok((i, node))
 }
+*/
 
 pub fn parse_block(i: Tokens) -> PResult<Tokens, ExprNode> {
     let (i, pos) = position(i)?;
@@ -237,7 +247,7 @@ pub fn parse_block(i: Tokens) -> PResult<Tokens, ExprNode> {
         many0(parse_expr),
         tag_token(Tok::RBrace),
     ))(i)?;
-    let mut node = ExprNode::new(Expr::Block(expressions), &i.to_location());
+    let mut node = new_loc_node_token(Expr::Block(expressions), &pos, &i);
     node.context.prepend(left.tok[0].expand_toks());
     node.context.append(right.tok[0].expand_toks());
     Ok((i, node))
@@ -305,13 +315,14 @@ pub fn token_list(i: Span) -> LResult<Span, ExprNode> {
 }
 
 pub fn parse_list(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos) = position(i)?;
     // consume LBracket
     let (i, left) = tag_token(Tok::LBracket)(i)?;
     let (i, t) = parse_expr(i)?;
     // consume RBracket
     let (i, right) = context("r-bracket", tag_token(Tok::RBracket))(i)?;
     let t = Expr::List(vec![t]);
-    let mut node = ExprNode::new(t, &i.to_location());
+    let mut node = new_loc_node_token(t, &pos, &i);
     node.context.prepend(left.expand_toks());
     node.context.append(right.expand_toks());
     Ok((i, node))
@@ -322,6 +333,7 @@ pub fn _parse_empty_stmt(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 pub(crate) fn parse_declaration(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos_start) = position(i)?;
     let (i, tlet) = tag_token(Tok::Let)(i)?;
 
     let token = &i.tok[0].tok;
@@ -336,20 +348,25 @@ pub(crate) fn parse_declaration(i: Tokens) -> PResult<Tokens, ExprNode> {
     };
 
     //debug!("is_mut {}", is_mutable);
+    let (i, pos_ident) = position(i)?;
     let (i, mut ident) = parse_ident(i)?;
     if is_mutable {
         ident.modifier = VarModifier::Mutable;
     }
-    let mut node = ExprNode::new_with_token(Expr::Ident(ident), &i.tok[0]);
+    let mut node = new_loc_node_token(Expr::Ident(ident), &pos_ident, &i);
     node.context.prepend(m_toks);
     node.context.prepend(tlet.expand_toks());
+
+    let (i, pos_assign) = position(i)?;
     let (i, assign) = tag_token(Tok::Assign)(i)?;
     node.context.append(assign.expand_toks());
+    let op_loc = Location::from_tokens_position(&pos_assign, &i);
+    let op_node = OperatorNode::new_with_location(Operator::Declare, op_loc);
 
     let (i, rhs) = pratt::parse_expr_pratt(i)?;
-    let loc = i.to_location();
+    //let loc = i.to_location();
     let expr = Expr::Binary(
-        OperatorNode::new_with_location(Operator::Declare, loc),
+        op_node,
         Box::new(node),
         Box::new(rhs),
     );
@@ -358,11 +375,11 @@ pub(crate) fn parse_declaration(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 fn parse_ident(i: Tokens) -> PResult<Tokens, Identifier> {
-    let (i1, t1) = take_one_any(i)?;
-    let token = &t1.tok[0];
+    let (i, t) = take_one_any(i)?;
+    let token = &t.tok[0];
     match &token.tok {
-        Tok::Ident(s) => Ok((i1, Identifier::new(s.clone(), VarModifier::Default))),
-        _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
+        Tok::Ident(s) => Ok((i, Identifier::new(s.clone(), VarModifier::Default))),
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
     }
 }
 
@@ -371,33 +388,38 @@ pub(crate) fn parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 fn _parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i1, t1) = take_one_any(i)?;
-    let token = &t1.tok[0];
+    log::debug!("{:?}", (&i, &i.input_len()));
+    let (i, pos) = position(i)?;
+    let (i, t) = take_one_any(i)?;
+    let token = &t.tok[0];
     match &token.tok {
         Tok::Ident(s) => {
             let expr = Expr::Ident(Identifier::new(s.clone(), VarModifier::Default));
-            let node = ExprNode::new_with_token(expr, &token);
-            Ok((i1, node))
+            let node = ExprNode::new_with_token(expr, &token);//new_loc_node_token(expr, &pos, &i);
+            log::debug!("t: {:?}", (&token, &node));
+            Ok((i, node))
         }
-        _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
+    }
+}
+
+fn parse_invalid_token(i: Tokens) -> PResult<Tokens, ExprNode> {
+    let (i, pos) = position(i)?;
+    let (i, t1) = take_one_any(i)?;
+    let token = &t1.tok[0];
+    match &token.tok {
+        Tok::Invalid(s) => {
+            let expr = Expr::Invalid(s.clone());
+            let node = ExprNode::new_with_token(expr, &token);//new_loc_node_token(expr, &pos, &i);
+            Ok((i, node))
+        }
+        _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
     }
 }
 
 impl ExprNode {
-    fn parse_invalid(i: Tokens) -> PResult<Tokens, ExprNode> {
-        let (i1, t1) = take_one_any(i)?;
-        let token = &t1.tok[0];
-        match &token.tok {
-            Tok::Invalid(s) => {
-                let expr = Expr::Invalid(s.clone());
-                let node = ExprNode::new_with_token(expr, &token);
-                Ok((i1, node))
-            }
-            _ => Err(Err::Error(error_position!(i1, ErrorKind::Tag))),
-        }
-    }
-
     pub(crate) fn parse_literal(i: Tokens) -> PResult<Tokens, ExprNode> {
+        let (i, pos) = position(i)?;
         let (i1, t1) = take_one_any(i)?;
         let token = &t1.tok[0];
         let tok = &token.tok;
@@ -416,6 +438,7 @@ impl ExprNode {
         context("lambda-expr", Self::_parse_lambda)(i)
     }
     fn _parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
+        let (i, pos) = position(i)?;
         let (i, (slash, idents, arrow)) = tuple((
             tag_token(Tok::Backslash),
             many0(parse_ident_expr),
@@ -442,15 +465,15 @@ pub fn parse_file(filename: &str) -> anyhow::Result<ExprNode> {
         .unwrap()
         .to_string();
     let mut lexer = crate::lexer::LexerState::default();
-    let (_, _) = lexer.lex(contents.as_str()).unwrap();
-    let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
+    let (_, tokens) = lexer.lex(contents.as_str()).unwrap();
+    let (_, expr) = crate::parser::parse_program(tokens).unwrap();
     Ok(expr)
 }
 
 pub fn parse_str(s: &str) -> anyhow::Result<ExprNode> {
     let mut lexer = crate::lexer::LexerState::default();
-    let (_, _) = lexer.lex(s).unwrap();
-    let (_, expr) = crate::parser::parse_program(lexer.tokens().clone()).unwrap();
+    let (_, tokens) = lexer.lex(s).unwrap();
+    let (_, expr) = crate::parser::parse_program(tokens).unwrap();
     Ok(expr)
 }
 
@@ -465,10 +488,8 @@ mod tests {
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);
-        let mut lexer = LexerState::from_str_eof(s).unwrap();
-        let tokens = lexer.tokens();
-        //let toks = tokens.toks();
-        //debug!("tokens {:?}", tokens);
+        let mut lexer = LexerState::default();
+        let (_, tokens) = lexer.lex_eof(s).unwrap();
         match parse_program(tokens) {
             Ok((prog_rest, prog)) => {
                 if prog_rest.input_len() > 0 {
@@ -480,7 +501,6 @@ mod tests {
                 s == s2
             }
             Err(nom::Err::Error(e)) => {
-                //debug!("Error: {:?}", e);
                 for (tokens, err) in e.errors {
                     debug!("error {:?}", (&err, tokens.toks()));
                 }
@@ -502,9 +522,8 @@ mod tests {
     fn literal() {
         let r = vec!["1", "2 ", "\n1", "1\n"];
         r.iter().for_each(|v| {
-            let mut lexer = LexerState::from_str(v).unwrap();
-            let tokens = lexer.tokens();
-            //let toks = tokens.toks();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex(v).unwrap();
             debug!("{:?}", (&tokens.toks()));
             let (rest, result) = ExprNode::parse_literal(tokens).unwrap();
             debug!("lit {:?}", (&result, rest.toks()));
@@ -518,12 +537,13 @@ mod tests {
     fn ident() {
         let r = vec!["x", "x "];
         r.iter().for_each(|v| {
-            let mut lexer = LexerState::from_str(v).unwrap();
-            let tokens = lexer.tokens();
-            //let toks = tokens.toks();
-            debug!("{:?}", (&tokens.toks()));
-            let (_, result) = parse_ident_expr(tokens).unwrap();
-            debug!("ident {:?}", (&result));
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex(v).unwrap();
+            debug!("tokens: {:?}", (&tokens));
+            debug!("toks: {:?}", (&tokens.expand_toks()));
+            let (rest, result) = parse_ident_expr(tokens).unwrap();
+            debug!("ident {:?}", (&result, &rest));
+            assert_eq!(rest.input_len(), 0);
             let restored = result.unlex();
             debug!("restored {:?}", (&restored));
             assert_eq!(v, &restored);
@@ -558,10 +578,9 @@ mod tests {
             "let x=1;(x+1);",
         ];
         r.iter().for_each(|v| {
-            let mut lexer = LexerState::from_str_eof(v).unwrap();
-            let tokens = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(v).unwrap();
             debug!("v {:?}", (&v));
-            //debug!("tokens: {:?}", (&tokens));
 
             let mut p = many1(parse_expr);
             match p(tokens) {
@@ -599,8 +618,8 @@ mod tests {
             //("let mut x = y\nlet x =2 ", true)
         ];
         r.iter().for_each(|(v, is_mut)| {
-            let mut lexer = LexerState::from_str_eof(v).unwrap();
-            let tokens = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(v).unwrap();
             debug!("q: {}", v);
             let (i, exprs) = many1(parse_declaration)(tokens).unwrap();
             let expr = exprs.get(0).unwrap();
@@ -640,11 +659,9 @@ mod tests {
             "f = \\x -> { x^2;;;; };;;;",
         ];
         r.iter().for_each(|v| {
-            let mut lexer = LexerState::from_str_eof(v).unwrap();
-            let tokens = lexer.tokens();
-            //let toks = tokens.toks();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(v).unwrap();
             debug!("q: {}", v);
-            //debug!("toks: {:?}", (&toks));
             let mut p = many0(parse_expr);
 
             match p(tokens) {
@@ -699,12 +716,10 @@ mod tests {
         ];
         r.iter_mut().for_each(|(q, a)| {
             debug!("q {:?}", (&q));
-            a.push(Tok::EOF);
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            let tokens = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex(q).unwrap();
             debug!("tokens: {:?}", (&tokens.toks()));
             let r = parse_program(tokens);
-            //print_result(&r);
             match r {
                 Ok((rest, prog)) => {
                     debug!("x{:?}", (&rest.toks(), &prog));
@@ -793,8 +808,8 @@ mod tests {
         let r = vec!["x = 1 + 2 ", "x = \\x -> { 0\n } \n", "{ }"];
         r.iter().for_each(|v| {
             debug!("q {:?}", (&v));
-            let mut lexer = LexerState::from_str_eof(v).unwrap();
-            let tokens = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(v).unwrap();
             debug!("tokens: {:?}", (&tokens.toks()));
             match parse_program(tokens) {
                 Ok((rest, prog)) => {
@@ -826,16 +841,16 @@ mod tests {
         r.iter().for_each(|(q, a)| {
             debug!("q {:?}", (&q));
 
-            let mut lexer = LexerState::from_str(q).unwrap();
-            let i = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex(q).unwrap();
 
-            debug!("tokens: {:?}", (i.toks()));
+            debug!("tokens: {:?}", (tokens.toks()));
 
-            i.iter_elements().for_each(|t| {
+            tokens.iter_elements().for_each(|t| {
                 debug!("{:?}", t);
             });
 
-            let r = parse_program(i);
+            let r = parse_program(tokens);
             print_result(&r);
             match r {
                 Ok((i, expr)) => {

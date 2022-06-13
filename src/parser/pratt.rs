@@ -3,7 +3,7 @@
  * Based heavily on this excellent article that explains Pratt Parsing
  * https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm
  */
-use crate::parser::{parse_ident_expr, tag_token, take_one_any, PResult};
+use crate::parser::{parse_ident_expr, tag_token, take_one_any, PResult, parse_invalid_token};
 use crate::tokens::{Tok, Token, Tokens, TokensList};
 use nom::error::ErrorKind;
 use nom::{multi, sequence};
@@ -653,7 +653,7 @@ fn primary<'a>(i: Tokens<'a>, depth: usize) -> RNode<'a> {
 
         Some(Tok::Invalid(_)) => {
             // consume invalid
-            ExprNode::parse_invalid(i)
+            parse_invalid_token(i)
         }
 
         Some(Tok::IndentOpen) => {
@@ -897,15 +897,15 @@ mod tests {
             "a! ^ b",
         ];
         r.iter().for_each(|v| {
-            let mut lexer = LexerState::from_str_eof(v).unwrap();
-            let i = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(v).unwrap();
             debug!("v {:?}", (&v));
-            debug!("tokens: {:?}", (i));
+            debug!("tokens: {:?}", (tokens));
 
-            i.iter_elements().for_each(|t| {
+            tokens.iter_elements().for_each(|t| {
                 debug!("{:?}", t);
             });
-            let r = crate::parser::parse_expr(i);
+            let r = crate::parser::parse_expr(tokens);
             match r {
                 Ok((i, node)) => {
                     let r = node.unlex();
@@ -1053,16 +1053,16 @@ mod tests {
         r.iter().for_each(|(q, a)| {
             debug!("q {:?}", (&q));
 
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            let i = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(q).unwrap();
 
-            debug!("tokens: {:?}", (i.expand_toks()));
+            debug!("tokens: {:?}", (tokens.expand_toks()));
 
-            i.iter_elements().for_each(|t| {
+            tokens.iter_elements().for_each(|t| {
                 debug!("{:?}", t);
             });
 
-            let r = crate::parser::parse_expr(i);
+            let r = crate::parser::parse_expr(tokens);
             print_result(&r);
             match r {
                 Ok((i, expr)) => {
@@ -1092,13 +1092,13 @@ mod tests {
     #[test]
     fn asdf() {
         let q = "{-1;+2}";
-        let mut lexer = LexerState::from_str_eof(q).unwrap();
-        let i = lexer.tokens();
-        debug!("tokens: {:?}", (i.toks()));
-        i.iter_elements().for_each(|t| {
+        let mut lexer = LexerState::default();
+        let (_, tokens) = lexer.lex_eof(q).unwrap();
+        debug!("tokens: {:?}", (tokens.toks()));
+        tokens.iter_elements().for_each(|t| {
             debug!("{:?}", t);
         });
-        let r = crate::parser::parse_expr(i);
+        let r = crate::parser::parse_expr(tokens);
         print_result(&r);
     }
 }

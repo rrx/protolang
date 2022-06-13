@@ -1,5 +1,5 @@
 use super::function::{Callable, Lambda};
-use super::node::{FromContext, MaybeNodeContext};
+use super::node::{FromContext, MaybeNodeContext, Context};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
 use crate::ast::CallWithType;
@@ -189,10 +189,14 @@ impl std::ops::DerefMut for ExprNode {
 impl fmt::Debug for ExprNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let loc = self.context.to_location();
+        let pre = self.context.pre();
+        let post = self.context.post();
         f.debug_struct("ExprN")
             .field("v", &self.value)
             .field("start", &loc.start)
             .field("end", &loc.end)
+            .field("pre", &pre)
+            .field("post", &post)
             .finish()
         /*
         let pre = self.context.pre();

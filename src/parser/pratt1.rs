@@ -238,7 +238,7 @@ pub fn infix_op(t: &Tok) -> (Precedence, Option<Operator>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::*;
+    //use crate::lexer::*;
     use crate::sexpr::SExpr;
 
     use super::super::tests::parser_losslessness;
@@ -372,8 +372,7 @@ mod tests {
         r.iter().for_each(|(q, a)| {
             debug!("q {:?}", (&q));
             let mut lexer = LexerState::default();
-            let (_, _) = lexer.lex_eof(q).unwrap();
-            let tokens = lexer.tokens();
+            let (_, tokens) = lexer.lex_eof(q).unwrap();
             debug!("{:?}", (&tokens.toks()));
             let r = parse_expr(tokens);
             print_result(&r);

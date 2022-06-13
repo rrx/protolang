@@ -1,8 +1,6 @@
 use super::*;
 use crate::lexer::Location;
-use crate::results::*;
 use crate::tokens::{FileId, Tok};
-use log::*;
 use nom::InputIter;
 use std::fmt;
 
@@ -551,10 +549,9 @@ impl TypeChecker {
         let file_id = self
             .results
             .add_source(filename.into(), contents.to_string());
-        let mut lexer = crate::lexer::LexerState::from_str_eof(&contents)
-            .unwrap()
+        let mut lexer = crate::lexer::LexerState::default()
             .set_file_id(file_id);
-        let tokens = lexer.tokens();
+        let (_, tokens) = lexer.lex_eof(&contents).unwrap();
 
         for t in tokens.iter_elements() {
             debug!("T: {:?}", t);

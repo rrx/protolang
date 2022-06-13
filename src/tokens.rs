@@ -208,8 +208,8 @@ impl<'a> fmt::Debug for Token<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Token")
             .field("tok", &self.tok)
-            //.field("pre", &self.s.pre)
-            //.field("post", &self.s.post)
+            .field("pre", &self.s.pre)
+            .field("post", &self.s.post)
             //.field("line", &self.pos.location_line())
             //.field("col", &self.pos.get_column())
             //.field("pos", &self.pos)
@@ -355,7 +355,7 @@ impl<'a> TokensList for Tokens<'a> {
 }
 
 impl<'a> Tokens<'a> {
-    pub fn new(vec: &'a [Token], file_id: FileId) -> Self {
+    pub fn new(vec: &'a [Token<'a>], file_id: FileId) -> Self {
         Tokens {
             tok: vec,
             start: 0,

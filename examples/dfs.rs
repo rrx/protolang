@@ -13,8 +13,8 @@ impl ExprVisitor<Vec<ExprNode>> for DFS {
 
 fn main() {
     let s = "1 + 2 * 3";
-    let mut lexer = LexerState::from_str_eof(s).unwrap();
-    let tokens = lexer.tokens2().clone();
+    let mut lexer = LexerState::default();
+    let (_, tokens) = lexer.lex_eof(s).unwrap();
     let (_, expr) = parse_program(tokens).unwrap();
     let mut dfs = DFS {};
     let mut out = vec![];

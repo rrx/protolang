@@ -218,6 +218,14 @@ pub fn span<'a>(s: &'a str, file_id: FileId) -> Span<'a> {
     Span::new_extra(s, SpanExtra { file_id })
 }
 
+/*
+pub fn lex<'a>(s: &'a str, file_id: FileId) -> Tokens<'a> {
+    let mut lexer = super::state::LexerState::default().set_file_id(file_id);
+    let (_, tokens) = lexer.lex(s).unwrap();
+    tokens.clone()
+}
+*/
+
 #[cfg(test)]
 mod tests {
     use super::super::state::LexerState;
@@ -245,12 +253,11 @@ mod tests {
             ("\t\t", vec![]),
             ("\t", vec![]),
         ];
-        r.into_iter().for_each(|(q, mut a)| {
-            a.push(EOF);
+        r.into_iter().for_each(|(q, a)| {
             debug!("q: {:?}", q);
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            debug!("state: {:?}", &lexer);
-            assert_eq!(lexer.final_toks(), *a);
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex(q).unwrap();
+            assert_eq!(tokens.toks(), *a);
         });
     }
 
@@ -266,9 +273,9 @@ mod tests {
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);
             debug!("q: {:?}", q);
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            debug!("state: {:?}", &lexer);
-            assert_eq!(lexer.expand_toks(), *a);
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(q).unwrap();
+            assert_eq!(tokens.expand_toks(), *a);
         });
     }
 
@@ -291,24 +298,26 @@ mod tests {
             ),
         ];
         r.iter().for_each(|(q, a)| {
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            assert_eq!(lexer.tokens().toks(), *a);
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(q).unwrap();
+            assert_eq!(tokens.toks(), *a);
         });
     }
 
     #[test]
     fn test_tag_token() {
         let s = " [ ] ";
-        let mut lexer = LexerState::from_str_eof(s).unwrap();
-        let toks = lexer.final_toks();
+        let mut lexer = LexerState::default();
+        let (_, tokens) = lexer.lex_eof(s).unwrap();
+        let toks = tokens.toks();
         assert_eq!(vec![/*IndentOpen, */ LBracket, RBracket, EOF], toks);
     }
 
     fn lexer_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);
-        match LexerState::from_str_eof(s) {
-            Some(mut lexer) => {
-                let tokens = lexer.tokens();
+        let mut lexer = LexerState::default();
+        match lexer.lex_eof(s) {
+            Ok((_, tokens)) => {
                 let toks = tokens.toks();
                 debug!("{:?}", &toks);
                 let restored = tokens.unlex();
@@ -327,8 +336,8 @@ mod tests {
             ("-", vec![Tok::Minus]),
         ];
         r.into_iter().for_each(|(q, mut a)| {
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            let tokens = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(q).unwrap();
             let toks = tokens.toks();
             debug!("{:?}", (&toks));
             a.push(EOF);
@@ -395,8 +404,8 @@ mod tests {
         ];
         r.into_iter().for_each(|(q, mut a)| {
             a.push(EOF);
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            let tokens = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(q).unwrap();
             let toks = tokens.expand_toks();
             assert_eq!(a, toks);
             assert!(lexer_losslessness(q));
@@ -462,8 +471,8 @@ f +
             ("1+1", vec![IntLiteral(1), Plus, IntLiteral(1)]),
         ];
         r.into_iter().for_each(|(q, mut a)| {
-            let mut lexer = LexerState::from_str_eof(q).unwrap();
-            let tokens = lexer.tokens();
+            let mut lexer = LexerState::default();
+            let (_, tokens) = lexer.lex_eof(q).unwrap();
             let toks = tokens.toks();
             a.push(EOF);
             assert_eq!(toks, *a);

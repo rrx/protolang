@@ -33,33 +33,34 @@ impl Program {
     }
 
     pub fn parse(&mut self, s: &str, file_id: FileId) -> anyhow::Result<ExprNode> {
-        let mut lexer = crate::lexer::LexerState::default();
-        if let Err(e) = lexer.lex(s) {
-            return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into());
-        }
-        let mut lexer = lexer.set_file_id(file_id);
-        let tokens = lexer.tokens();
+        let mut lexer = crate::lexer::LexerState::default().set_file_id(file_id);
+        match lexer.lex(s) {
+            Ok((_, tokens)) => {
+                tokens.iter_elements().for_each(|t| {
+                    if let Tok::Invalid(s) = &t.tok {
+                        let error = t
+                            .to_context()
+                            .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
+                        self.checker.push_error(error);
+                    }
+                });
 
-        tokens.iter_elements().for_each(|t| {
-            if let Tok::Invalid(s) = &t.tok {
-                let error = t
-                    .to_context()
-                    .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
-                self.checker.push_error(error);
-            }
-        });
-
-        match crate::parser::parse_program(tokens) {
-            Ok((_, expr)) => Ok(expr),
-            Err(nom::Err::Error(e)) => {
-                for (tokens, err) in e.errors {
-                    error!("error {:?}", (&err, tokens.toks()));
+                match crate::parser::parse_program(tokens) {
+                    Ok((_, expr)) => Ok(expr),
+                    Err(nom::Err::Error(e)) => {
+                        for (tokens, err) in e.errors {
+                            error!("error {:?}", (&err, tokens.toks()));
+                        }
+                        let error = LangError::runtime("Error parsing");
+                        self.checker.push_error(error.clone());
+                        Err(error.into())
+                    }
+                    Err(e) => Err(LangError::runtime(&format!("Error parsing: {:?}", e)).into()),
                 }
-                let error = LangError::runtime("Error parsing");
-                self.checker.push_error(error.clone());
-                Err(error.into())
             }
-            Err(e) => Err(LangError::runtime(&format!("Error parsing: {:?}", e)).into()),
+            Err(e) => {
+                return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into());
+            }
         }
     }
 
