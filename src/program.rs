@@ -32,6 +32,14 @@ impl Program {
         self.value = value;
     }
 
+    pub fn parse_str(
+        &mut self,
+        v: &str,
+    ) -> anyhow::Result<ExprNode> {
+        let file_id = self.checker.add_source("<repl>".into(), v.to_string());
+        self.parse(v, file_id)
+    }
+
     pub fn parse(&mut self, s: &str, file_id: FileId) -> anyhow::Result<ExprNode> {
         let mut lexer = crate::lexer::LexerState::default().set_file_id(file_id);
         match lexer.lex(s) {

@@ -27,6 +27,7 @@ im = "15"
 miette = { version = "3.1", features = ["fancy"] }
 thiserror = "*"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm13-0"] }
+ante = { path = "../ante" }
 
 [dev-dependencies]
 criterion = "0.3"

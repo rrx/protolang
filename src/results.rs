@@ -1,7 +1,8 @@
-use crate::ast::MaybeNodeContext;
+use crate::ast::{ExprNode, MaybeNodeContext};
 use crate::lexer::Location;
-use crate::tokens::FileId;
 use thiserror::Error;
+use nom::InputIter;
+use crate::tokens::{FileId, Tok, TokensList};
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
@@ -116,14 +117,14 @@ impl MaybeNodeContext {
     }
 }
 
-pub struct CompileResults {
+pub struct Compiler {
     results: Vec<LangError>,
     pub diagnostics: Vec<Diagnostic<FileId>>,
     files: SimpleFiles<String, String>,
     pub has_errors: bool,
 }
 
-impl Default for CompileResults {
+impl Default for Compiler {
     fn default() -> Self {
         Self {
             has_errors: false,
@@ -134,7 +135,7 @@ impl Default for CompileResults {
     }
 }
 
-impl CompileResults {
+impl Compiler {
     pub fn clear(&mut self) {
         self.results.clear();
         self.diagnostics.clear();
@@ -163,4 +164,51 @@ impl CompileResults {
             term::emit(&mut writer.lock(), &config, &self.files, &diagnostic).unwrap();
         }
     }
+
+    pub fn parse_str(
+        &mut self,
+        v: &str,
+    ) -> anyhow::Result<ExprNode> {
+        let file_id = self.add_source("<repl>".into(), v.to_string());
+        self.parse(v, file_id)
+    }
+
+    pub fn parse(&mut self, s: &str, file_id: FileId) -> anyhow::Result<ExprNode> {
+        let mut lexer = crate::lexer::LexerState::default().set_file_id(file_id);
+        match lexer.lex(s) {
+            Ok((_, tokens)) => {
+                tokens.iter_elements().for_each(|t| {
+                    if let Tok::Invalid(s) = &t.tok {
+                        let error = t
+                            .to_context()
+                            .error(LangErrorKind::Warning(format!("Invalid Token: {}", s)));
+                        self.push(error);
+                    }
+                });
+
+                match crate::parser::parse_program(tokens) {
+                    Ok((_, expr)) => Ok(expr),
+                    Err(nom::Err::Error(e)) => {
+                        for (tokens, err) in e.errors {
+                            log::error!("error {:?}", (&err, tokens.toks()));
+                        }
+                        let error = LangError::runtime("Error parsing");
+                        self.push(error.clone());
+                        Err(error.into())
+                    }
+                    Err(e) => Err(LangError::runtime(&format!("Error parsing: {:?}", e)).into()),
+                }
+            }
+            Err(e) => {
+                return Err(LangError::runtime(&format!("Error lexing: {:?}", e)).into());
+            }
+        }
+    }
+
+    pub fn parse_file(&mut self, filename: &str) -> anyhow::Result<ExprNode> {
+        let contents = std::fs::read_to_string(filename.clone())?.to_string();
+        let file_id = self.add_source(filename.into(), contents.clone());
+        self.parse(&contents, file_id)
+    }
+
 }

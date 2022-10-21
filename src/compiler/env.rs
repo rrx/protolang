@@ -120,15 +120,17 @@ impl<K: LayerKey, V: LayerValue> EnvLayers<K, V> {
         EnvLayersIterator { values }
     }
 
-    pub fn push(self) -> Self {
-        Self {
-            enclosing: Some(Box::new(self)),
-            layers: im::Vector::new(),
-        }
+    pub fn push(&mut self) {
+        let enclosing = Some(Box::new(self.clone()));
+        let layers = im::Vector::new();
+        self.enclosing = enclosing;
+        self.layers = layers;
     }
 
-    pub fn pop(mut self) -> Option<Self> {
-        self.enclosing.map(|v| *v)
+    pub fn pop(&mut self) {
+        let orig = self.enclosing.take().unwrap();
+        self.enclosing = orig.enclosing;
+        self.layers = orig.layers;
     }
 
     pub fn define(&mut self, name: K, value: V) {
@@ -274,5 +276,15 @@ mod tests {
         env3.types.iter().for_each(|(k, v)| {
             println!("x: {:?}", (k, v));
         });
+    }
+
+    #[test]
+    fn push_pop() {
+        let mut env = EnvLayers::default();
+        env.push();
+        env.define(String::from("asdf"), ValueId(0));
+        assert_eq!(Some(&ValueId(0)), env.resolve(&"asdf".into()));
+        env.pop();
+        assert_eq!(None, env.resolve(&"asdf".into()));
     }
 }

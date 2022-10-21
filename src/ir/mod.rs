@@ -23,10 +23,10 @@ pub enum Literal {
 
 #[derive(Clone, PartialEq)]
 pub struct IR {
-    ty: Type,
-    value: IRValue,
-    loc: Location,
-    env: Environment,
+    pub ty: Type,
+    pub value: IRValue,
+    pub loc: Location,
+    pub env: Environment,
 }
 
 impl fmt::Debug for IR {
@@ -85,11 +85,11 @@ pub enum IRValue {
 impl crate::compiler::env::LayerValue for IR {}
 
 impl IR {
-    fn new(v: IRValue, ty: Type, env: Environment) -> Self {
+    pub fn new(v: IRValue, ty: Type, env: Environment) -> Self {
         Self::new_with_location(v, ty, Location::default(), env)
     }
 
-    fn new_with_location(v: IRValue, ty: Type, loc: Location, env: Environment) -> Self {
+    pub fn new_with_location(v: IRValue, ty: Type, loc: Location, env: Environment) -> Self {
         Self {
             value: v,
             ty,
@@ -99,7 +99,7 @@ impl IR {
     }
 }
 
-fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment) -> IR {
+pub fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment) -> IR {
     assert_eq!(args.len(), 3);
     let left_ty = args.get(0).unwrap().clone();
     let right_ty = args.get(1).unwrap().clone();
@@ -168,7 +168,7 @@ pub fn base_env() -> Environment {
     env
 }
 
-fn op_name(op: &Operator) -> String {
+pub fn op_name(op: &Operator) -> String {
     match op {
         Operator::Plus => "+".into(),
         Operator::Minus => "-".into(),

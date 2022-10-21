@@ -38,7 +38,7 @@ impl fmt::Display for TypeEquation {
 
 #[derive(Default)]
 pub struct TypeChecker {
-    results: CompileResults,
+    results: Compiler,
     pub type_equations: Vec<TypeEquation>,
     type_counter: usize,
 }
