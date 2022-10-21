@@ -1,5 +1,5 @@
-use protolang::ir::{base_env, TypeChecker};
-use protolang::repl::*;
+use lang1::ir::{base_env, TypeChecker};
+use lang1::repl::*;
 use std::error::Error;
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
