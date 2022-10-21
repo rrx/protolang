@@ -1,6 +1,6 @@
-use protolang::eval::Environment;
-use protolang::program::Program;
-use protolang::repl::*;
+use lang1::eval::Environment;
+use lang1::program::Program;
+use lang1::repl::*;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

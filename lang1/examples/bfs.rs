@@ -1,8 +1,8 @@
 use log::debug;
-use protolang::ast::{ExprNode, ExprVisitor, VResult};
-use protolang::lexer::LexerState;
-use protolang::parser::{parse_program, unparse_expr};
-use protolang::sexpr::SExpr;
+use lang1::ast::{ExprNode, ExprVisitor, VResult};
+use lang1::lexer::LexerState;
+use lang1::parser::{parse_program, unparse_expr};
+use lang1::sexpr::SExpr;
 use std::collections::VecDeque;
 
 pub struct BFS {

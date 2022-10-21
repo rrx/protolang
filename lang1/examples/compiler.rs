@@ -1,4 +1,4 @@
-use protolang::compiler::direct;
+use lang1::compiler::direct;
 use std::env;
 
 fn main() {

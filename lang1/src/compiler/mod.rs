@@ -4,6 +4,7 @@ pub mod types;
 pub mod values;
 pub mod check;
 pub mod ircodegen;
+pub mod hirgen;
 pub mod lower;
 
 pub use lower::*;

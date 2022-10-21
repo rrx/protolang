@@ -1,7 +1,7 @@
 use log::debug;
-use protolang::ast::{visit_expr, ExprNode, ExprVisitor, VResult};
-use protolang::lexer::LexerState;
-use protolang::parser::parse_program;
+use lang1::ast::{visit_expr, ExprNode, ExprVisitor, VResult};
+use lang1::lexer::LexerState;
+use lang1::parser::parse_program;
 
 pub struct DFS {}
 impl ExprVisitor<Vec<ExprNode>> for DFS {
