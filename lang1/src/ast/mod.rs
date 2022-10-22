@@ -8,7 +8,7 @@ mod visitor;
 pub use visitor::{visit_expr, ExprVisitor, VResult, VisitError};
 
 mod expr;
-pub use expr::{Expr, ExprNode, Identifier, VarModifier};
+pub use expr::{Expr, ExprType, ExprNode, Identifier, VarModifier};
 
 mod op;
 pub use op::{Operator, OperatorNode};

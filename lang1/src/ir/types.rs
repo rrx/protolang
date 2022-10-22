@@ -1,4 +1,18 @@
 use std::fmt;
+use std::collections::BTreeSet;
+//use std::hash::Hash;
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Trait {
+    name: usize
+}
+
+impl Trait {
+    pub fn new(name: &str) -> Self  {
+        Self { name: 0 }//name.to_string() }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
@@ -11,7 +25,7 @@ pub enum Type {
     Float,
     Bool,
     String,
-    Unknown(usize),
+    Unknown(usize, BTreeSet<Trait>),
     Void,
     Error,
     Func(FunctionSig),
@@ -44,7 +58,7 @@ impl TypeSig {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unknown(s) => write!(f, "T:{}", s),
+            Self::Unknown(s, _) => write!(f, "T:{}", s),
             Self::Int => write!(f, "T:Int"),
             Self::Bool => write!(f, "T:Bool"),
             Self::String => write!(f, "T:String"),
@@ -59,11 +73,11 @@ impl fmt::Display for Type {
 
 impl Type {
     pub fn new_unknown(s: usize) -> Self {
-        Self::Unknown(s)
+        Self::Unknown(s, BTreeSet::default())
     }
 
     pub fn is_unknown(&self) -> bool {
-        if let Type::Unknown(_) = self {
+        if let Type::Unknown(_, _) = self {
             true
         } else {
             false

@@ -80,7 +80,7 @@ impl TypeChecker {
     }
 
     fn subs_if_exists<'a>(mut ty: &'a Type, subst: &'a SymbolTable) -> &'a Type {
-        if let Type::Unknown(name) = ty {
+        if let Type::Unknown(name, _) = ty {
             if subst.contains_key(name) {
                 ty = subst.get(name).unwrap();
             }
@@ -122,9 +122,9 @@ impl TypeChecker {
         let ty1 = Self::subs_if_exists(ty1, &subst);
         let ty2 = Self::subs_if_exists(ty2, &subst);
 
-        if let Type::Unknown(name) = ty1 {
+        if let Type::Unknown(name, _) = ty1 {
             return Some(subst.insert(name.clone(), ty2.clone()));
-        } else if let Type::Unknown(name) = ty2 {
+        } else if let Type::Unknown(name, _) = ty2 {
             return Some(subst.insert(name.clone(), ty1.clone()));
         }
 

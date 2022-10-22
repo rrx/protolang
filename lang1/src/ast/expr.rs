@@ -165,10 +165,24 @@ impl Expr {
     }
 }
 
+#[derive(Clone, PartialEq)]
+pub enum ExprType {
+    Float,
+    Integer,
+    Unknown,
+    Unbound(usize)
+}
+impl Default for ExprType {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct ExprNode {
     pub context: MaybeNodeContext,
     pub t: TypeSig,
+    pub ty: ExprType,
     pub value: Expr,
 }
 
@@ -221,6 +235,7 @@ impl ExprNode {
             context: MaybeNodeContext::from_location(loc),
             value,
             t: TypeSig::default(),
+            ty: ExprType::default()
         }
     }
 
@@ -229,6 +244,7 @@ impl ExprNode {
             context,
             value,
             t: TypeSig::default(),
+            ty: ExprType::default()
         }
     }
 
@@ -238,6 +254,7 @@ impl ExprNode {
             context,
             value,
             t: TypeSig::default(),
+            ty: ExprType::default()
         }
     }
 
@@ -255,6 +272,7 @@ impl From<Expr> for ExprNode {
             context: MaybeNodeContext::default(),
             value,
             t: TypeSig::default(),
+            ty: ExprType::default()
         }
     }
 }

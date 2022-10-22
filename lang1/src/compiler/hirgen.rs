@@ -1,6 +1,7 @@
 use crate::ast::*;
 use codegen::hir;
 use super::CodeGenLower;
+use super::check::TypeChecker;
 use std::error::Error;
 use crate::tokens::{Tok};
 use std::rc::Rc;
@@ -9,15 +10,54 @@ use crate::results::{Compiler, LangError};
 impl crate::compiler::env::LayerValue for hir::Definition {}
 pub type Environment = crate::compiler::env::EnvLayers<String, hir::Definition>;
 
+enum Type  {
+    Float,
+    Integer,
+    Unbound(usize)
+}
+
 struct HIRCodeGen {
     next_definition_id: usize,
     results: Compiler,
-    env: Environment
+    env: Environment,
+    checker: TypeChecker<hir::Ast>
 }
+
+fn ty(name: &str) -> hir::Type {
+    use codegen::hir::{IntegerKind, Type};
+    use codegen::hir::Type::Primitive;
+    use codegen::hir::PrimitiveType::Integer;
+
+    match name {
+        "u8" => Primitive(Integer(IntegerKind::U8)),
+        "u16" => Primitive(Integer(IntegerKind::U16)),
+        "u32" => Primitive(Integer(IntegerKind::U32)),
+        "u64" => Primitive(Integer(IntegerKind::U64)),
+        _ => unimplemented!()
+    }
+}
+
+struct NamedType<'a> {
+    name: &'a str,
+    ty: hir::Type
+}
+
+struct TypedExpr {
+    ty: Type,
+    expr: Expr
+}
+
+impl<'a> NamedType<'a> {
+    fn new(name: &'a str, ty: hir::Type) -> Self {
+        Self { name, ty }
+    }
+}
+
 
 impl Default for HIRCodeGen {
     fn default() -> Self {
-        Self { next_definition_id: 0, results: Compiler::default(), env: Environment::default() }
+        let env = Environment::default();
+        Self { next_definition_id: 0, results: Compiler::default(), env, checker: TypeChecker::default() }
     }
 }
 
@@ -26,6 +66,60 @@ impl HIRCodeGen {
         let d = hir::DefinitionId(self.next_definition_id);
         self.next_definition_id += 1;
         d
+    }
+
+    fn lambda(&mut self, name: String, params: Vec<NamedType>, ret: hir::Type, body: hir::Ast) -> hir::Ast {
+        let typ = hir::FunctionType {
+            parameters: params.iter().map(|p| p.ty.clone()).collect(),
+            return_type: Box::new(ret),
+            is_varargs: false,
+            export: true
+        };
+
+        let args = params.iter().map(|p| {
+            let definition_id = self.get_next_definition_id();
+            hir::Variable {
+                definition: None,
+                definition_id,
+                name: Some(p.name.to_string())
+            }
+        }).collect();
+
+        let f = hir::Lambda {
+            args,
+            body: Box::new(body),
+            typ
+        };
+
+        hir::Ast::Lambda(f)
+    }
+
+    fn update(&mut self, node: &mut ExprNode) {
+        let expr = node.value.clone();
+
+        let ty = match expr {
+            Expr::Literal(Tok::FloatLiteral(_)) => {
+                ExprType::Float
+            }
+
+            Expr::Literal(Tok::IntLiteral(_)) => { 
+                ExprType::Integer
+            }
+
+            Expr::Binary(op, mut left, mut right) => {
+                self.update(&mut left);
+                self.update(&mut right);
+                ExprType::Unbound(self.get_next_definition_id().0)
+            }
+
+            _ => {
+                unimplemented!()
+            }
+        };
+        node.ty = ty;
+    }
+
+    fn typecheck(&mut self) {
     }
 }
 
@@ -46,7 +140,7 @@ impl CodeGenLower for HIRCodeGen {
             }
 
             Expr::Literal(Tok::FloatLiteral(f)) => {
-                Ok(hir::Ast::Literal(hir::Literal::Integer(0, hir::IntegerKind::U64)))
+                Ok(hir::Ast::Literal(hir::Literal::Float(0, hir::FloatKind::F64)))
             }
             Expr::Literal(Tok::IntLiteral(i)) => { 
                 Ok(hir::Ast::Literal(hir::Literal::Integer(*i, hir::IntegerKind::U64)))
@@ -79,15 +173,32 @@ impl CodeGenLower for HIRCodeGen {
                 }
 
                 _ => {
-                    let ir_left = self.lower(left)?;
-                    let ir_right = self.lower(right)?;
-                    let f = match &op.value {
-                        Operator::Plus => hir::Builtin::AddInt(Box::new(ir_left), Box::new(ir_right)),
-                        Operator::Minus => hir::Builtin::SubInt(Box::new(ir_left), Box::new(ir_right)),
-                        _ => unimplemented!()
+                    unimplemented!()
+                        /*
+                    let name = crate::ir::op_name(op);
+
+                    let a = self.get_next_definition_id();
+                    let b = self.get_next_definition_id();
+                    let ret = self.get_next_definition_id();
+
+                    let f_ty = hir::FunctionType {
+                        parameters: vec![a, b],
+                        return_type: ret,
+                        is_varargs: false
                     };
 
-                    Ok(hir::Ast::Builtin(f))
+                    let ty = hir::Type::FunctionType(f_ty);
+                    let ir_left = self.lower(left)?;
+                    let ir_right = self.lower(right)?;
+
+                    let call = hir::FunctionCall {
+                        function: Box<Ast>,
+                        args: vec![ir_left, ir_right],
+                        function_type: f_ty,
+                    };
+
+                    Ok(hir::Ast::FunctionCall(call))
+                    */
                 }
             },
 
@@ -126,6 +237,19 @@ impl CodeGenLower for HIRCodeGen {
             }
 
             /*
+            Expr::Prefix(op, right) => {
+                let ir_right = self.lower(right)?;
+                match &op.value {
+                    // do nothing
+                    Operator::Plus => Ok(ir_right),
+                    //Operator::Minus => {
+                        //let mut ir_left = ir_right.clone();
+                        //hir::Builtin::SubInt(Box::new(ir_left), Box::new(ir_right))
+                    //}
+                    _ => unimplemented!()
+                }
+            }
+
             Expr::Ident(s) => {
                 if let Some(def) = self.env.resolve(&s.name) {
                     Ok(def.clone().into())

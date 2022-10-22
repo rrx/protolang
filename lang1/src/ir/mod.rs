@@ -227,7 +227,7 @@ x + 2
         let c = TypeChecker::default();
         let s = SymbolTable::default();
         let out = c.unify(
-            &Type::Func(vec![Type::Int, Type::Unknown(0)]),
+            &Type::Func(vec![Type::Int, Type::new_unknown(0)]),
             &vec![
                 Type::Func(vec![Type::Float, Type::Float]),
                 Type::Func(vec![Type::Int, Type::Int]),
@@ -243,7 +243,7 @@ x + 2
         let c = TypeChecker::default();
         let s = SymbolTable::default();
         let out = c.unify(
-            &Type::Func(vec![Type::Float, Type::Unknown(0)]),
+            &Type::Func(vec![Type::Float, Type::new_unknown(0)]),
             &vec![Type::Func(vec![Type::Int, Type::Int])],
             Some(s),
         );
@@ -270,24 +270,24 @@ x + 2
     fn types_unknown() {
         let c = TypeChecker::default();
         let s = SymbolTable::default();
-        let out = c.unify(&Type::Unknown(0), &vec![Type::Float], Some(s));
+        let out = c.unify(&Type::new_unknown(0), &vec![Type::Float], Some(s));
         assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();
-        let out = c.unify(&Type::Unknown(0), &vec![Type::Float, Type::Int], Some(s));
+        let out = c.unify(&Type::new_unknown(0), &vec![Type::Float, Type::Int], Some(s));
         assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();
         let out = c
-            .unify(&Type::Unknown(0), &vec![Type::Unknown(1)], Some(s))
+            .unify(&Type::new_unknown(0), &vec![Type::new_unknown(1)], Some(s))
             .unwrap();
         //assert_eq!(out.get("y".into()), Some(&Type::Float));
-        assert_eq!(out.get(&0), Some(&Type::Unknown(1)));
+        assert_eq!(out.get(&0), Some(&Type::new_unknown(1)));
 
         // no match
         let s = SymbolTable::default();
         let out = c.unify(
-            &Type::Func(vec![Type::Int, Type::Float, Type::Unknown(0)]),
+            &Type::Func(vec![Type::Int, Type::Float, Type::new_unknown(0)]),
             &vec![
                 Type::Func(vec![Type::Float, Type::Float, Type::Float]),
                 Type::Func(vec![Type::Int, Type::Int, Type::Int]),
