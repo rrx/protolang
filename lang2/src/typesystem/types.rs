@@ -1,0 +1,46 @@
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+pub struct TypeDefinitionId(usize);
+
+#[derive(Default)]
+pub struct TypeSystemContext {
+    next_id: usize
+}
+
+impl TypeSystemContext {
+    pub fn next_id(&mut self) -> TypeDefinitionId {
+        let id = TypeDefinitionId(self.next_id);
+        self.next_id += 1;
+        id
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Type {
+    Int,
+    Float,
+    Bool,
+    String,
+    Unknown(TypeDefinitionId),
+    Unit,
+    Error,
+    Func(FunctionSig),
+    Type(String),
+}
+
+impl Type {
+    pub fn new_unknown(s: TypeDefinitionId) -> Self {
+        Self::Unknown(s)
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        if let Type::Unknown(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+type FunctionSig = Vec<Type>;
+
