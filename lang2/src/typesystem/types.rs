@@ -1,6 +1,22 @@
+use crate::env::EnvLayers;
+use std::fmt;
 
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+pub type Environment<N> = EnvLayers<String, N>;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeDefinitionId(usize);
+
+impl fmt::Display for TypeDefinitionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Debug for TypeDefinitionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Default)]
 pub struct TypeSystemContext {
@@ -34,10 +50,19 @@ impl Type {
     }
 
     pub fn is_unknown(&self) -> bool {
-        if let Type::Unknown(_) = self {
-            true
-        } else {
-            false
+        match self {
+            Type::Unknown(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_unknown_recursive(&self) -> bool {
+        match self {
+            Type::Unknown(_) => true,
+            Type::Func(sig) => {
+                sig.iter().any(|v| v.is_unknown())
+            }
+            _ => false
         }
     }
 }

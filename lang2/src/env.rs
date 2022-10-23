@@ -47,7 +47,7 @@ impl<K: LayerKey, V> Layer<K, V> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct EnvLayers<K: LayerKey, V: LayerValue> {
     enclosing: Option<Box<EnvLayers<K, V>>>,
     layers: im::vector::Vector<Layer<K, V>>,
@@ -67,6 +67,15 @@ impl<K: LayerKey, V: LayerValue> Default for EnvLayers<K, V> {
 
 pub struct EnvLayersIterator<'a, K, V> {
     values: Vec<(&'a K, &'a V)>,
+}
+
+impl<K: LayerKey, V: LayerValue> fmt::Debug for EnvLayers<K, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for x in self.iter() {
+            write!(f, "{:?}\n", x)?;
+        }
+        Ok(())
+    }
 }
 
 impl<'a, K, V> Iterator for EnvLayersIterator<'a, K, V> {

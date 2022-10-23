@@ -4,7 +4,6 @@ use super::types::*;
 use crate::env::{EnvLayers, LayerValue, LayerKey};
 
 pub type SymbolTable = rpds::HashTrieMap<TypeDefinitionId, Type>;
-pub type Environment<N> = EnvLayers<String, N>;
 
 impl LayerKey for String {}
 
@@ -16,14 +15,14 @@ pub enum TypeError {
     Error(String),
 }
 
-pub struct TypeChecker<N: LayerValue> {
+pub struct TypeChecker {
     context: TypeSystemContext,
-    type_equations: Vec<TypeEquation<N>>,
+    type_equations: Vec<TypeEquation>,
     syms: SymbolTable,
     results: Vec<TypeError>
 }
 
-impl<N: LayerValue> Default for TypeChecker<N> {
+impl Default for TypeChecker {
     fn default() -> Self {
         Self {
             context: TypeSystemContext::default(),
@@ -34,32 +33,38 @@ impl<N: LayerValue> Default for TypeChecker<N> {
     }
 }
 
+impl fmt::Display for TypeChecker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (k, v) in self.syms.iter() {
+            write!(f, "Subs: {:?} => {:?}\n", k, v)?;
+        }
+        Ok(())
+    }
+}
+
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct TypeEquation<N: LayerValue> {
+pub struct TypeEquation {
     left: Type,
     // ordered set - should be ordered from general to specific
     right: Vec<Type>,
-    node: N,
-    env: Environment<N>,
 }
 
-impl<N: LayerValue> TypeEquation<N> {
-    pub fn new(left: Type, right: Vec<Type>, node: N, env: Environment<N>) -> Self {
+impl TypeEquation {
+    pub fn new(left: Type, right: Vec<Type>) -> Self {
         Self {
             left,
             right,
-            node,
-            env,
         }
     }
 }
 
-impl<N: LayerValue> TypeChecker<N> {
+impl TypeChecker {
     pub fn new_unknown_type(&mut self) -> Type {
         Type::new_unknown(self.context.next_id())
     }
 
-    pub fn add(&mut self, eq: TypeEquation<N>) {
+    pub fn add(&mut self, eq: TypeEquation) {
         self.type_equations.push(eq);
     }
 
@@ -71,7 +76,7 @@ impl<N: LayerValue> TypeChecker<N> {
         }
     }
 
-    fn get_type_by_id(&self, ty_id: &TypeDefinitionId) -> Option<Type> {
+    pub fn get_type_by_id(&self, ty_id: &TypeDefinitionId) -> Option<Type> {
         let mut ty_id = ty_id;
         loop {
             match self.syms.get(&ty_id) {
@@ -232,12 +237,12 @@ fn unify(
 }
 
 
-impl<N: fmt::Debug + LayerValue> fmt::Display for TypeEquation<N> {
+impl fmt::Display for TypeEquation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{:?} :: {:?}, from: {:?}",
-            self.left, self.right, &self.node//.loc
+            "{:?} :: {:?}",
+            self.left, self.right
         )
     }
 }
@@ -250,15 +255,14 @@ mod tests {
     type Node = usize;
 
     #[test]
-    fn unify() {
+    fn test_unify() {
         let mut checker = TypeChecker::default();
-        let env = Environment::default();
         let ty_0 = checker.new_unknown_type(); 
-        let eq1 = TypeEquation::new(ty_0.clone(), vec![Type::Int, Type::Float], 0, env.clone());
+        let eq1 = TypeEquation::new(ty_0.clone(), vec![Type::Int, Type::Float]);
         let ty_1 = checker.new_unknown_type(); 
         let ty_2 = checker.new_unknown_type(); 
-        let eq2 = TypeEquation::new(ty_1.clone(), vec![ty_2.clone()], 1, env.clone());
-        let eq3 = TypeEquation::new(ty_2.clone(), vec![Type::Bool], 2, env);
+        let eq2 = TypeEquation::new(ty_1.clone(), vec![ty_2.clone()]);
+        let eq3 = TypeEquation::new(ty_2.clone(), vec![Type::Bool]);
         checker.add(eq1);
         checker.add(eq2);
         checker.add(eq3);
@@ -271,5 +275,86 @@ mod tests {
         assert_eq!(Some(Type::Int), checker.resolve_type(&ty_0));
         assert_eq!(Some(Type::Bool), checker.resolve_type(&ty_1));
         assert_eq!(Some(Type::Bool), checker.resolve_type(&ty_2));
+    }
+
+    #[test]
+    fn test_unify_func_match() {
+        let mut c = TypeChecker::default();
+        let s = SymbolTable::default();
+        let ty = c.new_unknown_type();
+        let out = unify(
+            &Type::Func(vec![Type::Int, ty.clone()]),
+            &vec![
+                Type::Func(vec![Type::Float, Type::Float]),
+                Type::Func(vec![Type::Int, Type::Int]),
+            ],
+            Some(s),
+        );
+        log::debug!("{:?}", out.as_ref().unwrap().iter().collect::<Vec<_>>());
+        assert_eq!(c.resolve_type(&ty), Some(Type::Int));
+    }
+
+    #[test]
+    fn func_mismatch() {
+        let mut c = TypeChecker::default();
+        let s = SymbolTable::default();
+        let out = unify(
+            &Type::Func(vec![Type::Float, c.new_unknown_type()]),
+            &vec![Type::Func(vec![Type::Int, Type::Int])],
+            Some(s),
+        );
+        assert_eq!(out, None)
+    }
+
+    #[test]
+    fn types_match() {
+        let c = TypeChecker::default();
+        let s = SymbolTable::default();
+        let out = unify(&Type::Int, &vec![Type::Float, Type::Int], Some(s.clone()));
+        assert_eq!(out, Some(s));
+    }
+
+    #[test]
+    fn types_mismatch() {
+        let c = TypeChecker::default();
+        let s = SymbolTable::default();
+        let out = unify(&Type::Int, &vec![Type::Float], Some(s));
+        assert_eq!(out, None);
+    }
+
+    #[test]
+    fn types_unknown() {
+        let mut c = TypeChecker::default();
+
+        let s = SymbolTable::default();
+        let ty = c.new_unknown_type();
+        let out = unify(&ty, &vec![Type::Float], Some(s));
+        assert_eq!(c.resolve_type(&ty), Some(Type::Float));
+
+        let s = SymbolTable::default();
+        let ty = c.new_unknown_type();
+        let out = unify(&ty, &vec![Type::Float, Type::Int], Some(s));
+        assert_eq!(c.resolve_type(&ty), Some(Type::Float));
+
+        let s = SymbolTable::default();
+        let ty1 = c.new_unknown_type();
+        let ty2 = c.new_unknown_type();
+        let out = unify(&ty1, &vec![ty2.clone()], Some(s))
+            .unwrap();
+        //assert_eq!(out.get("y".into()), Some(&Type::Float));
+        assert_eq!(c.resolve_type(&ty1), Some(ty2));
+
+        // no match
+        let s = SymbolTable::default();
+        let ty = c.new_unknown_type();
+        let out = unify(
+            &Type::Func(vec![Type::Int, Type::Float, ty]),
+            &vec![
+                Type::Func(vec![Type::Float, Type::Float, Type::Float]),
+                Type::Func(vec![Type::Int, Type::Int, Type::Int]),
+            ],
+            Some(s),
+        );
+        assert_eq!(out, None);
     }
 }

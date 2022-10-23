@@ -654,6 +654,7 @@ dependencies = [
 name = "lang2"
 version = "0.1.0"
 dependencies = [
+ "codegen",
  "criterion",
  "env_logger",
  "im",
