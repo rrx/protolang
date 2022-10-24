@@ -12,7 +12,7 @@ pub type FileId = usize;
 
 #[derive(Clone, Debug)]
 pub struct SpanExtra {
-    pub file_id: FileId
+    pub file_id: FileId,
 }
 
 pub type Span<'a> = LocatedSpan<&'a str, SpanExtra>;

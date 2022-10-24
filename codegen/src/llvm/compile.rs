@@ -13,18 +13,18 @@ use inkwell::values::{AggregateValue, BasicValue, BasicValueEnum, CallableValue,
 use inkwell::AddressSpace;
 use inkwell::OptimizationLevel;
 
+use super::{path_to_module_name, CodeGen, Generator};
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use super::{ CodeGen, Generator, path_to_module_name };
-use std::error::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EmitOption {
     ASM,
     BC,
     IR,
-    OBJ
+    OBJ,
 }
 
 #[derive(Debug)]
@@ -48,26 +48,30 @@ pub struct CompileArgs {
     pub output_filename: Option<String>,
 
     // emit
-    pub emit: Vec<EmitOption> ,
+    pub emit: Vec<EmitOption>,
 
     // verbose
-    pub verbose: bool
+    pub verbose: bool,
 }
 
 impl Default for CompileArgs {
-    fn default() ->  Self {
-        Self { opt_level: '0', link: false, stdout: false, target: None,
+    fn default() -> Self {
+        Self {
+            opt_level: '0',
+            link: false,
+            stdout: false,
+            target: None,
             output_dir: None,
             output_filename: None,
-            emit: vec![], 
-            verbose: false
+            emit: vec![],
+            verbose: false,
         }
     }
 }
 
 pub fn list_targets() -> Result<(), Box<dyn Error>> {
     let config = InitializationConfig::default();
-    Target::initialize_all(&config);//.unwrap();
+    Target::initialize_all(&config); //.unwrap();
     eprintln!("Default: {:?}", TargetMachine::get_default_triple().as_str());
     eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
 
@@ -78,8 +82,8 @@ pub fn list_targets() -> Result<(), Box<dyn Error>> {
             Some(ref target) => {
                 eprintln!("  {:16} - {}", target.get_name().to_str()?, target.get_description().to_str()?);
                 maybe_target = target.get_next();
-            }
-            None => break
+            },
+            None => break,
         }
     }
     Ok(())
@@ -189,8 +193,9 @@ pub fn compile(module_name: &String, ast: hir::Ast, args: &CompileArgs) -> Resul
 }
 
 /// Output the current module to a file and link with gcc.
-pub fn output(module_name: String, binary_name: &str, target_triple: &TargetTriple, module: &Module, args: &CompileArgs) -> Result<(), Box<dyn Error>> {
-
+pub fn output(
+    module_name: String, binary_name: &str, target_triple: &TargetTriple, module: &Module, args: &CompileArgs,
+) -> Result<(), Box<dyn Error>> {
     let target = Target::from_triple(target_triple).unwrap();
     let target_machine = target
         .create_target_machine(target_triple, "", "", OptimizationLevel::Aggressive, RelocMode::PIC, CodeModel::Default)
@@ -203,7 +208,7 @@ pub fn output(module_name: String, binary_name: &str, target_triple: &TargetTrip
             path.push(args.output_dir.clone().unwrap_or("target".into()));
             path.push(&module_name);
             path.set_extension("o");
-        }
+        },
     }
 
     let directory = path.parent().unwrap();
@@ -247,4 +252,3 @@ pub fn output(module_name: String, binary_name: &str, target_triple: &TargetTrip
 
     Ok(())
 }
-

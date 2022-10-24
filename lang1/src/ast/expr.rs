@@ -1,5 +1,5 @@
 use super::function::{Callable, Lambda};
-use super::node::{FromContext, MaybeNodeContext, Context};
+use super::node::{Context, FromContext, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
 use super::{Operator, OperatorNode};
 use crate::ast::CallWithType;
@@ -170,7 +170,7 @@ pub enum ExprType {
     Float,
     Integer,
     Unknown,
-    Unbound(usize)
+    Unbound(usize),
 }
 impl Default for ExprType {
     fn default() -> Self {
@@ -235,7 +235,7 @@ impl ExprNode {
             context: MaybeNodeContext::from_location(loc),
             value,
             t: TypeSig::default(),
-            ty: ExprType::default()
+            ty: ExprType::default(),
         }
     }
 
@@ -244,7 +244,7 @@ impl ExprNode {
             context,
             value,
             t: TypeSig::default(),
-            ty: ExprType::default()
+            ty: ExprType::default(),
         }
     }
 
@@ -254,7 +254,7 @@ impl ExprNode {
             context,
             value,
             t: TypeSig::default(),
-            ty: ExprType::default()
+            ty: ExprType::default(),
         }
     }
 
@@ -272,7 +272,7 @@ impl From<Expr> for ExprNode {
             context: MaybeNodeContext::default(),
             value,
             t: TypeSig::default(),
-            ty: ExprType::default()
+            ty: ExprType::default(),
         }
     }
 }

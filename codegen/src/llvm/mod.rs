@@ -20,11 +20,9 @@
 //! Generator, walks the Ast, then optimizes and links the resulting Module.
 
 mod builtin;
-mod decisiontree;
 mod compile;
+mod decisiontree;
 pub mod generator;
 
-use generator::*;
 pub use compile::*;
-
-
+use generator::*;

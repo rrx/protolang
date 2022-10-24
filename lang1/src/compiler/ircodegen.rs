@@ -1,9 +1,9 @@
 use crate::ast::*;
 use crate::ir::*;
 
-use crate::tokens::{Tok};
-use std::error::Error;
 use crate::lexer::Location;
+use crate::tokens::Tok;
+use std::error::Error;
 
 use super::check::{TypeChecker, TypeEquation};
 use super::CodeGenLower;
@@ -18,14 +18,23 @@ pub struct IRCodeGen {
 
 impl Default for IRCodeGen {
     fn default() -> Self {
-        Self { env: base_env(), checker: TypeChecker::default(), results: Compiler::default() }
+        Self {
+            env: base_env(),
+            checker: TypeChecker::default(),
+            results: Compiler::default(),
+        }
     }
 }
 
 impl IRCodeGen {
     fn make_block(&mut self, nodes: Vec<IR>, loc: Location) -> IR {
         let block_ty = nodes.last().unwrap().ty.clone();
-        let block = IR::new_with_location(IRValue::Block(nodes), block_ty.clone(), loc, self.env.clone());
+        let block = IR::new_with_location(
+            IRValue::Block(nodes),
+            block_ty.clone(),
+            loc,
+            self.env.clone(),
+        );
         block
     }
 
@@ -78,12 +87,7 @@ impl IRCodeGen {
         IR::new_with_location(IRValue::Error(msg), Type::Error, loc, self.env.clone())
     }
 
-    fn make_func_from_name(
-        &mut self,
-        name: String,
-        ty: Type,
-        loc: Location,
-    ) -> IR {
+    fn make_func_from_name(&mut self, name: String, ty: Type, loc: Location) -> IR {
         // get all of the types that match the name
         let mut fn_types = Vec::new();
         for f in self.env.resolve_all(&name) {
@@ -98,7 +102,8 @@ impl IRCodeGen {
             let msg = format!("Function Not found: {}", name);
             self.make_error(msg, loc)
         } else {
-            let result = IR::new_with_location(IRValue::Ident(name), ty.clone(), loc, self.env.clone());
+            let result =
+                IR::new_with_location(IRValue::Ident(name), ty.clone(), loc, self.env.clone());
             self.checker.add(TypeEquation::new(
                 ty.clone(),
                 fn_types,
@@ -109,12 +114,7 @@ impl IRCodeGen {
         }
     }
 
-    fn make_ident_from_name(
-        &mut self,
-        name: String,
-        ty: Type,
-        loc: Location,
-    ) -> IR {
+    fn make_ident_from_name(&mut self, name: String, ty: Type, loc: Location) -> IR {
         if let Some(v) = self.env.resolve(&name) {
             let v_ty = v.ty.clone();
             let result =
@@ -144,12 +144,7 @@ impl IRCodeGen {
         }
     }
 
-    fn make_apply_by_name(
-        &mut self,
-        name: String,
-        ir_args: Vec<IR>,
-        loc: Location
-    ) -> IR {
+    fn make_apply_by_name(&mut self, name: String, ir_args: Vec<IR>, loc: Location) -> IR {
         let ret_ty = self.checker.new_unknown_type();
         let mut f_types = ir_args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
         f_types.push(ret_ty.clone());
@@ -268,7 +263,7 @@ impl CodeGenLower for IRCodeGen {
                     self.env.clone(),
                 );
 
-                self.env = orig_env;//self.env.pop().unwrap();
+                self.env = orig_env; //self.env.pop().unwrap();
                 Ok(ir)
             }
 
@@ -335,7 +330,6 @@ impl CodeGenLower for IRCodeGen {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,4 +345,3 @@ mod tests {
         gen.results.print();
     }
 }
-

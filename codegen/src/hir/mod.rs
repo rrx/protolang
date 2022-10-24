@@ -15,7 +15,7 @@ mod printer;
 mod types;
 
 //pub use monomorphisation::monomorphise;
-pub use types::{FunctionType, IntegerKind, PrimitiveType, Type, FloatKind};
+pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
 
 use std::rc::Rc;
 

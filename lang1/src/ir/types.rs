@@ -1,16 +1,15 @@
-use std::fmt;
 use std::collections::BTreeSet;
+use std::fmt;
 //use std::hash::Hash;
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Trait {
-    name: usize
+    name: usize,
 }
 
 impl Trait {
-    pub fn new(name: &str) -> Self  {
-        Self { name: 0 }//name.to_string() }
+    pub fn new(name: &str) -> Self {
+        Self { name: 0 } //name.to_string() }
     }
 }
 

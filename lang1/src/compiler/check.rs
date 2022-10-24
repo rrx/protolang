@@ -5,12 +5,16 @@ use std::fmt;
 pub struct TypeChecker<N> {
     pub type_equations: Vec<TypeEquation<N>>,
     type_counter: usize,
-    results: Vec<LangError>
+    results: Vec<LangError>,
 }
 
 impl<N> Default for TypeChecker<N> {
     fn default() -> Self {
-        Self { type_equations: vec![], type_counter: 0, results: vec![] }
+        Self {
+            type_equations: vec![],
+            type_counter: 0,
+            results: vec![],
+        }
     }
 }
 
@@ -57,7 +61,7 @@ impl<N> TypeChecker<N> {
         }
         ty
     }
- 
+
     // Does ty1 occur in ty2?
     fn occurs_check(ty1: &Type, ty2: &Type, subst: &SymbolTable) -> bool {
         if ty1 == ty2 {
@@ -205,7 +209,9 @@ impl<N: fmt::Debug> fmt::Display for TypeEquation<N> {
         write!(
             f,
             "{:?} :: {:?}, from: {:?}",
-            self.left, self.right, &self.node//.loc
+            self.left,
+            self.right,
+            &self.node //.loc
         )
     }
 }
@@ -214,8 +220,6 @@ impl<N: fmt::Debug> fmt::Display for TypeEquation<N> {
 mod tests {
     use super::*;
     use test_log::test;
-
-
 
     #[test]
     fn function() {

@@ -1,8 +1,8 @@
-use log::debug;
 use lang1::ast::{ExprNode, ExprVisitor, VResult};
 use lang1::lexer::LexerState;
 use lang1::parser::{parse_program, unparse_expr};
 use lang1::sexpr::SExpr;
+use log::debug;
 use std::collections::VecDeque;
 
 pub struct BFS {

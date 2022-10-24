@@ -4,5 +4,3 @@ pub trait CodeGenLower {
     type Error;
     fn lower(&mut self, i: &Self::Input) -> Result<Self::Output, Self::Error>;
 }
-
-

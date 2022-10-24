@@ -32,10 +32,7 @@ impl Program {
         self.value = value;
     }
 
-    pub fn parse_str(
-        &mut self,
-        v: &str,
-    ) -> anyhow::Result<ExprNode> {
+    pub fn parse_str(&mut self, v: &str) -> anyhow::Result<ExprNode> {
         let file_id = self.checker.add_source("<repl>".into(), v.to_string());
         self.parse(v, file_id)
     }

@@ -674,4 +674,3 @@ impl<'g> CodeGen<'g> for hir::Builtin {
         builtin::call_builtin(self, generator)
     }
 }
-

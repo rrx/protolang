@@ -1,8 +1,8 @@
 use crate::ast::{ExprNode, MaybeNodeContext};
 use crate::lexer::Location;
-use thiserror::Error;
-use nom::InputIter;
 use crate::tokens::{FileId, Tok, TokensList};
+use nom::InputIter;
+use thiserror::Error;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
@@ -165,10 +165,7 @@ impl Compiler {
         }
     }
 
-    pub fn parse_str(
-        &mut self,
-        v: &str,
-    ) -> anyhow::Result<ExprNode> {
+    pub fn parse_str(&mut self, v: &str) -> anyhow::Result<ExprNode> {
         let file_id = self.add_source("<repl>".into(), v.to_string());
         self.parse(v, file_id)
     }
@@ -210,5 +207,4 @@ impl Compiler {
         let file_id = self.add_source(filename.into(), contents.clone());
         self.parse(&contents, file_id)
     }
-
 }

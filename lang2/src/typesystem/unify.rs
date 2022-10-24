@@ -1,7 +1,7 @@
+use super::types::*;
+use crate::env::LayerKey;
 use std::fmt;
 use thiserror::Error;
-use super::types::*;
-use crate::env::{LayerKey};
 
 pub type SymbolTable = rpds::HashTrieMap<TypeDefinitionId, Type>;
 
@@ -19,7 +19,7 @@ pub struct TypeChecker {
     context: TypeSystemContext,
     type_equations: Vec<TypeEquation>,
     syms: SymbolTable,
-    results: Vec<TypeError>
+    results: Vec<TypeError>,
 }
 
 impl Default for TypeChecker {
@@ -28,7 +28,7 @@ impl Default for TypeChecker {
             context: TypeSystemContext::default(),
             type_equations: vec![],
             syms: SymbolTable::default(),
-            results: vec![]
+            results: vec![],
         }
     }
 }
@@ -45,7 +45,6 @@ impl fmt::Display for TypeChecker {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeEquation {
     left: Type,
@@ -55,10 +54,7 @@ pub struct TypeEquation {
 
 impl TypeEquation {
     pub fn new(left: Type, right: Vec<Type>) -> Self {
-        Self {
-            left,
-            right,
-        }
+        Self { left, right }
     }
 }
 
@@ -87,10 +83,10 @@ impl TypeChecker {
                     if let Type::Unknown(id) = v {
                         ty_id = id;
                     } else {
-                        return Some(v.clone())
+                        return Some(v.clone());
                     }
                 }
-                None => break
+                None => break,
             }
         }
         None
@@ -112,8 +108,7 @@ impl TypeChecker {
 
         for eq in errors {
             let msg = format!("Unable to unify: {:?} :: {:?}", &eq.left, &eq.right);
-            self.results
-                .push(TypeError::Error(msg));
+            self.results.push(TypeError::Error(msg));
         }
     }
 }
@@ -186,11 +181,7 @@ fn unify_eq(ty1: &Type, ty2: &Type, subst: Option<SymbolTable>) -> Option<Symbol
     None
 }
 
-fn unify_fn(
-    sig1: &Vec<Type>,
-    sig2: &Vec<Type>,
-    mut subst: SymbolTable,
-) -> Option<SymbolTable> {
+fn unify_fn(sig1: &Vec<Type>, sig2: &Vec<Type>, mut subst: SymbolTable) -> Option<SymbolTable> {
     log::debug!("unify_fn: {:?} :: {:?}", sig1, sig2);
 
     if sig1.len() != sig2.len() {
@@ -217,11 +208,7 @@ fn unify_fn(
     Some(subst)
 }
 
-fn unify(
-    left: &Type,
-    right: &Vec<Type>,
-    subst: Option<SymbolTable>,
-) -> Option<SymbolTable> {
+fn unify(left: &Type, right: &Vec<Type>, subst: Option<SymbolTable>) -> Option<SymbolTable> {
     log::debug!("unify: {:?} :: {:?}", left, right);
     if subst == None {
         return None;
@@ -239,14 +226,9 @@ fn unify(
     local_subst
 }
 
-
 impl fmt::Display for TypeEquation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:?} :: {:?}",
-            self.left, self.right
-        )
+        write!(f, "{:?} :: {:?}", self.left, self.right)
     }
 }
 
@@ -260,10 +242,10 @@ mod tests {
     #[test]
     fn test_unify() {
         let mut checker = TypeChecker::default();
-        let ty_0 = checker.new_unknown_type(); 
+        let ty_0 = checker.new_unknown_type();
         let eq1 = TypeEquation::new(ty_0.clone(), vec![Type::Int, Type::Float]);
-        let ty_1 = checker.new_unknown_type(); 
-        let ty_2 = checker.new_unknown_type(); 
+        let ty_1 = checker.new_unknown_type();
+        let ty_2 = checker.new_unknown_type();
         let eq2 = TypeEquation::new(ty_1.clone(), vec![ty_2.clone()]);
         let eq3 = TypeEquation::new(ty_2.clone(), vec![Type::Bool]);
         checker.add(eq1);
@@ -342,8 +324,7 @@ mod tests {
         let s = SymbolTable::default();
         let ty1 = c.new_unknown_type();
         let ty2 = c.new_unknown_type();
-        let out = unify(&ty1, &vec![ty2.clone()], Some(s))
-            .unwrap();
+        let out = unify(&ty1, &vec![ty2.clone()], Some(s)).unwrap();
         //assert_eq!(out.get("y".into()), Some(&Type::Float));
         assert_eq!(c.resolve_type(&ty1), Some(ty2));
 

@@ -1,7 +1,7 @@
-use log::debug;
 use lang1::ast::{visit_expr, ExprNode, ExprVisitor, VResult};
 use lang1::lexer::LexerState;
 use lang1::parser::parse_program;
+use log::debug;
 
 pub struct DFS {}
 impl ExprVisitor<Vec<ExprNode>> for DFS {

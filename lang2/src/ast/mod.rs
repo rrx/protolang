@@ -4,13 +4,11 @@ pub use builder::*;
 
 use crate::typesystem::*;
 
-use log::*;
-use rpds::HashTrieMap;
-use std::fmt;
-use std::rc::Rc;
-use std::ops::{Deref, DerefMut};
-use std::cell::RefCell;
 use itertools::Itertools;
+use std::cell::RefCell;
+use std::fmt;
+use std::ops::Deref;
+use std::rc::Rc;
 
 pub type Environment = crate::env::EnvLayers<String, AstNode>;
 
@@ -30,10 +28,7 @@ pub struct AstNodeInner {
 
 impl AstNodeInner {
     pub fn new(value: Ast, ty: Type) -> Self {
-        Self {
-            value,
-            ty,
-        }
+        Self { value, ty }
     }
 }
 
@@ -88,23 +83,24 @@ impl fmt::Display for AstNode {
                 }
                 write!(f, "]")?;
             }
-            Ast::Variable(v) => {
-                match &v.bound {
-                    Some(bound) => { 
-                        write!(f, "({}:{:?})", &v.name, &bound)?;
-                    }
-                    None => {
-                        write!(f, "({})", &v.name)?;
-                    }
+            Ast::Variable(v) => match &v.bound {
+                Some(bound) => {
+                    write!(f, "({}:{:?})", &v.name, &bound)?;
                 }
-            }
+                None => {
+                    write!(f, "({})", &v.name)?;
+                }
+            },
             Ast::Literal(x) => {
                 write!(f, "{:?}", &x)?;
             }
             Ast::Apply(func, params) => {
-                let s = vec![func].iter().map(|p| format!("{}", p))
+                let s = vec![func]
+                    .iter()
+                    .map(|p| format!("{}", p))
                     .chain(params.iter().map(|p| format!("{:?}", p)))
-                    .format(",").to_string();
+                    .format(",")
+                    .to_string();
 
                 write!(f, "({})", s)?;
             }
@@ -125,7 +121,7 @@ impl fmt::Display for AstNode {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Variable {
     pub name: String,
-    pub bound: Option<AstNode>
+    pub bound: Option<AstNode>,
 }
 
 impl Variable {
@@ -212,24 +208,68 @@ pub fn make_binary_function(name: String, args: Vec<Type>, env: &mut Environment
 pub fn base_env() -> Environment {
     let mut env = Environment::default();
     make_binary_function("*".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
-    make_binary_function("*".into(), vec![Type::Float, Type::Float, Type::Float], &mut env);
-    make_binary_function("*".into(), vec![Type::Int, Type::Float, Type::Float], &mut env);
-    make_binary_function("*".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
+    make_binary_function(
+        "*".into(),
+        vec![Type::Float, Type::Float, Type::Float],
+        &mut env,
+    );
+    make_binary_function(
+        "*".into(),
+        vec![Type::Int, Type::Float, Type::Float],
+        &mut env,
+    );
+    make_binary_function(
+        "*".into(),
+        vec![Type::Float, Type::Int, Type::Float],
+        &mut env,
+    );
 
     make_binary_function("+".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
-    make_binary_function("+".into(), vec![Type::Float, Type::Float, Type::Float], &mut env);
-    make_binary_function("+".into(), vec![Type::Int, Type::Float, Type::Float], &mut env);
-    make_binary_function("+".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
+    make_binary_function(
+        "+".into(),
+        vec![Type::Float, Type::Float, Type::Float],
+        &mut env,
+    );
+    make_binary_function(
+        "+".into(),
+        vec![Type::Int, Type::Float, Type::Float],
+        &mut env,
+    );
+    make_binary_function(
+        "+".into(),
+        vec![Type::Float, Type::Int, Type::Float],
+        &mut env,
+    );
 
     make_binary_function("-".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
-    make_binary_function("-".into(), vec![Type::Float, Type::Float, Type::Float], &mut env);
-    make_binary_function("-".into(), vec![Type::Int, Type::Float, Type::Float], &mut env);
-    make_binary_function("-".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
+    make_binary_function(
+        "-".into(),
+        vec![Type::Float, Type::Float, Type::Float],
+        &mut env,
+    );
+    make_binary_function(
+        "-".into(),
+        vec![Type::Int, Type::Float, Type::Float],
+        &mut env,
+    );
+    make_binary_function(
+        "-".into(),
+        vec![Type::Float, Type::Int, Type::Float],
+        &mut env,
+    );
 
     make_binary_function("^".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
-    make_binary_function("^".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
+    make_binary_function(
+        "^".into(),
+        vec![Type::Float, Type::Int, Type::Float],
+        &mut env,
+    );
     make_binary_function(">".into(), vec![Type::Int, Type::Int, Type::Bool], &mut env);
-    make_binary_function(">".into(), vec![Type::Float, Type::Float, Type::Bool], &mut env);
+    make_binary_function(
+        ">".into(),
+        vec![Type::Float, Type::Float, Type::Bool],
+        &mut env,
+    );
     env
 }
 
@@ -239,4 +279,3 @@ mod tests {
     use log::debug;
     use test_log::test;
 }
-

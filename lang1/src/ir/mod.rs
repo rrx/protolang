@@ -274,7 +274,11 @@ x + 2
         assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();
-        let out = c.unify(&Type::new_unknown(0), &vec![Type::Float, Type::Int], Some(s));
+        let out = c.unify(
+            &Type::new_unknown(0),
+            &vec![Type::Float, Type::Int],
+            Some(s),
+        );
         assert_eq!(out.unwrap().get(&0), Some(&Type::Float));
 
         let s = SymbolTable::default();

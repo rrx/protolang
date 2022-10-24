@@ -1,4 +1,4 @@
-use crate::{util::fmap};
+use crate::util::fmap;
 use std::fmt::{self, Display};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -45,7 +45,7 @@ pub struct FunctionType {
     pub parameters: Vec<Type>,
     pub return_type: Box<Type>,
     pub is_varargs: bool,
-    pub export: bool
+    pub export: bool,
 }
 
 /// A HIR type representation.

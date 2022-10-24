@@ -20,7 +20,7 @@ impl fmt::Debug for TypeDefinitionId {
 
 #[derive(Default)]
 pub struct TypeSystemContext {
-    next_id: usize
+    next_id: usize,
 }
 
 impl TypeSystemContext {
@@ -52,20 +52,17 @@ impl Type {
     pub fn is_unknown(&self) -> bool {
         match self {
             Type::Unknown(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_unknown_recursive(&self) -> bool {
         match self {
             Type::Unknown(_) => true,
-            Type::Func(sig) => {
-                sig.iter().any(|v| v.is_unknown())
-            }
-            _ => false
+            Type::Func(sig) => sig.iter().any(|v| v.is_unknown()),
+            _ => false,
         }
     }
 }
 
 type FunctionSig = Vec<Type>;
-

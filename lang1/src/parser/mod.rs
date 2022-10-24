@@ -86,7 +86,6 @@ pub(crate) fn take_one_any(i: Tokens) -> PResult<Tokens, Tokens> {
     take(1usize)(i)
 }
 
-
 fn token_not_stmt_end(i: Span) -> LResult<Span, Span> {
     // also return if we get EOF
     if i.len() == 0 {
@@ -133,7 +132,7 @@ fn parse_invalid_token(i: Tokens) -> PResult<Tokens, ExprNode> {
     match &token.tok {
         Tok::Invalid(s) => {
             let expr = Expr::Invalid(s.clone());
-            let node = ExprNode::new_with_token(expr, &token);//new_loc_node_token(expr, &pos, &i);
+            let node = ExprNode::new_with_token(expr, &token); //new_loc_node_token(expr, &pos, &i);
             Ok((i, node))
         }
         _ => Err(Err::Error(error_position!(i, ErrorKind::Tag))),
@@ -399,11 +398,7 @@ pub(crate) fn parse_declaration(i: Tokens) -> PResult<Tokens, ExprNode> {
 
     let (i, rhs) = pratt::parse_expr_pratt(i)?;
     //let loc = i.to_location();
-    let expr = Expr::Binary(
-        op_node,
-        Box::new(node),
-        Box::new(rhs),
-    );
+    let expr = Expr::Binary(op_node, Box::new(node), Box::new(rhs));
     let node = ExprNode::new(expr, &i.to_location());
     Ok((i, node))
 }
@@ -429,7 +424,7 @@ fn _parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     match &token.tok {
         Tok::Ident(s) => {
             let expr = Expr::Ident(Identifier::new(s.clone(), VarModifier::Default));
-            let node = ExprNode::new_with_token(expr, &token);//new_loc_node_token(expr, &pos, &i);
+            let node = ExprNode::new_with_token(expr, &token); //new_loc_node_token(expr, &pos, &i);
             log::debug!("t: {:?}", (&token, &node));
             Ok((i, node))
         }
@@ -499,13 +494,13 @@ pub fn parse_str(s: &str) -> anyhow::Result<ExprNode> {
 
 #[cfg(test)]
 mod tests {
+    use super::error::print_result;
     use super::*;
     use crate::lexer::*;
     use crate::program::Program;
     use crate::sexpr::SExpr;
     use nom::multi::many1;
     use test_log::test;
-    use super::error::print_result;
 
     pub(crate) fn parser_losslessness(s: &str) -> bool {
         debug!("{:?}", &s);

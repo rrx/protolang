@@ -549,8 +549,7 @@ impl TypeChecker {
         let file_id = self
             .results
             .add_source(filename.into(), contents.to_string());
-        let mut lexer = crate::lexer::LexerState::default()
-            .set_file_id(file_id);
+        let mut lexer = crate::lexer::LexerState::default().set_file_id(file_id);
         let (_, tokens) = lexer.lex_eof(&contents).unwrap();
 
         for t in tokens.iter_elements() {

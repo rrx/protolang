@@ -1,50 +1,50 @@
-use crate::ast::*;
-use codegen::hir;
-use super::CodeGenLower;
 use super::check::TypeChecker;
-use std::error::Error;
-use crate::tokens::{Tok};
-use std::rc::Rc;
+use super::CodeGenLower;
+use crate::ast::*;
 use crate::results::{Compiler, LangError};
+use crate::tokens::Tok;
+use codegen::hir;
+use std::error::Error;
+use std::rc::Rc;
 
 impl crate::compiler::env::LayerValue for hir::Definition {}
 pub type Environment = crate::compiler::env::EnvLayers<String, hir::Definition>;
 
-enum Type  {
+enum Type {
     Float,
     Integer,
-    Unbound(usize)
+    Unbound(usize),
 }
 
 struct HIRCodeGen {
     next_definition_id: usize,
     results: Compiler,
     env: Environment,
-    checker: TypeChecker<hir::Ast>
+    checker: TypeChecker<hir::Ast>,
 }
 
 fn ty(name: &str) -> hir::Type {
-    use codegen::hir::{IntegerKind, Type};
-    use codegen::hir::Type::Primitive;
     use codegen::hir::PrimitiveType::Integer;
+    use codegen::hir::Type::Primitive;
+    use codegen::hir::{IntegerKind, Type};
 
     match name {
         "u8" => Primitive(Integer(IntegerKind::U8)),
         "u16" => Primitive(Integer(IntegerKind::U16)),
         "u32" => Primitive(Integer(IntegerKind::U32)),
         "u64" => Primitive(Integer(IntegerKind::U64)),
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
 struct NamedType<'a> {
     name: &'a str,
-    ty: hir::Type
+    ty: hir::Type,
 }
 
 struct TypedExpr {
     ty: Type,
-    expr: Expr
+    expr: Expr,
 }
 
 impl<'a> NamedType<'a> {
@@ -53,11 +53,15 @@ impl<'a> NamedType<'a> {
     }
 }
 
-
 impl Default for HIRCodeGen {
     fn default() -> Self {
         let env = Environment::default();
-        Self { next_definition_id: 0, results: Compiler::default(), env, checker: TypeChecker::default() }
+        Self {
+            next_definition_id: 0,
+            results: Compiler::default(),
+            env,
+            checker: TypeChecker::default(),
+        }
     }
 }
 
@@ -68,27 +72,36 @@ impl HIRCodeGen {
         d
     }
 
-    fn lambda(&mut self, name: String, params: Vec<NamedType>, ret: hir::Type, body: hir::Ast) -> hir::Ast {
+    fn lambda(
+        &mut self,
+        name: String,
+        params: Vec<NamedType>,
+        ret: hir::Type,
+        body: hir::Ast,
+    ) -> hir::Ast {
         let typ = hir::FunctionType {
             parameters: params.iter().map(|p| p.ty.clone()).collect(),
             return_type: Box::new(ret),
             is_varargs: false,
-            export: true
+            export: true,
         };
 
-        let args = params.iter().map(|p| {
-            let definition_id = self.get_next_definition_id();
-            hir::Variable {
-                definition: None,
-                definition_id,
-                name: Some(p.name.to_string())
-            }
-        }).collect();
+        let args = params
+            .iter()
+            .map(|p| {
+                let definition_id = self.get_next_definition_id();
+                hir::Variable {
+                    definition: None,
+                    definition_id,
+                    name: Some(p.name.to_string()),
+                }
+            })
+            .collect();
 
         let f = hir::Lambda {
             args,
             body: Box::new(body),
-            typ
+            typ,
         };
 
         hir::Ast::Lambda(f)
@@ -98,13 +111,9 @@ impl HIRCodeGen {
         let expr = node.value.clone();
 
         let ty = match expr {
-            Expr::Literal(Tok::FloatLiteral(_)) => {
-                ExprType::Float
-            }
+            Expr::Literal(Tok::FloatLiteral(_)) => ExprType::Float,
 
-            Expr::Literal(Tok::IntLiteral(_)) => { 
-                ExprType::Integer
-            }
+            Expr::Literal(Tok::IntLiteral(_)) => ExprType::Integer,
 
             Expr::Binary(op, mut left, mut right) => {
                 self.update(&mut left);
@@ -119,8 +128,7 @@ impl HIRCodeGen {
         node.ty = ty;
     }
 
-    fn typecheck(&mut self) {
-    }
+    fn typecheck(&mut self) {}
 }
 
 impl CodeGenLower for HIRCodeGen {
@@ -136,18 +144,20 @@ impl CodeGenLower for HIRCodeGen {
                     ir_exprs.push(node);
                 }
 
-                Ok(hir::Ast::Sequence(hir::Sequence { statements: ir_exprs }))
+                Ok(hir::Ast::Sequence(hir::Sequence {
+                    statements: ir_exprs,
+                }))
             }
 
-            Expr::Literal(Tok::FloatLiteral(f)) => {
-                Ok(hir::Ast::Literal(hir::Literal::Float(0, hir::FloatKind::F64)))
-            }
-            Expr::Literal(Tok::IntLiteral(i)) => { 
-                Ok(hir::Ast::Literal(hir::Literal::Integer(*i, hir::IntegerKind::U64)))
-            }
-            Expr::Literal(Tok::BoolLiteral(b)) => {
-                Ok(hir::Ast::Literal(hir::Literal::Bool(*b)))
-            }
+            Expr::Literal(Tok::FloatLiteral(f)) => Ok(hir::Ast::Literal(hir::Literal::Float(
+                0,
+                hir::FloatKind::F64,
+            ))),
+            Expr::Literal(Tok::IntLiteral(i)) => Ok(hir::Ast::Literal(hir::Literal::Integer(
+                *i,
+                hir::IntegerKind::U64,
+            ))),
+            Expr::Literal(Tok::BoolLiteral(b)) => Ok(hir::Ast::Literal(hir::Literal::Bool(*b))),
             Expr::Literal(Tok::StringLiteral(s)) => {
                 Ok(hir::Ast::Literal(hir::Literal::CString(s.clone())))
             }
@@ -157,7 +167,10 @@ impl CodeGenLower for HIRCodeGen {
                 Operator::Assign => {
                     let ir_left = self.lower(left)?;
                     let ir_right = self.lower(right)?;
-                    Ok(hir::Ast::Assignment(hir::Assignment { lhs: Box::new(ir_left), rhs: Box::new(ir_right) }))
+                    Ok(hir::Ast::Assignment(hir::Assignment {
+                        lhs: Box::new(ir_left),
+                        rhs: Box::new(ir_right),
+                    }))
                 }
 
                 Operator::Declare => {
@@ -166,7 +179,7 @@ impl CodeGenLower for HIRCodeGen {
                     let v = hir::Definition {
                         variable: self.get_next_definition_id(),
                         name: Some(name.clone()),
-                        expr: Box::new(ir_right)
+                        expr: Box::new(ir_right),
                     };
                     self.env.define(name.clone(), v.clone());
                     Ok(hir::Ast::Definition(v))
@@ -174,7 +187,7 @@ impl CodeGenLower for HIRCodeGen {
 
                 _ => {
                     unimplemented!()
-                        /*
+                    /*
                     let name = crate::ir::op_name(op);
 
                     let a = self.get_next_definition_id();
@@ -205,7 +218,8 @@ impl CodeGenLower for HIRCodeGen {
             Expr::Lambda(f) => {
                 let mut parameters = vec![];
                 for p in &f.params.value {
-                    let ty = hir::Type::Primitive(hir::PrimitiveType::Integer(hir::IntegerKind::U64));
+                    let ty =
+                        hir::Type::Primitive(hir::PrimitiveType::Integer(hir::IntegerKind::U64));
                     parameters.push(ty);
                     //let ty = self.checker.new_unknown_type();
                     //let name = p.try_ident().unwrap().name;
@@ -217,20 +231,21 @@ impl CodeGenLower for HIRCodeGen {
                 }
 
                 //let return_type = hir::Type::Primitive(hir::PrimitiveType::Unit);
-                let return_type = hir::Type::Primitive(hir::PrimitiveType::Integer(hir::IntegerKind::U64));
+                let return_type =
+                    hir::Type::Primitive(hir::PrimitiveType::Integer(hir::IntegerKind::U64));
 
                 let typ = hir::FunctionType {
                     parameters: parameters,
                     return_type: Box::new(return_type),
                     is_varargs: false,
-                    export: true
+                    export: true,
                 };
 
                 let body = self.lower(&f.expr)?;
                 let f = hir::Lambda {
                     args: vec![],
                     body: Box::new(body),
-                    typ
+                    typ,
                 };
 
                 Ok(hir::Ast::Lambda(f))
@@ -322,7 +337,6 @@ impl CodeGenLower for HIRCodeGen {
                 _ => unimplemented!(),
             },
             */
-
             _ => {
                 log::debug!("Unimplemented: {:?}", &node);
                 unimplemented!()
@@ -334,16 +348,16 @@ impl CodeGenLower for HIRCodeGen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_log::test;
-    use codegen::llvm;
     use codegen::hir;
+    use codegen::llvm;
+    use test_log::test;
 
     #[test]
     fn function() {
         let mut gen = HIRCodeGen::default();
         let mut args = llvm::CompileArgs::default();
         args.stdout = true;
-        
+
         let one = hir::Ast::Literal(hir::Literal::Integer(1, hir::IntegerKind::U64));
         let two = hir::Ast::Literal(hir::Literal::Integer(2, hir::IntegerKind::U64));
         let add = hir::Ast::Builtin(hir::Builtin::AddInt(Box::new(one), Box::new(two)));
@@ -353,21 +367,21 @@ mod tests {
             parameters: vec![],
             return_type: Box::new(return_type),
             is_varargs: false,
-            export: true
+            export: true,
         };
 
         let body = add;
         let f = hir::Ast::Lambda(hir::Lambda {
             args: vec![],
             body: Box::new(body),
-            typ
+            typ,
         });
 
         let name = "main".to_string();
         let v = hir::Ast::Definition(hir::Definition {
             variable: gen.get_next_definition_id(),
             name: Some(name),
-            expr: Box::new(f)
+            expr: Box::new(f),
         });
 
         println!("{:?}", &v);
@@ -387,5 +401,3 @@ mod tests {
         llvm::compile(&String::from("test"), ir, &args).unwrap();
     }
 }
-
-

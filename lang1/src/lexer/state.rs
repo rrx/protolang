@@ -201,15 +201,19 @@ impl<'a> LexerState<'a> {
                             if self.indent_size < prev_indent {
                                 // close out
                                 let prev = self.indent_stack.pop().unwrap();
-                                let close =
-                                    crate::tokens::Token::new(Tok::IndentClose, &prev.pos, &prev.pos);
+                                let close = crate::tokens::Token::new(
+                                    Tok::IndentClose,
+                                    &prev.pos,
+                                    &prev.pos,
+                                );
                                 if false {
                                     self.push_token(close);
                                 } else {
                                     self.whitespace.push(close);
                                 }
                             } else if self.indent_size > prev_indent {
-                                let open = crate::tokens::Token::new(Tok::IndentOpen, &t.pos, &t.pos);
+                                let open =
+                                    crate::tokens::Token::new(Tok::IndentOpen, &t.pos, &t.pos);
                                 if false {
                                     self.push_token(open);
                                 } else {
