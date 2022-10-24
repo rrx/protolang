@@ -64,6 +64,9 @@ impl fmt::Debug for AstNode {
             Ast::Literal(x) => {
                 write!(f, "{:?}", &x)?;
             }
+            Ast::Variable(x) => {
+                write!(f, "Var({:?})", &x)?;
+            }
             _ => {
                 write!(f, "{:?}:{:?}", &inner.value, &inner.ty);
             }

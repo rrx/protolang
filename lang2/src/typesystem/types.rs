@@ -63,6 +63,14 @@ impl Type {
             _ => false,
         }
     }
+
+    pub fn unknown_ids(&self) -> Vec<TypeDefinitionId> {
+        match self {
+            Type::Unknown(id) => vec![*id],
+            Type::Func(sig) => sig.iter().map(|v| v.unknown_ids()).flatten().collect(),
+            _ => vec![],
+        }
+    }
 }
 
 type FunctionSig = Vec<Type>;

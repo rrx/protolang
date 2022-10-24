@@ -19,7 +19,7 @@ impl visitor::Visitor<SymbolTable> for AstBuilder {
         if is_unknown {
             let before: TypeNodePair = e.clone().into();
             let after = self.substitute(e.clone().into());
-            //println!("replacing {:?} => {:?}", &before.ty, &after.ty);
+            println!("replacing {:?} => {:?}", &before.ty, &after.ty);
             // only replace the type.  The node returned by substitute
             // isn't always going to be the same node.  It might be the
             // parent node for the type.
@@ -27,27 +27,23 @@ impl visitor::Visitor<SymbolTable> for AstBuilder {
             new_inner.ty = after.ty.clone();
             //println!("replacing {:?}", &new_inner);
             e.replace(new_inner);
-        }
 
-        /*
-        e.replace_with(|a| {
-            if a.ty.is_unknown_recursive() {
-                let before = a.ty.clone();
-                let after = self.substitute(AstNode::new(a.value.clone(), a.ty.clone()).into());
-                println!("replacing {:?} => {:?}", &before, &after.ty);
-            }
+            let inner = e.borrow();
+            let value = &inner.value;
 
-            // ensure that all variables are bound
-            match &a.value {
+            match value {
                 Ast::Variable(v) => {
-                    //assert!(v.bound.is_some());
+                    // we can use the unknown ids associated with the type 
+                    // to lookup the node, but this doesn't work if we have
+                    // multiple unknowns.  We need a better solution for
+                    // unification
+                    let unknown_ids = before.ty.unknown_ids();
+                    println!("var {:?}", (&v, &before, &after, unknown_ids));
+                    //unreachable!()
                 }
                 _ => ()
             }
-
-            a.clone()
-        });
-        */
+        }
 
 
         Ok(())
@@ -134,12 +130,6 @@ impl AstBuilder {
                         let new_ast = AstNode::new(v, ty);
                         //println!("resolve: {:?} => {:?}", &ast, &new_ast);
                         new_ast
-                        //inner.into()
-                        //v.replace_with(|a| {
-                            //let mut b = a.clone();
-                            //b.ty = ast_ty;
-                            //b
-                        //});
                     }
                     None => {
                         unimplemented!();
@@ -149,8 +139,10 @@ impl AstBuilder {
             }
 
             Ast::Apply(f, ref args) => {
+                let mut env = env.clone();
                 for arg in args {
-                    let (f, env) = self.name_resolve(arg.clone(), env.clone());
+                    let (_f, this_env) = self.name_resolve(arg.clone(), env.clone());
+                    env = this_env;
                 }
 
                 match &f.borrow().value {
@@ -172,6 +164,8 @@ impl AstBuilder {
                             })
                             .collect();
                         let ty = TypeNodePair::new(Type::Func(arg_types), *f.clone());
+                        //let unknown: TypeNodePair = self.var("x").into();
+                        //self.check.add(TypeEquation::new(unknown, vec![ty.clone()]));
                         self.check.add(TypeEquation::new(ty, possible));
                     }
 
@@ -316,10 +310,6 @@ mod tests {
 
         // make sure type is correct
         assert_eq!(ast.borrow().ty, Type::Int);
-
-        //let mut v = Test {};
-        //let _ = visitor::visit(ast.clone(), &mut v, &mut ()).unwrap();
-
     }
 
     #[test]

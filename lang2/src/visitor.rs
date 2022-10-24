@@ -52,7 +52,7 @@ fn visit_children<N>(e: AstNode, f: &mut impl Visitor<N>, n: &mut N) -> VResult 
             f.variable(v, n)?;
             f.leaf(e.clone(), n)?;
         }
-        Ast::Declare(name, rhs) => {
+        Ast::Declare(_name, rhs) => {
             visit(*rhs.clone(), f, n)?;
         }
         Ast::Block(exprs) => {

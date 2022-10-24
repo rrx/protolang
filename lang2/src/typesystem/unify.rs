@@ -63,7 +63,7 @@ impl fmt::Display for TypeChecker {
             write!(f, "Eq: {:?}\n", v)?;
         }
         for (k, v) in self.syms.iter() {
-            write!(f, "Subs: {:?} => {:?}\n", k, v.ty)?;
+            write!(f, "Subs: {:?} => {:?}\n", k, v)?;
         }
         Ok(())
     }
@@ -168,42 +168,42 @@ fn occurs_check(p1: &TypeNodePair, p2: &TypeNodePair, subst: &SymbolTable) -> bo
     false
 }
 
-fn unify_eq(ty1: &TypeNodePair, ty2: &TypeNodePair, subst: Option<SymbolTable>) -> Option<SymbolTable> {
-    log::debug!("unify_eq: {:?} :: {:?}", ty1, ty2);
+fn unify_eq(p1: &TypeNodePair, p2: &TypeNodePair, subst: Option<SymbolTable>) -> Option<SymbolTable> {
+    log::debug!("unify_eq: {:?} :: {:?}", p1, p2);
 
-    if ty1.ty == ty2.ty {
+    if p1.ty == p2.ty {
         return subst;
     }
 
     let subst = subst.unwrap();
 
     // make substitutions
-    let ty1 = subs_if_exists(ty1, &subst);
-    let ty2 = subs_if_exists(ty2, &subst);
+    let p1 = subs_if_exists(p1, &subst);
+    let p2 = subs_if_exists(p2, &subst);
 
-    if let Type::Unknown(type_id) = ty1.ty {
-        return Some(subst.insert(type_id, ty2.clone()));
-    } else if let Type::Unknown(type_id) = ty2.ty {
-        return Some(subst.insert(type_id, ty1.clone()));
+    if let Type::Unknown(type_id) = p1.ty {
+        return Some(subst.insert(type_id, p2.clone()));
+    } else if let Type::Unknown(type_id) = p2.ty {
+        return Some(subst.insert(type_id, p1.clone()));
     }
 
-    if ty1 == ty2 {
+    if p1 == p2 {
         return Some(subst);
     }
 
-    if occurs_check(ty1, ty2, &subst) {
+    if occurs_check(p1, p2, &subst) {
         return None;
     }
 
-    if let Type::Func(sig1) = &ty1.ty {
-        if let Type::Func(sig2) = &ty2.ty {
+    if let Type::Func(sig1) = &p1.ty {
+        if let Type::Func(sig2) = &p2.ty {
             let sig1 = sig1.into_iter().map(|s| {
-                TypeNodePair::new(s.clone(), ty1.node.clone())
+                TypeNodePair::new(s.clone(), p1.node.clone())
             }).collect::<Vec<TypeNodePair>>();
             let sig2 = sig2.into_iter().map(|s| {
-                TypeNodePair::new(s.clone(), ty1.node.clone())
+                TypeNodePair::new(s.clone(), p2.node.clone())
             }).collect::<Vec<TypeNodePair>>();
-            return unify_fn(&sig1, &sig2, subst.clone());
+            return unify_fn(p1.node.clone(), &sig1, p2.node.clone(), &sig2, subst.clone());
         } else {
             return None;
         }
@@ -212,8 +212,9 @@ fn unify_eq(ty1: &TypeNodePair, ty2: &TypeNodePair, subst: Option<SymbolTable>) 
     None
 }
 
-fn unify_fn(sig1: &Vec<TypeNodePair>, sig2: &Vec<TypeNodePair>, mut subst: SymbolTable) -> Option<SymbolTable> {
+fn unify_fn(p1: AstNode, sig1: &Vec<TypeNodePair>, p2: AstNode, sig2: &Vec<TypeNodePair>, mut subst: SymbolTable) -> Option<SymbolTable> {
     log::debug!("unify_fn: {:?} :: {:?}", sig1, sig2);
+    log::debug!("unify_fn: {:?} :: {:?}", p1, p2);
 
     if sig1.len() != sig2.len() {
         return None;
@@ -221,7 +222,13 @@ fn unify_fn(sig1: &Vec<TypeNodePair>, sig2: &Vec<TypeNodePair>, mut subst: Symbo
 
     let mut local_subst = SymbolTable::default();
     for (a1, a2) in sig1.iter().zip(sig2.iter()) {
-        match unify(a1, &Vec::from([a2.clone()]), Some(local_subst)) {
+        match unify(
+            // when we unify the function, we pass in the second node
+            // the second node is the function that matched, and we want
+            // to pass this back
+            &TypeNodePair::new(a1.ty.clone(), p2.clone()),
+            &Vec::from([TypeNodePair::new(a2.ty.clone(), p2.clone())]),
+            Some(local_subst)) {
             Some(s) => {
                 local_subst = s;
             }
@@ -232,6 +239,7 @@ fn unify_fn(sig1: &Vec<TypeNodePair>, sig2: &Vec<TypeNodePair>, mut subst: Symbo
     }
 
     for (k, v) in local_subst.iter() {
+        println!("unify_fn: {:?}", (&k, &v));
         subst = subst.insert(k.clone(), v.clone());
     }
 
