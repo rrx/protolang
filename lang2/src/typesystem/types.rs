@@ -4,7 +4,7 @@ use std::fmt;
 pub type Environment<N> = EnvLayers<str, N>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TypeDefinitionId(usize);
+pub struct TypeDefinitionId(pub usize);
 
 impl fmt::Display for TypeDefinitionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

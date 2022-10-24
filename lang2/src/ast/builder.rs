@@ -1,10 +1,36 @@
 use crate::ast::*;
 use crate::typesystem::{Type, TypeChecker};
-use std::rc::Rc;
+use crate::visitor;
 
 #[derive(Default)]
-struct AstBuilder {
-    check: TypeChecker,
+pub struct AstBuilder {
+    pub check: TypeChecker,
+}
+
+impl visitor::Visitor<SymbolTable> for AstBuilder {
+    fn exit(&mut self, e: AstNode, n: &mut SymbolTable) -> visitor::VResult {
+        println!("AST: {}", e);
+        e.replace_with(|a| {
+            if a.ty.is_unknown_recursive() {
+                let before = a.ty.clone();
+                a.ty = self.substitute(a.ty.clone());
+                println!("replacing {:?} => {:?}", &before, &a.ty);
+            }
+
+            // ensure that all variables are bound
+            match &a.value {
+                Ast::Variable(v) => {
+                    //assert!(v.bound.is_some());
+                }
+                _ => ()
+            }
+
+            a.clone()
+        });
+
+
+        Ok(())
+    }
 }
 
 impl AstBuilder {
@@ -12,14 +38,22 @@ impl AstBuilder {
         AstNode::new(Literal::Int(i).into(), Type::Int)
     }
 
-    pub fn ident(&mut self, n: &str) -> AstNode {
+    pub fn float(&self, f: f64) -> AstNode {
+        AstNode::new(Literal::Float(f).into(), Type::Float)
+    }
+
+    pub fn boolean(&self, b: bool) -> AstNode {
+        AstNode::new(Literal::Bool(b).into(), Type::Bool)
+    }
+
+    pub fn var(&mut self, n: &str) -> AstNode {
         AstNode::new(
             Variable::new(n.into()).into(),
             self.check.new_unknown_type(),
         )
     }
 
-    pub fn ident_resolve(&mut self, n: &str, env: Environment) -> AstNode {
+    pub fn var_resolve(&mut self, n: &str, env: Environment) -> AstNode {
         match env.resolve(&n.to_string()) {
             Some(v) => v.clone(),
             None => {
@@ -45,8 +79,6 @@ impl AstBuilder {
             ty_ret.clone(),
         ]);
 
-        //let name = "+".into();
-
         // type of this operation
         let f = AstNode::new(Variable::new(name.into()).into(), ty_f);
 
@@ -55,9 +87,9 @@ impl AstBuilder {
     }
 
     fn name_resolve(&mut self, ast: AstNode, env: Environment) -> (AstNode, Environment) {
-        let inner = &ast.borrow_mut();
-        let value = &inner.value;
+        let mut inner = ast.borrow_mut();
         let ast_ty = inner.ty.clone();
+        let value = &mut inner.value;
 
         match value {
             Ast::Literal(_) => (ast.clone(), env),
@@ -73,22 +105,33 @@ impl AstBuilder {
             }
 
             Ast::Variable(v) => {
-                match env.resolve(&v.name) {
-                    Some(v) => {
-                        v.replace_with(|a| {
-                            let mut b = a.clone();
-                            b.ty = ast_ty;
-                            b
-                        });
+                let ast = match env.resolve(&v.name) {
+                    Some(resolved_v) => {
+                        v.bind(resolved_v.clone());
+                        let ty = resolved_v.borrow().ty.clone();
+                        let v = Ast::Variable(v.clone());
+                        let new_ast = AstNode::new(v, ty);
+                        //println!("resolve: {:?} => {:?}", &ast, &new_ast);
+                        new_ast
+                        //inner.into()
+                        //v.replace_with(|a| {
+                            //let mut b = a.clone();
+                            //b.ty = ast_ty;
+                            //b
+                        //});
                     }
                     None => {
                         unimplemented!();
                     }
-                }
-                (ast.clone(), env)
+                };
+                (ast, env)
             }
 
-            Ast::Apply(ref f, ref args) => {
+            Ast::Apply(f, ref args) => {
+                for arg in args {
+                    let (f, env) = self.name_resolve(arg.clone(), env.clone());
+                }
+
                 match &f.borrow().value {
                     Ast::Variable(v) => {
                         let mut arg_types = args
@@ -101,14 +144,21 @@ impl AstBuilder {
                         let possible = env
                             .resolve_all(&v.name)
                             .iter()
-                            .map(|v| v.borrow().ty.clone())
+                            .map(|v| {
+                                let node = v.clone();
+                                let ty = v.borrow().ty.clone();
+                                TypeNodePair::new(ty, node.clone())
+                            })
                             .collect();
-                        let ty = Type::Func(arg_types);
+                        let ty = TypeNodePair::new(Type::Func(arg_types), *f.clone());
                         self.check.add(TypeEquation::new(ty, possible));
                     }
 
                     Ast::Function(_body, _args) => {
                         // Already resolved
+                        // TODO:
+                        // args are unbound
+                        // bind any free variables in the body
                     }
                     _ => unimplemented!(),
                 }
@@ -143,7 +193,7 @@ impl AstBuilder {
     fn substitute(&mut self, ty: Type) -> Type {
         match ty {
             Type::Unknown(ty_id) => match self.check.get_type_by_id(&ty_id) {
-                Some(v) => v,
+                Some(v) => v.ty,
                 None => {
                     println!("Type missing from substitution table: {:?}", &ty);
                     unimplemented!()
@@ -161,16 +211,21 @@ impl AstBuilder {
         // name resolution
         let (mut ast, mut env) = self.name_resolve(ast, env);
         // infer all types
-        self.check.unify_all();
+        let mut syms = self.check.unify_all();
 
         println!("AST: {}", &ast);
         println!("C: {}", self.check);
-        println!("ENV: {:?}", env);
+        println!("ENV: {}", env);
+
+        let _ = visitor::visit(ast.clone(), self, &mut syms).unwrap();
 
         /*
-        if ast.ty.is_unknown_recursive() {
-            ast.ty = self.substitute(ast.ty.clone());
-        }
+        ast.replace_with(|a| {
+            if a.ty.is_unknown_recursive() {
+                a.ty = self.substitute(a.ty.clone());
+            }
+            a.clone()
+        });
         */
 
         (ast, env)
@@ -180,8 +235,16 @@ impl AstBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use log::debug;
     use test_log::test;
+
+    struct Test {}
+    impl visitor::Visitor<()> for Test {
+        fn exit(&mut self, e: AstNode, n: &mut ()) -> visitor::VResult {
+            println!("AST: {}", e);
+            //n.push(e.clone());
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_resolve() {
@@ -190,7 +253,7 @@ mod tests {
 
         let v = b.int(1);
         let decl1 = b.declare("a", v);
-        let v = b.ident("a".into());
+        let v = b.var("a".into());
         let decl2 = b.declare("b", v);
         let block = b.block(vec![decl1, decl2]);
         let ast = b.declare("c", block.clone());
@@ -218,9 +281,61 @@ mod tests {
         let ast = b.declare("f", add);
 
         let (ast, env) = b.resolve(ast, env.clone());
-        println!("{:?}", env);
+        println!("{}", env);
         //println!("{:?}", env.resolve(&"f".into()));
         println!("{}", &ast);
         println!("{}", b.check);
+
+        let f = env.resolve(&"f".into()).unwrap();
+        match &f.borrow().value {
+            Ast::Apply(f, args) => {
+                println!("f1 = {:?}", f);
+                println!("f2 = {:?}", f.borrow().ty);
+            }
+            _ => unreachable!()
+        }
+
+        // make sure type is correct
+        assert_eq!(ast.borrow().ty, Type::Int);
+
+        //let mut v = Test {};
+        //let _ = visitor::visit(ast.clone(), &mut v, &mut ()).unwrap();
+
     }
+
+    #[test]
+    fn name_resolve() {
+        let mut b = AstBuilder::default();
+        let mut env = Environment::default();
+        env.define("a".into(), b.int(1)); 
+        let v = b.var("a");
+        println!("AST:{}", &v);
+        match &v.borrow().value {
+            Ast::Variable(v) => {
+                assert_eq!(v.bound, None);
+            }
+            _ => unreachable!()
+        }
+        let (ast, env) = b.name_resolve(v, env);
+        println!("ENV:{}", env);
+        println!("AST:{}", &ast);
+
+        let inner = &ast.borrow();
+        let ref_node = match &inner.value {
+            Ast::Variable(v) => {
+                v.bound.clone()
+            }
+            _ => unreachable!()
+        };
+
+        // make sure the types match
+        assert_eq!(ref_node.unwrap().borrow().ty, Type::Int);
+        assert_eq!(inner.ty, Type::Int);
+
+    }
+
+    #[test]
+    fn visit() {
+    }
+
 }

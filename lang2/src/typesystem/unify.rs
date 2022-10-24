@@ -1,9 +1,33 @@
 use super::types::*;
 use crate::env::LayerKey;
+use crate::ast::AstNode;
 use std::fmt;
 use thiserror::Error;
+use std::cmp::PartialEq;
 
-pub type SymbolTable = rpds::HashTrieMap<TypeDefinitionId, Type>;
+#[derive(Clone, Debug)]
+pub struct TypeNodePair {
+    pub ty: Type,
+    pub node: AstNode
+}
+impl TypeNodePair {
+    pub fn new(ty: Type, node: AstNode) -> Self {
+        Self { ty, node }
+    }
+}
+impl PartialEq for TypeNodePair {
+    fn eq(&self, other: &Self) -> bool {
+        self.ty == other.ty
+    }
+}
+impl From<AstNode> for TypeNodePair {
+    fn from(node: AstNode) -> Self {
+        let ty = node.borrow().ty.clone();
+        Self { ty, node }
+    }
+}
+
+pub type SymbolTable = rpds::HashTrieMap<TypeDefinitionId, TypeNodePair>;
 
 impl LayerKey for String {}
 
@@ -39,21 +63,22 @@ impl fmt::Display for TypeChecker {
             write!(f, "Eq: {:?}\n", v)?;
         }
         for (k, v) in self.syms.iter() {
-            write!(f, "Subs: {:?} => {:?}\n", k, v)?;
+            write!(f, "Subs: {:?} => {:?}\n", k, v.ty)?;
         }
         Ok(())
     }
 }
 
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeEquation {
-    left: Type,
+    left: TypeNodePair,
     // ordered set - should be ordered from general to specific
-    right: Vec<Type>,
+    right: Vec<TypeNodePair>,
 }
 
 impl TypeEquation {
-    pub fn new(left: Type, right: Vec<Type>) -> Self {
+    pub fn new(left: TypeNodePair, right: Vec<TypeNodePair>) -> Self {
         Self { left, right }
     }
 }
@@ -67,20 +92,20 @@ impl TypeChecker {
         self.type_equations.push(eq);
     }
 
-    pub fn resolve_type(&self, ty: &Type) -> Option<Type> {
-        if let Type::Unknown(id) = ty {
-            self.get_type_by_id(id)
+    pub fn resolve_type(&self, p: &TypeNodePair) -> Option<TypeNodePair> {
+        if let Type::Unknown(id) = p.ty {
+            self.get_type_by_id(&id)
         } else {
-            Some(ty.clone())
+            Some(p.clone())
         }
     }
 
-    pub fn get_type_by_id(&self, ty_id: &TypeDefinitionId) -> Option<Type> {
-        let mut ty_id = ty_id;
+    pub fn get_type_by_id(&self, ty_id: &TypeDefinitionId) -> Option<TypeNodePair> {
+        let mut ty_id = *ty_id;
         loop {
             match self.syms.get(&ty_id) {
                 Some(v) => {
-                    if let Type::Unknown(id) = v {
+                    if let Type::Unknown(id) = v.ty {
                         ty_id = id;
                     } else {
                         return Some(v.clone());
@@ -92,8 +117,7 @@ impl TypeChecker {
         None
     }
 
-    pub fn unify_all(&mut self) {
-        //let mut subst = SymbolTable::default();
+    pub fn unify_all(&mut self) -> SymbolTable {
         let mut errors = vec![];
         for eq in &self.type_equations {
             match unify(&eq.left, &eq.right, Some(self.syms.clone())) {
@@ -110,43 +134,44 @@ impl TypeChecker {
             let msg = format!("Unable to unify: {:?} :: {:?}", &eq.left, &eq.right);
             self.results.push(TypeError::Error(msg));
         }
+        self.syms.clone()
     }
 }
 
-fn subs_if_exists<'a>(mut ty: &'a Type, subst: &'a SymbolTable) -> &'a Type {
-    if let Type::Unknown(type_id) = ty {
+fn subs_if_exists<'a>(mut p: &'a TypeNodePair, subst: &'a SymbolTable) -> &'a TypeNodePair {
+    if let Type::Unknown(type_id) = p.ty {
         if subst.contains_key(&type_id) {
-            ty = subst.get(&type_id).unwrap();
+            p = subst.get(&type_id).unwrap();
         }
     }
-    ty
+    p
 }
 
 // Does ty1 occur in ty2?
-fn occurs_check(ty1: &Type, ty2: &Type, subst: &SymbolTable) -> bool {
-    if ty1 == ty2 {
+fn occurs_check(p1: &TypeNodePair, p2: &TypeNodePair, subst: &SymbolTable) -> bool {
+    if p1 == p2 {
         return true;
     }
 
-    assert!(!ty1.is_unknown());
+    assert!(!p1.ty.is_unknown());
 
-    let ty2 = subs_if_exists(ty2, &subst);
+    let p2 = subs_if_exists(p2, &subst);
 
-    if ty1 == ty2 {
+    if p1 == p2 {
         return true;
     }
 
     // if ty1 occurs in any of a functions parameters
-    if let Type::Func(sig) = ty2 {
-        return sig.iter().any(|s| occurs_check(ty1, s, subst));
+    if let Type::Func(sig) = &p2.ty {
+        return sig.iter().any(|s| occurs_check(p1, &TypeNodePair::new(s.clone(), p2.node.clone()), subst));
     }
     false
 }
 
-fn unify_eq(ty1: &Type, ty2: &Type, subst: Option<SymbolTable>) -> Option<SymbolTable> {
+fn unify_eq(ty1: &TypeNodePair, ty2: &TypeNodePair, subst: Option<SymbolTable>) -> Option<SymbolTable> {
     log::debug!("unify_eq: {:?} :: {:?}", ty1, ty2);
 
-    if ty1 == ty2 {
+    if ty1.ty == ty2.ty {
         return subst;
     }
 
@@ -156,10 +181,10 @@ fn unify_eq(ty1: &Type, ty2: &Type, subst: Option<SymbolTable>) -> Option<Symbol
     let ty1 = subs_if_exists(ty1, &subst);
     let ty2 = subs_if_exists(ty2, &subst);
 
-    if let Type::Unknown(type_id) = ty1 {
-        return Some(subst.insert(*type_id, ty2.clone()));
-    } else if let Type::Unknown(type_id) = ty2 {
-        return Some(subst.insert(*type_id, ty1.clone()));
+    if let Type::Unknown(type_id) = ty1.ty {
+        return Some(subst.insert(type_id, ty2.clone()));
+    } else if let Type::Unknown(type_id) = ty2.ty {
+        return Some(subst.insert(type_id, ty1.clone()));
     }
 
     if ty1 == ty2 {
@@ -170,9 +195,15 @@ fn unify_eq(ty1: &Type, ty2: &Type, subst: Option<SymbolTable>) -> Option<Symbol
         return None;
     }
 
-    if let Type::Func(sig1) = ty1 {
-        if let Type::Func(sig2) = ty2 {
-            return unify_fn(sig1, sig2, subst.clone());
+    if let Type::Func(sig1) = &ty1.ty {
+        if let Type::Func(sig2) = &ty2.ty {
+            let sig1 = sig1.into_iter().map(|s| {
+                TypeNodePair::new(s.clone(), ty1.node.clone())
+            }).collect::<Vec<TypeNodePair>>();
+            let sig2 = sig2.into_iter().map(|s| {
+                TypeNodePair::new(s.clone(), ty1.node.clone())
+            }).collect::<Vec<TypeNodePair>>();
+            return unify_fn(&sig1, &sig2, subst.clone());
         } else {
             return None;
         }
@@ -181,7 +212,7 @@ fn unify_eq(ty1: &Type, ty2: &Type, subst: Option<SymbolTable>) -> Option<Symbol
     None
 }
 
-fn unify_fn(sig1: &Vec<Type>, sig2: &Vec<Type>, mut subst: SymbolTable) -> Option<SymbolTable> {
+fn unify_fn(sig1: &Vec<TypeNodePair>, sig2: &Vec<TypeNodePair>, mut subst: SymbolTable) -> Option<SymbolTable> {
     log::debug!("unify_fn: {:?} :: {:?}", sig1, sig2);
 
     if sig1.len() != sig2.len() {
@@ -208,7 +239,7 @@ fn unify_fn(sig1: &Vec<Type>, sig2: &Vec<Type>, mut subst: SymbolTable) -> Optio
     Some(subst)
 }
 
-fn unify(left: &Type, right: &Vec<Type>, subst: Option<SymbolTable>) -> Option<SymbolTable> {
+fn unify(left: &TypeNodePair, right: &Vec<TypeNodePair>, subst: Option<SymbolTable>) -> Option<SymbolTable> {
     log::debug!("unify: {:?} :: {:?}", left, right);
     if subst == None {
         return None;
@@ -236,56 +267,116 @@ impl fmt::Display for TypeEquation {
 mod tests {
     use super::*;
     use test_log::test;
+    use crate::ast::{AstNodeInner, AstBuilder, Variable};
 
     type Node = usize;
 
+    struct Data {
+        int: TypeNodePair,
+        float: TypeNodePair,
+        boolean: TypeNodePair,
+        x: TypeNodePair,
+        y: TypeNodePair,
+        z: TypeNodePair,
+        b: AstBuilder,
+    }
+    impl Data {
+        fn new() -> Self {
+            let mut b = AstBuilder::default();
+            Self {
+                int: b.int(1).into(),
+                float: b.float(1.).into(),
+                boolean: b.boolean(false).into(),
+                x: b.var("x").into(),
+                y: b.var("y").into(),
+                z: b.var("z").into(),
+                b,
+            }
+        }
+    }
+
     #[test]
     fn test_unify() {
-        let mut checker = TypeChecker::default();
-        let ty_0 = checker.new_unknown_type();
-        let eq1 = TypeEquation::new(ty_0.clone(), vec![Type::Int, Type::Float]);
-        let ty_1 = checker.new_unknown_type();
-        let ty_2 = checker.new_unknown_type();
-        let eq2 = TypeEquation::new(ty_1.clone(), vec![ty_2.clone()]);
-        let eq3 = TypeEquation::new(ty_2.clone(), vec![Type::Bool]);
-        checker.add(eq1);
-        checker.add(eq2);
-        checker.add(eq3);
-        let syms = checker.unify_all();
-        checker.syms.iter().for_each(|(k, v)| {
-            println!("{:?} => {:?}", k, v);
-        });
+        //let mut b = AstBuilder::default();
+        //let mut checker = TypeChecker::default();
+        let mut data = Data::new();
+        //let int: TypeNodePair = b.int(0).into();
+        //let float: TypeNodePair = b.float(0.).into();
+        //let boolean: TypeNodePair = b.boolean(false).into();
+        //let p_0: TypeNodePair = v_0.clone().into();
+        //let v_0: TypeNodePair = b.var("a").into();
+        //let v_1: TypeNodePair = b.var("b").into();
+        //let v_2: TypeNodePair = b.var("c").into();
+        let eq1 = TypeEquation::new(data.x.clone(), vec![data.int.clone(), data.float.clone()]);
+        let eq2 = TypeEquation::new(data.y.clone(), vec![data.z.clone()]);
+        let eq3 = TypeEquation::new(data.z.clone(), vec![data.boolean.clone()]);
+        data.b.check.add(eq1);
+        data.b.check.add(eq2);
+        data.b.check.add(eq3);
+        let syms = data.b.check.unify_all();
+        //syms.iter().for_each(|(k, v)| {
+            //println!("{:?} => {:?}", k, v);
+        //});
 
-        println!("{:?}", &ty_0);
-        assert_eq!(Some(Type::Int), checker.resolve_type(&ty_0));
-        assert_eq!(Some(Type::Bool), checker.resolve_type(&ty_1));
-        assert_eq!(Some(Type::Bool), checker.resolve_type(&ty_2));
+        //println!("{:?}", &v_0);
+        assert_eq!(data.int, data.b.check.resolve_type(&data.x.clone()).unwrap());
+        assert_eq!(data.boolean, data.b.check.resolve_type(&data.y.clone()).unwrap());
+        assert_eq!(data.boolean, data.b.check.resolve_type(&data.z.clone()).unwrap());
+    }
+
+    fn create_func_node(name: &str, args: Vec<Type>) -> TypeNodePair {
+        let f_ty = Type::Func(args);
+        let node = AstNodeInner::new(Variable::new(name.into()).into(), f_ty.clone()).into();
+        TypeNodePair::new(f_ty, node)
     }
 
     #[test]
     fn test_unify_func_match() {
-        let mut c = TypeChecker::default();
+        //let mut c = TypeChecker::default();
         let s = SymbolTable::default();
-        let ty = c.new_unknown_type();
-        let out = unify(
-            &Type::Func(vec![Type::Int, ty.clone()]),
-            &vec![
-                Type::Func(vec![Type::Float, Type::Float]),
-                Type::Func(vec![Type::Int, Type::Int]),
-            ],
-            Some(s),
-        );
-        log::debug!("{:?}", out.as_ref().unwrap().iter().collect::<Vec<_>>());
-        assert_eq!(c.resolve_type(&ty), Some(Type::Int));
+        let mut data = Data::new();
+        //let mut b = AstBuilder::default();
+
+        //let int: TypeNodePair = b.int(1).into();
+        // solve for the type of x
+        //let x = b.var("x");
+        let ty = data.x.ty.clone();//node.borrow().ty.clone();
+
+        //let f_ty = Type::Func(vec![Type::Int, ty.clone()]);
+        let unknown = create_func_node("a", vec![Type::Int, ty.clone()]);
+        //let node = AstNodeInner::new(Variable::new("a".into()).into(), f_ty).into();
+        //let out = unify(
+        data.b.check.add(TypeEquation::new(
+            //&Type::Func(vec![Type::Int, ty.clone()]),
+            unknown,
+            vec![
+                create_func_node("b", vec![Type::Float, Type::Float]),
+                //Type::Func(vec![Type::Float, Type::Float]),
+                //Type::Func(vec![Type::Int, Type::Int]),
+                create_func_node("c", vec![Type::Int, Type::Int]),
+            ]));
+        let s = data.b.check.unify_all();
+            //Some(s),
+        //);
+        //log::debug!("{:?}", s.as_ref().unwrap().iter().collect::<Vec<_>>());
+        assert_eq!(data.b.check.resolve_type(&data.x.clone()).unwrap(), data.int);
     }
 
     #[test]
     fn func_mismatch() {
-        let mut c = TypeChecker::default();
+        let mut b = AstBuilder::default();
+        //let mut c = TypeChecker::default();
         let s = SymbolTable::default();
+        
+        // solve for the type of x
+        let x: TypeNodePair = b.var("x").into();
+        let unknown = create_func_node("a", vec![Type::Float, x.ty.clone()]);
+
         let out = unify(
-            &Type::Func(vec![Type::Float, c.new_unknown_type()]),
-            &vec![Type::Func(vec![Type::Int, Type::Int])],
+            &unknown,
+            //&Type::Func(vec![Type::Float, c.new_unknown_type()]),
+            //&vec![Type::Func(vec![Type::Int, Type::Int])],
+            &vec![create_func_node("b", vec![Type::Int, Type::Int])],
             Some(s),
         );
         assert_eq!(out, None)
@@ -293,49 +384,76 @@ mod tests {
 
     #[test]
     fn types_match() {
-        let c = TypeChecker::default();
+        let b = AstBuilder::default();
+        let int: TypeNodePair = b.int(1).into();
+        let float: TypeNodePair = b.float(1.).into();
+        //let c = TypeChecker::default();
         let s = SymbolTable::default();
-        let out = unify(&Type::Int, &vec![Type::Float, Type::Int], Some(s.clone()));
+        let out = unify(&int.clone(), &vec![float.clone(), int.clone()], Some(s.clone()));
         assert_eq!(out, Some(s));
     }
 
     #[test]
     fn types_mismatch() {
-        let c = TypeChecker::default();
+        let mut data = Data::new();
+        //let b = AstBuilder::default();
+        //let int: TypeNodePair = b.int(1).into();
+        //let float: TypeNodePair = b.float(1.).into();
+        //let c = TypeChecker::default();
         let s = SymbolTable::default();
-        let out = unify(&Type::Int, &vec![Type::Float], Some(s));
+        let out = unify(&data.int.clone(), &vec![data.float.clone()], Some(s));
         assert_eq!(out, None);
     }
 
     #[test]
-    fn types_unknown() {
-        let mut c = TypeChecker::default();
-
+    fn types_match_float() {
+        //let mut b = AstBuilder::default();
+        let mut data = Data::new();
         let s = SymbolTable::default();
-        let ty = c.new_unknown_type();
-        let out = unify(&ty, &vec![Type::Float], Some(s));
-        assert_eq!(c.resolve_type(&ty), Some(Type::Float));
+        data.b.check.add(TypeEquation::new(data.x.clone(), vec![data.float.clone()]));
+        let _ = data.b.check.unify_all();
+        assert_eq!(data.b.check.resolve_type(&data.x).unwrap(), data.float.clone());
+    }
 
+    #[test]
+    fn t2() {
+        //let mut b = AstBuilder::default();
+        let mut data = Data::new();
+        //let s = SymbolTable::default();
         let s = SymbolTable::default();
-        let ty = c.new_unknown_type();
-        let out = unify(&ty, &vec![Type::Float, Type::Int], Some(s));
-        assert_eq!(c.resolve_type(&ty), Some(Type::Float));
+        //let x: TypeNodePair = data.b.var("x").into();
+        //let ty = c.new_unknown_type();
+        data.b.check.add(TypeEquation::new(data.x.clone(), vec![data.float.clone(), data.int.clone()]));
+        let _ = data.b.check.unify_all();
+        //let _ = unify(&x.clone(), &vec![float.clone(), int.clone()], Some(s));
+        assert_eq!(data.b.check.resolve_type(&data.x.clone()).unwrap(), data.float.clone());
+    }
 
+    #[test]
+    fn test_no_solution() {
+        let mut data = Data::new();
         let s = SymbolTable::default();
-        let ty1 = c.new_unknown_type();
-        let ty2 = c.new_unknown_type();
-        let out = unify(&ty1, &vec![ty2.clone()], Some(s)).unwrap();
-        //assert_eq!(out.get("y".into()), Some(&Type::Float));
-        assert_eq!(c.resolve_type(&ty1), Some(ty2));
+        data.b.check.add(TypeEquation::new(data.x.clone(), vec![data.y.clone()]));
+        let s = data.b.check.unify_all();
+        println!("syms{}", &data.b.check);
+        assert_eq!(s.get(&TypeDefinitionId(0)).unwrap(), &data.y.clone());
+    }
 
+    #[test]
+    fn t4() {
         // no match
+        let data = Data::new();
         let s = SymbolTable::default();
-        let ty = c.new_unknown_type();
+        //let x: TypeNodePair = b.var("x").into();
+        let unknown = create_func_node("f", vec![Type::Int, Type::Float, data.x.ty]);
+        //let ty = c.new_unknown_type();
         let out = unify(
-            &Type::Func(vec![Type::Int, Type::Float, ty]),
+            //&Type::Func(vec![Type::Int, Type::Float, ty]),
+            &unknown,
             &vec![
-                Type::Func(vec![Type::Float, Type::Float, Type::Float]),
-                Type::Func(vec![Type::Int, Type::Int, Type::Int]),
+                //Type::Func(vec![Type::Float, Type::Float, Type::Float]),
+                create_func_node("y", vec![Type::Float, Type::Float, Type::Float]),
+                create_func_node("z", vec![Type::Int, Type::Int, Type::Int]),
             ],
             Some(s),
         );
