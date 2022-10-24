@@ -20,7 +20,7 @@ pub enum Literal {
     String(String),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AstNodeInner {
     pub ty: Type,
     pub value: Ast,

@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::typesystem::{Type, TypeChecker};
+use crate::typesystem::{Type, TypeChecker, TypeNodePair};
 use crate::visitor;
 
 #[derive(Default)]
@@ -8,13 +8,33 @@ pub struct AstBuilder {
 }
 
 impl visitor::Visitor<SymbolTable> for AstBuilder {
-    fn exit(&mut self, e: AstNode, n: &mut SymbolTable) -> visitor::VResult {
+    fn exit(&mut self, e: AstNode, _n: &mut SymbolTable) -> visitor::VResult {
         println!("AST: {}", e);
+
+        let is_unknown = {
+            let ty = &e.borrow().ty;
+            ty.is_unknown_recursive()
+        };
+
+        if is_unknown {
+            let before: TypeNodePair = e.clone().into();
+            let after = self.substitute(e.clone().into());
+            //println!("replacing {:?} => {:?}", &before.ty, &after.ty);
+            // only replace the type.  The node returned by substitute
+            // isn't always going to be the same node.  It might be the
+            // parent node for the type.
+            let mut new_inner = before.node.borrow().clone();
+            new_inner.ty = after.ty.clone();
+            //println!("replacing {:?}", &new_inner);
+            e.replace(new_inner);
+        }
+
+        /*
         e.replace_with(|a| {
             if a.ty.is_unknown_recursive() {
                 let before = a.ty.clone();
-                a.ty = self.substitute(a.ty.clone());
-                println!("replacing {:?} => {:?}", &before, &a.ty);
+                let after = self.substitute(AstNode::new(a.value.clone(), a.ty.clone()).into());
+                println!("replacing {:?} => {:?}", &before, &after.ty);
             }
 
             // ensure that all variables are bound
@@ -27,6 +47,7 @@ impl visitor::Visitor<SymbolTable> for AstBuilder {
 
             a.clone()
         });
+        */
 
 
         Ok(())
@@ -190,18 +211,21 @@ impl AstBuilder {
         node
     }
 
-    fn substitute(&mut self, ty: Type) -> Type {
-        match ty {
+    fn substitute(&mut self, ty: TypeNodePair) -> TypeNodePair {
+        match ty.ty {
             Type::Unknown(ty_id) => match self.check.get_type_by_id(&ty_id) {
-                Some(v) => v.ty,
+                Some(v) => v,
                 None => {
                     println!("Type missing from substitution table: {:?}", &ty);
                     unimplemented!()
                 }
             },
             Type::Func(sig) => {
-                let new_sig = sig.into_iter().map(|v| self.substitute(v)).collect();
-                Type::Func(new_sig)
+                let new_sig = sig.into_iter().map(|v| {
+                    let p = self.substitute(TypeNodePair::new(v, ty.node.clone()));
+                    p.ty
+                }).collect();
+                TypeNodePair::new(Type::Func(new_sig), ty.node)
             }
             _ => ty.clone(),
         }
@@ -210,23 +234,17 @@ impl AstBuilder {
     pub fn resolve(&mut self, ast: AstNode, env: Environment) -> (AstNode, Environment) {
         // name resolution
         let (mut ast, mut env) = self.name_resolve(ast, env);
+        ast.try_borrow_mut().unwrap();
         // infer all types
         let mut syms = self.check.unify_all();
+        ast.try_borrow_mut().unwrap();
 
         println!("AST: {}", &ast);
         println!("C: {}", self.check);
         println!("ENV: {}", env);
+        ast.try_borrow_mut().unwrap();
 
         let _ = visitor::visit(ast.clone(), self, &mut syms).unwrap();
-
-        /*
-        ast.replace_with(|a| {
-            if a.ty.is_unknown_recursive() {
-                a.ty = self.substitute(a.ty.clone());
-            }
-            a.clone()
-        });
-        */
 
         (ast, env)
     }
@@ -287,8 +305,9 @@ mod tests {
         println!("{}", b.check);
 
         let f = env.resolve(&"f".into()).unwrap();
+        println!("f0 = {:?}", f);
         match &f.borrow().value {
-            Ast::Apply(f, args) => {
+            Ast::Apply(f, _args) => {
                 println!("f1 = {:?}", f);
                 println!("f2 = {:?}", f.borrow().ty);
             }
