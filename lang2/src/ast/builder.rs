@@ -10,13 +10,13 @@ struct AstBuilder {
 impl AstBuilder {
     pub fn int(&self, i: u64) -> AstNode {
         AstNode::new(
-            Ast::Literal(Literal::Int(i)),
+            Literal::Int(i).into(),
             Type::Int)
     }
 
     pub fn ident(&mut self, n: &str) -> AstNode {
         AstNode::new(
-            Ast::Ident(n.into()),
+            Variable::new(n.into()).into(),
             self.check.new_unknown_type())
     }
     
@@ -47,7 +47,7 @@ impl AstBuilder {
         
         // type of this operation
         let f = AstNode::new(
-            Ast::Ident(name.into()),
+            Variable::new(name.into()).into(),
             ty_f);
 
         let args = vec![lhs, rhs];
@@ -71,8 +71,8 @@ impl AstBuilder {
                 (AstNode::new(Ast::Declare(name.clone(), Box::new(new_rhs.clone())), ty), env)
             }
 
-            Ast::Ident(ref name) => {
-                match env.resolve(&name) {
+            Ast::Variable(v) => {
+                match env.resolve(&v.name) {
                     Some(v) => {
                         v.replace_with(|a| {
                             let mut b = a.clone();
@@ -89,12 +89,12 @@ impl AstBuilder {
 
             Ast::Apply(ref f, ref args) => {
                 match &f.borrow().value {
-                    Ast::Ident(name) => {
+                    Ast::Variable(v) => {
                         let mut arg_types = args.iter().map(|a| a.borrow().ty.clone()).collect::<Vec<Type>>();
                         arg_types.push(ast_ty);
 
                         // create equation for all matches for the function
-                        let possible = env.resolve_all(&name).iter().map(|v| v.borrow().ty.clone()).collect();
+                        let possible = env.resolve_all(&v.name).iter().map(|v| v.borrow().ty.clone()).collect();
                         let ty = Type::Func(arg_types);
                         self.check.add(TypeEquation::new(ty, possible));
                     }

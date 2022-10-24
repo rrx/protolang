@@ -10,6 +10,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::ops::{Deref, DerefMut};
 use std::cell::RefCell;
+use itertools::Itertools;
 
 pub type Environment = crate::env::EnvLayers<String, AstNode>;
 
@@ -87,23 +88,52 @@ impl fmt::Display for AstNode {
                 }
                 write!(f, "]")?;
             }
-            Ast::Ident(n) => {
-                write!(f, "({:?})", &n)?;
+            Ast::Variable(v) => {
+                match &v.bound {
+                    Some(bound) => { 
+                        write!(f, "({}:{:?})", &v.name, &bound)?;
+                    }
+                    None => {
+                        write!(f, "({})", &v.name)?;
+                    }
+                }
             }
             Ast::Literal(x) => {
                 write!(f, "{:?}", &x)?;
             }
             Ast::Apply(func, params) => {
-                write!(f, "({}, {:?})", &func, &params)?;
+                let s = vec![func].iter().map(|p| format!("{}", p))
+                    .chain(params.iter().map(|p| format!("{:?}", p)))
+                    .format(",").to_string();
+
+                write!(f, "({})", s)?;
             }
             Ast::Extern(_exprs) => {
                 write!(f, "Extern({:?})", &inner.ty)?;
+            }
+            Ast::Declare(name, rhs) => {
+                write!(f, "Declare({}={}):{:?}", &name, &rhs, &inner.ty)?;
             }
             _ => {
                 write!(f, "{:?}", &self)?;
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Variable {
+    pub name: String,
+    pub bound: Option<AstNode>
+}
+
+impl Variable {
+    pub fn new(name: String) -> Self {
+        Self { name, bound: None }
+    }
+    pub fn bind(&mut self, ast: AstNode) {
+        self.bound.replace(ast);
     }
 }
 
@@ -115,7 +145,7 @@ pub enum Ast {
     Literal(Literal),
 
     // Variable, represented by a String
-    Ident(String),
+    Variable(Variable),
 
     Block(Vec<AstNode>),
 
@@ -136,6 +166,18 @@ pub enum Ast {
     Error(String),
 }
 
+impl From<Variable> for Ast {
+    fn from(item: Variable) -> Self {
+        Ast::Variable(item)
+    }
+}
+
+impl From<Literal> for Ast {
+    fn from(item: Literal) -> Self {
+        Ast::Literal(item)
+    }
+}
+
 pub fn make_binary_function(name: String, args: Vec<Type>, env: &mut Environment) {
     assert_eq!(args.len(), 3);
     let left_ty = args.get(0).unwrap().clone();
@@ -143,17 +185,17 @@ pub fn make_binary_function(name: String, args: Vec<Type>, env: &mut Environment
     let ret_ty = args.get(2).unwrap().clone();
 
     let left = AstNodeInner {
-        value: Ast::Ident("left".into()),
+        value: Variable::new("left".into()).into(),
         ty: left_ty.clone(),
     };
 
     let right = AstNodeInner {
-        value: Ast::Ident("right".into()),
+        value: Variable::new("right".into()).into(),
         ty: right_ty.clone(),
     };
 
     let ret = AstNodeInner {
-        value: Ast::Ident("ret".into()),
+        value: Variable::new("ret".into()).into(),
         ty: ret_ty.clone(),
     };
 

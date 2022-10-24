@@ -658,6 +658,7 @@ dependencies = [
  "criterion",
  "env_logger",
  "im",
+ "itertools",
  "log",
  "rpds",
  "test-log",
