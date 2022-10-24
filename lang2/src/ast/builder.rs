@@ -7,84 +7,139 @@ struct AstBuilder {
 }
 
 impl AstBuilder {
-    pub fn int(&self, i: u64, env: Environment) -> AstNode {
+    pub fn int(&self, i: u64) -> AstNode {
         AstNode {
             value: Ast::Literal(Literal::Int(i)),
             ty: Type::Int,
-            env
         }
     }
 
-    pub fn ident(&mut self, n: &str, env: Environment) -> AstNode {
-        let ty = match env.resolve(&n.to_string()) {
+    pub fn ident(&mut self, n: &str) -> AstNode {
+        AstNode {
+            value: Ast::Ident(n.into()),
+            ty: self.check.new_unknown_type(),
+        }
+    }
+    
+    pub fn ident_resolve(&mut self, n: &str, env: Environment) -> AstNode {
+        match env.resolve(&n.to_string()) {
             Some(v) => {
-                v.ty.clone()
+                v.clone()
             }
             None => {
                 println!("Unable to find symbol: {}", n);
                 unimplemented!();
             }
-        };
-
-        AstNode {
-            value: Ast::Ident(n.into()),
-            ty,
-            env
         }
     }
 
-    pub fn block(&self, exprs: Vec<AstNode>, env: Environment) -> AstNode {
+    pub fn block(&self, exprs: Vec<AstNode>) -> AstNode {
         let ty = exprs.iter().last().map_or(Type::Unit, |x| x.ty.clone());
         AstNode {
             value: Ast::Block(exprs),
             ty,
-            env
         }
     }
 
-    pub fn binary(&mut self, lhs: AstNode, rhs: AstNode, env: Environment) -> AstNode {
+    pub fn binary(&mut self, name: &str, lhs: AstNode, rhs: AstNode) -> AstNode {
         let ty_ret = self.check.new_unknown_type();
         let ty_f = Type::Func(vec![lhs.ty.clone(), rhs.ty.clone(), ty_ret.clone()]);
 
-        let name = "+".into();
+        //let name = "+".into();
         
-        // create equations for all matches
-        let possible = env.resolve_all(&name).iter().map(|v| v.ty.clone()).collect();
-        self.check.add(TypeEquation::new(ty_f.clone(), possible));
-
         // type of this operation
         let f = AstNode {
-            value: Ast::Ident(name),
+            value: Ast::Ident(name.into()),
             ty: ty_f,
-            env: env.clone()
         };
 
         let args = vec![lhs, rhs];
         AstNode {
             value: Ast::Apply(f.into(), args),
             ty: ty_ret,
-            env
         }
     }
 
-    pub fn declare(&self, name: String, rhs: AstNode, mut env: Environment) -> (AstNode, Environment) {
+    fn name_resolve(&mut self, mut ast: AstNode, mut env: Environment) -> (AstNode, Environment) {
+        match ast.value {
+            Ast::Literal(_) => (ast, env),
+
+            Ast::Declare(name, rhs) => {
+                let (new_rhs, mut env) = self.name_resolve(*rhs, env.clone());
+                env.define(name.clone(), new_rhs.clone());
+                (AstNode { value: Ast::Declare(name, Box::new(new_rhs.clone())), ty: new_rhs.ty }, env)
+            }
+
+            Ast::Ident(ref name) => {
+                match env.resolve(&name) {
+                    Some(v) => {
+                        ast.ty = v.ty.clone();
+                    }
+                    None => {
+                        unimplemented!();
+                    }
+                }
+                (ast, env)
+            }
+
+            Ast::Apply(ref f, ref args) => {
+                match &f.value {
+                    Ast::Ident(name) => {
+                        let mut arg_types = args.iter().map(|a| a.ty.clone()).collect::<Vec<Type>>();
+                        arg_types.push(ast.ty.clone());
+
+                        // create equation for all matches for the function
+                        let possible = env.resolve_all(&name).iter().map(|v| v.ty.clone()).collect();
+                        let ty = Type::Func(arg_types);
+                        self.check.add(TypeEquation::new(ty, possible));
+                    }
+
+                    Ast::Function(body, args) => {
+                        // Already resolved
+                    }
+                    _ => unimplemented!()
+                }
+                (ast, env)
+            }
+
+            Ast::Block(mut exprs) => {
+                let mut local_env = env.clone();
+                let mut updated = vec![];
+                for mut expr in exprs {
+                    let (new_ast, new_env) = self.name_resolve(expr, local_env);
+                    local_env = new_env;
+                    updated.push(new_ast);
+                }
+                // return original scope
+                (self.block(updated), env)
+            }
+            _ => {
+                println!("{:?}", &ast);
+                unimplemented!()
+            }
+        }
+    }
+
+    pub fn declare(&self, name: &str, rhs: AstNode) -> AstNode {
         let ty = rhs.ty.clone();
 
-        // add rhs to the environment
-        env.define(name.clone(), rhs.clone());
-
-        let mut node = AstNode {
-            value: Ast::Declare(name.clone(), Box::new(rhs)),
+        let node = AstNode {
+            value: Ast::Declare(name.into(), Box::new(rhs)),
             ty,
-            env: env.clone()
         };
-        (node, env)
+        node
     }
 
     fn substitute(&mut self, ty: Type) -> Type {
         match ty {
             Type::Unknown(ty_id) => {
-                self.check.get_type_by_id(&ty_id).expect("Type missing from substitution table")
+                match self.check.get_type_by_id(&ty_id) {
+                    Some(v) => v,
+                    None => {
+                        println!("Type missing from substitution table: {:?}", &ty);
+                        unimplemented!()
+                    }
+                }
             }
             Type::Func(sig) => {
                 let new_sig = sig.into_iter().map(|v| {
@@ -96,28 +151,37 @@ impl AstBuilder {
         }
     }
 
-    pub fn resolve(&mut self, ast: &mut AstNode, mut env: Environment) -> Environment {
+    pub fn resolve(&mut self, ast: AstNode, env: Environment) -> (AstNode, Environment) {
+        // name resolution
+        let (mut ast, mut env) = self.name_resolve(ast, env);
+        // infer all types
         self.check.unify_all();
+
+        println!("AST: {:?}", &ast);
+        println!("C: {}", self.check);
+        println!("ENV: {:?}", env);
+
+        /*
         if ast.ty.is_unknown_recursive() {
             ast.ty = self.substitute(ast.ty.clone());
         }
 
-        match &mut ast.value {
+        match ast.value {
             Ast::Literal(Literal::Int(_)) => {
             }
 
             Ast::Literal(Literal::Float(_)) => {
             }
 
-            Ast::Extern(args) => {
+            Ast::Extern(_) => {
             }
 
-            Ast::Apply(f, args) => {
+            Ast::Apply(ref f, ref args) => {
                 for arg in args {
-                    env = self.resolve(arg, env);
+                    //env = self.resolve(arg, env);
                 }
 
-                env = self.resolve(f, env);
+                //env = self.resolve(f, env);
 
                 /*
                 match &f.value {
@@ -142,11 +206,13 @@ impl AstBuilder {
                 */
             }
 
-            Ast::Ident(s) => {
-                match ast.env.resolve(&s) {
+            Ast::Ident(ref s) => {
+                match env.resolve(&s) {
                     Some(v) => {
-                        ast.value = v.value.clone();
                         ast.ty = v.ty.clone();
+                        //ast = v.clone()
+                        //ast.value = v.value.clone();
+                        //ast.ty = v.ty.clone();
                     }
                     None => {
                         unimplemented!();
@@ -158,22 +224,25 @@ impl AstBuilder {
             Ast::Block(ref mut exprs) => {
                 //let mut updated = vec![];
                 for expr in exprs {
-                    env = self.resolve(expr, env);
+                    //env = self.resolve(expr, env);
                     //updated.push(node);
                 }
                 //ast = self.block(updated, env.clone());
             }
 
-            Ast::Declare(ref name, ref mut rhs) => {
-                env = self.resolve(rhs, env);
-                env.define(name.clone(), *rhs.clone());
+            Ast::Declare(ref name, ref rhs) => {
+                let (rhs, new_env) = self.resolve(*rhs.clone(), env.clone()); 
+                //env = self.resolve(rhs, env);
+                env.define(name.clone(), rhs);//*rhs.clone());
             }
             _ => {
                 println!("{:?}", &ast);
                 unimplemented!()
             }
         }
-        env
+        */ */
+
+        (ast, env)
     }
 }
 
@@ -188,30 +257,24 @@ mod tests {
         let env = base_env();
         let mut b = AstBuilder::default();
 
-        let block = {
-            let v = b.int(1, env.clone());
-            let (decl1, env) = b.declare("a".into(), v, env.clone());
-            let v = b.ident("a".into(), env.clone());
-            let (decl2, env) = b.declare("b".into(), v, env.clone());
-            let block = b.block(vec![decl1, decl2], env.clone());
-            block
-        };
-        let (decl3, env) = b.declare("c".into(), block.clone(), env.clone());
-        let mut ast = b.block(vec![decl3], env.clone());
+        let v = b.int(1);
+        let decl1 = b.declare("a", v);
+        let v = b.ident("a".into());
+        let decl2 = b.declare("b", v);
+        let block = b.block(vec![decl1, decl2]);
+        let ast = b.declare("c", block.clone());
 
-        let env = b.resolve(&mut ast, env.clone());
+        let (ast, env) = b.resolve(ast, env.clone());
 
-        println!("{:?}", env);
-        println!("{:?}", &ast);
-        println!("{}", b.check);
         println!("a = {:?}", env.resolve(&"a".into()));
         println!("b = {:?}", env.resolve(&"b".into()));
         println!("c = {:?}", env.resolve(&"c".into()));
 
-        //env.resolve_all(&"+".into()).iter().for_each(|v| {
-            //println!("{}", v);
-        //});
-        //println!("{:?}", ast);
+        // a and b should not be visible from the outer lexical scope
+        // c should be visible though
+        assert_eq!(env.resolve(&"a".into()), None);
+        assert_eq!(env.resolve(&"b".into()), None);
+        assert!(env.resolve(&"c".into()).is_some());
     }
 
 
@@ -219,17 +282,12 @@ mod tests {
     fn test_binary() {
         let mut b = AstBuilder::default();
         let env = base_env();
-        let f = {
-            let one = b.int(1, env.clone());
-            let two = b.int(2, env.clone());
-            let add = b.binary(one, two, env.clone());
-            let (f, env) = b.declare("f".into(), add, env.clone());
-            f
-        };
-        let mut ast = b.block(vec![f], env.clone());
-        let env = ast.env.clone();
+        let one = b.int(1);
+        let two = b.int(2);
+        let add = b.binary("+", one, two);
+        let ast = b.declare("f", add);
 
-        let env = b.resolve(&mut ast, env.clone());
+        let (ast, env) = b.resolve(ast, env.clone());
         println!("{:?}", env);
         //println!("{:?}", env.resolve(&"f".into()));
         println!("{:?}", &ast);

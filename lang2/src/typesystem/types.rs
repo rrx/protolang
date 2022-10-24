@@ -1,7 +1,7 @@
 use crate::env::EnvLayers;
 use std::fmt;
 
-pub type Environment<N> = EnvLayers<String, N>;
+pub type Environment<N> = EnvLayers<str, N>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeDefinitionId(usize);

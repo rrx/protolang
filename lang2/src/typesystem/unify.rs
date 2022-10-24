@@ -1,7 +1,7 @@
 use std::fmt;
 use thiserror::Error;
 use super::types::*;
-use crate::env::{EnvLayers, LayerValue, LayerKey};
+use crate::env::{LayerKey};
 
 pub type SymbolTable = rpds::HashTrieMap<TypeDefinitionId, Type>;
 
@@ -35,6 +35,9 @@ impl Default for TypeChecker {
 
 impl fmt::Display for TypeChecker {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for v in self.type_equations.iter() {
+            write!(f, "Eq: {:?}\n", v)?;
+        }
         for (k, v) in self.syms.iter() {
             write!(f, "Subs: {:?} => {:?}\n", k, v)?;
         }

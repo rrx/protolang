@@ -22,7 +22,6 @@ pub enum Literal {
 pub struct AstNode {
     pub ty: Type,
     pub value: Ast,
-    pub env: Environment,
 }
 
 impl AstNode {
@@ -30,7 +29,6 @@ impl AstNode {
         Self {
             value,
             ty,
-            env
         }
     }
 
@@ -97,14 +95,6 @@ pub enum Ast {
     Error(String),
 }
 
-/*
-impl From<Ast> for AstNode {
-    fn from(item: Ast) -> Self {
-        Self::new(item)
-    }
-}
-*/
-
 pub fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment) -> Environment {
     assert_eq!(args.len(), 3);
     let left_ty = args.get(0).unwrap().clone();
@@ -114,19 +104,16 @@ pub fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment)
     let left = AstNode {
         value: Ast::Ident("left".into()),
         ty: left_ty.clone(),
-        env: env.clone()
     };
 
     let right = AstNode {
         value: Ast::Ident("right".into()),
         ty: right_ty.clone(),
-        env: env.clone()
     };
 
     let ret = AstNode {
         value: Ast::Ident("ret".into()),
         ty: ret_ty.clone(),
-        env: env.clone()
     };
 
     let args = vec![left, right, ret];
@@ -134,11 +121,9 @@ pub fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment)
     let mut node = AstNode {
         value: Ast::Extern(args),
         ty: Type::Func(vec![left_ty, right_ty, ret_ty]),
-        env: env.clone()
     };
 
     env.define(name, node.clone());
-    node.env = env.clone();
     env
 }
 
