@@ -269,8 +269,6 @@ mod tests {
     use test_log::test;
     use crate::ast::{AstNodeInner, AstBuilder, Variable};
 
-    type Node = usize;
-
     struct Data {
         int: TypeNodePair,
         float: TypeNodePair,
@@ -297,28 +295,14 @@ mod tests {
 
     #[test]
     fn test_unify() {
-        //let mut b = AstBuilder::default();
-        //let mut checker = TypeChecker::default();
         let mut data = Data::new();
-        //let int: TypeNodePair = b.int(0).into();
-        //let float: TypeNodePair = b.float(0.).into();
-        //let boolean: TypeNodePair = b.boolean(false).into();
-        //let p_0: TypeNodePair = v_0.clone().into();
-        //let v_0: TypeNodePair = b.var("a").into();
-        //let v_1: TypeNodePair = b.var("b").into();
-        //let v_2: TypeNodePair = b.var("c").into();
         let eq1 = TypeEquation::new(data.x.clone(), vec![data.int.clone(), data.float.clone()]);
         let eq2 = TypeEquation::new(data.y.clone(), vec![data.z.clone()]);
         let eq3 = TypeEquation::new(data.z.clone(), vec![data.boolean.clone()]);
         data.b.check.add(eq1);
         data.b.check.add(eq2);
         data.b.check.add(eq3);
-        let syms = data.b.check.unify_all();
-        //syms.iter().for_each(|(k, v)| {
-            //println!("{:?} => {:?}", k, v);
-        //});
-
-        //println!("{:?}", &v_0);
+        let _ = data.b.check.unify_all();
         assert_eq!(data.int, data.b.check.resolve_type(&data.x.clone()).unwrap());
         assert_eq!(data.boolean, data.b.check.resolve_type(&data.y.clone()).unwrap());
         assert_eq!(data.boolean, data.b.check.resolve_type(&data.z.clone()).unwrap());
@@ -332,50 +316,29 @@ mod tests {
 
     #[test]
     fn test_unify_func_match() {
-        //let mut c = TypeChecker::default();
-        let s = SymbolTable::default();
         let mut data = Data::new();
-        //let mut b = AstBuilder::default();
-
-        //let int: TypeNodePair = b.int(1).into();
         // solve for the type of x
-        //let x = b.var("x");
-        let ty = data.x.ty.clone();//node.borrow().ty.clone();
-
-        //let f_ty = Type::Func(vec![Type::Int, ty.clone()]);
+        let ty = data.x.ty.clone();
         let unknown = create_func_node("a", vec![Type::Int, ty.clone()]);
-        //let node = AstNodeInner::new(Variable::new("a".into()).into(), f_ty).into();
-        //let out = unify(
         data.b.check.add(TypeEquation::new(
-            //&Type::Func(vec![Type::Int, ty.clone()]),
             unknown,
             vec![
                 create_func_node("b", vec![Type::Float, Type::Float]),
-                //Type::Func(vec![Type::Float, Type::Float]),
-                //Type::Func(vec![Type::Int, Type::Int]),
                 create_func_node("c", vec![Type::Int, Type::Int]),
             ]));
-        let s = data.b.check.unify_all();
-            //Some(s),
-        //);
-        //log::debug!("{:?}", s.as_ref().unwrap().iter().collect::<Vec<_>>());
+        let _ = data.b.check.unify_all();
         assert_eq!(data.b.check.resolve_type(&data.x.clone()).unwrap(), data.int);
     }
 
     #[test]
     fn func_mismatch() {
-        let mut b = AstBuilder::default();
-        //let mut c = TypeChecker::default();
-        let s = SymbolTable::default();
+        let data = Data::new();
         
         // solve for the type of x
-        let x: TypeNodePair = b.var("x").into();
-        let unknown = create_func_node("a", vec![Type::Float, x.ty.clone()]);
-
+        let unknown = create_func_node("a", vec![Type::Float, data.x.ty.clone()]);
+        let s = SymbolTable::new();
         let out = unify(
             &unknown,
-            //&Type::Func(vec![Type::Float, c.new_unknown_type()]),
-            //&vec![Type::Func(vec![Type::Int, Type::Int])],
             &vec![create_func_node("b", vec![Type::Int, Type::Int])],
             Some(s),
         );
@@ -384,22 +347,15 @@ mod tests {
 
     #[test]
     fn types_match() {
-        let b = AstBuilder::default();
-        let int: TypeNodePair = b.int(1).into();
-        let float: TypeNodePair = b.float(1.).into();
-        //let c = TypeChecker::default();
+        let data = Data::new();
         let s = SymbolTable::default();
-        let out = unify(&int.clone(), &vec![float.clone(), int.clone()], Some(s.clone()));
+        let out = unify(&data.int.clone(), &vec![data.float.clone(), data.int.clone()], Some(s.clone()));
         assert_eq!(out, Some(s));
     }
 
     #[test]
     fn types_mismatch() {
-        let mut data = Data::new();
-        //let b = AstBuilder::default();
-        //let int: TypeNodePair = b.int(1).into();
-        //let float: TypeNodePair = b.float(1.).into();
-        //let c = TypeChecker::default();
+        let data = Data::new();
         let s = SymbolTable::default();
         let out = unify(&data.int.clone(), &vec![data.float.clone()], Some(s));
         assert_eq!(out, None);
@@ -407,9 +363,7 @@ mod tests {
 
     #[test]
     fn types_match_float() {
-        //let mut b = AstBuilder::default();
         let mut data = Data::new();
-        let s = SymbolTable::default();
         data.b.check.add(TypeEquation::new(data.x.clone(), vec![data.float.clone()]));
         let _ = data.b.check.unify_all();
         assert_eq!(data.b.check.resolve_type(&data.x).unwrap(), data.float.clone());
@@ -417,22 +371,15 @@ mod tests {
 
     #[test]
     fn t2() {
-        //let mut b = AstBuilder::default();
         let mut data = Data::new();
-        //let s = SymbolTable::default();
-        let s = SymbolTable::default();
-        //let x: TypeNodePair = data.b.var("x").into();
-        //let ty = c.new_unknown_type();
         data.b.check.add(TypeEquation::new(data.x.clone(), vec![data.float.clone(), data.int.clone()]));
         let _ = data.b.check.unify_all();
-        //let _ = unify(&x.clone(), &vec![float.clone(), int.clone()], Some(s));
         assert_eq!(data.b.check.resolve_type(&data.x.clone()).unwrap(), data.float.clone());
     }
 
     #[test]
     fn test_no_solution() {
         let mut data = Data::new();
-        let s = SymbolTable::default();
         data.b.check.add(TypeEquation::new(data.x.clone(), vec![data.y.clone()]));
         let s = data.b.check.unify_all();
         println!("syms{}", &data.b.check);
