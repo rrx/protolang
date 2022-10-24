@@ -1,9 +1,9 @@
 use codegen::hir;
 use crate::ast::*;
 
-fn lower(ast: &AstNode) -> hir::Ast {
-    match &ast.value {
-        Ast::Literal(Literal::Int(u)) => hir::Ast::Literal(hir::Literal::Integer(*u, hir::IntegerKind::U64)),
+fn lower(ast: AstNode) -> hir::Ast {
+    match ast.borrow().value {
+        Ast::Literal(Literal::Int(u)) => hir::Ast::Literal(hir::Literal::Integer(u, hir::IntegerKind::U64)),
         _ => unimplemented!()
     }
 }

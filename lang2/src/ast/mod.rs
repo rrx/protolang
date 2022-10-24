@@ -7,6 +7,9 @@ use crate::typesystem::*;
 use log::*;
 use rpds::HashTrieMap;
 use std::fmt;
+use std::rc::Rc;
+use std::ops::{Deref, DerefMut};
+use std::cell::RefCell;
 
 pub type Environment = crate::env::EnvLayers<String, AstNode>;
 
@@ -19,50 +22,88 @@ pub enum Literal {
 }
 
 #[derive(Clone, PartialEq)]
-pub struct AstNode {
+pub struct AstNodeInner {
     pub ty: Type,
     pub value: Ast,
 }
 
-impl AstNode {
-    pub fn new(value: Ast, ty: Type, env: Environment) -> Self {
+impl AstNodeInner {
+    pub fn new(value: Ast, ty: Type) -> Self {
         Self {
             value,
             ty,
         }
     }
+}
 
+#[derive(Clone, PartialEq)]
+pub struct AstNode(Rc<RefCell<AstNodeInner>>);
 
+impl AstNode {
+    fn new(value: Ast, ty: Type) -> Self {
+        AstNodeInner::new(value, ty).into()
+    }
+}
+
+impl From<AstNodeInner> for AstNode {
+    fn from(item: AstNodeInner) -> Self {
+        Self(Rc::new(RefCell::new(item)))
+    }
+}
+
+impl Deref for AstNode {
+    type Target = RefCell<AstNodeInner>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl crate::env::LayerValue for AstNode {}
 
 impl fmt::Debug for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}:{:?}", self.value, self.ty)
-        //let mut out = f.debug_struct("Ast");
-        //out.field("v", &self.value);
-        //out.field("ty", &self.ty);
-        //out.finish()
+        let inner = self.borrow();
+        match &inner.value {
+            Ast::Literal(x) => {
+                write!(f, "{:?}", &x)?;
+            }
+            _ => {
+                write!(f, "{:?}:{:?}", &inner.value, &inner.ty);
+            }
+        }
+        Ok(())
     }
 }
 
 impl fmt::Display for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.value {
+        let inner = self.borrow();
+        match &inner.value {
             Ast::Block(exprs) => {
-                write!(f, "Block({:?})", self.ty)?;
+                write!(f, "Block({:?}, [", &inner.ty)?;
                 for expr in exprs {
-                    write!(f, "\t{:?}", expr)?;
+                    write!(f, "{:?}", expr)?;
                 }
-                Ok(())
+                write!(f, "]")?;
             }
-            Ast::Extern(exprs) => {
-                write!(f, "Extern({:?})", self.ty)?;
-                Ok(())
+            Ast::Ident(n) => {
+                write!(f, "({:?})", &n)?;
             }
-            _ => write!(f, "{:?}", &self),
+            Ast::Literal(x) => {
+                write!(f, "{:?}", &x)?;
+            }
+            Ast::Apply(func, params) => {
+                write!(f, "({}, {:?})", &func, &params)?;
+            }
+            Ast::Extern(_exprs) => {
+                write!(f, "Extern({:?})", &inner.ty)?;
+            }
+            _ => {
+                write!(f, "{:?}", &self)?;
+            }
         }
+        Ok(())
     }
 }
 
@@ -95,59 +136,58 @@ pub enum Ast {
     Error(String),
 }
 
-pub fn make_binary_function(name: String, args: Vec<Type>, mut env: Environment) -> Environment {
+pub fn make_binary_function(name: String, args: Vec<Type>, env: &mut Environment) {
     assert_eq!(args.len(), 3);
     let left_ty = args.get(0).unwrap().clone();
     let right_ty = args.get(1).unwrap().clone();
     let ret_ty = args.get(2).unwrap().clone();
 
-    let left = AstNode {
+    let left = AstNodeInner {
         value: Ast::Ident("left".into()),
         ty: left_ty.clone(),
     };
 
-    let right = AstNode {
+    let right = AstNodeInner {
         value: Ast::Ident("right".into()),
         ty: right_ty.clone(),
     };
 
-    let ret = AstNode {
+    let ret = AstNodeInner {
         value: Ast::Ident("ret".into()),
         ty: ret_ty.clone(),
     };
 
-    let args = vec![left, right, ret];
+    let args = vec![left.into(), right.into(), ret.into()];
 
-    let mut node = AstNode {
+    let node = AstNodeInner {
         value: Ast::Extern(args),
         ty: Type::Func(vec![left_ty, right_ty, ret_ty]),
     };
 
-    env.define(name, node.clone());
-    env
+    env.define(name, node.into());
 }
 
 pub fn base_env() -> Environment {
     let mut env = Environment::default();
-    env = make_binary_function("*".into(), vec![Type::Int, Type::Int, Type::Int], env);
-    env = make_binary_function("*".into(), vec![Type::Float, Type::Float, Type::Float], env);
-    env = make_binary_function("*".into(), vec![Type::Int, Type::Float, Type::Float], env);
-    env = make_binary_function("*".into(), vec![Type::Float, Type::Int, Type::Float], env);
+    make_binary_function("*".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
+    make_binary_function("*".into(), vec![Type::Float, Type::Float, Type::Float], &mut env);
+    make_binary_function("*".into(), vec![Type::Int, Type::Float, Type::Float], &mut env);
+    make_binary_function("*".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
 
-    env = make_binary_function("+".into(), vec![Type::Int, Type::Int, Type::Int], env);
-    env = make_binary_function("+".into(), vec![Type::Float, Type::Float, Type::Float], env);
-    env = make_binary_function("+".into(), vec![Type::Int, Type::Float, Type::Float], env);
-    env = make_binary_function("+".into(), vec![Type::Float, Type::Int, Type::Float], env);
+    make_binary_function("+".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
+    make_binary_function("+".into(), vec![Type::Float, Type::Float, Type::Float], &mut env);
+    make_binary_function("+".into(), vec![Type::Int, Type::Float, Type::Float], &mut env);
+    make_binary_function("+".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
 
-    env = make_binary_function("-".into(), vec![Type::Int, Type::Int, Type::Int], env);
-    env = make_binary_function("-".into(), vec![Type::Float, Type::Float, Type::Float], env);
-    env = make_binary_function("-".into(), vec![Type::Int, Type::Float, Type::Float], env);
-    env = make_binary_function("-".into(), vec![Type::Float, Type::Int, Type::Float], env);
+    make_binary_function("-".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
+    make_binary_function("-".into(), vec![Type::Float, Type::Float, Type::Float], &mut env);
+    make_binary_function("-".into(), vec![Type::Int, Type::Float, Type::Float], &mut env);
+    make_binary_function("-".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
 
-    env = make_binary_function("^".into(), vec![Type::Int, Type::Int, Type::Int], env);
-    env = make_binary_function("^".into(), vec![Type::Float, Type::Int, Type::Float], env);
-    env = make_binary_function(">".into(), vec![Type::Int, Type::Int, Type::Bool], env);
-    env = make_binary_function(">".into(), vec![Type::Float, Type::Float, Type::Bool], env);
+    make_binary_function("^".into(), vec![Type::Int, Type::Int, Type::Int], &mut env);
+    make_binary_function("^".into(), vec![Type::Float, Type::Int, Type::Float], &mut env);
+    make_binary_function(">".into(), vec![Type::Int, Type::Int, Type::Bool], &mut env);
+    make_binary_function(">".into(), vec![Type::Float, Type::Float, Type::Bool], &mut env);
     env
 }
 
