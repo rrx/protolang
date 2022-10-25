@@ -10,41 +10,22 @@ impl From<usize> for DefinitionId {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum UnifyResult {
+    NoSolution,
+    MismatchShape,
+    OccursCheck,
+    Incomplete,
+    Ok
+}
+
 pub trait TypeSignature<T> {
     fn sig(&self) -> Vec<T>;
     fn unknown(&self) -> Option<DefinitionId>;
     fn var(u: DefinitionId) -> T;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Type {
-    Int,
-    Float,
-    Name(String),
-    Seq(Vec<Type>),
-    Var(DefinitionId)
-}
-
-impl TypeSignature<Type> for Type {
-    fn unknown(&self) -> Option<DefinitionId> {
-        match self {
-            Type::Var(id) => Some(*id),
-            _ => None
-        }
-    }
-    fn sig(&self) -> Vec<Type> {
-        match self {
-            Seq(args) => args.clone(),
-            _ => vec![self.clone()]
-        }
-    }
-    fn var(u: DefinitionId) -> Type {
-        Type::Var(u)
-    }
-}
-
 use self::Expr::*;
-use self::Type::*;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub enum Expr<T> {
@@ -52,12 +33,23 @@ pub enum Expr<T> {
     Eq(T, T),
 }
 
-
 impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
     fn unify(&self, subst: SymbolTable<T>) -> (UnifyResult, SymbolTable<T>) {
         match self {
             Eq(ty1, ty2) => {
                 unify_eq(ty1.sig(), ty2.sig(), subst)
+            }
+            OneOf(ty1, types) => {
+                let s = subst;
+                for ty2 in types {
+                    match unify_eq(ty1.sig(), ty2.sig(), s.clone()) {
+                        (UnifyResult::Ok, s) => {
+                            return (UnifyResult::Ok, s);
+                        }
+                        _ => ()
+                    }
+                }
+                (UnifyResult::NoSolution, s)
             }
             _ => unimplemented!()
         }
@@ -155,35 +147,10 @@ fn unify_eq<T: fmt::Debug + PartialEq + Clone + TypeSignature<T>>(ty1: Vec<T>, t
 
 // Does ty1 occur in ty2?
 fn occurs_check<T: PartialEq + TypeSignature<T>>(ty1: &T, sig: &Vec<T>) -> bool {
-    // left should be known
-    //assert!(ty1.unknown().is_none());
-
     // if ty1 occurs in any of a functions parameters
     return sig.iter().any(|s| {
         s == ty1 
     });
-}
-
-fn var(u: usize) -> Type {
-    Type::Var(u.into())
-}
-
-fn seq(args: Vec<Type>) -> Type {
-    Type::Seq(args)
-}
-
-fn name(s: &str) -> Type {
-    Type::Name(s.into())
-}
-
-
-#[derive(Debug, PartialEq)]
-pub enum UnifyResult {
-    NoSolution,
-    MismatchShape,
-    OccursCheck,
-    Incomplete,
-    Ok
 }
 
 fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(equations: Vec<Expr<T>>, mut subst: SymbolTable<T>) -> (Vec<Expr<T>>, SymbolTable<T>) {
@@ -199,15 +166,18 @@ fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(equations: Ve
             _ => {
                 println!("no unify on {:?}", (res, &eq));
                 out.push(eq);
-                //break;
             }
         }
     }
 
     println!("x:{}, {}", out.len(), subst.size());
-    for i in 0..subst.size() {
-        let v = subst.get(&i.into()).unwrap();
-        println!("{:?}={:?}", i, v);
+    //for i in 0..subst.size() {
+        //let v = subst.get(&i.into()).unwrap();
+        //println!("{:?}={:?}", i, v);
+    //}
+    for (k, v) in subst.iter() {
+        //let v = subst.get(&i.into()).unwrap();
+        println!("{:?}={:?}", k, v);
     }
     for v in out.iter() {
         println!("Eq: {:?}", v);
@@ -216,7 +186,7 @@ fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(equations: Ve
     (out, subst)
 }
 
-fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(mut equations: Vec<Expr<T>>) -> (UnifyResult, SymbolTable<T>) {
+pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(mut equations: Vec<Expr<T>>) -> (UnifyResult, SymbolTable<T>) {
     let mut subst = SymbolTable::default();
     let mut count = equations.len();
     let mut res = UnifyResult::Ok;
@@ -241,29 +211,52 @@ fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(mut equatio
     (res, subst)
 }
 
-fn main() {
-    assert_eq!(true, occurs_check(&name("a"), &vec![name("b"), name("a")]));
-    assert_eq!(false, occurs_check(&name("a"), &vec![name("b")]));
-
-    let start = vec![
-        Eq(var(8), var(7)),
-        Eq(var(0), Type::Int),
-        Eq(var(1), var(0)),
-        Eq(var(6), var(1)),
-        Eq(var(7), var(6)),
-        Eq(seq(vec![name("a"), name("b")]), seq(vec![var(2), var(3)])),
-        Eq(seq(vec![name("c"), var(4)]), seq(vec![var(5), name("d")])),
-    ];
-
-    let (res, subst) = unify_start(start);
-    println!("{:?}", res); 
-    assert_eq!(subst.get(&8.into()), Some(&Type::Int));
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use test_log::test;
+    use Type::*;
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum Type {
+        Int,
+        Float,
+        Name(String),
+        Seq(Vec<Type>),
+        Var(DefinitionId)
+    }
+
+    impl TypeSignature<Type> for Type {
+        fn unknown(&self) -> Option<DefinitionId> {
+            match self {
+                Type::Var(id) => Some(*id),
+                _ => None
+            }
+        }
+        fn sig(&self) -> Vec<Type> {
+            match self {
+                Seq(args) => args.clone(),
+                _ => vec![self.clone()]
+            }
+        }
+        fn var(u: DefinitionId) -> Type {
+            Type::Var(u)
+        }
+    }
+
+
+    fn var(u: usize) -> Type {
+        Type::Var(u.into())
+    }
+
+    fn seq(args: Vec<Type>) -> Type {
+        Type::Seq(args)
+    }
+
+    fn name(s: &str) -> Type {
+        Type::Name(s.into())
+    }
+
 
     #[test]
     fn logic_occurs() {
@@ -286,11 +279,19 @@ mod test {
             Eq(var(7), var(6)),
             Eq(seq(vec![name("a"), name("b")]), seq(vec![var(2), var(3)])),
             Eq(seq(vec![name("c"), var(4)]), seq(vec![var(5), name("d")])),
+
+            Eq(var(10), Type::Float),
+            Eq(var(11), name("w")),
+            OneOf(var(9), vec![var(10), var(11)]),
+            OneOf(name("y"), vec![var(12)]),
+            OneOf(name("z"), vec![var(13), var(14)]),
+            Eq(var(14), name("x")),
         ];
 
         let (res, subst) = unify_start(start);
         assert_eq!(UnifyResult::Ok, res);
         assert_eq!(subst.get(&8.into()), Some(&Type::Int));
+        assert_eq!(subst.get(&13.into()), Some(&name("z")));
     }
 
     #[test]
@@ -325,6 +326,7 @@ mod test {
                      seq(vec![name("a"), var(0)]),
                      seq(vec![var(1), name("b")]),
         ]);
+
         let s2 = seq(vec![
                      seq(vec![var(3), name("d")]),
                      seq(vec![name("c"), var(2)]),
@@ -339,3 +341,5 @@ mod test {
         assert_eq!(UnifyResult::Ok, res);
     }
 }
+
+
