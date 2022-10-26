@@ -10,17 +10,55 @@ pub struct AstBuilder {
 }
 
 impl visitor::Visitor<SymbolTable<TypeNodePair>> for AstBuilder {
-    fn exit(&mut self, e: AstNode, n: &mut SymbolTable<TypeNodePair>) -> visitor::VResult {
-        println!("AST: {}", e);
+    fn enter(&mut self, e: AstNode, n: &mut SymbolTable<TypeNodePair>) -> visitor::VResult {
+        println!("Visit AST: {}", e);
 
-        let is_unknown = {
-            let ty = &e.borrow().ty;
-            ty.is_unknown_recursive()
+        // this is crazy gymnastics to set the bound on a variable
+        // there must be an easier way to do this.
+        let maybe_v = {
+            let inner = e.borrow();
+            let value = &inner.value;
+            match value {
+                Ast::Apply(op, _args) => {
+                    let op = op.clone();
+                    let node = &mut op.borrow();
+                    match &node.value {
+                        Ast::Variable(v) => {
+                            let unknown_ids = inner.ty.unknown_ids();
+                            if let Some(type_id) = unknown_ids.iter().next() {
+                                if let Some(r) = n.get(type_id) {
+                                    let mut v = v.clone();
+                                    v.bound = Some(r.node.clone());
+                                    let ty = node.ty.clone();
+                                    Some((op.clone(), v, ty))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None
+                    }
+                }
+                _ => None
+            }
         };
 
+        if let Some((op, v, ty)) = maybe_v {
+            op.replace(AstNodeInner::new(Ast::Variable(v), ty));
+        }
+
+        let is_unknown = {
+            e.borrow().ty.is_unknown_recursive()
+        };
+
+        // update the types in the AST
         if is_unknown {
             let before: TypeNodePair = e.clone().into();
             let after = self.substitute(e.clone().into(), n);
+            println!("before {:?}", &before.node);
+            println!("after {:?}", &after.node);
             println!("replacing {:?} => {:?}", &before.ty, &after.ty);
             // only replace the type.  The node returned by substitute
             // isn't always going to be the same node.  It might be the
@@ -29,24 +67,7 @@ impl visitor::Visitor<SymbolTable<TypeNodePair>> for AstBuilder {
             new_inner.ty = after.ty.clone();
             //println!("replacing {:?}", &new_inner);
             e.replace(new_inner);
-
-            let inner = e.borrow();
-            let value = &inner.value;
-
-            match value {
-                Ast::Variable(v) => {
-                    // we can use the unknown ids associated with the type 
-                    // to lookup the node, but this doesn't work if we have
-                    // multiple unknowns.  We need a better solution for
-                    // unification
-                    let unknown_ids = before.ty.unknown_ids();
-                    println!("var {:?}", (&v, &before, &after, unknown_ids));
-                    //unreachable!()
-                }
-                _ => ()
-            }
         }
-
 
         Ok(())
     }
@@ -238,7 +259,6 @@ impl AstBuilder {
         println!("RES: {:?}", res);
         println!("SUB: {:?}", subst);
         if res == UnifyResult::Ok {
-
             let _ = visitor::visit(ast.clone(), self, &mut subst).unwrap();
             println!("SUB: {:?}", subst);
         }
@@ -301,12 +321,20 @@ mod tests {
         println!("{}", &ast);
         assert_eq!(res, UnifyResult::Ok); 
 
-        let f = env.resolve(&"f".into()).unwrap();
-        println!("f0 = {:?}", f);
-        match &f.borrow().value {
-            Ast::Apply(f, _args) => {
-                println!("f1 = {:?}", f);
-                println!("f2 = {:?}", f.borrow().ty);
+        let call = env.resolve(&"f".into()).unwrap();
+        println!("call = {:?}", call);
+        match &call.borrow().value {
+            Ast::Apply(op, _args) => {
+                println!("op = {:?}", op);
+                match &op.borrow().value {
+                    Ast::Variable(s) => {
+                        println!("var.bound = {:?}", s.bound);
+                        // the variable for the operation should be bound
+                        assert!(s.bound.is_some());
+                    }
+                    _ => unreachable!()
+                }
+                println!("op.type = {:?}", op.borrow().ty);
             }
             _ => unreachable!()
         }
