@@ -660,6 +660,7 @@ dependencies = [
  "im",
  "itertools",
  "log",
+ "logic",
  "rpds",
  "test-log",
  "thiserror",

@@ -1,14 +1,16 @@
 use crate::ast::*;
-use crate::typesystem::{Type, TypeChecker, TypeNodePair};
+use crate::typesystem::{Type, TypeNodePair};
 use crate::visitor;
+use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 
 #[derive(Default)]
 pub struct AstBuilder {
-    pub check: TypeChecker,
+    pub state: TypeSystemContext,
+    pub equations: Vec<logic::Expr<TypeNodePair>>
 }
 
-impl visitor::Visitor<SymbolTable> for AstBuilder {
-    fn exit(&mut self, e: AstNode, _n: &mut SymbolTable) -> visitor::VResult {
+impl visitor::Visitor<SymbolTable<TypeNodePair>> for AstBuilder {
+    fn exit(&mut self, e: AstNode, n: &mut SymbolTable<TypeNodePair>) -> visitor::VResult {
         println!("AST: {}", e);
 
         let is_unknown = {
@@ -18,7 +20,7 @@ impl visitor::Visitor<SymbolTable> for AstBuilder {
 
         if is_unknown {
             let before: TypeNodePair = e.clone().into();
-            let after = self.substitute(e.clone().into());
+            let after = self.substitute(e.clone().into(), n);
             println!("replacing {:?} => {:?}", &before.ty, &after.ty);
             // only replace the type.  The node returned by substitute
             // isn't always going to be the same node.  It might be the
@@ -66,7 +68,7 @@ impl AstBuilder {
     pub fn var(&mut self, n: &str) -> AstNode {
         AstNode::new(
             Variable::new(n.into()).into(),
-            self.check.new_unknown_type(),
+            Type::var(self.state.next_id()),
         )
     }
 
@@ -89,7 +91,7 @@ impl AstBuilder {
     }
 
     pub fn binary(&mut self, name: &str, lhs: AstNode, rhs: AstNode) -> AstNode {
-        let ty_ret = self.check.new_unknown_type();
+        let ty_ret = Type::var(self.state.next_id());
         let ty_f = Type::Func(vec![
             lhs.borrow().ty.clone(),
             rhs.borrow().ty.clone(),
@@ -164,9 +166,7 @@ impl AstBuilder {
                             })
                             .collect();
                         let ty = TypeNodePair::new(Type::Func(arg_types), *f.clone());
-                        //let unknown: TypeNodePair = self.var("x").into();
-                        //self.check.add(TypeEquation::new(unknown, vec![ty.clone()]));
-                        self.check.add(TypeEquation::new(ty, possible));
+                        self.equations.push(logic::Expr::OneOf(ty, possible));
                     }
 
                     Ast::Function(_body, _args) => {
@@ -205,42 +205,45 @@ impl AstBuilder {
         node
     }
 
-    fn substitute(&mut self, ty: TypeNodePair) -> TypeNodePair {
-        match ty.ty {
-            Type::Unknown(ty_id) => match self.check.get_type_by_id(&ty_id) {
+    fn substitute(&mut self, p: TypeNodePair, subst: &SymbolTable<TypeNodePair>) -> TypeNodePair {
+        match p.ty {
+            Type::Var(ty_id) => match logic::subst_get_type_by_id(&subst, &ty_id) {
                 Some(v) => v,
                 None => {
-                    println!("Type missing from substitution table: {:?}", &ty);
+                    println!("Type missing from substitution table: {:?}", (ty_id, &p));
                     unimplemented!()
                 }
             },
             Type::Func(sig) => {
                 let new_sig = sig.into_iter().map(|v| {
-                    let p = self.substitute(TypeNodePair::new(v, ty.node.clone()));
+                    let p = self.substitute(TypeNodePair::new(v, p.node.clone()), subst);
                     p.ty
                 }).collect();
-                TypeNodePair::new(Type::Func(new_sig), ty.node)
+                TypeNodePair::new(Type::Func(new_sig), p.node)
             }
-            _ => ty.clone(),
+            _ => p.clone(),
         }
     }
 
-    pub fn resolve(&mut self, ast: AstNode, env: Environment) -> (AstNode, Environment) {
+    pub fn resolve(&mut self, ast: AstNode, env: Environment) -> (UnifyResult, AstNode, Environment) {
         // name resolution
-        let (mut ast, mut env) = self.name_resolve(ast, env);
+        let (ast, env) = self.name_resolve(ast, env);
         ast.try_borrow_mut().unwrap();
         // infer all types
-        let mut syms = self.check.unify_all();
-        ast.try_borrow_mut().unwrap();
 
+        let eqs = self.equations.clone();
+        let (res, mut subst) = logic::unify_start(eqs);
         println!("AST: {}", &ast);
-        println!("C: {}", self.check);
         println!("ENV: {}", env);
-        ast.try_borrow_mut().unwrap();
+        println!("RES: {:?}", res);
+        println!("SUB: {:?}", subst);
+        if res == UnifyResult::Ok {
 
-        let _ = visitor::visit(ast.clone(), self, &mut syms).unwrap();
+            let _ = visitor::visit(ast.clone(), self, &mut subst).unwrap();
+            println!("SUB: {:?}", subst);
+        }
 
-        (ast, env)
+        (res, ast, env)
     }
 }
 
@@ -251,9 +254,8 @@ mod tests {
 
     struct Test {}
     impl visitor::Visitor<()> for Test {
-        fn exit(&mut self, e: AstNode, n: &mut ()) -> visitor::VResult {
+        fn exit(&mut self, e: AstNode, _n: &mut ()) -> visitor::VResult {
             println!("AST: {}", e);
-            //n.push(e.clone());
             Ok(())
         }
     }
@@ -270,11 +272,13 @@ mod tests {
         let block = b.block(vec![decl1, decl2]);
         let ast = b.declare("c", block.clone());
 
-        let (ast, env) = b.resolve(ast, env.clone());
+        let (res, ast, env) = b.resolve(ast, env.clone());
 
         println!("a = {:?}", env.resolve(&"a".into()));
         println!("b = {:?}", env.resolve(&"b".into()));
         println!("c = {:?}", env.resolve(&"c".into()));
+
+        assert_eq!(res, UnifyResult::Ok); 
 
         // a and b should not be visible from the outer lexical scope
         // c should be visible though
@@ -292,11 +296,10 @@ mod tests {
         let add = b.binary("+", one, two);
         let ast = b.declare("f", add);
 
-        let (ast, env) = b.resolve(ast, env.clone());
+        let (res, ast, env) = b.resolve(ast, env.clone());
         println!("{}", env);
-        //println!("{:?}", env.resolve(&"f".into()));
         println!("{}", &ast);
-        println!("{}", b.check);
+        assert_eq!(res, UnifyResult::Ok); 
 
         let f = env.resolve(&"f".into()).unwrap();
         println!("f0 = {:?}", f);
@@ -342,9 +345,4 @@ mod tests {
         assert_eq!(inner.ty, Type::Int);
 
     }
-
-    #[test]
-    fn visit() {
-    }
-
 }

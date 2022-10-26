@@ -1,12 +1,42 @@
 use std::fmt;
 pub type SymbolTable<T> = rpds::HashTrieMap<DefinitionId, T>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub fn subst_get_type_by_id<T: Clone + TypeSignature<T>>(subst: &SymbolTable<T>, ty_id: &DefinitionId) -> Option<T> {
+    let mut ty_id = *ty_id;
+    loop {
+        match subst.get(&ty_id) {
+            Some(v) => {
+                if let Some(id) = v.unknown() {
+                    ty_id = id;
+                } else {
+                    return Some(v.clone());
+                }
+            }
+            None => break,
+        }
+    }
+    None
+}
+
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DefinitionId(pub usize);
 
 impl From<usize> for DefinitionId {
     fn from(item: usize) -> Self {
         Self(item)
+    }
+}
+
+impl fmt::Display for DefinitionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Debug for DefinitionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -20,7 +50,7 @@ pub enum UnifyResult {
 }
 
 pub trait TypeSignature<T> {
-    fn sig(&self) -> Vec<T>;
+    fn children(&self) -> Vec<T>;
     fn unknown(&self) -> Option<DefinitionId>;
     fn var(u: DefinitionId) -> T;
 }
@@ -37,12 +67,12 @@ impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
     fn unify(&self, subst: SymbolTable<T>) -> (UnifyResult, SymbolTable<T>) {
         match self {
             Eq(ty1, ty2) => {
-                unify_eq(ty1.sig(), ty2.sig(), subst)
+                unify_eq(vec![ty1.clone()], vec![ty2.clone()], subst)
             }
             OneOf(ty1, types) => {
                 let s = subst;
                 for ty2 in types {
-                    match unify_eq(ty1.sig(), ty2.sig(), s.clone()) {
+                    match unify(ty1.clone(), ty2.clone(), s.clone()) {
                         (UnifyResult::Ok, s) => {
                             return (UnifyResult::Ok, s);
                         }
@@ -75,82 +105,87 @@ fn unify<T: PartialEq + Clone + fmt::Debug + TypeSignature<T>>(ty1: T, ty2: T, s
     let u1 = ty1.unknown();
     let u2 = ty2.unknown();
 
-    let sig1 = ty1.sig();
-    let sig2 = ty2.sig();
-
-    //println!("{:?}", (&u1, &u2));
-
-    if sig1.len() > 1 {
-        return unify_eq(sig1, sig2, subst);
-    } else if u1.is_none() && u2.is_none() {
+    let (res, subst) = if u1.is_none() && u2.is_none() {
         // both are known
-        if occurs_check(&ty1, &sig2) {
-            return (UnifyResult::OccursCheck, subst);
-        }
+        let children1 = ty1.children();
+        let children2 = ty2.children();
 
-        if sig1.len() == 1 {
-            if ty1 != ty2 {
-                return (UnifyResult::NoSolution, subst);
+        if occurs_check(&ty1, &ty2) {
+            (UnifyResult::OccursCheck, subst)
+        } else if children1.len() == children2.len() {
+            if children1.len() > 1 {
+                // iterate over children
+                unify_eq(children1, children2, subst)
+            } else if ty1 == ty2 {
+                (UnifyResult::Ok, subst)
+            } else {
+                (UnifyResult::NoSolution, subst)
             }
         } else {
-
+            (UnifyResult::MismatchShape, subst)
         }
     } else if u1.is_none() && u2.is_some() {
         // one unknown
-        return (UnifyResult::Ok, subst.insert(u2.unwrap(), ty1.clone()));
+        (UnifyResult::Ok, subst.insert(u2.unwrap(), ty1.clone()))
     } else if u1.is_some() && u2.is_none() {
         // one unknown
-        return (UnifyResult::Ok, subst.insert(u1.unwrap(), ty2.clone()));
+        (UnifyResult::Ok, subst.insert(u1.unwrap(), ty2.clone()))
     } else if u1.is_some() && u2.is_some() {
         // two unknowns, nothing to do
         if u1 == u2 {
             // they should never be equal
             unreachable!()
         } else {
-            return (UnifyResult::Incomplete, subst);
+            (UnifyResult::Incomplete, subst)
         }
-    }
+    } else {
+        (UnifyResult::Ok, subst)
+    };
 
-    if ty1 == ty2 {
-        return (UnifyResult::Ok, subst);
-    }
-    (UnifyResult::Ok, subst)
+    log::debug!("unify: {:?} :: {:?} :: {:?}", &ty1, &ty2, res);
+    (res, subst)
 }
 
 fn unify_eq<T: fmt::Debug + PartialEq + Clone + TypeSignature<T>>(ty1: Vec<T>, ty2: Vec<T>, mut subst: SymbolTable<T>) -> (UnifyResult, SymbolTable<T>) {
-    log::debug!("unify_eq: {:?} :: {:?}", ty1, ty2);
-
     // ensure we have the same shape
-    if ty1.len() != ty2.len() {
-        return (UnifyResult::MismatchShape, subst);
-    }
-
-    if ty1 == ty2 {
-        return (UnifyResult::Ok, subst);
-    }
-
-    for (a1, a2) in ty1.into_iter().zip(ty2.into_iter()) {
-        let (res, new_subst) = unify(a1.clone(), a2.clone(), subst);
-        log::debug!("unify: {:?} :: {:?} :: {:?}", &a1, &a2, res);
-        match res {
-            UnifyResult::Ok => {
-                subst = new_subst;
-            }
-            _ => {
-                return (res, new_subst);
+    let (res, subst) = if ty1.len() != ty2.len() {
+        (UnifyResult::MismatchShape, subst)
+    } else if ty1.len() == 0 {
+        (UnifyResult::MismatchShape, subst)
+    } else if ty1 == ty2 {
+        (UnifyResult::Ok, subst)
+    } else {
+        let mut new_res = UnifyResult::Ok;
+        for (a1, a2) in ty1.iter().zip(ty2.iter()) {
+            let (res, new_subst) = unify(a1.clone(), a2.clone(), subst);
+            match res {
+                UnifyResult::Ok => {
+                    subst = new_subst;
+                }
+                _ => {
+                    new_res = res;
+                    subst = new_subst;
+                    break;
+                }
             }
         }
-    }
+        (new_res, subst)
+    };
 
-    (UnifyResult::Ok, subst)
+    log::debug!("unify_eq: {:?} :: {:?} :: {:?}", ty1, ty2, &res);
+
+    (res, subst)
 }
 
 // Does ty1 occur in ty2?
-fn occurs_check<T: PartialEq + TypeSignature<T>>(ty1: &T, sig: &Vec<T>) -> bool {
+fn occurs_check<T: PartialEq + fmt::Debug + TypeSignature<T>>(ty: &T, ty2: &T) -> bool {
+    let children = ty2.children();
     // if ty1 occurs in any of a functions parameters
-    return sig.iter().any(|s| {
-        s == ty1 
+    let res = children.iter().any(|s| {
+        s == ty 
     });
+    log::debug!("occurs_check: {:?} :: {:?} => {}", ty, children, &res);
+    res
 }
 
 fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(equations: Vec<Expr<T>>, mut subst: SymbolTable<T>) -> (Vec<Expr<T>>, SymbolTable<T>) {
@@ -176,7 +211,6 @@ fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(equations: Ve
         //println!("{:?}={:?}", i, v);
     //}
     for (k, v) in subst.iter() {
-        //let v = subst.get(&i.into()).unwrap();
         println!("{:?}={:?}", k, v);
     }
     for v in out.iter() {
@@ -233,10 +267,10 @@ mod test {
                 _ => None
             }
         }
-        fn sig(&self) -> Vec<Type> {
+        fn children(&self) -> Vec<Type> {
             match self {
                 Seq(args) => args.clone(),
-                _ => vec![self.clone()]
+                _ => vec![]
             }
         }
         fn var(u: DefinitionId) -> Type {
@@ -260,13 +294,14 @@ mod test {
 
     #[test]
     fn logic_occurs() {
-        assert_eq!(true, occurs_check(&name("a"), &vec![name("b"), name("a")]));
-        assert_eq!(false, occurs_check(&name("a"), &vec![name("b")]));
+        assert_eq!(true, occurs_check(&name("a"), &seq(vec![name("b"), name("a")])));
+        assert_eq!(false, occurs_check(&name("a"), &seq(vec![name("b")])));
+        assert_eq!(false, occurs_check(&name("a"), &seq(vec![])));
 
         // check occurs using an unknown
         let x = var(0);
         let s = seq(vec![x.clone(), x.clone()]);
-        assert_eq!(true, occurs_check(&x, &s.sig()));
+        assert_eq!(true, occurs_check(&x, &s));
     }
 
     #[test]
@@ -313,6 +348,18 @@ mod test {
                 seq(vec![name("a"), name("b")]),
                 seq(vec![name("c"), name("d")]),
             ),
+        ];
+
+        let (res, _) = unify_start(start);
+        // no solution, because types do not match
+        assert_eq!(UnifyResult::NoSolution, res);
+    }
+
+    #[test]
+    fn logic_no_solution_3() {
+        let start: Vec<Expr<Type>> = vec![
+            Eq(Type::Int, Type::Float),
+            OneOf(Type::Int, vec![Type::Float]),
         ];
 
         let (res, _) = unify_start(start);

@@ -5,28 +5,6 @@ use std::fmt;
 use thiserror::Error;
 use std::cmp::PartialEq;
 
-#[derive(Clone, Debug)]
-pub struct TypeNodePair {
-    pub ty: Type,
-    pub node: AstNode
-}
-impl TypeNodePair {
-    pub fn new(ty: Type, node: AstNode) -> Self {
-        Self { ty, node }
-    }
-}
-impl PartialEq for TypeNodePair {
-    fn eq(&self, other: &Self) -> bool {
-        self.ty == other.ty
-    }
-}
-impl From<AstNode> for TypeNodePair {
-    fn from(node: AstNode) -> Self {
-        let ty = node.borrow().ty.clone();
-        Self { ty, node }
-    }
-}
-
 pub type SymbolTable = rpds::HashTrieMap<TypeDefinitionId, TypeNodePair>;
 
 impl LayerKey for String {}
