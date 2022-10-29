@@ -9,6 +9,7 @@ edition = "2021"
 rpds = "*"
 log = "*"
 env_logger = "0.9"
+ena = "*"
 
 [dev-dependencies]
 criterion = "0.3"
