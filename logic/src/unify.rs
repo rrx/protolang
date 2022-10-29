@@ -57,10 +57,14 @@ pub trait TypeSignature<T> {
 
 use self::Expr::*;
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+type ExprFunc<T> = fn(T, T, T, SymbolTable<T>) -> (UnifyResult, SymbolTable<T>);
+
+#[derive(Clone, Debug, Hash)]
 pub enum Expr<T> {
     OneOf(T, Vec<T>),
     Eq(T, T),
+    Or(Vec<Expr<T>>),
+    Func(T, T, T, ExprFunc<T>),
 }
 
 impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
@@ -80,6 +84,24 @@ impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
                     }
                 }
                 (UnifyResult::NoSolution, s)
+            },
+            Or(exprs) => {
+                if exprs.len() == 0 {
+                    (UnifyResult::Ok, subst)
+                } else {
+                    let s = subst;
+                    for expr in exprs {
+                        let (res1, s1) = expr.unify(s.clone());
+                        println!("or: {:?}", (&expr, &res1));
+                        if res1 == UnifyResult::Ok {
+                            return (res1, s1);
+                        }
+                    }
+                    (UnifyResult::NoSolution, s)
+                }
+            }
+            Func(x, y, z, f) => {
+                f(x.clone(), y.clone(), z.clone(), subst)
             }
             _ => unimplemented!()
         }
@@ -133,8 +155,8 @@ fn unify<T: PartialEq + Clone + fmt::Debug + TypeSignature<T>>(ty1: T, ty2: T, s
     } else if u1.is_some() && u2.is_some() {
         // two unknowns, nothing to do
         if u1 == u2 {
-            // they should never be equal
-            unreachable!()
+            // if they are equal, then they still match 
+            (UnifyResult::Ok, subst)
         } else {
             (UnifyResult::Incomplete, subst)
         }
@@ -384,9 +406,188 @@ mod test {
         ];
 
         let (res, _) = unify_start(start);
-        // no solution, because types do not match
         assert_eq!(UnifyResult::Ok, res);
     }
+
+    #[test]
+    fn logic_or() {
+        let eqs = vec![
+            Or( vec![
+                Eq(name("a"), name("b")),
+                Eq(var(0), var(1)),
+                Eq(var(2), name("c"))
+            ]),
+            Eq( name("b"), var(1) )
+        ];
+        let (res, _) = unify_start(eqs);
+        assert_eq!(UnifyResult::Ok, res);
+    }
+
+    #[test]
+    fn zebra_1() {
+        let houses = seq(vec![var(0), var(1), var(2)]);
+        let italian = seq(vec![name("italian"), var(3)]);
+        let spanish = seq(vec![name("spanish"), var(4)]);
+        let norwegian = seq(vec![name("norwegian"), name("blue")]);
+        let red = seq(vec![var(5), name("red")]);
+
+        let terms = vec![
+            Eq(houses.clone(), var(6).into()),
+
+            // italian lives in the second house
+            Eq(var(1), italian),
+
+            // spanish lives next to the red house
+            OneOf( seq(vec![var(0), var(1), var(2) ]), vec![
+                   seq(vec![red.clone(), spanish.clone(), var(2)]),
+                   seq(vec![var(0), red, spanish]),
+            ]),
+
+            // norwegian is in one of the houses
+            OneOf(norwegian, vec![var(0).into(), var(1).into(), var(2).into()]), 
+
+            // blue is already taken, but this algo isn't able to figure that out
+            // there's no concept of exclusive here, so we could have duplicate 
+            // colors
+            Or(vec![
+                //Eq( var(3).into(), name("blue")),
+                Eq( var(3).into(), name("orange")),
+                Eq( var(3).into(), name("red")),
+            ]),
+
+            Or(vec![
+                //Eq( var(4).into(), name("blue")),
+                Eq( var(4).into(), name("orange")),
+                Eq( var(4).into(), name("red")),
+            ]),
+        ];
+        let (res, _) = unify_start(terms);
+        assert_eq!(UnifyResult::Ok, res);
+
+
+    }
+
+    /*
+    #[test]
+    fn zebra_easy() {
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        enum Color {
+            Red, Blue, Orange
+        }
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        enum Language {
+            Italian,
+            Spanish,
+            Norwegian
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        struct House {
+            language: Box<Type>,
+            color: Box<Type>
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        pub enum Type {
+            Color(Color),
+            Language(Language),
+            House(House),
+            Houses(Vec<Type>),
+            Var(DefinitionId)
+        }
+
+        use Language::*;
+        use Color::*;
+
+        fn var(u: usize) -> Type {
+            Type::Var(u.into())
+        }
+
+        impl TypeSignature<Type> for Type {
+            fn unknown(&self) -> Option<DefinitionId> {
+                match self {
+                    Type::Var(id) => Some(*id),
+                    _ => None
+                }
+            }
+            fn children(&self) -> Vec<Type> {
+                match self {
+                    Type::Houses(houses) => houses.clone(),
+                    _ => vec![]
+                }
+            }
+            fn var(u: DefinitionId) -> Type {
+                Type::Var(u)
+            }
+        }
+
+        let houses = Type::Houses(vec![var(0).into(), var(1).into(), var(2).into()]);
+        let italian = Type::House(House { language: Type::Language(Italian).into(), color: var(3).into() });
+        let spanish = Type::House(House { language: Type::Language(Spanish).into(), color: var(4).into() });
+        let red = Type::House(House { language: var(5).into(), color: Type::Color(Red).into() });
+        let norwegian = Type::House(House { language: Type::Language(Norwegian).into(), color: Type::Color(Blue).into() });
+
+        fn rightto(x: Type, y: Type, z: Type, s: SymbolTable<Type>) -> (UnifyResult, SymbolTable<Type>) {
+            println!("func: {:?}", (&x, &y, &z));
+            if let Type::Houses(hs) = z.clone() {
+                if hs.len() < 2 {
+                    (UnifyResult::NoSolution, s)
+                } else {
+                    let first = hs.get(0).unwrap().clone();
+                    let second = hs.get(1).unwrap().clone();
+                    let eqs = vec![
+                        Eq(y, first),
+                        Eq(x, second)
+                    ];
+
+                    //let (new_eqs, new_s) = unify_all(eqs, s.clone());
+                    //if new_eqs.len() != eqs.len() {
+
+                    //}
+                    //(res, new_s)
+
+                    //if first == &x && second == &y {
+                        (UnifyResult::Ok, s)
+                    //} else {
+                        //let rest = Type::Houses(hs.iter().skip(1).cloned().collect::<Vec<_>>());
+                        //rightto(hs.get(0).unwrap().clone(), hs.get(1).unwrap().clone(), z, s)
+                    //}
+                }
+            } else {
+                (UnifyResult::NoSolution, s)
+            }
+        }
+
+        let terms = vec![
+            Eq(houses.clone(), var(6).into()),
+
+            // italian lives in the second house
+            Eq(var(1).into(), italian),
+
+            Or(vec![
+                Eq( var(3).into(), Type::Color(Blue)),
+                Eq( var(3).into(), Type::Color(Orange)),
+                Eq( var(3).into(), Type::Color(Red)),
+            ]),
+
+            // spanish lives next to the red house
+            Or(vec![
+                Eq( Type::Houses(vec![var(0), var(1)]), Type::Houses(vec![red.clone(), spanish.clone()])),
+                Eq( Type::Houses(vec![var(1), var(2)]), Type::Houses(vec![red, spanish]))
+            ]),
+            
+            OneOf(norwegian, vec![var(0).into(), var(1).into(), var(2).into()]), 
+            //OneOf(spanish.clone(), vec![var(0).into(), var(1).into()]), 
+            //OneOf(spanish, vec![house1, house3]), 
+            //Func(spanish, red, houses, rightto)
+        ];
+        let (res, _) = unify_start(terms);
+        assert_eq!(UnifyResult::Ok, res);
+
+
+    }
+    */
+
 }
 
 
