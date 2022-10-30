@@ -27,7 +27,7 @@ pub enum EmitOption {
     OBJ,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompileArgs {
     /// Sets the current optimization level from 0 (no optimization) to 3 (aggressive optimization).
     /// Set to s or z to optimize for size.
@@ -54,6 +54,7 @@ pub struct CompileArgs {
     pub verbose: bool,
 }
 
+
 impl Default for CompileArgs {
     fn default() -> Self {
         Self {
@@ -65,6 +66,83 @@ impl Default for CompileArgs {
             output_filename: None,
             emit: vec![],
             verbose: false,
+        }
+    }
+}
+
+pub struct Compiler {
+    context: Context,
+    args: CompileArgs,
+}
+
+impl Compiler {
+    pub fn new(args: CompileArgs) -> Self {
+        Self { context: Context::create(), args }
+    }
+
+    pub fn module(&self, module_name: &str, ast: hir::Ast) -> Module {
+        let module = self.context.create_module(&module_name);
+
+        let target_triple = if let Some(target) = &self.args.target {
+            TargetTriple::create(&target)
+        } else {
+            TargetMachine::get_default_triple()
+        };
+
+        eprintln!("target: {}", &target_triple);
+
+        module.set_triple(&target_triple);
+        let mut codegen = Generator {
+            context: &self.context,
+            module,
+            builder: self.context.create_builder(),
+            definitions: HashMap::new(),
+            auto_derefs: HashSet::new(),
+            current_function_info: None,
+            current_definition_name: None,
+        };
+
+        ast.codegen(&mut codegen);
+        
+        // print to stdout
+        if self.args.stdout {
+            println!("{}", codegen.module.print_to_string().to_string());
+        }
+
+        codegen
+            .module
+            .verify()
+            .map_err(|error| {
+                codegen.module.print_to_stderr();
+                eprintln!("{}", error);
+            })
+        .unwrap();
+
+        // print to stdout
+        if self.args.stdout {
+            println!("{}", codegen.module.print_to_string().to_string());
+        }
+        //self.modules.push(codegen.module);
+        codegen.module
+    }
+
+    pub fn run_jit<'a>(&'a self, modules: Vec<Module<'a>>) -> Result<i64, Box<dyn Error>> {
+        let config = InitializationConfig::default();
+        Target::initialize_native(&config)?;
+        eprintln!("Default: {:?}", TargetMachine::get_default_triple().as_str());
+        eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
+
+        let module = self.context.create_module("__main__");
+
+        let ee = module.create_jit_execution_engine(OptimizationLevel::None)?;
+        for module in modules.into_iter() {
+            ee.add_module(&module);
+        }
+
+        unsafe {
+            let f = ee.get_function::<unsafe extern "C" fn() -> i64>("main")?;
+            let ret = f.call();
+            Ok(ret)
         }
     }
 }
@@ -106,8 +184,10 @@ fn to_size_level(optimization_argument: char) -> u32 {
     }
 }
 
-pub fn compile(module_name: &String, ast: hir::Ast, args: &CompileArgs) -> Result<(), Box<dyn Error>> {
-    list_targets();
+pub fn compile_and_run(module_name: &String, ast: hir::Ast, args: &CompileArgs) -> Result<i64, Box<dyn Error>> {
+    //list_targets();
+
+    let compiler = Compiler::new(args.clone());
 
     let context = Context::create();
 
@@ -173,23 +253,15 @@ pub fn compile(module_name: &String, ast: hir::Ast, args: &CompileArgs) -> Resul
 
     unsafe {
         let mut ee = codegen.module.create_jit_execution_engine(OptimizationLevel::None)?;
-        let f = ee.get_function::<unsafe extern "C" fn() -> u32>("main")?;
+        let f = ee.get_function::<unsafe extern "C" fn() -> i64>("main")?;
         let ret = f.call();
         eprintln!("ret: {}", ret);
+        Ok(ret)
     }
-
-    /*
-    unsafe {
-        let mut ie = codegen.module.create_interpreter_execution_engine()?;
-        let f = ie.get_function::<unsafe extern "C" fn() -> u32>("main")?;
-        let ret = f.call();
-        eprintln!("ret: {}", ret);
-    }
-    */
 
     //let program_command = PathBuf::from("./".to_string() + &binary_name);
     //Command::new(&program_command).spawn().unwrap().wait().unwrap();
-    Ok(())
+    //Ok(())
 }
 
 /// Output the current module to a file and link with gcc.

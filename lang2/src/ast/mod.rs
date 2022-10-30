@@ -151,6 +151,8 @@ pub enum Ast {
     // A function that is defined externally
     Extern(Vec<AstNode>), // args
 
+    Builtin(String, Vec<AstNode>), // name, args
+
     // A function that is defined as part of the program
     Function(Box<AstNode>, Vec<AstNode>), // body, arg names
 
@@ -201,7 +203,7 @@ pub fn make_binary_function(name: String, args: Vec<Type>, env: &mut Environment
     let args = vec![left.into(), right.into(), ret.into()];
 
     let node = AstNodeInner {
-        value: Ast::Extern(args),
+        value: Ast::Builtin(name.clone(), args),
         ty: Type::Func(vec![left_ty, right_ty, ret_ty]),
     };
 

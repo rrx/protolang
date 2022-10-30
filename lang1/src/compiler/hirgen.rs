@@ -385,7 +385,7 @@ mod tests {
         });
 
         println!("{:?}", &v);
-        llvm::compile(&String::from("test"), v, &args).unwrap();
+        llvm::compile_and_run(&String::from("test"), v, &args).unwrap();
     }
 
     #[test]
@@ -398,6 +398,6 @@ mod tests {
         //let ir = gen.lower(&expr).unwrap();
         //println!("{:?}", ir);
         //gen.results.print();
-        //llvm::compile(&String::from("test"), ir, &args).unwrap();
+        //llvm::compile_and_run(&String::from("test"), ir, &args).unwrap();
     }
 }

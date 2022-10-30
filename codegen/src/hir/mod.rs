@@ -13,6 +13,9 @@
 //mod monomorphisation;
 mod printer;
 mod types;
+mod module;
+
+pub use module::ModuleBuilder;
 
 //pub use monomorphisation::monomorphise;
 pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
@@ -278,6 +281,19 @@ pub enum Ast {
     Builtin(Builtin),
 }
 
+
+impl From<Builtin> for Ast {
+    fn from(item: Builtin) -> Self {
+        Ast::Builtin(item)
+    }
+}
+
+impl From<Literal> for Ast {
+    fn from(item: Literal) -> Self {
+        Ast::Literal(item)
+    }
+}
+
 impl std::fmt::Display for DefinitionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "v{}", self.0)
@@ -337,3 +353,5 @@ impl_display!(MemberAccess);
 impl_display!(Tuple);
 impl_display!(ReinterpretCast);
 impl_display!(Builtin);
+
+

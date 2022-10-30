@@ -111,6 +111,26 @@ impl AstBuilder {
         AstNode::new(Ast::Block(exprs), ty)
     }
 
+    pub fn func(&mut self, name: &str, sig: Vec<Type>, body: AstNode) -> AstNode {
+        let mut params = sig.iter().map(|p| {
+            AstNodeInner {
+                value: Variable::new("x".into()).into(),
+                ty: p.clone(),
+            }.into()
+        }).collect::<Vec<_>>();
+        let ty = Type::Func(sig);
+        AstNode::new(
+            Ast::Function(body.into(), params),
+            ty)
+    }
+
+    pub fn apply(&mut self, f: AstNode, args: Vec<AstNode>) -> AstNode {
+        let inner = f.borrow();
+        let ty = inner.ty.clone();
+        let ty_ret = ty.children().last().unwrap().clone();
+        AstNode::new(Ast::Apply(f.clone().into(), args), ty_ret)
+    }
+
     pub fn binary(&mut self, name: &str, lhs: AstNode, rhs: AstNode) -> AstNode {
         let ty_ret = Type::var(self.state.next_id());
         let ty_f = Type::Func(vec![
@@ -201,6 +221,16 @@ impl AstBuilder {
                 (ast.clone(), env)
             }
 
+            Ast::Function(body, args) => {
+                let mut local_env = env.clone();
+                for arg in args {
+                    //local_env.define(
+                }
+                let (body, local_env) = self.name_resolve(*body.clone(), local_env);
+                // nothing to do?
+                (ast.clone(), env)
+            }
+
             Ast::Block(exprs) => {
                 let mut local_env = env.clone();
                 let mut updated = vec![];
@@ -213,7 +243,7 @@ impl AstBuilder {
                 (self.block(updated), env)
             }
             _ => {
-                println!("{:?}", &ast);
+                println!("{:?}", &value);
                 unimplemented!()
             }
         }
