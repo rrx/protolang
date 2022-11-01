@@ -846,27 +846,27 @@ mod tests {
 
         let top1 = hir::Sequence::new(top1);
         let top2 = hir::Sequence::new(top2);
-        top1.codegen(&mut codegen1, &module1);
-        top2.codegen(&mut codegen2, &module2);
+        top1.codegen(&mut codegen1);
+        top2.codegen(&mut codegen2);
 
-        module1
+        codegen1.module
             .verify()
             .map_err(|error| {
-                module1.print_to_stderr();
+                codegen1.module.print_to_stderr();
                 eprintln!("{}", error);
             })
         .unwrap();
 
-        module2
+        codegen2.module
             .verify()
             .map_err(|error| {
-                module2.print_to_stderr();
+                codegen2.module.print_to_stderr();
                 eprintln!("{}", error);
             })
         .unwrap();
 
-        module1.print_to_stderr();
-        module2.print_to_stderr();
+        codegen1.module.print_to_stderr();
+        codegen2.module.print_to_stderr();
 
         use inkwell::targets::{InitializationConfig, Target, TargetMachine};
         let config = InitializationConfig::default();
@@ -877,8 +877,8 @@ mod tests {
         let module = context.create_module("__xmain__");
 
         let ee = module.create_jit_execution_engine(OptimizationLevel::None).unwrap();
-        ee.add_module(&module1).unwrap();
-        ee.add_module(&module2).unwrap();
+        ee.add_module(&codegen1.module).unwrap();
+        ee.add_module(&codegen2.module).unwrap();
 
         unsafe {
             let f = ee.get_function::<unsafe extern "C" fn() -> i64>("main").unwrap();
