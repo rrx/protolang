@@ -26,3 +26,42 @@ pub mod generator;
 
 pub use compile::*;
 use generator::*;
+use inkwell::context::Context;
+
+use crate::lower::Lower;
+use crate::hir::Ast;
+
+use std::error::Error;
+use std::rc::Rc;
+
+pub struct LLVMBackendContext {
+    context: Context
+}
+impl LLVMBackendContext {
+    pub fn new() -> Self {
+        let context = Context::create();
+        Self { context }
+    }
+}
+
+pub struct LLVMBackend<'a> {
+    context: &'a LLVMBackendContext,
+    lower: Lower<'a>
+}
+
+impl<'a> LLVMBackend<'a> {
+    pub fn new(context: &'a LLVMBackendContext) -> Self {
+        let lower = Lower::new();
+        Self { context, lower }
+    }
+
+    pub fn module(&mut self, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
+        self.lower.module(&self.context.context, name, ast).unwrap();
+        Ok(())
+    }
+
+    pub fn run(&self) -> Result<i64, Box<dyn Error>> {
+        self.lower.run(&self.context.context)
+    }
+}
+

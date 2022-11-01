@@ -11,17 +11,13 @@ pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
 pub struct Lower<'a> {
     next_id: usize,
-    //context: &'a Context,
-    modules: ModuleMap<'a>//HashMap<String, Module<'a>>
+    modules: ModuleMap<'a>
 }
 
 impl<'a> Lower<'a> {
     pub fn new() -> Self {
         Self { next_id: 0, modules: ModuleMap::new() }
     }
-    //pub fn new(context: &'a Context) -> Self {
-        //Self { next_id: 0, context, modules: ModuleMap::new() }
-    //}
     pub fn new_definition(&mut self, name: &str, ast: hir::Ast) -> hir::Definition { 
         let d = hir::Definition {
             variable: hir::DefinitionId(self.next_id),
@@ -79,12 +75,12 @@ impl<'a> Lower<'a> {
         }
     }
 
-    pub fn run(&mut self, context: &'a Context) -> Result<i64, Box<dyn Error>> {
+    pub fn run(&self, context: &'a Context) -> Result<i64, Box<dyn Error>> {
         run_jit(context, &self.modules)
     }
 }
 
-pub fn run_jit<'a>(context: &'a Context, modules: &HashMap<String, Module<'a>>) -> Result<i64, Box<dyn Error>> {
+pub fn run_jit<'a>(context: &'a Context, modules: &ModuleMap<'a>) -> Result<i64, Box<dyn Error>> {
     let config = InitializationConfig::default();
     Target::initialize_native(&config)?;
     eprintln!("Default: {:?}", TargetMachine::get_default_triple().as_str());

@@ -170,7 +170,7 @@ mod tests {
     use log::debug;
     use test_log::test;
     use logic::UnifyResult;
-    use codegen::{lower::{Lower, Context}};
+    use codegen::{llvm::LLVMBackend, llvm::LLVMBackendContext, lower::{Lower, Context}};
 
     #[test]
     fn lower_binary() {
@@ -203,9 +203,6 @@ mod tests {
         let main_f = b.func(vec![Type::Int], block);
         let main = b.declare("main", main_f);
 
-        let context = Context::create();
-        let mut lower = Lower::new();//&context);
-
         let (res, ast1, env) = b.resolve(main, env.clone());
         println!("{}", env);
         println!("{}", &ast1);
@@ -225,13 +222,19 @@ mod tests {
 
         let mut b = Builder::new();
         let hir1 = b.lower(&ast1).unwrap();
-        println!("{}", &hir1);
-        lower.module(&context, "test", hir1).unwrap();
-
         let hir2 = b.lower(&ast3).unwrap();
-        lower.module(&context, "test2", hir2).unwrap();
 
-        let ret = lower.run(&context).unwrap();
+        let context = LLVMBackendContext::new();
+        let mut backend = LLVMBackend::new(&context);
+        //let context = Context::create();
+        //let mut lower = Lower::new();//&context);
+
+
+        println!("{}", &hir1);
+        backend.module("test", hir1).unwrap();
+        backend.module("test2", hir2).unwrap();
+
+        let ret = backend.run().unwrap();
         println!("ret: {}", &ret);
         assert_eq!(3, ret);
     }
