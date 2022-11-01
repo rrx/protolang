@@ -1,23 +1,12 @@
-use crate::hir;
-use crate::util;
-
-use inkwell::basic_block::BasicBlock;
-use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::{Linkage, Module};
-use inkwell::passes::{PassManager, PassManagerBuilder};
+use inkwell::module::Module;
 use inkwell::targets::{CodeModel, FileType, RelocMode, TargetTriple};
 use inkwell::targets::{InitializationConfig, Target, TargetMachine};
-use inkwell::types::{BasicType, BasicTypeEnum, PointerType};
-use inkwell::values::{AggregateValue, BasicValue, BasicValueEnum, CallableValue, FunctionValue, InstructionOpcode};
-use inkwell::AddressSpace;
 use inkwell::OptimizationLevel;
 
-use super::{path_to_module_name, CodeGen, Generator};
-use std::collections::{HashMap, HashSet};
+use super::{CodeGen, Generator};
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EmitOption {
@@ -82,7 +71,7 @@ impl Compiler {
 
 pub fn list_targets() -> Result<(), Box<dyn Error>> {
     let config = InitializationConfig::default();
-    Target::initialize_all(&config); //.unwrap();
+    Target::initialize_all(&config);
     eprintln!("Default: {:?}", TargetMachine::get_default_triple().as_str());
     eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
 
@@ -100,7 +89,11 @@ pub fn list_targets() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn to_optimization_level(opt_level: char) -> OptimizationLevel {
+pub fn path_to_module_name(path: &Path) -> String {
+    path.with_extension("").to_string_lossy().into()
+}
+
+pub fn to_optimization_level(opt_level: char) -> OptimizationLevel {
     match opt_level {
         '1' => OptimizationLevel::Less,
         '2' => OptimizationLevel::Default,
@@ -109,7 +102,7 @@ fn to_optimization_level(opt_level: char) -> OptimizationLevel {
     }
 }
 
-fn to_size_level(optimization_argument: char) -> u32 {
+pub fn to_size_level(optimization_argument: char) -> u32 {
     match optimization_argument {
         's' => 1,
         'z' => 2,
@@ -117,9 +110,9 @@ fn to_size_level(optimization_argument: char) -> u32 {
     }
 }
 
-/// Output the current module to a file and link with gcc.
+/// Output the current module to a file
 pub fn output(
-    module_name: String, binary_name: &str, target_triple: &TargetTriple, module: &Module, args: &CompileArgs,
+    module_name: String, target_triple: &TargetTriple, module: &Module, args: &CompileArgs,
 ) -> Result<(), Box<dyn Error>> {
     let target = Target::from_triple(target_triple).unwrap();
     let target_machine = target

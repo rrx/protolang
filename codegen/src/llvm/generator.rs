@@ -9,36 +9,19 @@
 //! function and lazily codegens each Definition that is used so that only what is
 //! used is actually compiled into the resulting binary. Once this walk is finished
 //! the resulting inkwell::Module is optimized then linked with gcc.
-//!
-//! Note that ante currently does whole program compilation - the entire program
-//! is compiled into a single inkwell::Module which can then be optimized later.
-//! Any libraries need to have their source code included anyway since ante does
-//! not have a stable ABI.
-//!
-//! The reccomended starting point while reading through this pass is the `run`
-//! function which is called directly from `main`. This function sets up the
-//! Generator, walks the Ast, then optimizes and links the resulting Module.
-//use crate::cli::Cli;
 use crate::hir::{self, Ast, DefinitionId, FloatKind};
-//use crate::types::FloatKind;
-use crate::util::{self, fmap};
+use crate::util::fmap;
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
-use inkwell::passes::{PassManager, PassManagerBuilder};
-use inkwell::targets::{CodeModel, FileType, RelocMode, TargetTriple};
-use inkwell::targets::{InitializationConfig, Target, TargetMachine};
 use inkwell::types::{BasicType, BasicTypeEnum, PointerType};
 use inkwell::values::{AggregateValue, BasicValue, BasicValueEnum, CallableValue, FunctionValue, InstructionOpcode};
 use inkwell::AddressSpace;
-use inkwell::OptimizationLevel;
 
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use super::builtin;
 
@@ -61,29 +44,8 @@ pub struct Generator<'context> {
     pub current_definition_name: Option<String>,
 }
 
-pub fn path_to_module_name(path: &Path) -> String {
-    path.with_extension("").to_string_lossy().into()
-}
-
-fn to_optimization_level(opt_level: char) -> OptimizationLevel {
-    match opt_level {
-        '1' => OptimizationLevel::Less,
-        '2' => OptimizationLevel::Default,
-        '3' => OptimizationLevel::Aggressive,
-        _ => OptimizationLevel::None,
-    }
-}
-
-fn to_size_level(optimization_argument: char) -> u32 {
-    match optimization_argument {
-        's' => 1,
-        'z' => 2,
-        _ => 0,
-    }
-}
-
 impl<'g> Generator<'g> {
-    fn codegen_main(&mut self, ast: &hir::Ast) {
+    fn codegen_main(&mut self, ast: &Ast) {
         let i32_type = self.context.i32_type();
         let main_type = i32_type.fn_type(&[], false);
         let function = self.module.add_function("main", main_type, Some(Linkage::External));
@@ -95,49 +57,6 @@ impl<'g> Generator<'g> {
 
         let success = i32_type.const_int(0, true);
         self.build_return(success.into());
-    }
-
-    /// Optimize the current inkwell::Module.
-    /// optimization_argument is one of '0', '1', '2', '3', 's', or 'z'
-    pub fn optimize(&self, optimization_argument: char) {
-        let config = InitializationConfig::default();
-        Target::initialize_native(&config).unwrap();
-        let pass_manager_builder = PassManagerBuilder::create();
-
-        let optimization_level = to_optimization_level(optimization_argument);
-        let size_level = to_size_level(optimization_argument);
-        pass_manager_builder.set_optimization_level(optimization_level);
-        pass_manager_builder.set_size_level(size_level);
-
-        let pass_manager = PassManager::create(());
-        pass_manager_builder.populate_module_pass_manager(&pass_manager);
-        pass_manager.run_on(&self.module);
-
-        // Do LTO optimizations afterward mosty for function inlining
-        let link_time_optimizations = PassManager::create(());
-        pass_manager_builder.populate_lto_pass_manager(&link_time_optimizations, false, true);
-        link_time_optimizations.run_on(&self.module);
-    }
-
-    /// Output the current module to a file and link with gcc.
-    pub fn output(&self, module_name: String, binary_name: &str, target_triple: &TargetTriple, module: &Module) {
-        // generate the bitcode to a .bc file
-        let mut path = PathBuf::new();
-        path.push("target");
-        path.push(&module_name);
-        path.set_extension("o");
-
-        let target = Target::from_triple(target_triple).unwrap();
-        let target_machine = target
-            .create_target_machine(target_triple, "", "", OptimizationLevel::None, RelocMode::PIC, CodeModel::Default)
-            .unwrap();
-
-        let directory = path.parent().unwrap();
-        if !directory.exists() {
-            std::fs::create_dir_all(directory);
-        }
-
-        target_machine.write_to_file(module, FileType::Object, &path).unwrap();
     }
 
     /// Return the inkwell function we're currently inserting into
@@ -672,13 +591,13 @@ impl<'g> CodeGen<'g> for hir::Builtin {
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::hir::*;
     use crate::lower::{self, Definitions};
 
-    /*
         #[test]
         fn codegen_function3() {
             let context = Context::create();
@@ -811,5 +730,5 @@ mod tests {
                 //Ok(ret)
             }
         }
-    */
 }
+    */

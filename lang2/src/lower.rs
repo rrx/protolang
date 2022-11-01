@@ -1,17 +1,10 @@
 use crate::ast::*;
 use crate::typesystem::Type;
-use crate::visitor::*;
 use codegen::hir;
 use std::error::Error;
 
 struct Builder {
     next_id: usize,
-}
-
-impl Visitor<()> for Builder {
-    fn exit(&mut self, ast: AstNode, _: &mut ()) -> VResult {
-        Ok(())
-    }
 }
 
 fn convert_type(ty: &Type) -> hir::Type {
@@ -231,8 +224,8 @@ mod tests {
         let mut backend = LLVMBackend::new(&context);
 
         // add modules
-        backend.module("test", hir1).unwrap();
-        backend.module("test2", hir2).unwrap();
+        backend.compile_module("test", hir1).unwrap();
+        backend.compile_module("test2", hir2).unwrap();
 
         // execute
         let ret = backend.run().unwrap();

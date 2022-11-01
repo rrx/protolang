@@ -4,6 +4,7 @@ use crate::{
 };
 pub use inkwell::context::Context;
 use inkwell::module::Module;
+use inkwell::passes::{PassManager, PassManagerBuilder};
 use inkwell::targets::{InitializationConfig, Target, TargetMachine};
 use inkwell::OptimizationLevel;
 use std::collections::{HashMap, HashSet};
@@ -47,14 +48,29 @@ pub fn lt(a: Ast, b: Ast) -> Ast {
 
 pub struct Lower<'a> {
     modules: ModuleMap<'a>,
+    optimizer: PassManager<Module<'a>>,
+    link_optimizer: PassManager<Module<'a>>,
 }
 
 impl<'a> Lower<'a> {
-    pub fn new() -> Self {
-        Self { modules: ModuleMap::new() }
+    pub fn new(optimization_level: OptimizationLevel, size_level: u32) -> Self {
+        let pass_manager_builder = PassManagerBuilder::create();
+
+        pass_manager_builder.set_optimization_level(optimization_level);
+        pass_manager_builder.set_size_level(size_level);
+
+        let pass_manager = PassManager::create(());
+        pass_manager_builder.populate_module_pass_manager(&pass_manager);
+
+        // Do LTO optimizations afterward mosty for function inlining
+        let link_time_optimizations = PassManager::create(());
+        pass_manager_builder.populate_lto_pass_manager(&link_time_optimizations, false, true);
+
+        Self { modules: ModuleMap::new(), optimizer: pass_manager, link_optimizer: link_time_optimizations }
     }
-    pub fn module(&mut self, context: &'a Context, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
-        let mut module = context.create_module(name);
+
+    pub fn compile_module(&mut self, context: &'a Context, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
+        let module = context.create_module(name);
 
         let mut codegen = Generator {
             module,
@@ -67,6 +83,8 @@ impl<'a> Lower<'a> {
         };
 
         ast.codegen(&mut codegen);
+
+        self.optimizer.run_on(&codegen.module);
 
         match codegen.module.verify() {
             Ok(_) => {

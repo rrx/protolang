@@ -10,14 +10,6 @@
 //! used is actually compiled into the resulting binary. Once this walk is finished
 //! the resulting inkwell::Module is optimized then linked with gcc.
 //!
-//! Note that ante currently does whole program compilation - the entire program
-//! is compiled into a single inkwell::Module which can then be optimized later.
-//! Any libraries need to have their source code included anyway since ante does
-//! not have a stable ABI.
-//!
-//! The reccomended starting point while reading through this pass is the `run`
-//! function which is called directly from `main`. This function sets up the
-//! Generator, walks the Ast, then optimizes and links the resulting Module.
 
 mod builtin;
 mod compile;
@@ -30,9 +22,8 @@ use inkwell::context::Context;
 
 use crate::hir::Ast;
 use crate::lower::Lower;
-
+use inkwell::OptimizationLevel;
 use std::error::Error;
-use std::rc::Rc;
 
 pub struct LLVMBackendContext {
     context: Context,
@@ -55,12 +46,12 @@ pub struct LLVMBackend<'a> {
 
 impl<'a> LLVMBackend<'a> {
     pub fn new(context: &'a LLVMBackendContext) -> Self {
-        let lower = Lower::new();
+        let lower = Lower::new(OptimizationLevel::None, 0);
         Self { context, lower }
     }
 
-    pub fn module(&mut self, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
-        self.lower.module(&self.context.context, name, ast).unwrap();
+    pub fn compile_module(&mut self, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
+        self.lower.compile_module(&self.context.context, name, ast).unwrap();
         Ok(())
     }
 
@@ -121,8 +112,8 @@ mod tests {
 
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.module("test", Sequence::new(vec![xd0.into()]).into()).unwrap();
-        b.module("main", Sequence::new(vec![df_main.into()]).into()).unwrap();
+        b.compile_module("test", Sequence::new(vec![xd0.into()]).into()).unwrap();
+        b.compile_module("main", Sequence::new(vec![df_main.into()]).into()).unwrap();
         let ret = b.run().unwrap();
         assert_eq!(1000, ret);
     }
