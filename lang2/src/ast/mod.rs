@@ -154,7 +154,7 @@ pub enum Ast {
     Builtin(String, Vec<AstNode>), // name, args
 
     // A function that is defined as part of the program
-    Function(Box<AstNode>, Vec<AstNode>), // body, arg names
+    Function(Box<AstNode>, Vec<AstNode>, Vec<Type>), // body, arg names, signature
 
     // function application
     Apply(Box<AstNode>, Vec<AstNode>), // function, parameters

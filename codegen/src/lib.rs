@@ -9,3 +9,4 @@ pub mod hir;
 
 //pub mod cli;
 pub mod llvm;
+pub mod lower;

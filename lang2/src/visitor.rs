@@ -60,7 +60,7 @@ fn visit_children<N>(e: AstNode, f: &mut impl Visitor<N>, n: &mut N) -> VResult 
                 visit(e.clone(), f, n)?;
             }
         }
-        Ast::Function(body, args) => {
+        Ast::Function(body, args, sig) => {
             visit(*body.clone(), f, n)?;
             for arg in args {
                 visit(arg.clone(), f, n)?;

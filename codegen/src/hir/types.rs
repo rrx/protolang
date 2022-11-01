@@ -61,7 +61,17 @@ pub enum Type {
     Tuple(Vec<Type>),
 }
 
+impl From<FunctionType> for Type {
+    fn from(item: FunctionType) -> Self {
+        Self::Function(item)
+    }
+}
+
 impl Type {
+    pub fn i64() -> Self {
+      Self::Primitive(PrimitiveType::Integer(IntegerKind::I64))
+    }
+    
     pub fn into_function(self) -> Option<FunctionType> {
         match self {
             Type::Function(f) => Some(f),

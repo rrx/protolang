@@ -56,12 +56,6 @@ pub struct DefinitionInfo {
 
 pub type Variable = DefinitionInfo;
 
-impl From<Variable> for Ast {
-    fn from(v: Variable) -> Ast {
-        Ast::Variable(v)
-    }
-}
-
 impl From<DefinitionId> for Variable {
     fn from(definition_id: DefinitionId) -> Variable {
         Variable { definition_id, definition: None, name: None }
@@ -69,7 +63,7 @@ impl From<DefinitionId> for Variable {
 }
 
 impl DefinitionId {
-    fn to_variable(self) -> Ast {
+    pub fn to_variable(self) -> Ast {
         Ast::Variable(self.into())
     }
 }
@@ -166,6 +160,11 @@ pub struct Return {
 #[derive(Debug, Clone)]
 pub struct Sequence {
     pub statements: Vec<Ast>,
+}
+impl Sequence {
+    pub fn new(statements: Vec<Ast>) -> Self {
+        Self { statements }
+    }
 }
 
 /// extern declaration
@@ -281,6 +280,28 @@ pub enum Ast {
     Builtin(Builtin),
 }
 
+impl Ast {
+    pub fn i64(u: i64) -> Self {
+        unsafe {
+            Self::Literal(Literal::Integer(std::mem::transmute(u), IntegerKind::I64))
+        }
+    }
+    pub fn u64(u: u64) -> Self {
+        Self::Literal(Literal::Integer(u, IntegerKind::U64))
+    }
+    pub fn f64(f: f64) -> Self {
+        unsafe {
+            let u = std::mem::transmute(f);
+            Self::Literal(Literal::Float(u, FloatKind::F64))
+        }
+    }
+    pub fn bool(u: bool) -> Self {
+        Ast::Literal(Literal::Bool(u))
+    }
+    pub fn string(s: String) -> Self {
+        Ast::Literal(Literal::CString(s))
+    }
+}
 
 impl From<Builtin> for Ast {
     fn from(item: Builtin) -> Self {
@@ -291,6 +312,42 @@ impl From<Builtin> for Ast {
 impl From<Literal> for Ast {
     fn from(item: Literal) -> Self {
         Ast::Literal(item)
+    }
+}
+
+impl From<Variable> for Ast {
+    fn from(v: Variable) -> Ast {
+        Ast::Variable(v)
+    }
+}
+
+impl From<Definition> for Ast {
+    fn from(definition: Definition) -> Ast {
+        Ast::Definition(definition)
+    }
+}
+
+impl From<Lambda> for Ast {
+    fn from(f: Lambda) -> Ast {
+        Ast::Lambda(f)
+    }
+}
+
+impl From<FunctionCall> for Ast {
+    fn from(f: FunctionCall) -> Ast {
+        Ast::FunctionCall(f)
+    }
+}
+
+impl From<Sequence> for Ast {
+    fn from(v: Sequence) -> Ast {
+        Ast::Sequence(v)
+    }
+}
+
+impl From<Extern> for Ast {
+    fn from(v: Extern) -> Ast {
+        Ast::Extern(v)
     }
 }
 

@@ -15,12 +15,12 @@ impl ModuleBuilder {
         result
     }
 
-    pub fn define(&mut self, name: &str, expr: Ast) -> Ast {
-        Ast::Definition(Definition {
+    pub fn define(&mut self, name: &str, expr: Ast) -> Definition {
+        Definition {
             variable: self.next_id(),
             name: Some(name.to_string()),
             expr: expr.into(),
-        })
+        }
     }
 
     pub fn u64(&self, u: u64) -> Ast {
@@ -29,17 +29,6 @@ impl ModuleBuilder {
 
     pub fn add(&self, a: Ast, b: Ast) -> Ast {
         Builtin::AddInt(a.into(), b.into()).into()
-            /*
-        match (&a, &b) {
-            (Ast::Literal(Literal::Integer(_, _)), Ast::Literal(Literal::Integer(_, _))) => {
-                Builtin::AddInt(a.into(), b.into()).into()
-            }
-            _ => {
-                println!("{:?}", (&a, &b));
-                unimplemented!()
-            }
-        }
-        */
     }
 
     pub fn apply(&self, f: Ast, args: Vec<Ast>) -> Ast {
@@ -57,6 +46,17 @@ impl ModuleBuilder {
                 self.apply(*def.expr, args)
             }
 
+            /*
+            Ast::Variable(var) => {
+                //let function_type = lambda.typ.clone();
+                Ast::FunctionCall(FunctionCall {
+                    function: Ast::Variable(var).into(),
+                    args,
+                    function_type: FunctionType::
+                })
+            }
+            */
+
             _ => {
                 println!("{:?}", (&f));
                 unreachable!()
@@ -64,7 +64,7 @@ impl ModuleBuilder {
         }
     }
 
-    pub fn main(&mut self, body: Ast) -> Ast {
+    pub fn main(&mut self, body: Ast) -> Definition {
         self.function("main", body)
     }
 
@@ -72,7 +72,7 @@ impl ModuleBuilder {
         Ast::Sequence(Sequence { statements: exprs })
     }
 
-    pub fn function(&mut self, name: &str, body: Ast) -> Ast {
+    pub fn function(&mut self, name: &str, body: Ast) -> Definition {
         let return_type = Type::Primitive(PrimitiveType::Integer(IntegerKind::I64));
 
         let typ = FunctionType {

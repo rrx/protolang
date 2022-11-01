@@ -385,7 +385,7 @@ mod tests {
         });
 
         println!("{:?}", &v);
-        llvm::compile_and_run(&String::from("test"), v, &args).unwrap();
+        //llvm::compile_and_run(&String::from("test"), v, &args).unwrap();
     }
 
     #[test]

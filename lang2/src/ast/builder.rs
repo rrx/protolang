@@ -111,16 +111,16 @@ impl AstBuilder {
         AstNode::new(Ast::Block(exprs), ty)
     }
 
-    pub fn func(&mut self, name: &str, sig: Vec<Type>, body: AstNode) -> AstNode {
-        let mut params = sig.iter().map(|p| {
-            AstNodeInner {
-                value: Variable::new("x".into()).into(),
-                ty: p.clone(),
-            }.into()
-        }).collect::<Vec<_>>();
-        let ty = Type::Func(sig);
+    pub fn func(&mut self, sig: Vec<Type>, body: AstNode) -> AstNode {
+        //let names = sig.iter().map(|p| {
+            //AstNodeInner {
+                //value: Variable::new("x".into()).into(),
+                //ty: p.clone(),
+            //}.into()
+        //}).collect::<Vec<_>>();
+        let ty = Type::Func(sig.clone());
         AstNode::new(
-            Ast::Function(body.into(), params),
+            Ast::Function(body.into(), vec![], sig),
             ty)
     }
 
@@ -210,7 +210,7 @@ impl AstBuilder {
                         self.equations.push(logic::Expr::OneOf(ty, possible));
                     }
 
-                    Ast::Function(_body, _args) => {
+                    Ast::Function(_body, _args, _sig) => {
                         // Already resolved
                         // TODO:
                         // args are unbound
@@ -221,7 +221,7 @@ impl AstBuilder {
                 (ast.clone(), env)
             }
 
-            Ast::Function(body, args) => {
+            Ast::Function(body, args, sig) => {
                 let mut local_env = env.clone();
                 for arg in args {
                     //local_env.define(
