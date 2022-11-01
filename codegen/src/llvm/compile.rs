@@ -54,7 +54,6 @@ pub struct CompileArgs {
     pub verbose: bool,
 }
 
-
 impl Default for CompileArgs {
     fn default() -> Self {
         Self {

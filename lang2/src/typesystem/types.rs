@@ -1,7 +1,7 @@
-use crate::env::{EnvLayers, LayerKey};
 use crate::ast::AstNode;
-use std::fmt;
+use crate::env::{EnvLayers, LayerKey};
 use logic::{DefinitionId, TypeSignature};
+use std::fmt;
 
 pub type Environment<N> = EnvLayers<str, N>;
 impl LayerKey for String {}
@@ -22,7 +22,7 @@ impl TypeSystemContext {
 #[derive(Clone)]
 pub struct TypeNodePair {
     pub ty: Type,
-    pub node: AstNode
+    pub node: AstNode,
 }
 impl TypeNodePair {
     pub fn new(ty: Type, node: AstNode) -> Self {
@@ -51,13 +51,16 @@ impl TypeSignature<TypeNodePair> for TypeNodePair {
         self.ty.unknown()
     }
     fn children(&self) -> Vec<TypeNodePair> {
-        self.ty.children().into_iter().map(|s| TypeNodePair::new(s, self.node.clone())).collect()
+        self.ty
+            .children()
+            .into_iter()
+            .map(|s| TypeNodePair::new(s, self.node.clone()))
+            .collect()
     }
     fn var(_u: DefinitionId) -> TypeNodePair {
         unimplemented!()
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
@@ -105,13 +108,13 @@ impl TypeSignature<Type> for Type {
     fn unknown(&self) -> Option<DefinitionId> {
         match self {
             Type::Var(id) => Some(*id),
-            _ => None
+            _ => None,
         }
     }
     fn children(&self) -> Vec<Type> {
         match self {
             Type::Func(args) => args.clone(),
-            _ => vec![]
+            _ => vec![],
         }
     }
     fn var(u: DefinitionId) -> Type {

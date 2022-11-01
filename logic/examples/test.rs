@@ -9,7 +9,7 @@ enum Type {
     Int,
     Float,
     Seq(Vec<Type>),
-    Var(usize)
+    Var(usize),
 }
 impl Type {
     fn unknown(&self) -> Option<usize> {
@@ -32,12 +32,7 @@ impl UnifyKey for IntKey {
     fn tag() -> &'static str {
         "IntKey"
     }
-    fn order_roots(
-        a: IntKey,
-        a_rank: &Type,
-        b: IntKey,
-        b_rank: &Type,
-    ) -> Option<(IntKey, IntKey)> {
+    fn order_roots(a: IntKey, a_rank: &Type, b: IntKey, b_rank: &Type) -> Option<(IntKey, IntKey)> {
         //println!("{:?} vs {:?}", a_rank, b_rank);
         if a_rank > b_rank {
             Some((a, b))
@@ -50,7 +45,7 @@ impl UnifyKey for IntKey {
 }
 
 enum UError {
-    Bad
+    Bad,
 }
 
 impl UnifyValue for Type {
@@ -60,44 +55,44 @@ impl UnifyValue for Type {
         let id1 = value1.unknown();
         let id2 = value2.unknown();
         match (id1, id2) {
-            (None, None) => {
-                match (value1, value2) {
-                    (Type::Seq(c1), Type::Seq(c2)) => {
-                        if c1.len() != c2.len() {
-                            Err(UError::Bad)
-                        } else {
-                            let result = c1.iter().zip(c2.iter()).map_while(|(a, b)| {
-                                match Self::unify_values(a, b) {
-                                    Ok(s) => Some(s),
-                                    Err(_) => None
-                                }
-                            }).collect::<Vec<_>>();
-                            if result.len() == c1.len() {
-                                Ok(Type::Seq(result))
-                            } else {
-                                Err(UError::Bad)
-                            }
-                        }
-                    }
-                    _ => {
-                        if value1 == value2 {
-                            Ok(value1.clone())
+            (None, None) => match (value1, value2) {
+                (Type::Seq(c1), Type::Seq(c2)) => {
+                    if c1.len() != c2.len() {
+                        Err(UError::Bad)
+                    } else {
+                        let result = c1
+                            .iter()
+                            .zip(c2.iter())
+                            .map_while(|(a, b)| match Self::unify_values(a, b) {
+                                Ok(s) => Some(s),
+                                Err(_) => None,
+                            })
+                            .collect::<Vec<_>>();
+                        if result.len() == c1.len() {
+                            Ok(Type::Seq(result))
                         } else {
                             Err(UError::Bad)
                         }
                     }
                 }
-            }
+                _ => {
+                    if value1 == value2 {
+                        Ok(value1.clone())
+                    } else {
+                        Err(UError::Bad)
+                    }
+                }
+            },
             (Some(_), None) => Ok(value2.clone()),
             (None, Some(_)) => Ok(value1.clone()),
-            (Some(_), Some(_)) => {
-                Ok(value1.clone())
-            }
+            (Some(_), Some(_)) => Ok(value1.clone()),
         }
     }
 }
 
-fn test<S: Clone + Default + UnificationStore<Key=IntKey, Value = <IntKey as UnifyKey>::Value>>() {
+fn test<
+    S: Clone + Default + UnificationStore<Key = IntKey, Value = <IntKey as UnifyKey>::Value>,
+>() {
     let mut ut: UnificationTable<S> = UnificationTable::new();
     let start = ut.snapshot();
     let k1 = ut.new_key(Type::Var(1));
@@ -119,7 +114,7 @@ fn test<S: Clone + Default + UnificationStore<Key=IntKey, Value = <IntKey as Uni
     //ut.union(k1, k2);
     println!("{:?}", ut.vars_since_snapshot(&start));
     //for k in ut.vars_since_snapshot(&start)) {
-        //println!("{} => {:?}", k, ut.probe_value(k));
+    //println!("{} => {:?}", k, ut.probe_value(k));
     //}
     println!("{:?}", ut.probe_value(k1));
     println!("{:?}", ut.probe_value(k6));
@@ -131,4 +126,3 @@ fn test<S: Clone + Default + UnificationStore<Key=IntKey, Value = <IntKey as Uni
 fn main() {
     test::<InPlace<IntKey>>();
 }
-

@@ -19,10 +19,10 @@ mod tests {
         let add2 = b.add(four, add1.clone());
 
         let block1 = b.seq(vec![add1]);
-        let f1 = b.function("f1", block1.clone()); 
+        let f1 = b.function("f1", block1.clone());
         let f1_var: hir::Variable = f1.clone().into();
 
-        let f2 = b.function("f2", block1); 
+        let f2 = b.function("f2", block1);
         let f2_var: hir::Variable = f2.clone().into();
 
         let call = b.apply(f1_var.into(), vec![]);
@@ -47,4 +47,3 @@ mod tests {
     }
     */
 }
-

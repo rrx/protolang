@@ -28,14 +28,14 @@ pub use compile::*;
 use generator::*;
 use inkwell::context::Context;
 
-use crate::lower::Lower;
 use crate::hir::Ast;
+use crate::lower::Lower;
 
 use std::error::Error;
 use std::rc::Rc;
 
 pub struct LLVMBackendContext {
-    context: Context
+    context: Context,
 }
 impl LLVMBackendContext {
     pub fn new() -> Self {
@@ -50,7 +50,7 @@ impl LLVMBackendContext {
 
 pub struct LLVMBackend<'a> {
     context: &'a LLVMBackendContext,
-    lower: Lower<'a>
+    lower: Lower<'a>,
 }
 
 impl<'a> LLVMBackend<'a> {
@@ -72,8 +72,8 @@ impl<'a> LLVMBackend<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lower::{self, Definitions};
     use crate::hir::*;
+    use crate::lower::{self, Definitions};
 
     #[test]
     fn test_recursive() {
@@ -81,36 +81,32 @@ mod tests {
 
         // single parameter function type
         let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
-        
+
         // variable for the function
         let xv0 = defs.named_variable("v0");
         // variable for the single parameter in the function
         let param = defs.new_variable();
-        
+
         // call the function that we've created and then increment
         let call = FunctionCall::new(xv0.clone().into(), vec![param.clone().into()], typ.clone());
         let call_and_add = lower::add(Ast::i64(1), call.clone().into());
-        
+
         // increment param as the body of the function
         let condition = lower::lt(param.clone().into(), Ast::i64(10));
-        let then: Ast = call_and_add.into();//lower::add(Ast::i64(1), param.clone().into());
+        let then: Ast = call_and_add.into();
         let otherwise = Ast::i64(1000);
         let result_type = Type::i64();
-        let branch = If {
-            condition: condition.into(),
-            then: then.into(),
-            otherwise: Some(otherwise.into()),
-            result_type
-        };
+        let branch =
+            If { condition: condition.into(), then: then.into(), otherwise: Some(otherwise.into()), result_type };
 
         // create a function to associate with the variable
         let f = Lambda::new(vec![param.clone()], branch.into(), typ.clone());
 
         // define the function using the definition id
         let xd0 = Definition::variable(xv0.clone(), f.into());
-        
+
         // call the recursive function
-        let call = FunctionCall::new(xv0.clone().into(), vec![Ast::i64(0)], typ.clone());
+        //let call = FunctionCall::new(xv0.clone().into(), vec![Ast::i64(0)], typ.clone());
 
         // main function
         let extern1 = Extern::new("v0".to_string(), typ.clone().into());
@@ -127,6 +123,7 @@ mod tests {
         let mut b = context.backend();
         b.module("test", Sequence::new(vec![xd0.into()]).into()).unwrap();
         b.module("main", Sequence::new(vec![df_main.into()]).into()).unwrap();
-        b.run().unwrap();
+        let ret = b.run().unwrap();
+        assert_eq!(1000, ret);
     }
 }

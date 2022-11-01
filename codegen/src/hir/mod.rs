@@ -11,9 +11,9 @@
 //mod decision_tree_monomorphisation;
 //mod definitions;
 //mod monomorphisation;
+mod module;
 mod printer;
 mod types;
-mod module;
 
 pub use module::ModuleBuilder;
 
@@ -78,11 +78,7 @@ pub struct Lambda {
 }
 impl Lambda {
     pub fn new(args: Vec<Variable>, body: Ast, typ: FunctionType) -> Self {
-        Self {
-            args,
-            body: Box::new(body),
-            typ: typ.clone()
-        }
+        Self { args, body: Box::new(body), typ: typ.clone() }
     }
 }
 
@@ -96,14 +92,8 @@ pub struct FunctionCall {
 impl FunctionCall {
     pub fn new(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Self {
         match f {
-            Ast::Extern(_) | Ast::Variable(_) => {
-                Self {
-                    function: Box::new(f.into()),
-                    args,
-                    function_type: typ,
-                }
-            }
-            _ => unimplemented!()
+            Ast::Extern(_) | Ast::Variable(_) => Self { function: Box::new(f.into()), args, function_type: typ },
+            _ => unimplemented!(),
         }
     }
 }
@@ -119,28 +109,16 @@ pub struct Definition {
 }
 impl Definition {
     pub fn named(definition_id: DefinitionId, name: &str, expr: Ast) -> Self {
-        Self {
-            variable: definition_id,
-            name: Some(name.to_string()),
-            expr: expr.into()
-        }
+        Self { variable: definition_id, name: Some(name.to_string()), expr: expr.into() }
     }
 
     pub fn unamed(definition_id: DefinitionId, expr: Ast) -> Self {
-        Self {
-            variable: definition_id,
-            name: None,
-            expr: expr.into()
-        }
+        Self { variable: definition_id, name: None, expr: expr.into() }
     }
 
     /// define a variable
     pub fn variable(var: Variable, expr: Ast) -> Self {
-        Self {
-            variable: var.definition_id,
-            name: var.name.clone(),
-            expr: expr.into()
-        }
+        Self { variable: var.definition_id, name: var.name.clone(), expr: expr.into() }
     }
 }
 
@@ -335,9 +313,7 @@ pub enum Ast {
 
 impl Ast {
     pub fn i64(u: i64) -> Self {
-        unsafe {
-            Self::Literal(Literal::Integer(std::mem::transmute(u), IntegerKind::I64))
-        }
+        unsafe { Self::Literal(Literal::Integer(std::mem::transmute(u), IntegerKind::I64)) }
     }
     pub fn u64(u: u64) -> Self {
         Self::Literal(Literal::Integer(u, IntegerKind::U64))
@@ -469,5 +445,3 @@ impl_display!(MemberAccess);
 impl_display!(Tuple);
 impl_display!(ReinterpretCast);
 impl_display!(Builtin);
-
-

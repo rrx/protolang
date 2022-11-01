@@ -1,11 +1,11 @@
 use crate::ast::*;
-use codegen::{hir};
-use std::error::Error;
+use crate::typesystem::Type;
 use crate::visitor::*;
-use crate::typesystem::{Type};
+use codegen::hir;
+use std::error::Error;
 
 struct Builder {
-    next_id: usize
+    next_id: usize,
 }
 
 impl Visitor<()> for Builder {
@@ -17,7 +17,7 @@ impl Visitor<()> for Builder {
 fn convert_type(ty: &Type) -> hir::Type {
     match ty {
         Type::Int => hir::Type::i64(),
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
@@ -34,21 +34,13 @@ impl Builder {
 
     fn lower(&mut self, ast: &AstNode) -> Result<hir::Ast, Box<dyn Error>> {
         match &ast.borrow().value {
-            Ast::Literal(Literal::Bool(b)) => {
-                Ok(hir::Ast::bool(*b))
-            }
+            Ast::Literal(Literal::Bool(b)) => Ok(hir::Ast::bool(*b)),
 
-            Ast::Literal(Literal::Int(u)) => {
-                Ok(hir::Ast::u64(*u))
-            }
+            Ast::Literal(Literal::Int(u)) => Ok(hir::Ast::u64(*u)),
 
-            Ast::Literal(Literal::Float(f)) => {
-                Ok(hir::Ast::f64(*f))
-            }
+            Ast::Literal(Literal::Float(f)) => Ok(hir::Ast::f64(*f)),
 
-            Ast::Literal(Literal::String(s)) => {
-                Ok(hir::Ast::string(s.clone()))
-            }
+            Ast::Literal(Literal::String(s)) => Ok(hir::Ast::string(s.clone())),
 
             Ast::Block(exprs) => {
                 let mut lowered = vec![];
@@ -64,7 +56,7 @@ impl Builder {
                 let def = hir::Definition {
                     variable: hir::DefinitionId(0),
                     name: Some(name.clone()),
-                    expr: rhs.into()
+                    expr: rhs.into(),
                 };
                 Ok(hir::Ast::Definition(def))
             }
@@ -72,45 +64,47 @@ impl Builder {
             Ast::Builtin(name, args) => {
                 let lhs = args.get(0).unwrap();
                 let rhs = args.get(1).unwrap();
-                Ok(hir::Ast::Builtin(hir::Builtin::AddInt(self.lower(&lhs)?.into(), self.lower(&rhs)?.into())))
+                Ok(hir::Ast::Builtin(hir::Builtin::AddInt(
+                    self.lower(&lhs)?.into(),
+                    self.lower(&rhs)?.into(),
+                )))
             }
 
             Ast::Function(body, params, sig) => {
                 let body = self.lower(body)?;
 
-                let params = params.iter().map(|a| {
-                    hir::Variable {
+                let params = params
+                    .iter()
+                    .map(|a| hir::Variable {
                         definition: None,
                         definition_id: self.next_definition(),
-                        name: None
-                    }
-                }).collect::<Vec<_>>();
+                        name: None,
+                    })
+                    .collect::<Vec<_>>();
 
                 let parameters = vec![];
 
-                let return_type = convert_type(sig.get(sig.len()-1).unwrap());
+                let return_type = convert_type(sig.get(sig.len() - 1).unwrap());
 
                 let f_type = hir::FunctionType {
                     parameters,
                     return_type: return_type.into(),
                     is_varargs: false,
-                    export: true
+                    export: true,
                 };
 
                 Ok(hir::Ast::Lambda(hir::Lambda {
                     args: params,
                     body: body.into(),
-                    typ: f_type
+                    typ: f_type,
                 }))
             }
 
             Ast::Apply(f, args) => {
                 println!("apply {:?}", &f);
                 let bound = match &f.borrow().value {
-                    Ast::Variable(v) => {
-                        v.clone().bound.unwrap()
-                    }
-                    _ => unreachable!()
+                    Ast::Variable(v) => v.clone().bound.unwrap(),
+                    _ => unreachable!(),
                 };
 
                 let value = &bound.borrow().value;
@@ -118,18 +112,22 @@ impl Builder {
                     Ast::Builtin(name, _args) => {
                         let lhs = args.get(0).unwrap();
                         let rhs = args.get(1).unwrap();
-                        Ok(hir::Ast::Builtin(hir::Builtin::AddInt(self.lower(&lhs)?.into(), self.lower(&rhs)?.into())))
+                        Ok(hir::Ast::Builtin(hir::Builtin::AddInt(
+                            self.lower(&lhs)?.into(),
+                            self.lower(&rhs)?.into(),
+                        )))
                     }
                     Ast::Function(body, args, sig) => {
                         let body = self.lower(body)?;
 
-                        let args = args.iter().map(|a| {
-                            hir::Variable {
+                        let args = args
+                            .iter()
+                            .map(|a| hir::Variable {
                                 definition: None,
                                 definition_id: hir::DefinitionId(0),
-                                name: None
-                            }
-                        }).collect::<Vec<_>>();
+                                name: None,
+                            })
+                            .collect::<Vec<_>>();
 
                         let parameters = vec![];
                         let return_type = hir::Type::Primitive(hir::PrimitiveType::Unit);
@@ -138,13 +136,13 @@ impl Builder {
                             parameters,
                             return_type: return_type.into(),
                             is_varargs: false,
-                            export: true
+                            export: true,
                         };
 
                         Ok(hir::Ast::Lambda(hir::Lambda {
                             args,
                             body: body.into(),
-                            typ: f_type
+                            typ: f_type,
                         }))
                     }
                     _ => {
@@ -165,14 +163,17 @@ impl Builder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codegen::{
+        llvm::LLVMBackend,
+        llvm::LLVMBackendContext,
+        lower::{Context, Lower},
+    };
     use log::debug;
-    use test_log::test;
     use logic::UnifyResult;
-    use codegen::{llvm::LLVMBackend, llvm::LLVMBackendContext, lower::{Lower, Context}};
+    use test_log::test;
 
     #[test]
     fn lower_binary() {
-
         let mut a = AstBuilder::default();
         let one = a.int(1);
         let two = a.int(2);
@@ -205,19 +206,19 @@ mod tests {
         let (res, ast1, env) = a.resolve(main, env.clone());
         println!("{}", env);
         //println!("{}", &ast1);
-        assert_eq!(res, UnifyResult::Ok); 
+        assert_eq!(res, UnifyResult::Ok);
 
         /*
         let (res, ast2, env) = a.resolve(f1, env.clone());
         println!("{}", env);
         println!("{}", &ast2);
-        assert_eq!(res, UnifyResult::Ok); 
+        assert_eq!(res, UnifyResult::Ok);
         */
 
         let (res, ast3, env) = a.resolve(df2, env.clone());
         println!("{}", env);
         //println!("{}", &ast3);
-        assert_eq!(res, UnifyResult::Ok); 
+        assert_eq!(res, UnifyResult::Ok);
 
         // lower to codegen ir
         let mut b = Builder::new();

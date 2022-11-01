@@ -72,7 +72,7 @@ fn visit_children<N>(e: AstNode, f: &mut impl Visitor<N>, n: &mut N) -> VResult 
                 visit(arg.clone(), f, n)?;
             }
         }
-        _ => unimplemented!()
+        _ => unimplemented!(),
     };
     Ok(())
 }

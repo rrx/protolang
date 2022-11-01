@@ -71,7 +71,7 @@ pub struct EnvLayersIterator<'a, K, V> {
 
 impl<K: LayerKey, V: LayerValue> fmt::Display for EnvLayers<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (k,v) in self.iter() {
+        for (k, v) in self.iter() {
             write!(f, "{}={}\n", k, v)?;
         }
         Ok(())
@@ -80,7 +80,7 @@ impl<K: LayerKey, V: LayerValue> fmt::Display for EnvLayers<K, V> {
 
 impl<K: LayerKey, V: LayerValue> fmt::Debug for EnvLayers<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (k,v) in self.iter() {
+        for (k, v) in self.iter() {
             write!(f, "{}={:?}\n", k, v)?;
         }
         Ok(())

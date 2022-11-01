@@ -49,16 +49,10 @@ pub struct FunctionType {
 }
 impl FunctionType {
     pub fn export(mut args: Vec<Type>) -> Self {
-        let ret = args.split_off(args.len()-1).pop().unwrap();
-        Self {
-            parameters: args,
-            return_type: ret.into(),
-            is_varargs: false,
-            export: true,
-        }
+        let ret = args.split_off(args.len() - 1).pop().unwrap();
+        Self { parameters: args, return_type: ret.into(), is_varargs: false, export: true }
     }
 }
-
 
 /// A HIR type representation.
 /// Removes all references to generics and user-defined types.
@@ -81,9 +75,9 @@ impl From<FunctionType> for Type {
 
 impl Type {
     pub fn i64() -> Self {
-      Self::Primitive(PrimitiveType::Integer(IntegerKind::I64))
+        Self::Primitive(PrimitiveType::Integer(IntegerKind::I64))
     }
-    
+
     pub fn into_function(self) -> Option<FunctionType> {
         match self {
             Type::Function(f) => Some(f),

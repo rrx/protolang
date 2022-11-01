@@ -6,7 +6,7 @@ use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 #[derive(Default)]
 pub struct AstBuilder {
     pub state: TypeSystemContext,
-    pub equations: Vec<logic::Expr<TypeNodePair>>
+    pub equations: Vec<logic::Expr<TypeNodePair>>,
 }
 
 impl visitor::Visitor<SymbolTable<TypeNodePair>> for AstBuilder {
@@ -38,10 +38,10 @@ impl visitor::Visitor<SymbolTable<TypeNodePair>> for AstBuilder {
                                 None
                             }
                         }
-                        _ => None
+                        _ => None,
                     }
                 }
-                _ => None
+                _ => None,
             }
         };
 
@@ -49,9 +49,7 @@ impl visitor::Visitor<SymbolTable<TypeNodePair>> for AstBuilder {
             op.replace(AstNodeInner::new(Ast::Variable(v), ty));
         }
 
-        let is_unknown = {
-            e.borrow().ty.is_unknown_recursive()
-        };
+        let is_unknown = { e.borrow().ty.is_unknown_recursive() };
 
         // update the types in the AST
         if is_unknown {
@@ -113,15 +111,13 @@ impl AstBuilder {
 
     pub fn func(&mut self, sig: Vec<Type>, body: AstNode) -> AstNode {
         //let names = sig.iter().map(|p| {
-            //AstNodeInner {
-                //value: Variable::new("x".into()).into(),
-                //ty: p.clone(),
-            //}.into()
+        //AstNodeInner {
+        //value: Variable::new("x".into()).into(),
+        //ty: p.clone(),
+        //}.into()
         //}).collect::<Vec<_>>();
         let ty = Type::Func(sig.clone());
-        AstNode::new(
-            Ast::Function(body.into(), vec![], sig),
-            ty)
+        AstNode::new(Ast::Function(body.into(), vec![], sig), ty)
     }
 
     pub fn apply(&mut self, f: AstNode, args: Vec<AstNode>) -> AstNode {
@@ -266,17 +262,24 @@ impl AstBuilder {
                 }
             },
             Type::Func(sig) => {
-                let new_sig = sig.into_iter().map(|v| {
-                    let p = self.substitute(TypeNodePair::new(v, p.node.clone()), subst);
-                    p.ty
-                }).collect();
+                let new_sig = sig
+                    .into_iter()
+                    .map(|v| {
+                        let p = self.substitute(TypeNodePair::new(v, p.node.clone()), subst);
+                        p.ty
+                    })
+                    .collect();
                 TypeNodePair::new(Type::Func(new_sig), p.node)
             }
             _ => p.clone(),
         }
     }
 
-    pub fn resolve(&mut self, ast: AstNode, env: Environment) -> (UnifyResult, AstNode, Environment) {
+    pub fn resolve(
+        &mut self,
+        ast: AstNode,
+        env: Environment,
+    ) -> (UnifyResult, AstNode, Environment) {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
         ast.try_borrow_mut().unwrap();
@@ -328,7 +331,7 @@ mod tests {
         println!("b = {:?}", env.resolve(&"b".into()));
         println!("c = {:?}", env.resolve(&"c".into()));
 
-        assert_eq!(res, UnifyResult::Ok); 
+        assert_eq!(res, UnifyResult::Ok);
 
         // a and b should not be visible from the outer lexical scope
         // c should be visible though
@@ -349,7 +352,7 @@ mod tests {
         let (res, ast, env) = b.resolve(ast, env.clone());
         println!("{}", env);
         println!("{}", &ast);
-        assert_eq!(res, UnifyResult::Ok); 
+        assert_eq!(res, UnifyResult::Ok);
 
         let call = env.resolve(&"f".into()).unwrap();
         println!("call = {:?}", call);
@@ -362,11 +365,11 @@ mod tests {
                         // the variable for the operation should be bound
                         assert!(s.bound.is_some());
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
                 println!("op.type = {:?}", op.borrow().ty);
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
 
         // make sure type is correct
@@ -377,14 +380,14 @@ mod tests {
     fn name_resolve() {
         let mut b = AstBuilder::default();
         let mut env = Environment::default();
-        env.define("a".into(), b.int(1)); 
+        env.define("a".into(), b.int(1));
         let v = b.var("a");
         println!("AST:{}", &v);
         match &v.borrow().value {
             Ast::Variable(v) => {
                 assert_eq!(v.bound, None);
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
         let (ast, env) = b.name_resolve(v, env);
         println!("ENV:{}", env);
@@ -392,15 +395,12 @@ mod tests {
 
         let inner = &ast.borrow();
         let ref_node = match &inner.value {
-            Ast::Variable(v) => {
-                v.bound.clone()
-            }
-            _ => unreachable!()
+            Ast::Variable(v) => v.bound.clone(),
+            _ => unreachable!(),
         };
 
         // make sure the types match
         assert_eq!(ref_node.unwrap().borrow().ty, Type::Int);
         assert_eq!(inner.ty, Type::Int);
-
     }
 }
