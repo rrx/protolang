@@ -87,20 +87,30 @@ mod tests {
         // variable for the single parameter in the function
         let param = defs.new_variable();
         
-        // increment param as the body of the function
-        let ast = lower::add(Ast::i64(1), param.clone().into());
+        // call the function that we've created and then increment
+        let call = FunctionCall::new(xv0.clone().into(), vec![param.clone().into()], typ.clone());
+        let call_and_add = lower::add(Ast::i64(1), call.clone().into());
         
-        // call the function that we've created
-        let call = FunctionCall::new(xv0.clone().into(), vec![ast.into()], typ.clone());
+        // increment param as the body of the function
+        let condition = lower::lt(param.clone().into(), Ast::i64(10));
+        let then: Ast = call_and_add.into();//lower::add(Ast::i64(1), param.clone().into());
+        let otherwise = Ast::i64(1000);
+        let result_type = Type::i64();
+        let branch = If {
+            condition: condition.into(),
+            then: then.into(),
+            otherwise: Some(otherwise.into()),
+            result_type
+        };
 
         // create a function to associate with the variable
-        let f = Lambda::new(vec![param.clone()], call.into(), typ.clone());
+        let f = Lambda::new(vec![param.clone()], branch.into(), typ.clone());
 
         // define the function using the definition id
         let xd0 = Definition::variable(xv0.clone(), f.into());
         
         // call the recursive function
-        let call = FunctionCall::new(xv0.clone().into(), vec![Ast::i64(1)], typ.clone());
+        let call = FunctionCall::new(xv0.clone().into(), vec![Ast::i64(0)], typ.clone());
 
         // main function
         let extern1 = Extern::new("v0".to_string(), typ.clone().into());

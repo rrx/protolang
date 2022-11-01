@@ -1,4 +1,4 @@
-use crate::{hir, llvm::generator::{CodeGen, Generator}};
+use crate::{hir::*, llvm::generator::{CodeGen, Generator}};
 use std::error::Error;
 use inkwell::module::{Linkage, Module};
 pub use inkwell::context::Context;
@@ -16,9 +16,9 @@ impl Definitions {
     pub fn new() -> Self {
         Self { next_id: 0 }
     }
-    pub fn new_definition(&mut self, name: &str, ast: hir::Ast) -> hir::Definition { 
-        let d = hir::Definition {
-            variable: hir::DefinitionId(self.next_id),
+    pub fn new_definition(&mut self, name: &str, ast: Ast) -> Definition { 
+        let d = Definition {
+            variable: DefinitionId(self.next_id),
             name: Some(name.to_string()),
             expr: ast.into()
         };
@@ -26,20 +26,20 @@ impl Definitions {
         d
     }
 
-    pub fn named_variable(&mut self, name: &str) -> hir::Variable {
-        let v = hir::Variable {
+    pub fn named_variable(&mut self, name: &str) -> Variable {
+        let v = Variable {
             definition: None,
-            definition_id: hir::DefinitionId(self.next_id),
+            definition_id: DefinitionId(self.next_id),
             name: Some(name.to_string()),
         };
         self.next_id += 1;
         v
     }
 
-    pub fn new_variable(&mut self) -> hir::Variable {
-        let v = hir::Variable {
+    pub fn new_variable(&mut self) -> Variable {
+        let v = Variable {
             definition: None,
-            definition_id: hir::DefinitionId(self.next_id),
+            definition_id: DefinitionId(self.next_id),
             name: None,
         };
         self.next_id += 1;
@@ -47,9 +47,14 @@ impl Definitions {
     }
 }
 
-pub fn add(a: hir::Ast, b: hir::Ast) -> hir::Ast {
-    hir::Builtin::AddInt(a.into(), b.into()).into()
+pub fn add(a: Ast, b: Ast) -> Ast {
+    Builtin::AddInt(a.into(), b.into()).into()
 }
+
+pub fn lt(a: Ast, b: Ast) -> Ast {
+    Builtin::LessSigned(a.into(), b.into()).into()
+}
+
 
 pub struct Lower<'a> {
     modules: ModuleMap<'a>
@@ -59,7 +64,7 @@ impl<'a> Lower<'a> {
     pub fn new() -> Self {
         Self { modules: ModuleMap::new() }
     }
-    pub fn module(&mut self, context: &'a Context, name: &str, ast: hir::Ast) -> Result<(), Box<dyn Error>> {
+    pub fn module(&mut self, context: &'a Context, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
         let mut module = context.create_module(name);
 
         let mut codegen = Generator {

@@ -404,6 +404,12 @@ impl From<Extern> for Ast {
     }
 }
 
+impl From<If> for Ast {
+    fn from(item: If) -> Ast {
+        Ast::If(item)
+    }
+}
+
 impl std::fmt::Display for DefinitionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "v{}", self.0)

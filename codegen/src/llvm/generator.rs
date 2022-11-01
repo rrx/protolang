@@ -677,6 +677,7 @@ mod tests {
     use crate::lower::{self, Definitions};
     use crate::hir::*;
 
+    /*
     #[test]
     fn codegen_function3() {
         let context = Context::create();
@@ -809,6 +810,7 @@ mod tests {
             //Ok(ret)
         }
     }
+*/
 
 }
 
