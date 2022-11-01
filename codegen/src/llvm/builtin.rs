@@ -167,7 +167,7 @@ fn eq_bool<'g>(a: IntValue<'g>, b: IntValue<'g>, generator: &mut Generator<'g>) 
 }
 
 fn deref_ptr<'g>(ptr: &Ast, typ: &Type, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
-    let ret = generator.convert_type(typ).ptr_type(AddressSpace::Generic);
+    let ret = Generator::convert_type(generator.context, typ).ptr_type(AddressSpace::Generic);
 
     let ptr = ptr.codegen(generator).into_pointer_value();
     let ptr = generator.builder.build_pointer_cast(ptr, ret, "bitcast");
@@ -180,7 +180,7 @@ fn deref_ptr<'g>(ptr: &Ast, typ: &Type, generator: &mut Generator<'g>) -> BasicV
 fn offset<'g>(ptr: &Ast, offset: IntValue<'g>, type_size: u32, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
     let ptr = ptr.codegen(generator).into_pointer_value();
     // expect ptr to be an i8* so we must multiply offset by type_size manually
-    let bits = generator.integer_bit_count(IntegerKind::Usz);
+    let bits = Generator::integer_bit_count(IntegerKind::Usz);
     let type_size = generator.context.custom_width_int_type(bits).const_int(type_size as u64, true);
 
     let offset = generator.builder.build_int_mul(offset, type_size, "offset_adjustment");
@@ -270,7 +270,7 @@ fn stack_alloc<'g>(x: &Ast, generator: &mut Generator<'g>) -> BasicValueEnum<'g>
     generator.builder.build_store(alloca, value);
 
     let ptr_type = &crate::hir::Type::Primitive(PrimitiveType::Pointer);
-    let opaque_ptr_type = generator.convert_type(ptr_type).into_pointer_type();
+    let opaque_ptr_type = Generator::convert_type(generator.context, ptr_type).into_pointer_type();
 
     generator.builder.build_pointer_cast(alloca, opaque_ptr_type, "bitcast").as_basic_value_enum()
 }

@@ -62,14 +62,14 @@ impl<'a> Lower<'a> {
         };
 
         ast.codegen(&mut codegen);
-        match module.verify() {
+        match codegen.module.verify() {
             Ok(_) => {
-                module.print_to_stderr();
-                self.modules.insert(name.to_string(), module);
+                codegen.module.print_to_stderr();
+                self.modules.insert(name.to_string(), codegen.module);
                 Ok(())
             }
             Err(error) => {
-                module.print_to_stderr();
+                codegen.module.print_to_stderr();
                 //eprintln!("{}", &error);
                 Err(error.into())
             }

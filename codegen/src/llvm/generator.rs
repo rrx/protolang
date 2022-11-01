@@ -83,15 +83,15 @@ fn to_size_level(optimization_argument: char) -> u32 {
 }
 
 impl<'g> Generator<'g> {
-    fn codegen_main(&mut self, ast: &hir::Ast, module: &'g Module<'g>) {
+    fn codegen_main(&mut self, ast: &hir::Ast) {
         let i32_type = self.context.i32_type();
         let main_type = i32_type.fn_type(&[], false);
-        let function = module.add_function("main", main_type, Some(Linkage::External));
+        let function = self.module.add_function("main", main_type, Some(Linkage::External));
         let basic_block = self.context.append_basic_block(function, "entry");
 
         self.builder.position_at_end(basic_block);
 
-        ast.codegen(self, module);
+        ast.codegen(self);
 
         let success = i32_type.const_int(0, true);
         self.build_return(success.into());
@@ -99,7 +99,7 @@ impl<'g> Generator<'g> {
 
     /// Optimize the current inkwell::Module.
     /// optimization_argument is one of '0', '1', '2', '3', 's', or 'z'
-    pub fn optimize(&self, optimization_argument: char, module: &Module) {
+    pub fn optimize(&self, optimization_argument: char) {
         let config = InitializationConfig::default();
         Target::initialize_native(&config).unwrap();
         let pass_manager_builder = PassManagerBuilder::create();
@@ -111,12 +111,12 @@ impl<'g> Generator<'g> {
 
         let pass_manager = PassManager::create(());
         pass_manager_builder.populate_module_pass_manager(&pass_manager);
-        pass_manager.run_on(module);
+        pass_manager.run_on(&self.module);
 
         // Do LTO optimizations afterward mosty for function inlining
         let link_time_optimizations = PassManager::create(());
         pass_manager_builder.populate_lto_pass_manager(&link_time_optimizations, false, true);
-        link_time_optimizations.run_on(&module);
+        link_time_optimizations.run_on(&self.module);
     }
 
     /// Output the current module to a file and link with gcc.
@@ -162,7 +162,7 @@ impl<'g> Generator<'g> {
     /// Create a new function with the given name and type and set
     /// its entry block as the current insert point. Returns the
     /// pointer to the function.
-    fn function(&mut self, name: &str, typ: &hir::FunctionType, module: &Module<'g>) -> (FunctionValue<'g>, BasicValueEnum<'g>) {
+    fn function(&mut self, name: &str, typ: &hir::FunctionType) -> (FunctionValue<'g>, BasicValueEnum<'g>) {
         let raw_function_type = Self::convert_function_type(self.context, typ).get_element_type().into_function_type();
 
         let mut linkage = Linkage::Internal;
@@ -170,7 +170,7 @@ impl<'g> Generator<'g> {
             linkage = Linkage::External;
         }
 
-        let function = module.add_function(name, raw_function_type, Some(linkage));
+        let function = self.module.add_function(name, raw_function_type, Some(linkage));
 
         let function_pointer = function.as_global_value().as_pointer_value().into();
 
@@ -271,10 +271,10 @@ impl<'g> Generator<'g> {
 
     /// Perform codegen for a string literal. This will create a global
     /// value for the string itself
-    fn cstring_value(&mut self, contents: &str, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn cstring_value(&mut self, contents: &str) -> BasicValueEnum<'g> {
         let literal = self.context.const_string(contents.as_bytes(), true);
 
-        let global = module.add_global(literal.get_type(), None, "string_literal");
+        let global = self.module.add_global(literal.get_type(), None, "string_literal");
 
         global.set_initializer(&literal);
 
@@ -311,10 +311,9 @@ impl<'g> Generator<'g> {
     /// check that the branch hasn't yet terminated before inserting a br after
     /// a then/else branch, pattern match, or looping construct.
     pub fn codegen_branch(
-        &mut self, branch: &hir::Ast, end_block: BasicBlock<'g>,
-        module: &Module<'g>
+        &mut self, branch: &hir::Ast, end_block: BasicBlock<'g>
     ) -> (BasicTypeEnum<'g>, Option<(BasicValueEnum<'g>, BasicBlock<'g>)>) {
-        let branch_value = branch.codegen(self, module);
+        let branch_value = branch.codegen(self);
 
         if self.current_instruction_is_block_terminator() {
             (branch_value.get_type(), None)
@@ -403,35 +402,35 @@ impl<'g> Generator<'g> {
 }
 
 pub trait CodeGen<'g> {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g>;
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g>;
 }
 
 impl<'g> CodeGen<'g> for hir::Ast {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        dispatch_on_hir!(self, CodeGen::codegen, generator, module)
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        dispatch_on_hir!(self, CodeGen::codegen, generator)
     }
 }
 
 impl<'g> CodeGen<'g> for hir::Literal {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
         match self {
             hir::Literal::Char(c) => generator.char_value(*c as u64),
             hir::Literal::Bool(b) => generator.bool_value(*b),
             hir::Literal::Float(f, kind) => generator.float_value(f64::from_bits(*f), *kind),
             hir::Literal::Integer(i, kind) => generator.integer_value(*i, *kind),
-            hir::Literal::CString(s) => generator.cstring_value(s, module),
+            hir::Literal::CString(s) => generator.cstring_value(s),
             hir::Literal::Unit => generator.unit_value(),
         }
     }
 }
 
 impl<'g> CodeGen<'g> for hir::Variable {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
         let mut value = match generator.definitions.get(&self.definition_id) {
             Some(definition) => *definition,
             None => {
                 match self.definition.as_ref() {
-                    Some(ast) => ast.codegen(generator, module),
+                    Some(ast) => ast.codegen(generator),
                     None => unreachable!("Definition for {} not yet compiled", self.definition_id),
                 };
                 generator.definitions[&self.definition_id]
@@ -447,11 +446,11 @@ impl<'g> CodeGen<'g> for hir::Variable {
 }
 
 impl<'g> CodeGen<'g> for hir::Lambda {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
         //let caller_block = generator.current_block();
         let name = generator.current_definition_name.take().unwrap_or_else(|| "lambda".into());
 
-        let (function, function_value) = generator.function(&name, &self.typ, module);
+        let (function, function_value) = generator.function(&name, &self.typ);
 
         // Bind each parameter node to the nth parameter of `function`
         for (i, parameter) in self.args.iter().enumerate() {
@@ -460,7 +459,7 @@ impl<'g> CodeGen<'g> for hir::Lambda {
             generator.definitions.insert(parameter.definition_id, value);
         }
 
-        let return_value = self.body.codegen(generator, module);
+        let return_value = self.body.codegen(generator);
 
         generator.build_return(return_value);
         //generator.builder.position_at_end(caller_block);
@@ -470,9 +469,9 @@ impl<'g> CodeGen<'g> for hir::Lambda {
 }
 
 impl<'g> CodeGen<'g> for hir::FunctionCall {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        let function = self.function.codegen(generator, module).into_pointer_value();
-        let args = fmap(&self.args, |arg| arg.codegen(generator, module).into());
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        let function = self.function.codegen(generator).into_pointer_value();
+        let args = fmap(&self.args, |arg| arg.codegen(generator).into());
 
         let function = CallableValue::try_from(function).unwrap();
         generator.builder.build_call(function, &args, "").try_as_basic_value().left().unwrap()
@@ -488,7 +487,7 @@ fn should_auto_deref(definition: &hir::Definition) -> bool {
 }
 
 impl<'g> CodeGen<'g> for hir::Definition {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
         // Cannot use HashMap::entry here, generator is borrowed mutably in self.expr.codegen
         #[allow(clippy::map_entry)]
         if !generator.definitions.contains_key(&self.variable) {
@@ -498,7 +497,7 @@ impl<'g> CodeGen<'g> for hir::Definition {
 
             generator.current_function_info = Some(self.variable);
             generator.current_definition_name = self.name.clone();
-            let value = self.expr.codegen(generator, module);
+            let value = self.expr.codegen(generator);
             generator.definitions.insert(self.variable, value);
         }
 
@@ -507,8 +506,8 @@ impl<'g> CodeGen<'g> for hir::Definition {
 }
 
 impl<'g> CodeGen<'g> for hir::If {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        let condition = self.condition.codegen(generator, module);
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        let condition = self.condition.codegen(generator);
 
         let current_function = generator.current_function();
         let then_block = generator.context.append_basic_block(current_function, "then");
@@ -520,10 +519,10 @@ impl<'g> CodeGen<'g> for hir::If {
             generator.builder.build_conditional_branch(condition.into_int_value(), then_block, else_block);
 
             generator.builder.position_at_end(then_block);
-            let (if_type, then_option) = generator.codegen_branch(&self.then, end_block, module);
+            let (if_type, then_option) = generator.codegen_branch(&self.then, end_block);
 
             generator.builder.position_at_end(else_block);
-            let (_, else_option) = generator.codegen_branch(otherwise, end_block, module);
+            let (_, else_option) = generator.codegen_branch(otherwise, end_block);
 
             // Create phi at the end of the if beforehand
             generator.builder.position_at_end(end_block);
@@ -551,7 +550,7 @@ impl<'g> CodeGen<'g> for hir::If {
             generator.builder.build_conditional_branch(condition.into_int_value(), then_block, end_block);
 
             generator.builder.position_at_end(then_block);
-            generator.codegen_branch(&self.then, end_block, module);
+            generator.codegen_branch(&self.then, end_block);
 
             generator.builder.position_at_end(end_block);
             generator.unit_value()
@@ -560,52 +559,52 @@ impl<'g> CodeGen<'g> for hir::If {
 }
 
 impl<'g> CodeGen<'g> for hir::Match {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        generator.codegen_tree(self, module)
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        generator.codegen_tree(self)
     }
 }
 
 impl<'g> CodeGen<'g> for hir::Return {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        let value = self.expression.codegen(generator, module);
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        let value = self.expression.codegen(generator);
         generator.builder.build_return(Some(&value));
         value
     }
 }
 
 impl<'g> CodeGen<'g> for hir::Sequence {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
         assert!(!self.statements.is_empty());
 
         for statement in self.statements.iter().take(self.statements.len() - 1) {
-            statement.codegen(generator, module);
+            statement.codegen(generator);
         }
 
-        self.statements.last().unwrap().codegen(generator, module)
+        self.statements.last().unwrap().codegen(generator)
     }
 }
 
 impl<'g> CodeGen<'g> for hir::Extern {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
         let name = &self.name;
         let llvm_type = Generator::convert_type(&generator.context, &self.typ);
 
         if matches!(&self.typ, hir::Type::Function(_)) {
             let function_type = llvm_type.into_pointer_type().get_element_type().into_function_type();
 
-            module
+            generator.module
                 .add_function(name, function_type, Some(Linkage::External))
                 .as_global_value()
                 .as_basic_value_enum()
         } else {
-            module.add_global(llvm_type, None, name).as_basic_value_enum()
+            generator.module.add_global(llvm_type, None, name).as_basic_value_enum()
         }
     }
 }
 
 impl<'g> CodeGen<'g> for hir::MemberAccess {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        let lhs = self.lhs.codegen(generator, module);
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        let lhs = self.lhs.codegen(generator);
         let index = self.member_index;
 
         // If our lhs is a load from an alloca, create a GEP instead of extracting directly.
@@ -622,8 +621,8 @@ impl<'g> CodeGen<'g> for hir::MemberAccess {
 }
 
 impl<'g> CodeGen<'g> for hir::Assignment {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        let lhs = self.lhs.codegen(generator, module);
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        let lhs = self.lhs.codegen(generator);
 
         let lhs = match lhs.as_instruction_value() {
             Some(instruction) if instruction.get_opcode() == InstructionOpcode::Load => {
@@ -633,7 +632,7 @@ impl<'g> CodeGen<'g> for hir::Assignment {
             _ => lhs.into_pointer_value(),
         };
 
-        let rhs = self.rhs.codegen(generator, module);
+        let rhs = self.rhs.codegen(generator);
 
         let rhs_ptr = rhs.get_type().ptr_type(AddressSpace::Generic);
         let lhs = generator.builder.build_pointer_cast(lhs, rhs_ptr, "bitcast");
@@ -644,12 +643,12 @@ impl<'g> CodeGen<'g> for hir::Assignment {
 }
 
 impl<'g> CodeGen<'g> for hir::Tuple {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
         let (values, types) = self
             .fields
             .iter()
             .map(|field| {
-                let value = field.codegen(generator, module);
+                let value = field.codegen(generator);
                 (value, value.get_type())
             })
             .unzip();
@@ -659,16 +658,16 @@ impl<'g> CodeGen<'g> for hir::Tuple {
 }
 
 impl<'g> CodeGen<'g> for hir::ReinterpretCast {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        let value = self.lhs.codegen(generator, module);
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        let value = self.lhs.codegen(generator);
         let target_type = Generator::convert_type(&generator.context, &self.target_type);
         generator.reinterpret_cast(value, target_type)
     }
 }
 
 impl<'g> CodeGen<'g> for hir::Builtin {
-    fn codegen(&self, generator: &mut Generator<'g>, module: &Module<'g>) -> BasicValueEnum<'g> {
-        builtin::call_builtin(self, generator, module)
+    fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        builtin::call_builtin(self, generator)
     }
 }
 
