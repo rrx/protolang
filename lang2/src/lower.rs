@@ -204,7 +204,7 @@ mod tests {
         let main = b.declare("main", main_f);
 
         let context = Context::create();
-        let mut lower = Lower::new(&context);
+        let mut lower = Lower::new();//&context);
 
         let (res, ast1, env) = b.resolve(main, env.clone());
         println!("{}", env);
@@ -226,12 +226,12 @@ mod tests {
         let mut b = Builder::new();
         let hir1 = b.lower(&ast1).unwrap();
         println!("{}", &hir1);
-        lower.module("test", hir1).unwrap();
+        lower.module(&context, "test", hir1).unwrap();
 
         let hir2 = b.lower(&ast3).unwrap();
-        lower.module("test2", hir2).unwrap();
+        lower.module(&context, "test2", hir2).unwrap();
 
-        let ret = lower.run().unwrap();
+        let ret = lower.run(&context).unwrap();
         println!("ret: {}", &ret);
         assert_eq!(3, ret);
     }
