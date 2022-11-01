@@ -52,6 +52,7 @@ impl<'a> Lower<'a> {
     pub fn module(&mut self, name: &str, ast: hir::Ast) -> Result<(), Box<dyn Error>> {
         let mut module = self.context.create_module(name);
         let mut codegen = Generator {
+            module,
             context: self.context,
             builder: self.context.create_builder(),
             definitions: HashMap::new(),
@@ -60,7 +61,7 @@ impl<'a> Lower<'a> {
             current_definition_name: None,
         };
 
-        ast.codegen(&mut codegen, &module);
+        ast.codegen(&mut codegen);
         match module.verify() {
             Ok(_) => {
                 module.print_to_stderr();
