@@ -180,24 +180,23 @@ mod tests {
         //let f = b.declare("f", add);
 
         let f1 = {
-            let p = a.var("p");
+            //let p = a.var("p");
             //let add = b.binary("+", p, one.clone());
-            let f = a.func(vec![Type::Int, Type::Int], add.clone());
-            let f = a.declare("f1", f);
-            f
+            //a.func(vec![Type::Int, Type::Int], add.clone())
+            a.func(vec![Type::Int], add.clone())
         };
+        let df1 = a.declare("f1", f1.clone());
 
         let f2 = {
             let p = a.int(3);
             let add = a.binary("+", p, one);
-            let f = a.func(vec![Type::Int], add);
-            f
+            a.func(vec![Type::Int], add)
         };
         let df2 = a.declare("f2", f2.clone());
 
         //let call = b.apply(f, vec![add]);
-        let call = a.apply(f2, vec![]);
-        let block = a.block(vec![call, add]);
+        //let call = a.apply(f1, vec![]);
+        let block = a.block(vec![add]);
         let main_f = a.func(vec![Type::Int], block);
         let main = a.declare("main", main_f);
 
@@ -205,7 +204,7 @@ mod tests {
         let env = base_env();
         let (res, ast1, env) = a.resolve(main, env.clone());
         println!("{}", env);
-        println!("{}", &ast1);
+        //println!("{}", &ast1);
         assert_eq!(res, UnifyResult::Ok); 
 
         /*
@@ -217,7 +216,7 @@ mod tests {
 
         let (res, ast3, env) = a.resolve(df2, env.clone());
         println!("{}", env);
-        println!("{}", &ast3);
+        //println!("{}", &ast3);
         assert_eq!(res, UnifyResult::Ok); 
 
         // lower to codegen ir
