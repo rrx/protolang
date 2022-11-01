@@ -6,12 +6,10 @@ use crate::typesystem::{Type};
 
 struct Builder {
     next_id: usize
-    //codegen: Lower<'a>
 }
 
 impl Visitor<()> for Builder {
     fn exit(&mut self, ast: AstNode, _: &mut ()) -> VResult {
-        //lower(&ast).unwrap();
         Ok(())
     }
 }
@@ -25,7 +23,7 @@ fn convert_type(ty: &Type) -> hir::Type {
 
 impl Builder {
     fn new() -> Self {
-        Self { next_id: 0 } // codegen: Lower::new() }
+        Self { next_id: 0 }
     }
 
     fn next_definition(&mut self) -> hir::DefinitionId {
@@ -175,65 +173,68 @@ mod tests {
     #[test]
     fn lower_binary() {
 
-        let mut b = AstBuilder::default();
-        let env = base_env();
-        let one = b.int(1);
-        let two = b.int(2);
-        let add = b.binary("+", one.clone(), two);
+        let mut a = AstBuilder::default();
+        let one = a.int(1);
+        let two = a.int(2);
+        let add = a.binary("+", one.clone(), two);
         //let f = b.declare("f", add);
 
         let f1 = {
-            let p = b.var("p");
-            let add = b.binary("+", p, one.clone());
-            let f = b.func(vec![Type::Int, Type::Int], add);
-            let f = b.declare("f1", f);
+            let p = a.var("p");
+            //let add = b.binary("+", p, one.clone());
+            let f = a.func(vec![Type::Int, Type::Int], add.clone());
+            let f = a.declare("f1", f);
             f
         };
 
         let f2 = {
-            let p = b.int(3);
-            let add = b.binary("+", p, one);
-            let f = b.func(vec![Type::Int], add);
-            let f = b.declare("f2", f);
+            let p = a.int(3);
+            let add = a.binary("+", p, one);
+            let f = a.func(vec![Type::Int], add);
             f
         };
+        let df2 = a.declare("f2", f2.clone());
 
         //let call = b.apply(f, vec![add]);
-        let block = b.block(vec![add]);
-        let main_f = b.func(vec![Type::Int], block);
-        let main = b.declare("main", main_f);
+        let call = a.apply(f2, vec![]);
+        let block = a.block(vec![call, add]);
+        let main_f = a.func(vec![Type::Int], block);
+        let main = a.declare("main", main_f);
 
-        let (res, ast1, env) = b.resolve(main, env.clone());
+        // name resolution and type inference
+        let env = base_env();
+        let (res, ast1, env) = a.resolve(main, env.clone());
         println!("{}", env);
         println!("{}", &ast1);
         assert_eq!(res, UnifyResult::Ok); 
 
         /*
-        let (res, ast2, env) = b.resolve(f1, env.clone());
+        let (res, ast2, env) = a.resolve(f1, env.clone());
         println!("{}", env);
         println!("{}", &ast2);
         assert_eq!(res, UnifyResult::Ok); 
         */
 
-        let (res, ast3, env) = b.resolve(f2, env.clone());
+        let (res, ast3, env) = a.resolve(df2, env.clone());
         println!("{}", env);
         println!("{}", &ast3);
         assert_eq!(res, UnifyResult::Ok); 
 
+        // lower to codegen ir
         let mut b = Builder::new();
         let hir1 = b.lower(&ast1).unwrap();
         let hir2 = b.lower(&ast3).unwrap();
+        println!("{}", &hir1);
+        println!("{}", &hir2);
 
         let context = LLVMBackendContext::new();
         let mut backend = LLVMBackend::new(&context);
-        //let context = Context::create();
-        //let mut lower = Lower::new();//&context);
 
-
-        println!("{}", &hir1);
+        // add modules
         backend.module("test", hir1).unwrap();
         backend.module("test2", hir2).unwrap();
 
+        // execute
         let ret = backend.run().unwrap();
         println!("ret: {}", &ret);
         assert_eq!(3, ret);

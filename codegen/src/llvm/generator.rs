@@ -674,54 +674,13 @@ impl<'g> CodeGen<'g> for hir::Builtin {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct Definitions {
-        next_id: usize
-    }
-    impl Definitions {
-        fn new() -> Self {
-            Self { next_id: 0 }
-        }
-        fn new_definition(&mut self, name: &str, ast: Ast) -> hir::Definition { 
-            let d = hir::Definition {
-                variable: DefinitionId(self.next_id),
-                name: Some(name.to_string()),
-                expr: ast.into()
-            };
-            self.next_id += 1;
-            d
-        }
-
-        fn named_variable(&mut self, name: &str) -> hir::Variable {
-            let v = hir::Variable {
-                definition: None,
-                definition_id: DefinitionId(self.next_id),
-                name: Some(name.to_string()),
-            };
-            self.next_id += 1;
-            v
-        }
-
-        fn new_variable(&mut self) -> hir::Variable {
-            let v = hir::Variable {
-                definition: None,
-                definition_id: DefinitionId(self.next_id),
-                name: None,
-            };
-            self.next_id += 1;
-            v
-        }
-    }
+    use crate::lower::{self, Definitions};
+    use crate::hir::*;
 
     #[test]
     fn codegen_function3() {
         let context = Context::create();
         let mut defs = Definitions::new();
-
-
-        pub fn add(a: Ast, b: Ast) -> Ast {
-            hir::Builtin::AddInt(a.into(), b.into()).into()
-        }
 
         let module1 = context.create_module("__main__");
         let module2 = context.create_module("two");
@@ -749,63 +708,26 @@ mod tests {
             current_definition_name: None,
         };
 
-        let typ = hir::FunctionType {
-            parameters: vec![hir::Type::i64()],
-            return_type: hir::Type::i64().into(),
-            is_varargs: false,
-            export: true,
-        };
-
-
-        // recursive function
-        if true {
-            // variable for the function
-            let xv0 = defs.named_variable("v0");
-            // variable for the single parameter in the function
-            let param = defs.new_variable();
-            
-            // increment param as the body of the function
-            let ast = add(Ast::i64(1), param.clone().into());
-            
-            // call the function that we've created
-            let call: hir::Ast = hir::FunctionCall {
-                function: Box::new(xv0.clone().into()),
-                args: vec![ast.into()],
-                function_type: typ.clone(),
-            }.into();
-
-            let f: Ast = hir::Lambda {
-                args: vec![param.clone()],
-                body: call.into(),
-                typ: typ.clone()
-            }.into();
-
-            // define the function using the definition id
-            let xd0: Ast = hir::Definition {
-                variable: xv0.definition_id,
-                name: xv0.name.clone(),
-                expr: f.into()
-            }.into();
-            top1.push(xd0);
-        }
+        // single parameter function type
+        let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
 
         if true {
             let param = defs.new_variable();
-            let ast = add(Ast::i64(1), param.clone().into());
-            let f: Ast = hir::Lambda {
+            let ast = lower::add(Ast::i64(1), param.clone().into());
+            let f: Ast = Lambda {
                 args: vec![param],
                 body: ast.into(),
                 typ: typ.clone()
             }.into();
             let d = defs.new_definition("x1", f);
-            let d: hir::Ast = d.into();
+            let d: Ast = d.into();
             top1.push(d);
         }
 
         if false {
             let d0 = defs.new_variable();
-            let body = add(hir::Ast::i64(3), d0.clone().into());
-            let f1: hir::Ast = hir::Lambda {
+            let body = lower::add(Ast::i64(3), d0.clone().into());
+            let f1: Ast = Lambda {
                 args: vec![d0],
                 body: body.into(),
                 typ: typ.clone()
@@ -815,26 +737,26 @@ mod tests {
             let f2 = f1.clone();
             let df2 = defs.new_definition("f2", f2);
             let vf2 = df2.variable.to_variable();
-            let df2: hir::Ast = df2.into();
+            let df2: Ast = df2.into();
             top1.push(df2);
         }
 
         {
-            let extern1 = hir::Extern {
+            let extern1 = Extern {
                 name: "x1".to_string(),
                 typ: typ.clone().into()
             };
             
             // call extern
-            let call: hir::Ast = hir::FunctionCall {
+            let call: Ast = FunctionCall {
                 function: Box::new(extern1.into()),
                 args: vec![Ast::i64(1)],
                 function_type: typ.clone(),
             }.into();
 
-            let seq: Ast = hir::Sequence::new(vec![call]).into();
+            let seq: Ast = Sequence::new(vec![call]).into();
 
-            let f_main: hir::Ast = hir::Lambda {
+            let f_main: Ast = Lambda {
                 args: vec![],
                 body: seq.into(),
                 typ: typ.clone()
@@ -844,8 +766,8 @@ mod tests {
             top2.push(df_main.into());
         }
 
-        let top1 = hir::Sequence::new(top1);
-        let top2 = hir::Sequence::new(top2);
+        let top1 = Sequence::new(top1);
+        let top2 = Sequence::new(top2);
         top1.codegen(&mut codegen1);
         top2.codegen(&mut codegen2);
 

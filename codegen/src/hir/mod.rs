@@ -76,6 +76,15 @@ pub struct Lambda {
     pub body: Box<Ast>,
     pub typ: FunctionType,
 }
+impl Lambda {
+    pub fn new(args: Vec<Variable>, body: Ast, typ: FunctionType) -> Self {
+        Self {
+            args,
+            body: Box::new(body),
+            typ: typ.clone()
+        }
+    }
+}
 
 /// foo a b c
 #[derive(Debug, Clone)]
@@ -83,6 +92,20 @@ pub struct FunctionCall {
     pub function: Box<Ast>,
     pub args: Vec<Ast>,
     pub function_type: FunctionType,
+}
+impl FunctionCall {
+    pub fn new(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Self {
+        match f {
+            Ast::Extern(_) | Ast::Variable(_) => {
+                Self {
+                    function: Box::new(f.into()),
+                    args,
+                    function_type: typ,
+                }
+            }
+            _ => unimplemented!()
+        }
+    }
 }
 
 /// Unlike ast::Definition, hir::Definition
@@ -93,6 +116,32 @@ pub struct Definition {
     pub variable: DefinitionId,
     pub name: Option<String>,
     pub expr: Box<Ast>,
+}
+impl Definition {
+    pub fn named(definition_id: DefinitionId, name: &str, expr: Ast) -> Self {
+        Self {
+            variable: definition_id,
+            name: Some(name.to_string()),
+            expr: expr.into()
+        }
+    }
+
+    pub fn unamed(definition_id: DefinitionId, expr: Ast) -> Self {
+        Self {
+            variable: definition_id,
+            name: None,
+            expr: expr.into()
+        }
+    }
+
+    /// define a variable
+    pub fn variable(var: Variable, expr: Ast) -> Self {
+        Self {
+            variable: var.definition_id,
+            name: var.name.clone(),
+            expr: expr.into()
+        }
+    }
 }
 
 impl From<Definition> for DefinitionInfo {
@@ -179,7 +228,11 @@ pub struct Extern {
     pub name: String,
     pub typ: Type,
 }
-
+impl Extern {
+    pub fn new(name: String, typ: Type) -> Self {
+        Self { name, typ }
+    }
+}
 /// lhs := rhs
 #[derive(Debug, Clone)]
 pub struct Assignment {

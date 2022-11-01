@@ -9,14 +9,12 @@ use inkwell::OptimizationLevel;
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
-pub struct Lower<'a> {
-    next_id: usize,
-    modules: ModuleMap<'a>
+pub struct Definitions {
+    next_id: usize
 }
-
-impl<'a> Lower<'a> {
+impl Definitions {
     pub fn new() -> Self {
-        Self { next_id: 0, modules: ModuleMap::new() }
+        Self { next_id: 0 }
     }
     pub fn new_definition(&mut self, name: &str, ast: hir::Ast) -> hir::Definition { 
         let d = hir::Definition {
@@ -47,9 +45,23 @@ impl<'a> Lower<'a> {
         self.next_id += 1;
         v
     }
+}
 
+pub fn add(a: hir::Ast, b: hir::Ast) -> hir::Ast {
+    hir::Builtin::AddInt(a.into(), b.into()).into()
+}
+
+pub struct Lower<'a> {
+    modules: ModuleMap<'a>
+}
+
+impl<'a> Lower<'a> {
+    pub fn new() -> Self {
+        Self { modules: ModuleMap::new() }
+    }
     pub fn module(&mut self, context: &'a Context, name: &str, ast: hir::Ast) -> Result<(), Box<dyn Error>> {
         let mut module = context.create_module(name);
+
         let mut codegen = Generator {
             module,
             context: context,
@@ -61,6 +73,7 @@ impl<'a> Lower<'a> {
         };
 
         ast.codegen(&mut codegen);
+
         match codegen.module.verify() {
             Ok(_) => {
                 codegen.module.print_to_stderr();
@@ -99,10 +112,6 @@ pub fn run_jit<'a>(context: &'a Context, modules: &ModuleMap<'a>) -> Result<i64,
         println!("ret: {}", ret);
         Ok(ret)
     }
-}
-
-pub fn add(a: hir::Ast, b: hir::Ast) -> hir::Ast {
-    hir::Builtin::AddInt(a.into(), b.into()).into()
 }
 
 

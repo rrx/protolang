@@ -42,6 +42,10 @@ impl LLVMBackendContext {
         let context = Context::create();
         Self { context }
     }
+
+    pub fn backend<'a>(&'a self) -> LLVMBackend<'a> {
+        LLVMBackend::new(self)
+    }
 }
 
 pub struct LLVMBackend<'a> {
@@ -65,3 +69,54 @@ impl<'a> LLVMBackend<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lower::{self, Definitions};
+    use crate::hir::*;
+
+    #[test]
+    fn test_recursive() {
+        let mut defs = Definitions::new();
+
+        // single parameter function type
+        let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
+        
+        // variable for the function
+        let xv0 = defs.named_variable("v0");
+        // variable for the single parameter in the function
+        let param = defs.new_variable();
+        
+        // increment param as the body of the function
+        let ast = lower::add(Ast::i64(1), param.clone().into());
+        
+        // call the function that we've created
+        let call = FunctionCall::new(xv0.clone().into(), vec![ast.into()], typ.clone());
+
+        // create a function to associate with the variable
+        let f = Lambda::new(vec![param.clone()], call.into(), typ.clone());
+
+        // define the function using the definition id
+        let xd0 = Definition::variable(xv0.clone(), f.into());
+        
+        // call the recursive function
+        let call = FunctionCall::new(xv0.clone().into(), vec![Ast::i64(1)], typ.clone());
+
+        // main function
+        let extern1 = Extern::new("v0".to_string(), typ.clone().into());
+        // call extern
+        let call_extern = FunctionCall::new(extern1.clone().into(), vec![Ast::i64(10)], typ.clone());
+
+        let f_main = Lambda::new(vec![], call_extern.into(), typ.clone());
+
+        let df_main = defs.new_definition("main", f_main.into());
+
+        //let asts = vec![xd0.into(), df_main.into()];
+
+        let context = LLVMBackendContext::new();
+        let mut b = context.backend();
+        b.module("test", Sequence::new(vec![xd0.into()]).into()).unwrap();
+        b.module("main", Sequence::new(vec![df_main.into()]).into()).unwrap();
+        b.run().unwrap();
+    }
+}

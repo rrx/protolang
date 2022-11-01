@@ -47,6 +47,18 @@ pub struct FunctionType {
     pub is_varargs: bool,
     pub export: bool,
 }
+impl FunctionType {
+    pub fn export(mut args: Vec<Type>) -> Self {
+        let ret = args.split_off(args.len()-1).pop().unwrap();
+        Self {
+            parameters: args,
+            return_type: ret.into(),
+            is_varargs: false,
+            export: true,
+        }
+    }
+}
+
 
 /// A HIR type representation.
 /// Removes all references to generics and user-defined types.
