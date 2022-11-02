@@ -84,10 +84,25 @@ impl AstBuilder {
         AstNode::new(Literal::Bool(b).into(), Type::Bool)
     }
 
-    pub fn var(&mut self, n: &str) -> AstNode {
+    pub fn type_unknown(&mut self) -> Type {
+        Type::Var(self.state.next_id())
+    }
+
+    pub fn var_unnamed(&mut self, ty: Type) -> Variable {
+        let definition_id = self.state.next_id();
+        Variable::unnamed(definition_id, ty)
+    }
+
+    pub fn node_unnamed(&mut self, ty: Type) -> AstNode {
+        let v = self.var_unnamed(ty.clone());
+        AstNode::new(v.into(), ty)
+    }
+
+    pub fn var(&mut self, n: &str, ty: Type) -> AstNode {
+        let definition_id = self.state.next_id();
         AstNode::new(
-            Variable::new(n.into()).into(),
-            Type::var(self.state.next_id()),
+            Variable::new(n.into(), definition_id, ty.clone()).into(),
+            ty
         )
     }
 
@@ -109,15 +124,9 @@ impl AstBuilder {
         AstNode::new(Ast::Block(exprs), ty)
     }
 
-    pub fn func(&mut self, sig: Vec<Type>, body: AstNode) -> AstNode {
-        //let names = sig.iter().map(|p| {
-        //AstNodeInner {
-        //value: Variable::new("x".into()).into(),
-        //ty: p.clone(),
-        //}.into()
-        //}).collect::<Vec<_>>();
+    pub fn func(&mut self, params: Vec<Variable>, body: AstNode, sig: Vec<Type>) -> AstNode {
         let ty = Type::Func(sig.clone());
-        AstNode::new(Ast::Function { params: vec![], body: body.into(), ty: sig }, ty)
+        AstNode::new(Ast::Function { params, body: body.into(), ty: sig }, ty)
     }
 
     pub fn apply(&mut self, f: AstNode, args: Vec<AstNode>) -> AstNode {
@@ -135,8 +144,7 @@ impl AstBuilder {
             ty_ret.clone(),
         ]);
 
-        // type of this operation
-        let f = AstNode::new(Variable::new(name.into()).into(), ty_f);
+        let f = self.var(name.into(), ty_f);
 
         let args = vec![lhs, rhs];
         AstNode::new(Ast::Apply(f.into(), args), ty_ret)
@@ -171,6 +179,7 @@ impl AstBuilder {
                         new_ast
                     }
                     None => {
+                        eprintln!("unresolved variable: {:?}", &v);
                         unimplemented!();
                     }
                 };
@@ -179,10 +188,10 @@ impl AstBuilder {
 
             Ast::Apply(f, ref args) => {
                 let mut env = env.clone();
-                for arg in args {
-                    let (_f, this_env) = self.name_resolve(arg.clone(), env.clone());
-                    env = this_env;
-                }
+                //for arg in args {
+                    //let (_f, this_env) = self.name_resolve(arg.clone(), env.clone());
+                    //env = this_env;
+                //}
 
                 match &f.borrow().value {
                     Ast::Variable(v) => {
@@ -320,7 +329,8 @@ mod tests {
 
         let v = b.int(1);
         let decl1 = b.declare("a", v);
-        let v = b.var("a".into());
+        let ty = b.type_unknown();
+        let v = b.var("a".into(), ty);
         let decl2 = b.declare("b", v);
         let block = b.block(vec![decl1, decl2]);
         let ast = b.declare("c", block.clone());
@@ -338,6 +348,30 @@ mod tests {
         assert_eq!(env.resolve(&"a".into()), None);
         assert_eq!(env.resolve(&"b".into()), None);
         assert!(env.resolve(&"c".into()).is_some());
+    }
+
+    #[test]
+    fn test_function() {
+        let mut b = AstBuilder::default();
+        let env = base_env();
+
+        // function to increment by one
+        // f(x) => x + 1
+        let ty = b.type_unknown();
+        let p = b.var_unnamed(ty.clone());
+        let node = AstNode::new(p.clone().into(), ty.clone());
+        let one = b.int(1);
+        let add = b.binary("+", one, node);
+        let f = b.func(vec![p], add, vec![Type::Int, Type::Int]);
+        let ast = b.declare("f", f);
+
+        let (res, ast, env) = b.resolve(ast, env.clone());
+        println!("{}", env);
+        println!("{}", &ast);
+        assert_eq!(res, UnifyResult::Ok);
+
+        //let call = env.resolve(&"f".into()).unwrap();
+        //println!("{}", &call);
     }
 
     #[test]
@@ -381,7 +415,8 @@ mod tests {
         let mut b = AstBuilder::default();
         let mut env = Environment::default();
         env.define("a".into(), b.int(1));
-        let v = b.var("a");
+        let ty = b.type_unknown();
+        let v = b.var("a", ty);
         println!("AST:{}", &v);
         match &v.borrow().value {
             Ast::Variable(v) => {

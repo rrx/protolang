@@ -174,24 +174,25 @@ mod tests {
         //let f = b.declare("f", add);
 
         let f1 = {
-            //let p = a.var("p");
-            //let add = b.binary("+", p, one.clone());
+            let p = a.var_unnamed(Type::Int);
+            let add = a.binary("+", AstNode::new(p.clone().into(), Type::Int), one.clone());
             //a.func(vec![Type::Int, Type::Int], add.clone())
-            a.func(vec![Type::Int], add.clone())
+            a.func(vec![p], add.clone(), vec![Type::Int, Type::Int])
         };
         let df1 = a.declare("f1", f1.clone());
 
         let f2 = {
             let p = a.int(3);
             let add = a.binary("+", p, one);
-            a.func(vec![Type::Int], add)
+            a.func(vec![], add, vec![Type::Int])
+
         };
         let df2 = a.declare("f2", f2.clone());
 
         //let call = b.apply(f, vec![add]);
         //let call = a.apply(f1, vec![]);
         let block = a.block(vec![add]);
-        let main_f = a.func(vec![Type::Int], block);
+        let main_f = a.func(vec![], block, vec![Type::Int]);
         let main = a.declare("main", main_f);
 
         // name resolution and type inference

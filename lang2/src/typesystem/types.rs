@@ -104,6 +104,13 @@ impl Type {
     }
 }
 
+impl From<DefinitionId> for Type {
+    fn from(item: DefinitionId) -> Self {
+        Self::Var(item)
+    }
+}
+
+
 impl TypeSignature<Type> for Type {
     fn unknown(&self) -> Option<DefinitionId> {
         match self {

@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
+use logic::DefinitionId;
 
 pub type Environment = crate::env::EnvLayers<String, AstNode>;
 
@@ -36,7 +37,7 @@ impl AstNodeInner {
 pub struct AstNode(Rc<RefCell<AstNodeInner>>);
 
 impl AstNode {
-    fn new(value: Ast, ty: Type) -> Self {
+    pub fn new(value: Ast, ty: Type) -> Self {
         AstNodeInner::new(value, ty).into()
     }
 }
@@ -127,16 +128,18 @@ impl fmt::Display for AstNode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Variable {
+    pub definition_id: DefinitionId,
+    pub ty: Type,
     pub name: Option<String>,
     pub bound: Option<AstNode>,
 }
 
 impl Variable {
-    pub fn new(name: String) -> Self {
-        Self { name: Some(name), bound: None }
+    pub fn new(name: String, definition_id: DefinitionId, ty: Type) -> Self {
+        Self { name: Some(name), bound: None, definition_id, ty }
     }
-    pub fn unnamed() -> Self {
-        Self { name: None, bound: None }
+    pub fn unnamed(definition_id: DefinitionId, ty: Type) -> Self {
+        Self { name: None, bound: None, definition_id, ty }
     }
     pub fn bind(&mut self, ast: AstNode) {
         self.bound.replace(ast);
@@ -192,20 +195,17 @@ pub fn make_binary_function(name: String, args: Vec<Type>, env: &mut Environment
     let right_ty = args.get(1).unwrap().clone();
     let ret_ty = args.get(2).unwrap().clone();
 
-    let left = AstNodeInner {
-        value: Variable::new("left".into()).into(),
-        ty: left_ty.clone(),
-    };
+    let left = AstNode::new(
+        Variable::new("left".into(), DefinitionId(0), left_ty.clone()).into(),
+        left_ty.clone());
 
-    let right = AstNodeInner {
-        value: Variable::new("right".into()).into(),
-        ty: right_ty.clone(),
-    };
+    let right = AstNode::new(
+        Variable::new("right".into(), DefinitionId(0), right_ty.clone()).into(),
+        right_ty.clone());
 
-    let ret = AstNodeInner {
-        value: Variable::new("ret".into()).into(),
-        ty: ret_ty.clone(),
-    };
+    let ret = AstNode::new(
+        Variable::new("ret".into(), DefinitionId(0), ret_ty.clone()).into(),
+        ret_ty.clone());
 
     let args = vec![left.into(), right.into(), ret.into()];
 
