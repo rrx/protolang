@@ -86,14 +86,18 @@ impl fmt::Display for AstNode {
                 }
                 write!(f, "]")?;
             }
-            Ast::Variable(v) => match &v.bound {
-                Some(bound) => {
-                    write!(f, "({}:{:?})", &v.name, &bound)?;
+            Ast::Variable(v) => {
+                let default = "".to_string();
+                let name = v.name.as_ref().unwrap_or(&default);
+                match &v.bound {
+                    Some(bound) => {
+                        write!(f, "({}:{:?})", &name, &bound)?;
+                    }
+                    None => {
+                        write!(f, "({})", &name)?;
+                    }
                 }
-                None => {
-                    write!(f, "({})", &v.name)?;
-                }
-            },
+            }
             Ast::Literal(x) => {
                 write!(f, "{:?}", &x)?;
             }
@@ -123,13 +127,16 @@ impl fmt::Display for AstNode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Variable {
-    pub name: String,
+    pub name: Option<String>,
     pub bound: Option<AstNode>,
 }
 
 impl Variable {
     pub fn new(name: String) -> Self {
-        Self { name, bound: None }
+        Self { name: Some(name), bound: None }
+    }
+    pub fn unnamed() -> Self {
+        Self { name: None, bound: None }
     }
     pub fn bind(&mut self, ast: AstNode) {
         self.bound.replace(ast);
@@ -154,7 +161,7 @@ pub enum Ast {
     Builtin(String, Vec<AstNode>), // name, args
 
     // A function that is defined as part of the program
-    Function(Box<AstNode>, Vec<AstNode>, Vec<Type>), // body, arg names, signature
+    Function { params: Vec<Variable>, body: Box<AstNode>, ty: Vec<Type>}, // body, arg names, signature
 
     // function application
     Apply(Box<AstNode>, Vec<AstNode>), // function, parameters

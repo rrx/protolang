@@ -63,7 +63,7 @@ impl Builder {
                 )))
             }
 
-            Ast::Function(body, params, sig) => {
+            Ast::Function { params, body, ty } => {
                 let body = self.lower(body)?;
 
                 let params = params
@@ -77,7 +77,7 @@ impl Builder {
 
                 let parameters = vec![];
 
-                let return_type = convert_type(sig.get(sig.len() - 1).unwrap());
+                let return_type = convert_type(ty.get(ty.len() - 1).unwrap());
 
                 let f_type = hir::FunctionType {
                     parameters,
@@ -110,10 +110,10 @@ impl Builder {
                             self.lower(&rhs)?.into(),
                         )))
                     }
-                    Ast::Function(body, args, sig) => {
+                    Ast::Function { params, body, ty } => {
                         let body = self.lower(body)?;
 
-                        let args = args
+                        let params = params
                             .iter()
                             .map(|a| hir::Variable {
                                 definition: None,
@@ -133,7 +133,7 @@ impl Builder {
                         };
 
                         Ok(hir::Ast::Lambda(hir::Lambda {
-                            args,
+                            args: params,
                             body: body.into(),
                             typ: f_type,
                         }))

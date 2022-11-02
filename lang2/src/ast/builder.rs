@@ -117,7 +117,7 @@ impl AstBuilder {
         //}.into()
         //}).collect::<Vec<_>>();
         let ty = Type::Func(sig.clone());
-        AstNode::new(Ast::Function(body.into(), vec![], sig), ty)
+        AstNode::new(Ast::Function { params: vec![], body: body.into(), ty: sig }, ty)
     }
 
     pub fn apply(&mut self, f: AstNode, args: Vec<AstNode>) -> AstNode {
@@ -161,7 +161,7 @@ impl AstBuilder {
             }
 
             Ast::Variable(v) => {
-                let ast = match env.resolve(&v.name) {
+                let ast = match env.resolve(&v.name.as_ref().unwrap()) {
                     Some(resolved_v) => {
                         v.bind(resolved_v.clone());
                         let ty = resolved_v.borrow().ty.clone();
@@ -194,7 +194,7 @@ impl AstBuilder {
 
                         // create equation for all matches for the function
                         let possible = env
-                            .resolve_all(&v.name)
+                            .resolve_all(&v.name.as_ref().unwrap())
                             .iter()
                             .map(|v| {
                                 let node = v.clone();
@@ -206,7 +206,7 @@ impl AstBuilder {
                         self.equations.push(logic::Expr::OneOf(ty, possible));
                     }
 
-                    Ast::Function(_body, _args, _sig) => {
+                    Ast::Function { params, body, ty } => {
                         // Already resolved
                         // TODO:
                         // args are unbound
@@ -217,9 +217,9 @@ impl AstBuilder {
                 (ast.clone(), env)
             }
 
-            Ast::Function(body, args, sig) => {
+            Ast::Function { params, body, ty } => {
                 let mut local_env = env.clone();
-                for arg in args {
+                for arg in params {
                     //local_env.define(
                 }
                 let (body, local_env) = self.name_resolve(*body.clone(), local_env);
