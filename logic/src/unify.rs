@@ -256,21 +256,22 @@ pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
     let mut res = UnifyResult::Ok;
 
     loop {
-        let (results, s) = unify_all(equations, subst.clone());
-        subst = s;
-        equations = results;
-
         // Are we out of equations?
         if equations.len() == 0 {
             break;
         }
-
+        
         // check if anything has changed
         if subst.size() == count {
             res = UnifyResult::NoSolution;
             break;
         }
         count = subst.size();
+
+        let (results, s) = unify_all(equations, subst.clone());
+        subst = s;
+        equations = results;
+
     }
     (res, subst)
 }
@@ -422,6 +423,12 @@ mod test {
             Eq(name("b"), var(1)),
         ];
         let (res, _) = unify_start(eqs);
+        assert_eq!(UnifyResult::Ok, res);
+    }
+
+    #[test]
+    fn empty() {
+        let (res, _) = unify_start::<Type>(vec![]);
         assert_eq!(UnifyResult::Ok, res);
     }
 
