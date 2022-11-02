@@ -7,17 +7,12 @@
 //! - All trait function calls are replaced with references to the exact
 //!   function to call statically (monomorphisation) or are passed in as
 //!   arguments to calling functions (boxing).
-//mod closures;
-//mod decision_tree_monomorphisation;
-//mod definitions;
-//mod monomorphisation;
 mod module;
 mod printer;
 mod types;
 
 pub use module::ModuleBuilder;
 
-//pub use monomorphisation::monomorphise;
 pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
 
 use std::rc::Rc;
@@ -91,6 +86,11 @@ pub struct FunctionCall {
 }
 impl FunctionCall {
     pub fn new(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Self {
+        // params should match the type, anything else isn't supported
+        if args.len() != typ.parameters.len() {
+            unimplemented!("Parameters must match the type signature")
+        }
+
         match f {
             Ast::Extern(_) | Ast::Variable(_) => Self { function: Box::new(f.into()), args, function_type: typ },
             _ => unimplemented!(),
