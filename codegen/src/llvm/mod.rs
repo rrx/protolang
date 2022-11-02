@@ -67,54 +67,100 @@ mod tests {
     use crate::lower::{self, Definitions};
 
     #[test]
-    fn test_recursive() {
+    fn codegen_fib() {
+        let mut defs = Definitions::new();
+        /*
+         function fibonacci(a, b, n) {
+           if (n === 0) {
+             return a;
+           }
+
+           if (n === 1) {
+             return b;
+           }
+
+            return fibonacci(b, a + b, n - 1);
+         }
+         */
+
+        // fib function type
+        let typ = FunctionType::export(vec![Type::i64(), Type::i64(), Type::i64(), Type::i64()]);
+
+        // variable for the function
+        let fib = defs.named_variable("fib");
+        // variable for the single parameter in the function
+        let a = defs.new_variable();
+        let b = defs.new_variable();
+        let n = defs.new_variable();
+
+        let eq0 = lower::eq(n.clone().into(), Ast::i64(0));
+
+        let ret_a: Ast = Return::new(a.clone().into()).into();
+        let branch1 =
+            If { condition: eq0.into(), then: ret_a.into(), otherwise: None, result_type: Type::Primitive(PrimitiveType::Unit) };
+
+        let eq1 = lower::eq(n.clone().into(), Ast::i64(1));
+        let ret_b: Ast = Return::new(b.clone().into()).into();
+        let branch2 =
+            If { condition: eq1.into(), then: ret_b.into(), otherwise: None, result_type: Type::Primitive(PrimitiveType::Unit) };
+
+        // call the function that we've created and then increment
+        let call = FunctionCall::new(fib.clone().into(), vec![
+                                     b.clone().into(),
+                                     lower::add(a.clone().into(), b.clone().into()),
+                                     lower::sub(n.clone().into(), Ast::i64(1)),
+        ], typ.clone());
+
+        let block = Sequence::new(vec![branch1.into(), branch2.into(), call.into()]);
+        // create a function to associate with the variable
+        let f = Lambda::new(vec![a.clone(), b.clone(), n.clone()], block.into(), typ.clone());
+
+        // define the function using the definition id
+        let dfib = Definition::variable(fib.clone(), f.into());
+
+        let call = FunctionCall::new(fib.clone().into(), vec![
+                                            Ast::i64(0), Ast::i64(1), Ast::i64(10)
+        ], typ.clone());
+
+        // single parameter function type for main
+        let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
+        let f_main = Lambda::new(vec![], call.into(), typ.clone());
+        let df_main = defs.new_definition("main", f_main.into());
+
+        let context = LLVMBackendContext::new();
+        let mut b = context.backend();
+        b.compile_module("main", Sequence::new(vec![dfib.into(), df_main.into()]).into()).unwrap();
+        let ret = b.run().unwrap();
+        assert_eq!(55, ret);
+    }
+
+    #[test]
+    fn codegen_extern() {
         let mut defs = Definitions::new();
 
         // single parameter function type
         let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
 
-        // variable for the function
-        let xv0 = defs.named_variable("v0");
-        // variable for the single parameter in the function
-        let param = defs.new_variable();
-
-        // call the function that we've created and then increment
-        let call = FunctionCall::new(xv0.clone().into(), vec![param.clone().into()], typ.clone());
-        let call_and_add = lower::add(Ast::i64(1), call.clone().into());
-
-        // increment param as the body of the function
-        let condition = lower::lt(param.clone().into(), Ast::i64(10));
-        let then: Ast = call_and_add.into();
-        let otherwise = Ast::i64(1000);
-        let result_type = Type::i64();
-        let branch =
-            If { condition: condition.into(), then: then.into(), otherwise: Some(otherwise.into()), result_type };
-
-        // create a function to associate with the variable
-        let f = Lambda::new(vec![param.clone()], branch.into(), typ.clone());
-
-        // define the function using the definition id
-        let xd0 = Definition::variable(xv0.clone(), f.into());
-
-        // call the recursive function
-        //let call = FunctionCall::new(xv0.clone().into(), vec![Ast::i64(0)], typ.clone());
+        let x1 = {
+            // x1(x) => x+1
+            // increment by 1
+            let p = defs.new_variable();
+            Lambda::new(vec![p.clone()], lower::add(p.clone().into(), Ast::i64(1)), typ.clone())
+        };
+        let dx1 = defs.new_definition("x1", x1.into());
 
         // main function
-        let extern1 = Extern::new("v0".to_string(), typ.clone().into());
+        let extern1 = Extern::new("x1".to_string(), typ.clone().into());
         // call extern
         let call_extern = FunctionCall::new(extern1.clone().into(), vec![Ast::i64(10)], typ.clone());
-
         let f_main = Lambda::new(vec![], call_extern.into(), typ.clone());
 
         let df_main = defs.new_definition("main", f_main.into());
-
-        //let asts = vec![xd0.into(), df_main.into()];
-
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("test", Sequence::new(vec![xd0.into()]).into()).unwrap();
+        b.compile_module("test", Sequence::new(vec![dx1.into()]).into()).unwrap();
         b.compile_module("main", Sequence::new(vec![df_main.into()]).into()).unwrap();
         let ret = b.run().unwrap();
-        assert_eq!(1000, ret);
+        assert_eq!(11, ret);
     }
 }

@@ -4,11 +4,11 @@ use crate::{
 };
 pub use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::passes::{PassManager, PassManagerBuilder};
 use inkwell::targets::{InitializationConfig, Target, TargetMachine};
-use inkwell::OptimizationLevel;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use inkwell::passes::{PassManager, PassManagerBuilder};
+use inkwell::OptimizationLevel;
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
@@ -42,14 +42,22 @@ pub fn add(a: Ast, b: Ast) -> Ast {
     Builtin::AddInt(a.into(), b.into()).into()
 }
 
+pub fn sub(a: Ast, b: Ast) -> Ast {
+    Builtin::SubInt(a.into(), b.into()).into()
+}
+
 pub fn lt(a: Ast, b: Ast) -> Ast {
     Builtin::LessSigned(a.into(), b.into()).into()
+}
+
+pub fn eq(a: Ast, b: Ast) -> Ast {
+    Builtin::EqInt(a.into(), b.into()).into()
 }
 
 pub struct Lower<'a> {
     modules: ModuleMap<'a>,
     optimizer: PassManager<Module<'a>>,
-    link_optimizer: PassManager<Module<'a>>,
+    link_optimizer: PassManager<Module<'a>>
 }
 
 impl<'a> Lower<'a> {

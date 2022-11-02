@@ -179,6 +179,11 @@ pub enum DecisionTree {
 pub struct Return {
     pub expression: Box<Ast>,
 }
+impl Return {
+    pub fn new(ast: Ast) -> Self {
+        Self { expression: ast.into() }
+    }
+}
 
 /// statement1
 /// statement2
@@ -383,6 +388,12 @@ impl From<Extern> for Ast {
 impl From<If> for Ast {
     fn from(item: If) -> Ast {
         Ast::If(item)
+    }
+}
+
+impl From<Return> for Ast {
+    fn from(item: Return) -> Ast {
+        Ast::Return(item)
     }
 }
 
