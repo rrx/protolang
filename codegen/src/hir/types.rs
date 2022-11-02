@@ -78,6 +78,18 @@ impl Type {
         Self::Primitive(PrimitiveType::Integer(IntegerKind::I64))
     }
 
+    pub fn f64() -> Self {
+        Self::Primitive(PrimitiveType::Float(FloatKind::F64))
+    }
+
+    pub fn bool() -> Self {
+        Self::Primitive(PrimitiveType::Boolean)
+    }
+
+    pub fn unit() -> Self {
+        Self::Primitive(PrimitiveType::Unit)
+    }
+
     pub fn into_function(self) -> Option<FunctionType> {
         match self {
             Type::Function(f) => Some(f),

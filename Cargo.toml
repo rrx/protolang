@@ -2,6 +2,7 @@
 members = [
   "lang1",
   "lang2",
+  "lang3",
   "logic",
   "codegen"
 ]
