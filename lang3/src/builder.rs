@@ -1,29 +1,25 @@
 use crate::*;
-use logic::{self, SymbolTable, TypeSignature, UnifyResult, DefinitionId};
-use std::marker::PhantomData;
+use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 use codegen::hir;
 use std::error::Error;
 use std::ops::Deref;
 
-pub type AstType = Type;
-
 #[derive(Default)]
-pub struct AstBuilder<T> {
+pub struct AstBuilder {
     last_id: usize,
     pub equations: Vec<logic::Expr<Type>>,
-    phantom: PhantomData<T>
 }
 
-impl Visitor<Type, SymbolTable<Ast<Type>>> for AstBuilder<Type> {
-    fn enter(&mut self, e: &Ast<Type>, n: &mut SymbolTable<Ast<Type>>) -> visitor::VResult {
+impl Visitor<SymbolTable<Ast>> for AstBuilder {
+    fn enter(&mut self, e: &Ast, n: &mut SymbolTable<Ast>) -> visitor::VResult {
         println!("Visit AST: {}", e);
         Ok(())
     }
 }
 
-impl AstBuilder<AstType> {
-    pub fn type_next_id(&mut self) -> DefinitionId {
-        let d = DefinitionId(self.last_id);
+impl AstBuilder {
+    pub fn type_next_id(&mut self) -> logic::DefinitionId {
+        let d = logic::DefinitionId(self.last_id);
         self.last_id += 1;
         d
     }
@@ -34,15 +30,15 @@ impl AstBuilder<AstType> {
         d
     }
 
-    pub fn int(&self, i: u64) -> Ast<AstType> {
+    pub fn int(&self, i: u64) -> Ast {
         Ast::Literal(Literal::Int(i))
     }
 
-    pub fn float(&self, f: f64) -> Ast<AstType> {
+    pub fn float(&self, f: f64) -> Ast {
         Ast::Literal(Literal::Float(f))
     }
 
-    pub fn boolean(&self, b: bool) -> Ast<AstType> {
+    pub fn boolean(&self, b: bool) -> Ast {
         Ast::Literal(Literal::Bool(b))
     }
 
@@ -50,24 +46,24 @@ impl AstBuilder<AstType> {
         Type::Variable(self.type_next_id())
     }
 
-    pub fn var_unnamed(&mut self, ty: Type) -> Variable<AstType> {
+    pub fn var_unnamed(&mut self, ty: Type) -> Variable {
         Variable::unnamed(self.var_next_id(), ty)
     }
 
-    pub fn var_named(&mut self, n: &str, ty: Type) -> Variable<AstType> {
+    pub fn var_named(&mut self, n: &str, ty: Type) -> Variable {
         Variable::named(n.to_string(), self.var_next_id(), ty)
     }
 
-    pub fn node_unnamed(&mut self, ty: Type) -> Ast<AstType> {
+    pub fn node_unnamed(&mut self, ty: Type) -> Ast {
         let v = self.var_unnamed(ty.clone());
         v.into()
     }
 
-    pub fn node_named(&mut self, n: &str, ty: Type) -> Ast<AstType> {
+    pub fn node_named(&mut self, n: &str, ty: Type) -> Ast {
         self.var_named(n, ty).into()
     }
 
-    pub fn var_resolve(&mut self, n: &str, env: Environment<AstType>) -> Ast<AstType> {
+    pub fn var_resolve(&mut self, n: &str, env: Environment) -> Ast {
         match env.resolve(&n.to_string()) {
             Some(v) => v.clone(),
             None => {
@@ -77,20 +73,20 @@ impl AstBuilder<AstType> {
         }
     }
 
-    pub fn block(&self, exprs: Vec<Ast<AstType>>) -> Ast<AstType> {
+    pub fn block(&self, exprs: Vec<Ast>) -> Ast {
         Ast::Block(exprs)
     }
 
-    pub fn func(&mut self, params: Vec<Variable<AstType>>, body: Ast<AstType>, sig: Vec<Type>) -> Ast<AstType> {
+    pub fn func(&mut self, params: Vec<Variable>, body: Ast, sig: Vec<Type>) -> Ast {
         let ty = Type::Func(sig.clone());
         Ast::Function { params, body: body.into(), ty: Type::Func(sig) }
     }
 
-    pub fn apply(&mut self, f: Ast<AstType>, args: Vec<Ast<AstType>>) -> Ast<AstType> {
+    pub fn apply(&mut self, f: Ast, args: Vec<Ast>) -> Ast {
         Ast::Apply(f.into(), args)
     }
 
-    pub fn apply_name(&mut self, name: &str, args: Vec<Ast<AstType>>) -> Ast<AstType> {
+    pub fn apply_name(&mut self, name: &str, args: Vec<Ast>) -> Ast {
         let mut arg_types = args.iter().map(|a| a.get_type()).collect::<Vec<_>>();
         let ret_ty = self.type_unknown();
         arg_types.push(ret_ty);
@@ -99,7 +95,7 @@ impl AstBuilder<AstType> {
         Ast::Apply(f.into(), args)
     }
 
-    pub fn binary(&mut self, name: &str, lhs: Ast<AstType>, rhs: Ast<AstType>) -> Ast<AstType> {
+    pub fn binary(&mut self, name: &str, lhs: Ast, rhs: Ast) -> Ast {
         let ty_ret = self.type_unknown();
         let ty_f = Type::Func(vec![lhs.get_type(), rhs.get_type(), ty_ret]);
         let f = self.node_named(name.into(), ty_f);
@@ -107,7 +103,7 @@ impl AstBuilder<AstType> {
         Ast::Apply(f.into(), args)
     }
 
-    fn name_resolve(&mut self, ast: Ast<AstType>, env: Environment<AstType>) -> (Ast<AstType>, Environment<AstType>) {
+    fn name_resolve(&mut self, ast: Ast, env: Environment) -> (Ast, Environment) {
         match ast {
             Ast::Literal(_) => (ast, env),
 
@@ -218,7 +214,7 @@ impl AstBuilder<AstType> {
         }
     }
 
-    pub fn declare(&mut self, name: &str, rhs: Ast<AstType>) -> Ast<AstType> {
+    pub fn declare(&mut self, name: &str, rhs: Ast) -> Ast {
         let ty = rhs.get_type();
         let v = self.var_named(name, ty.clone());
         Ast::Declare(v, rhs.into())
@@ -226,9 +222,9 @@ impl AstBuilder<AstType> {
 
     pub fn resolve(
         &mut self,
-        ast: Ast<AstType>,
-        env: Environment<AstType>,
-    ) -> (UnifyResult, Ast<AstType>, Environment<AstType>, SymbolTable<Type>) {
+        ast: Ast,
+        env: Environment,
+    ) -> (UnifyResult, Ast, Environment, SymbolTable<Type>) {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
 
@@ -251,17 +247,17 @@ impl AstBuilder<AstType> {
         (res, ast, env, subst)
     }
 
-    pub fn base_env(&mut self) -> Environment<AstType> {
+    pub fn base_env(&mut self) -> Environment {
         let mut env = Environment::default();
 
         let params = vec![self.var_named("a", Type::Int), self.var_named("b", Type::Int)];
         let sig = vec![Type::Int, Type::Int, Type::Int];
-        let body = Ast::Extern(sig.clone());
+        let body = Ast::Builtin(sig.clone());
         env.define("+".to_string(), self.func(params, body, sig));
         env
     }
 
-    pub fn lower(&mut self, ast: &Ast<AstType>, env: Environment<AstType>) -> Result<hir::Ast, Box<dyn Error>> {
+    pub fn lower(&mut self, ast: &Ast, env: Environment) -> Result<hir::Ast, Box<dyn Error>> {
         match ast {
             Ast::Literal(Literal::Bool(b)) => Ok(hir::Ast::bool(*b)),
             Ast::Literal(Literal::Int(u)) => Ok(hir::Ast::i64(*u as i64)),
@@ -328,7 +324,7 @@ impl AstBuilder<AstType> {
         }
     }
     
-    fn lower_list(&mut self, exprs: &Vec<Ast<AstType>>, env: Environment<AstType>) -> Result<Vec<hir::Ast>, Box<dyn Error>> {
+    fn lower_list(&mut self, exprs: &Vec<Ast>, env: Environment) -> Result<Vec<hir::Ast>, Box<dyn Error>> {
         let mut out = vec![];
         for e in exprs {
             out.push(self.lower(e, env.clone())?);
@@ -345,8 +341,8 @@ mod tests {
     use codegen::llvm::LLVMBackendContext;
 
     struct Test {}
-    impl Visitor<Type, ()> for Test {
-        fn exit(&mut self, e: &Ast<Type>, _n: &mut ()) -> visitor::VResult {
+    impl Visitor<()> for Test {
+        fn exit(&mut self, e: &Ast, _n: &mut ()) -> visitor::VResult {
             println!("AST: {}", e);
             Ok(())
         }
@@ -367,7 +363,7 @@ mod tests {
 
     #[test]
     fn test_resolve() {
-        let mut b: AstBuilder<Type> = AstBuilder::default();
+        let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
 
         let v = b.int(1);
@@ -395,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_function() {
-        let mut b: AstBuilder<Type> = AstBuilder::default();
+        let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
 
         // function to increment by one
@@ -431,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_binary() {
-        let mut b: AstBuilder<Type> = AstBuilder::default();
+        let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
         let one = b.int(1);
         let two = b.int(2);
@@ -463,7 +459,7 @@ mod tests {
 
     #[test]
     fn name_resolve() {
-        let mut b: AstBuilder<Type> = AstBuilder::default();
+        let mut b: AstBuilder = AstBuilder::default();
         let mut env = Environment::default();
 
         // predefined variable "a"
@@ -491,7 +487,7 @@ mod tests {
 
     #[test]
     fn codegen() {
-        let mut b: AstBuilder<Type> = AstBuilder::default();
+        let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
         let ty = b.type_unknown();
 

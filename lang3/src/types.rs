@@ -1,13 +1,8 @@
-use crate::env::{EnvLayers, LayerKey};
-use logic::{DefinitionId, TypeSignature, SymbolTable};
+use logic::{DefinitionId, TypeSignature};
 use std::fmt;
 use std::error::Error;
-use crate::Ast;
-
+use super::*;
 use codegen::hir;
-
-pub type Environment<T> = EnvLayers<String, Ast<T>>;
-impl LayerKey for String {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
@@ -52,7 +47,7 @@ impl TypeSignature<Type> for Type {
 }
 
 impl Type {
-    pub fn lower(&self, subst: &SymbolTable<Type>) -> Result<hir::Type, Box<dyn Error>> {
+    pub fn lower(&self, subst: &SymbolTable) -> Result<hir::Type, Box<dyn Error>> {
         match self {
             Self::Func(sig) => {
                 let mut out = vec![];
@@ -83,7 +78,7 @@ impl Type {
         }
     }
 
-    pub fn lower_list(types: &Vec<Type>, subst: &SymbolTable<Type>) -> Result<Vec<hir::Type>, Box<dyn Error>> {
+    pub fn lower_list(types: &Vec<Type>, subst: &SymbolTable) -> Result<Vec<hir::Type>, Box<dyn Error>> {
         let mut out = vec![];
         for t in types {
             out.push(t.lower(&subst)?);
@@ -91,11 +86,11 @@ impl Type {
         Ok(out)
     }
 
-    pub fn resolve_list(types: &Vec<Type>, subst: &SymbolTable<Type>) -> Vec<Type> {
+    pub fn resolve_list(types: &Vec<Type>, subst: &SymbolTable) -> Vec<Type> {
         types.clone().into_iter().map(|ty| ty.resolve(subst)).collect()
     }
 
-    pub fn resolve(&self, subst: &SymbolTable<Type>) -> Type {
+    pub fn resolve(&self, subst: &SymbolTable) -> Type {
         match self {
             Type::Variable(v) => {
                 match subst.get(&v) {

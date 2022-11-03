@@ -1,5 +1,5 @@
-use crate::env::{EnvLayers, LayerKey, LayerValue};
-use logic::{DefinitionId, TypeSignature, SymbolTable};
+use crate::env::{LayerValue};
+use logic::{TypeSignature};
 use std::fmt;
 use super::*;
 
@@ -14,49 +14,57 @@ pub enum Literal {
     String(String),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Variable<T> {
+pub type AstType = Type;
+
+#[derive(Clone, Debug)]
+pub struct Variable {
     pub id: VariableId,
     pub ty: Type,
     pub name: String,
-    pub bound: Option<T>,
+    pub bound: Option<AstType>,
+    pub env: Option<Environment>
 }
-pub type AstType = Type;
+impl PartialEq for Variable {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
 
-impl Variable<AstType> {
+
+impl Variable {
     pub fn named(name: String, id: VariableId, ty: Type) -> Self {
-        Self { name, bound: None, id, ty }
+        Self { name, bound: None, id, ty, env: None  }
     }
     pub fn unnamed(id: VariableId, ty: Type) -> Self {
         let name = format!("v{}", id.0);
-        Self { name, bound: None, id, ty }
+        Self { name, bound: None, id, ty, env: None }
     }
     pub fn bind(&mut self, ast: AstType) {
         self.bound.replace(ast);
     }
-    pub fn resolve(&self, subst: &SymbolTable<Type>) -> Self {
+    pub fn resolve(&self, subst: &SymbolTable) -> Self {
         let mut v = self.clone();
         v.ty = v.ty.resolve(subst);
         v
     }
 }
-impl<T: fmt::Debug> fmt::Display for Variable<T> {
+impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "V{}", &self.id.0)
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Ast<T> {
+pub enum Ast {
     Type(Type),
 
     // Const value
     Literal(Literal),
 
     // Variable, represented by a String
-    Variable(Variable<T>),
+    Variable(Variable),
 
-    Block(Vec<Ast<T>>),
+    Block(Vec<Ast>),
 
     // A function that is defined externally
     Extern(Vec<Type>), // args
@@ -65,22 +73,22 @@ pub enum Ast<T> {
     Builtin(Vec<Type>), // args
 
     // A function that is defined as part of the program
-    Function { params: Vec<Variable<T>>, body: Box<Ast<T>>, ty: Type},
+    Function { params: Vec<Variable>, body: Box<Ast>, ty: Type},
 
     // function application
-    Apply(Box<Ast<T>>, Vec<Ast<T>>), // function, args
+    Apply(Box<Ast>, Vec<Ast>), // function, args
 
-    Assign(String, Box<Ast<T>>),
+    Assign(String, Box<Ast>),
 
-    Declare(Variable<T>, Box<Ast<T>>),
+    Declare(Variable, Box<Ast>),
 }
 
-fn resolve_list(exprs: &Vec<Ast<AstType>>, subst: &SymbolTable<Type>) -> Vec<Ast<AstType>> {
+fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Vec<Ast> {
     exprs.iter().cloned().map(|e| e.resolve(subst)).collect()
 }
 
-impl Ast<AstType> {
-    pub fn resolve(&self, subst: &SymbolTable<Type>) -> Self {
+impl Ast {
+    pub fn resolve(&self, subst: &SymbolTable) -> Self {
         let before = self.clone();
         let after = match &self {
             Self::Literal(_) => self.clone(),
@@ -136,19 +144,19 @@ impl Ast<AstType> {
     }
 }
 
-impl<T> From<Variable<T>> for Ast<T> {
-    fn from(item: Variable<T>) -> Self {
+impl From<Variable> for Ast {
+    fn from(item: Variable) -> Self {
         Ast::Variable(item)
     }
 }
 
-impl<T> From<Literal> for Ast<T> {
+impl From<Literal> for Ast {
     fn from(item: Literal) -> Self {
         Ast::Literal(item)
     }
 }
 
-impl<T: fmt::Debug> fmt::Display for Ast<T> {
+impl fmt::Display for Ast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ast::Literal(Literal::Int(x)) => {
@@ -213,9 +221,9 @@ impl<T: fmt::Debug> fmt::Debug for Ast<T> {
 }
 */
 
-impl<T: fmt::Debug + fmt::Display + Clone> LayerValue for Ast<T> {}
+impl LayerValue for Ast {}
 
-impl<T: fmt::Debug + fmt::Display + Clone> Ast<T> {
+impl Ast {
     pub fn int(i: i64) -> Self {
         Self::Literal(Literal::Int(i as u64))
     }
