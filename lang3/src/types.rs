@@ -14,9 +14,11 @@ pub enum Type {
     Int,
     Float,
     Bool,
+    String,
     Func(Vec<Type>),
     Variable(DefinitionId),
     Unit,
+    Type  // the type of a type
 }
 
 impl Default for Type {
@@ -60,54 +62,54 @@ impl Type {
                 Ok(hir::FunctionType::export(out).into())
             }
             Self::Variable(def) => {
-                subst.get(def).expect("Variable not found").lower(subst)
+                match subst.get(def) {
+                    Some(v) => v.lower(subst),
+                    None => {
+                        eprintln!("Not found in subsitution: {:?}", def);
+                        unreachable!()
+                    }
+                }
             }
             Self::Int => Ok(hir::Type::i64()),
             Self::Float => Ok(hir::Type::f64()),
             Self::Bool => Ok(hir::Type::bool()),
-            Self::Unit => Ok(hir::Type::unit())
+            Self::Unit => Ok(hir::Type::unit()),
+
+            // types can't be lowered
+            Self::Type => unimplemented!(),
+
+            // codegen doesn't handle strings, we need to implement them at this layer
+            Self::String => unimplemented!()
         }
     }
 
-    pub fn resolve(&self, subst: SymbolTable<Type>) -> (bool, Type) {
+    pub fn lower_list(types: &Vec<Type>, subst: &SymbolTable<Type>) -> Result<Vec<hir::Type>, Box<dyn Error>> {
+        let mut out = vec![];
+        for t in types {
+            out.push(t.lower(&subst)?);
+        }
+        Ok(out)
+    }
+
+    pub fn resolve_list(types: &Vec<Type>, subst: &SymbolTable<Type>) -> Vec<Type> {
+        types.clone().into_iter().map(|ty| ty.resolve(subst)).collect()
+    }
+
+    pub fn resolve(&self, subst: &SymbolTable<Type>) -> Type {
         match self {
             Type::Variable(v) => {
                 match subst.get(&v) {
-                    Some(ty) => (ty.unknown().is_none(), ty.clone()),
-                    None => (false, self.clone()),
+                    Some(ty) => ty.clone(),
+                    None => self.clone(),
                 }
             }
             Type::Func(sig) => {
                 let resolved_sig = sig.iter().map(|t| {
-                    let (_, ty) = t.resolve(subst.clone());
-                    ty
+                    t.resolve(subst)
                 }).collect::<Vec<_>>();
-                let ty = Type::Func(resolved_sig);
-                (ty.unknown().is_none(), ty)
+                Type::Func(resolved_sig)
             }
-            _ => (true, self.clone())
-        }
-    }
-
-    fn substitute(&mut self, subst: &SymbolTable<Type>) -> Type {
-        match self {
-            Type::Variable(ty_id) => match logic::subst_get_type_by_id(&subst, &ty_id) {
-                Some(v) => v,
-                None => {
-                    println!("Type missing from substitution table: {:?}", (ty_id));//, &self));
-                    unimplemented!()
-                }
-            },
-            Type::Func(sig) => {
-                let new_sig = sig
-                    .into_iter()
-                    .map(|v| {
-                        v.substitute(subst)
-                    })
-                    .collect();
-                Type::Func(new_sig)
-            }
-            _ => self.clone(),
+            _ => self.clone()
         }
     }
 }
