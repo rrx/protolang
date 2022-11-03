@@ -10,8 +10,8 @@ pub struct AstBuilder<T> {
     phantom: PhantomData<T>
 }
 
-impl<T> Visitor<T, SymbolTable<Ast<T>>> for AstBuilder<T> {
-    fn enter(&mut self, e: &Ast<T>, n: &mut SymbolTable<Ast<T>>) -> visitor::VResult {
+impl Visitor<Type, SymbolTable<Ast<Type>>> for AstBuilder<Type> {
+    fn enter(&mut self, e: &Ast<Type>, n: &mut SymbolTable<Ast<Type>>) -> visitor::VResult {
         println!("Visit AST: {}", e);
         Ok(())
     }
@@ -228,14 +228,17 @@ impl<T: Clone + fmt::Debug + fmt::Display + PartialEq + TypeSignature<Type>> Ast
         &mut self,
         ast: Ast<T>,
         env: Environment<T>,
-    ) -> (UnifyResult, Ast<T>, Environment<T>) {
+    ) -> (UnifyResult, Ast<T>, Environment<T>, SymbolTable<Type>) {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
-        //ast.try_borrow_mut().unwrap();
-        // infer all types
 
+        // infer all types
         let eqs = self.equations.clone();
-        let (res, mut subst) = logic::unify_start(eqs);
+        for eq in &eqs {
+            println!("EQ: {:?}", &eq);
+        }
+        let (res, subst) = logic::unify_start(eqs);
+
         println!("AST: {}", &ast);
         println!("ENV: {}", env);
         println!("RES: {:?}", res);
@@ -245,7 +248,7 @@ impl<T: Clone + fmt::Debug + fmt::Display + PartialEq + TypeSignature<Type>> Ast
             //println!("SUB: {:?}", subst);
         }
 
-        (res, ast, env)
+        (res, ast, env, subst)
     }
 
     pub fn base_env(&mut self) -> Environment<T> {
@@ -265,11 +268,25 @@ mod tests {
     use test_log::test;
 
     struct Test {}
-    impl<T> Visitor<T, ()> for Test {
-        fn exit(&mut self, e: &Ast<T>, _n: &mut ()) -> visitor::VResult {
+    impl Visitor<Type, ()> for Test {
+        fn exit(&mut self, e: &Ast<Type>, _n: &mut ()) -> visitor::VResult {
             println!("AST: {}", e);
             Ok(())
         }
+    }
+
+    #[test]
+    fn test_unify() {
+        let eqs = vec![
+            //logic::Expr::OneOf(Type::Variable(0.into()), vec![Type::Int]),
+            logic::Expr::OneOf(
+                Type::Func(vec![Type::Variable(0.into()), Type::Int]),
+                vec![Type::Func(vec![Type::Int, Type::Int])],
+                )
+        ];
+        let (res, subst) = logic::unify_start(eqs);
+        println!("SUB: {:?}", subst);
+        assert_eq!(res, UnifyResult::Ok);
     }
 
     #[test]
@@ -285,7 +302,7 @@ mod tests {
         let block = b.block(vec![decl1, decl2]);
         let ast = b.declare("c", block.clone());
 
-        let (res, ast, env) = b.resolve(ast, env.clone());
+        let (res, ast, env, _) = b.resolve(ast, env.clone());
 
         println!("a = {:?}", env.resolve(&"a".into()));
         println!("b = {:?}", env.resolve(&"b".into()));
@@ -314,7 +331,7 @@ mod tests {
         let f = b.func(vec![p], add, vec![Type::Int, Type::Int]);
         let ast = b.declare("f", f);
 
-        let (res, ast, env) = b.resolve(ast, env.clone());
+        let (res, ast, env, _) = b.resolve(ast, env.clone());
         println!("{}", env);
         println!("{}", &ast);
         assert_eq!(res, UnifyResult::Ok);
@@ -332,7 +349,11 @@ mod tests {
         let add = b.binary("+", one, two);
         let ast = b.declare("f", add);
 
-        let (res, ast, env) = b.resolve(ast, env.clone());
+        for eq in &b.equations {
+            println!("EQ: {:?}", &eq);
+        }
+
+        let (res, ast, env, subst) = b.resolve(ast, env.clone());
         println!("{}", env);
         println!("{}", &ast);
         assert_eq!(res, UnifyResult::Ok);
@@ -340,8 +361,15 @@ mod tests {
         let call = env.resolve(&"f".into()).unwrap();
         println!("call = {:?}", call);
 
+        for (k,v) in subst.iter() {
+            println!("subst = {:?} => {:?}", k, v);
+        }
+
         // make sure type is correct
-        assert_eq!(ast.get_type(), Type::Int);
+        let ty = ast.resolve(subst.clone()).get_type();//resolve_type(subst).unwrap();
+        let (_, ty) = ty.resolve(subst);
+        println!("ty = {:?}", &ty);
+        assert_eq!(ty, Type::Int);
     }
 
     #[test]
@@ -352,11 +380,17 @@ mod tests {
         let ty = b.type_unknown();
         let v = b.var_named("a", ty);
         println!("AST:{:?}", &v);
-        let (ast, env) = b.name_resolve(v.into(), env);
+        let (res, ast, env, subst) = b.resolve(v.into(), env);
         println!("ENV:{}", env);
         println!("AST:{}", &ast);
 
+        for (k,v) in subst.iter() {
+            println!("subst = {:?} => {:?}", k, v);
+        }
+
         // make sure the types match
-        assert_eq!(ast.get_type(), Type::Int);
+        let ty = ast.resolve(subst.clone()).get_type();//resolve_type(subst).unwrap();
+        let (_, ty) = ty.resolve(subst);
+        //assert_eq!(ty, Type::Int);
     }
 }

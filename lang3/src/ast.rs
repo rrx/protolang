@@ -1,5 +1,5 @@
 use crate::env::{EnvLayers, LayerKey, LayerValue};
-use logic::{DefinitionId, TypeSignature};
+use logic::{DefinitionId, TypeSignature, SymbolTable};
 use std::fmt;
 use super::*;
 use codegen::hir;
@@ -61,7 +61,26 @@ pub enum Ast<T> {
     Declare(String, Box<Ast<T>>),
 }
 
-impl<T> Ast<T> {
+impl<T: Clone> Ast<T> {
+    pub fn resolve(&self, subst: SymbolTable<Type>) -> Self {
+        match &self {
+            Self::Variable(v) => {
+                let mut v = v.clone();
+                let (_, ty) = v.ty.resolve(subst);
+                v.ty = ty;
+                Self::Variable(v.clone())
+            }
+            Self::Function { params, body, ty } => {
+                //let sig = ty.
+                //let (_, new_ty) = ty.resolve(subst);
+                //ty = new_ty;
+                //Self::Function { params: params.clone(), body: body.clone(), ty }
+                self.clone()
+            }
+            _ => self.clone() 
+        }
+    }
+
     pub fn get_type(&self) -> Type {
         match self {
             Self::Literal(Literal::Int(_)) => Type::Int,
@@ -69,12 +88,17 @@ impl<T> Ast<T> {
             Self::Literal(Literal::Bool(_)) => Type::Bool,
             Self::Function { ty, .. } => Type::Func(ty.clone()),
             Self::Block(exprs) => exprs.last().expect("Empty Block").get_type(),
-            Self::Apply(f, args) => f.get_type().children().last().expect("No Return Type").clone(),
+            Self::Apply(f, _) => f.get_type().children().last().expect("No Return Type").clone(),
+            Self::Declare(_, expr) => expr.get_type(),
+            Self::Assign(_, expr) => expr.get_type(),
+            Self::Variable(v) => v.ty.clone(),
             _ => unimplemented!()
         }
     }
 }
 
+
+/*
 impl<T> TypeSignature<Type> for Ast<T> {
     fn unknown(&self) -> Option<DefinitionId> {
         self.get_type().unknown()
@@ -86,6 +110,7 @@ impl<T> TypeSignature<Type> for Ast<T> {
         unimplemented!()
     }
 }
+*/
 
 impl<T> From<Variable<T>> for Ast<T> {
     fn from(item: Variable<T>) -> Self {
@@ -99,7 +124,7 @@ impl<T> From<Literal> for Ast<T> {
     }
 }
 
-impl<T> fmt::Debug for Ast<T> {
+impl<T: fmt::Debug> fmt::Debug for Ast<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ast::Literal(x) => {
@@ -108,28 +133,43 @@ impl<T> fmt::Debug for Ast<T> {
             Ast::Variable(x) => {
                 write!(f, "Var({:?})", &x.definition_id)?;
             }
-            _ => {
-                write!(f, "{:?}", &self)?;
+            Ast::Type(t) => {
+                write!(f, "Type({:?})", &t)?;
+            }
+
+            Ast::Block(exprs) => {
+                write!(f, "Block({:?})", &exprs)?;
+            }
+
+            Ast::Extern(types) => {
+                write!(f, "Extern({:?})", &types)?;
+            }
+
+            Ast::Builtin(name, _) => write!(f, "Builtin({:?})", &name)?,
+
+            Ast::Function { params, body, ty } => {
+                write!(f, "Func({:?}, {:?}, {:?})", &params, &body, &ty)?;
+            }
+
+            Ast::Apply(func, args) => {
+                write!(f, "Apply({:?}, {:?})", &func, &args)?;
+            }
+
+            Ast::Assign(name, expr) => {
+                write!(f, "Assign({:?}, {:?})", &name, &expr)?;
+            }
+
+            Ast::Declare(name, expr) => {
+                write!(f, "Declare({:?}, {:?})", &name, &expr)?;
             }
         }
         Ok(())
     }
 }
 
-impl<T> fmt::Display for Ast<T> {
+impl<T: fmt::Debug> fmt::Display for Ast<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Ast::Literal(x) => {
-                write!(f, "{:?}", &x)?;
-            }
-            Ast::Variable(x) => {
-                write!(f, "Var({:?})", &x.definition_id)?;
-            }
-            _ => {
-                write!(f, "{:?}", &self)?;
-            }
-        }
-        Ok(())
+        write!(f, "{:?}", &self)
     }
 }
 

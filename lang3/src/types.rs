@@ -69,6 +69,26 @@ impl Type {
         }
     }
 
+    pub fn resolve(&self, subst: SymbolTable<Type>) -> (bool, Type) {
+        match self {
+            Type::Variable(v) => {
+                match subst.get(&v) {
+                    Some(ty) => (ty.unknown().is_none(), ty.clone()),
+                    None => (false, self.clone()),
+                }
+            }
+            Type::Func(sig) => {
+                let resolved_sig = sig.iter().map(|t| {
+                    let (_, ty) = t.resolve(subst.clone());
+                    ty
+                }).collect::<Vec<_>>();
+                let ty = Type::Func(resolved_sig);
+                (ty.unknown().is_none(), ty)
+            }
+            _ => (true, self.clone())
+        }
+    }
+
     fn substitute(&mut self, subst: &SymbolTable<Type>) -> Type {
         match self {
             Type::Variable(ty_id) => match logic::subst_get_type_by_id(&subst, &ty_id) {
