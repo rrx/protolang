@@ -1,13 +1,13 @@
-mod types;
 mod ast;
-mod env;
 mod builder;
+mod env;
+mod types;
 mod visitor;
 
-use types::*;
 use ast::*;
-use env::*;
 use builder::*;
+use env::*;
+use types::*;
 use visitor::*;
 
 pub type SymbolTable = logic::SymbolTable<Type>;
@@ -15,12 +15,10 @@ pub type SymbolTable = logic::SymbolTable<Type>;
 pub type Environment = EnvLayers<String, Ast>;
 impl LayerKey for String {}
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-    }
+    fn it_works() {}
 }

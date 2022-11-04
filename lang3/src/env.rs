@@ -84,7 +84,7 @@ impl<K: LayerKey, V: LayerValue> fmt::Debug for EnvLayers<K, V> {
             .entries(self.iter().map(|(k, v)| (k, v)))
             .finish()
         //for (k, v) in self.iter() {
-            //write!(f, "{}={:?}\n", k, v)?;
+        //write!(f, "{}={:?}\n", k, v)?;
         //}
         //Ok(())
     }
@@ -201,7 +201,7 @@ mod tests {
         assert_eq!(None, env2.resolve(&"Asdf2".into()));
 
         //env3.iter().for_each(|(k, v)| {
-            //println!("x: {:?}", (k, v));
+        //println!("x: {:?}", (k, v));
         //});
     }
 

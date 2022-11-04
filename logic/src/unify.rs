@@ -260,7 +260,7 @@ pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
         if equations.len() == 0 {
             break;
         }
-        
+
         // check if anything has changed
         if subst.size() == count {
             res = UnifyResult::NoSolution;
@@ -271,7 +271,6 @@ pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
         let (results, s) = unify_all(equations, subst.clone());
         subst = s;
         equations = results;
-
     }
     (res, subst)
 }

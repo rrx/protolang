@@ -1,7 +1,7 @@
-use crate::env::{LayerValue};
-use logic::{TypeSignature};
-use std::fmt;
 use super::*;
+use crate::env::LayerValue;
+use logic::TypeSignature;
+use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VariableId(pub usize);
@@ -20,7 +20,7 @@ pub struct Variable {
     pub ty: Type,
     pub name: String,
     pub bound: Option<Type>,
-    pub env: Option<Environment>
+    pub env: Option<Environment>,
 }
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
@@ -30,11 +30,23 @@ impl PartialEq for Variable {
 
 impl Variable {
     pub fn named(name: String, id: VariableId, ty: Type) -> Self {
-        Self { name, bound: None, id, ty, env: None  }
+        Self {
+            name,
+            bound: None,
+            id,
+            ty,
+            env: None,
+        }
     }
     pub fn unnamed(id: VariableId, ty: Type) -> Self {
         let name = format!("v{}", id.0);
-        Self { name, bound: None, id, ty, env: None }
+        Self {
+            name,
+            bound: None,
+            id,
+            ty,
+            env: None,
+        }
     }
     pub fn bind(&mut self, env: Environment) {
         self.env.replace(env);
@@ -61,7 +73,7 @@ impl Builtin {
         match self {
             Self::AddInt(a, b) => vec![a, b],
             Self::AddFloat(a, b) => vec![a, b],
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -87,7 +99,11 @@ pub enum Ast {
     Internal(Builtin),
 
     // A function that is defined as part of the program
-    Function { params: Vec<Variable>, body: Box<Ast>, ty: Type},
+    Function {
+        params: Vec<Variable>,
+        body: Box<Ast>,
+        ty: Type,
+    },
 
     // function application
     Apply(Box<Ast>, Vec<Ast>), // function, args
@@ -119,13 +135,13 @@ impl Ast {
                             Ast::Variable(var) => {
                                 return var.clone().into();
                             }
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         }
                     }
                 }
                 Self::Variable(v.resolve(subst))
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -145,31 +161,25 @@ impl Ast {
                 */
                 //Self::Variable(v.resolve(subst))
             }
-            Self::Extern(types) => {
-                Self::Extern(Type::resolve_list(&types, subst))
-            }
-            Self::Builtin(types) => {
-                Self::Builtin(Type::resolve_list(&types, subst))
-            }
+            Self::Extern(types) => Self::Extern(Type::resolve_list(&types, subst)),
+            Self::Builtin(types) => Self::Builtin(Type::resolve_list(&types, subst)),
             Self::Internal(v) => self.clone(),
             Self::Declare(var, expr) => {
                 Self::Declare(var.resolve(subst), expr.resolve(subst).into())
             }
-            Self::Assign(name, expr) => {
-                Self::Assign(name.clone(), expr.resolve(subst).into())
-            }
+            Self::Assign(name, expr) => Self::Assign(name.clone(), expr.resolve(subst).into()),
             Self::Function { params, body, ty } => {
                 // resolve the types in the params
                 let params = params.iter().map(|p| p.resolve(subst)).collect::<Vec<_>>();
                 let ty = ty.resolve(&subst);
-                Self::Function { params, body: body.resolve(subst).into(), ty }
+                Self::Function {
+                    params,
+                    body: body.resolve(subst).into(),
+                    ty,
+                }
             }
-            Self::Block(exprs) => {
-                Self::Block(resolve_list(exprs, &subst))
-            }
-            Self::Apply(f, args) => {
-                Self::Apply(f.resolve(subst).into(), resolve_list(args, subst))
-            }
+            Self::Block(exprs) => Self::Block(resolve_list(exprs, &subst)),
+            Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)),
 
             Self::Type(ty) => Self::Type(ty.resolve(subst)),
         };
@@ -185,7 +195,12 @@ impl Ast {
             Self::Literal(Literal::String(_)) => Type::String,
             Self::Function { ty, .. } => ty.clone(),
             Self::Block(exprs) => exprs.last().expect("Empty Block").get_type(),
-            Self::Apply(f, _) => f.get_type().children().last().expect("No Return Type").clone(),
+            Self::Apply(f, _) => f
+                .get_type()
+                .children()
+                .last()
+                .expect("No Return Type")
+                .clone(),
             Self::Declare(_, expr) => expr.get_type(),
             Self::Assign(_, expr) => expr.get_type(),
             Self::Variable(v) => v.ty.clone(),
@@ -256,7 +271,10 @@ impl fmt::Display for Ast {
 }
 
 fn format_list<T: fmt::Display>(args: &Vec<T>) -> String {
-    args.iter().map(|x| format!("{}", x)).collect::<Vec<_>>().join(", ")
+    args.iter()
+        .map(|x| format!("{}", x))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /*
@@ -280,7 +298,6 @@ impl Ast {
     pub fn int(i: i64) -> Self {
         Self::Literal(Literal::Int(i as u64))
     }
-
 }
 
 #[cfg(test)]
@@ -289,8 +306,5 @@ mod tests {
     use test_log::test;
 
     #[test]
-    fn lower() {
-    }
+    fn lower() {}
 }
-
-

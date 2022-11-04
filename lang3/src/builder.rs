@@ -1,6 +1,6 @@
 use crate::*;
-use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 use codegen::hir;
+use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 use std::error::Error;
 use std::ops::Deref;
 
@@ -9,7 +9,7 @@ pub struct AstBuilder {
     last_id: usize,
     pub equations: Vec<logic::Expr<Type>>,
     to_resolve: Vec<Variable>,
-    base: Vec<Ast>
+    base: Vec<Ast>,
 }
 
 impl Visitor<SymbolTable<Ast>> for AstBuilder {
@@ -81,7 +81,11 @@ impl AstBuilder {
 
     pub fn func(&mut self, params: Vec<Variable>, body: Ast, sig: Vec<Type>) -> Ast {
         let ty = Type::Func(sig.clone());
-        Ast::Function { params, body: body.into(), ty: Type::Func(sig) }
+        Ast::Function {
+            params,
+            body: body.into(),
+            ty: Type::Func(sig),
+        }
     }
 
     pub fn apply(&mut self, f: Ast, args: Vec<Ast>) -> Ast {
@@ -162,9 +166,9 @@ impl AstBuilder {
                         // resolve the name of the function
                         // This can yield multiple results and they need to match with parameters
                         // We accomplish this here by making use of the type unification system
-                        // This also means we don't know the resolution until after types are 
+                        // This also means we don't know the resolution until after types are
                         // unified.
-                        
+
                         v.bind(env.clone());
                         self.to_resolve.push(v.clone());
 
@@ -186,7 +190,11 @@ impl AstBuilder {
                         (Ast::Apply(Ast::Variable(v).into(), args.clone()), env)
                     }
 
-                    Ast::Function { ref params, ref body, ref ty } => {
+                    Ast::Function {
+                        ref params,
+                        ref body,
+                        ref ty,
+                    } => {
                         // Already resolved
                         // TODO:
                         // args are unbound
@@ -210,7 +218,14 @@ impl AstBuilder {
                     local_env.define(name, Ast::Variable(arg.clone()));
                 }
                 let (body, local_env) = self.name_resolve(*body.clone(), local_env);
-                (Ast::Function { params, body: body.into(), ty }, env)
+                (
+                    Ast::Function {
+                        params,
+                        body: body.into(),
+                        ty,
+                    },
+                    env,
+                )
             }
 
             Ast::Block(exprs) => {
@@ -234,7 +249,6 @@ impl AstBuilder {
                     let env = new_env;
                 }
                 (Ast::Internal(v), env)
-
             }
             _ => {
                 eprintln!("{:?}", &ast);
@@ -267,11 +281,10 @@ impl AstBuilder {
                         .resolve_all(&v.name)
                         .iter()
                         .cloned()
-                        .map(|v| {
-                            v.get_type()
-                        })
-                    .collect::<Vec<_>>();
-                    self.equations.push(logic::Expr::OneOf(v.ty.clone(), possible));
+                        .map(|v| v.get_type())
+                        .collect::<Vec<_>>();
+                    self.equations
+                        .push(logic::Expr::OneOf(v.ty.clone(), possible));
                 }
                 _ => {
                     match var_env.resolve(&v.name) {
@@ -313,7 +326,6 @@ impl AstBuilder {
             }
         }
 
-
         (res, ast, env, subst)
     }
 
@@ -323,7 +335,7 @@ impl AstBuilder {
         let b = self.var_named("b", Type::Int);
         let params = vec![a.clone(), b.clone()];
         let sig = vec![Type::Int, Type::Int, Type::Int];
-        let body = Ast::Internal(Builtin::AddInt(Box::new(a.into()), Box::new(b.into())));//sig.clone());
+        let body = Ast::Internal(Builtin::AddInt(Box::new(a.into()), Box::new(b.into()))); //sig.clone());
         self.func(params, body, sig)
     }
 
@@ -358,8 +370,9 @@ impl AstBuilder {
                 let d = hir::Definition {
                     variable: hir::DefinitionId(v.id.0),
                     name: Some(v.name.clone()),
-                    expr: self.lower(expr, env)?.into()
-                }.into(); 
+                    expr: self.lower(expr, env)?.into(),
+                }
+                .into();
                 Ok(hir::Ast::Definition(d))
             }
             Ast::Block(exprs) => {
@@ -404,31 +417,34 @@ impl AstBuilder {
                         let ty = hir::FunctionType::export(sig);
                         Ok(hir::FunctionCall::new(lowered_f, args, ty).into())
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
 
-
-            Ast::Internal(v) => {
-                match v {
-                    Builtin::AddInt(a, b) => Ok(hir::Builtin::AddInt(
-                            self.lower(a, env.clone())?.into(),
-                            self.lower(b, env.clone())?.into()
-                            ).into()),
-                    Builtin::AddFloat(a, b) => Ok(hir::Builtin::AddFloat(
-                            self.lower(a, env.clone())?.into(),
-                            self.lower(b, env.clone())?.into()
-                            ).into())
-                }
-            }
+            Ast::Internal(v) => match v {
+                Builtin::AddInt(a, b) => Ok(hir::Builtin::AddInt(
+                    self.lower(a, env.clone())?.into(),
+                    self.lower(b, env.clone())?.into(),
+                )
+                .into()),
+                Builtin::AddFloat(a, b) => Ok(hir::Builtin::AddFloat(
+                    self.lower(a, env.clone())?.into(),
+                    self.lower(b, env.clone())?.into(),
+                )
+                .into()),
+            },
             _ => {
                 eprintln!("{:?}", &ast);
                 unimplemented!()
             }
         }
     }
-    
-    fn lower_list(&mut self, exprs: &Vec<Ast>, env: Environment) -> Result<Vec<hir::Ast>, Box<dyn Error>> {
+
+    fn lower_list(
+        &mut self,
+        exprs: &Vec<Ast>,
+        env: Environment,
+    ) -> Result<Vec<hir::Ast>, Box<dyn Error>> {
         let mut out = vec![];
         for e in exprs {
             out.push(self.lower(e, env.clone())?);
@@ -441,12 +457,11 @@ impl AstBuilder {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_log::test;
     use codegen::llvm::LLVMBackendContext;
+    use test_log::test;
 
     struct Test {}
     impl Visitor<()> for Test {
@@ -458,12 +473,10 @@ mod tests {
 
     #[test]
     fn test_unify() {
-        let eqs = vec![
-            logic::Expr::OneOf(
-                Type::Func(vec![Type::Variable(0.into()), Type::Int]),
-                vec![Type::Func(vec![Type::Int, Type::Int])],
-                )
-        ];
+        let eqs = vec![logic::Expr::OneOf(
+            Type::Func(vec![Type::Variable(0.into()), Type::Int]),
+            vec![Type::Func(vec![Type::Int, Type::Int])],
+        )];
         let (res, subst) = logic::unify_start(eqs);
         println!("SUB: {:?}", subst);
         assert_eq!(res, UnifyResult::Ok);
@@ -558,7 +571,7 @@ mod tests {
         let call = env.resolve(&"f".into()).unwrap();
         println!("call = {:?}", call);
 
-        for (k,v) in subst.iter() {
+        for (k, v) in subst.iter() {
             println!("subst = {:?} => {:?}", k, v);
         }
 
@@ -590,7 +603,7 @@ mod tests {
         println!("AST:{}", &ast);
         assert_eq!(res, UnifyResult::Ok);
 
-        for (k,v) in subst.iter() {
+        for (k, v) in subst.iter() {
             println!("subst = {:?} => {:?}", k, v);
         }
 
@@ -635,7 +648,7 @@ mod tests {
         let p = b.var_unnamed(Type::Int);
         let f = b.func(vec![p.clone()], p.into(), vec![Type::Int, Type::Int]);
         let df = b.declare("f", f);
-       
+
         // main
         // call f
         let call = b.apply_name("f", vec![b.int(2)]);

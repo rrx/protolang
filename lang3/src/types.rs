@@ -1,8 +1,8 @@
-use logic::{DefinitionId, TypeSignature};
-use std::fmt;
-use std::error::Error;
 use super::*;
 use codegen::hir;
+use logic::{DefinitionId, TypeSignature};
+use std::error::Error;
+use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
@@ -13,7 +13,7 @@ pub enum Type {
     Func(Vec<Type>),
     Variable(DefinitionId),
     Unit,
-    Type  // the type of a type
+    Type, // the type of a type
 }
 
 impl Default for Type {
@@ -56,15 +56,13 @@ impl Type {
                 }
                 Ok(hir::FunctionType::export(out).into())
             }
-            Self::Variable(def) => {
-                match subst.get(def) {
-                    Some(v) => v.lower(subst),
-                    None => {
-                        eprintln!("Not found in subsitution: {:?}", def);
-                        unreachable!()
-                    }
+            Self::Variable(def) => match subst.get(def) {
+                Some(v) => v.lower(subst),
+                None => {
+                    eprintln!("Not found in subsitution: {:?}", def);
+                    unreachable!()
                 }
-            }
+            },
             Self::Int => Ok(hir::Type::i64()),
             Self::Float => Ok(hir::Type::f64()),
             Self::Bool => Ok(hir::Type::bool()),
@@ -74,11 +72,14 @@ impl Type {
             Self::Type => unimplemented!(),
 
             // codegen doesn't handle strings, we need to implement them at this layer
-            Self::String => unimplemented!()
+            Self::String => unimplemented!(),
         }
     }
 
-    pub fn lower_list(types: &Vec<Type>, subst: &SymbolTable) -> Result<Vec<hir::Type>, Box<dyn Error>> {
+    pub fn lower_list(
+        types: &Vec<Type>,
+        subst: &SymbolTable,
+    ) -> Result<Vec<hir::Type>, Box<dyn Error>> {
         let mut out = vec![];
         for t in types {
             out.push(t.lower(&subst)?);
@@ -87,24 +88,24 @@ impl Type {
     }
 
     pub fn resolve_list(types: &Vec<Type>, subst: &SymbolTable) -> Vec<Type> {
-        types.clone().into_iter().map(|ty| ty.resolve(subst)).collect()
+        types
+            .clone()
+            .into_iter()
+            .map(|ty| ty.resolve(subst))
+            .collect()
     }
 
     pub fn resolve(&self, subst: &SymbolTable) -> Type {
         match self {
-            Type::Variable(v) => {
-                match subst.get(&v) {
-                    Some(ty) => ty.clone(),
-                    None => self.clone(),
-                }
-            }
+            Type::Variable(v) => match subst.get(&v) {
+                Some(ty) => ty.clone(),
+                None => self.clone(),
+            },
             Type::Func(sig) => {
-                let resolved_sig = sig.iter().map(|t| {
-                    t.resolve(subst)
-                }).collect::<Vec<_>>();
+                let resolved_sig = sig.iter().map(|t| t.resolve(subst)).collect::<Vec<_>>();
                 Type::Func(resolved_sig)
             }
-            _ => self.clone()
+            _ => self.clone(),
         }
     }
 }
@@ -114,5 +115,3 @@ impl From<DefinitionId> for Type {
         Self::Variable(item)
     }
 }
-
-

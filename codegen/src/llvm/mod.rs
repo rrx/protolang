@@ -69,18 +69,18 @@ mod tests {
     fn codegen_fib() {
         let mut defs = Definitions::new();
         /*
-         function fibonacci(a, b, n) {
-           if (n === 0) {
-             return a;
-           }
+        function fibonacci(a, b, n) {
+          if (n === 0) {
+            return a;
+          }
 
-           if (n === 1) {
-             return b;
-           }
+          if (n === 1) {
+            return b;
+          }
 
-            return fibonacci(b, a + b, n - 1);
-         }
-         */
+           return fibonacci(b, a + b, n - 1);
+        }
+        */
 
         // fib function type
         let typ = FunctionType::export(vec![Type::i64(), Type::i64(), Type::i64(), Type::i64()]);
@@ -95,20 +95,32 @@ mod tests {
         let eq0 = lower::eq(n.clone().into(), Ast::i64(0));
 
         let ret_a: Ast = Return::new(a.clone().into()).into();
-        let branch1 =
-            If { condition: eq0.into(), then: ret_a.into(), otherwise: None, result_type: Type::Primitive(PrimitiveType::Unit) };
+        let branch1 = If {
+            condition: eq0.into(),
+            then: ret_a.into(),
+            otherwise: None,
+            result_type: Type::Primitive(PrimitiveType::Unit),
+        };
 
         let eq1 = lower::eq(n.clone().into(), Ast::i64(1));
         let ret_b: Ast = Return::new(b.clone().into()).into();
-        let branch2 =
-            If { condition: eq1.into(), then: ret_b.into(), otherwise: None, result_type: Type::Primitive(PrimitiveType::Unit) };
+        let branch2 = If {
+            condition: eq1.into(),
+            then: ret_b.into(),
+            otherwise: None,
+            result_type: Type::Primitive(PrimitiveType::Unit),
+        };
 
         // call the function that we've created and then increment
-        let call = FunctionCall::new(fib.clone().into(), vec![
-                                     b.clone().into(),
-                                     lower::add(a.clone().into(), b.clone().into()),
-                                     lower::sub(n.clone().into(), Ast::i64(1)),
-        ], typ.clone());
+        let call = FunctionCall::new(
+            fib.clone().into(),
+            vec![
+                b.clone().into(),
+                lower::add(a.clone().into(), b.clone().into()),
+                lower::sub(n.clone().into(), Ast::i64(1)),
+            ],
+            typ.clone(),
+        );
 
         let block = Sequence::new(vec![branch1.into(), branch2.into(), call.into()]);
         // create a function to associate with the variable
@@ -117,9 +129,7 @@ mod tests {
         // define the function using the definition id
         let dfib = Definition::variable(fib.clone(), f.into());
 
-        let call = FunctionCall::new(fib.clone().into(), vec![
-                                     Ast::i64(0), Ast::i64(1), Ast::i64(10)
-        ], typ.clone());
+        let call = FunctionCall::new(fib.clone().into(), vec![Ast::i64(0), Ast::i64(1), Ast::i64(10)], typ.clone());
 
         // single parameter function type for main
         let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
