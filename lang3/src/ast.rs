@@ -86,9 +86,18 @@ impl Variable {
 
     /// generate type equations for the variable that can be used for unification
     pub fn generate_equations(&self) -> logic::Expr<Type> {
+
         let var_env = self.env.as_ref().unwrap();
         match &self.ty {
             Type::Func(_) => {
+                // resolve the name of the function
+                // This can yield multiple results and they need to match with parameters
+                // We accomplish this here by making use of the type unification system
+                //
+                // create equation for all matches for the function
+                // We could filter this based on the known arguments so far
+                // It could be none, and so we could return an error now, rather
+                // than waiting for unification
                 let possible = var_env
                     .resolve_all(&self.name)
                     .iter()
@@ -166,7 +175,7 @@ pub enum Ast {
     },
 
     // function application
-    Apply(Box<Ast>, Vec<Ast>), // function, args
+    Apply(Variable, Vec<Ast>), // function, args
 
     Assign(String, Box<Ast>),
 
@@ -234,8 +243,7 @@ impl Ast {
             Self::Literal(Literal::String(_)) => Type::String,
             Self::Function { ty, .. } => ty.clone(),
             Self::Block(exprs) => exprs.last().expect("Empty Block").get_type(),
-            Self::Apply(f, _) => f
-                .get_type()
+            Self::Apply(var, _) => var.ty
                 .children()
                 .last()
                 .expect("No Return Type")

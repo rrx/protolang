@@ -2,7 +2,6 @@ use log::debug;
 use rpds::HashTrieMap;
 use std::fmt;
 use std::hash::Hash;
-use std::rc::Rc;
 
 pub trait LayerKey: Hash + Eq + fmt::Debug + fmt::Display + Clone {}
 pub trait LayerValue: fmt::Debug + fmt::Display + Clone {}
@@ -83,10 +82,6 @@ impl<K: LayerKey, V: LayerValue> fmt::Debug for EnvLayers<K, V> {
         f.debug_map()
             .entries(self.iter().map(|(k, v)| (k, v)))
             .finish()
-        //for (k, v) in self.iter() {
-        //write!(f, "{}={:?}\n", k, v)?;
-        //}
-        //Ok(())
     }
 }
 
@@ -199,10 +194,6 @@ mod tests {
         assert_eq!(Some(&1), env3.resolve(&"Asdf2".into()));
         assert_eq!(None, env.resolve(&"Asdf2".into()));
         assert_eq!(None, env2.resolve(&"Asdf2".into()));
-
-        //env3.iter().for_each(|(k, v)| {
-        //println!("x: {:?}", (k, v));
-        //});
     }
 
     #[test]

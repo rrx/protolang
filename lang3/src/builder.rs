@@ -2,7 +2,6 @@ use crate::*;
 use codegen::hir;
 use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 use std::error::Error;
-use std::ops::Deref;
 
 #[derive(Default)]
 pub struct AstBuilder {
@@ -88,8 +87,8 @@ impl AstBuilder {
         }
     }
 
-    pub fn apply(&mut self, f: Ast, args: Vec<Ast>) -> Ast {
-        Ast::Apply(f.into(), args)
+    pub fn apply(&mut self, var: &Variable, args: Vec<Ast>) -> Ast {
+        Ast::Apply(var.clone(), args)
     }
 
     pub fn apply_name(&mut self, name: &str, args: Vec<Ast>) -> Ast {
@@ -97,16 +96,16 @@ impl AstBuilder {
         let ret_ty = self.type_unknown();
         arg_types.push(ret_ty);
         let ty = Type::Func(arg_types);
-        let f = self.node_named(name, ty);
-        Ast::Apply(f.into(), args)
+        let var = self.var_named(name, ty);
+        Ast::Apply(var, args)
     }
 
     pub fn binary(&mut self, name: &str, lhs: Ast, rhs: Ast) -> Ast {
         let ty_ret = self.type_unknown();
         let ty_f = Type::Func(vec![lhs.get_type(), rhs.get_type(), ty_ret]);
-        let f = self.node_named(name.into(), ty_f);
+        let var = self.var_named(name.into(), ty_f);
         let args = vec![lhs, rhs];
-        Ast::Apply(f.into(), args)
+        Ast::Apply(var, args)
     }
 
     fn name_resolve(&mut self, ast: Ast, env: Environment) -> (Ast, Environment) {
@@ -126,33 +125,10 @@ impl AstBuilder {
                 v.bind(env.clone());
                 self.to_resolve.push(v.clone());
                 (v.into(), env)
-                /*
-                // Resolve the variable, and get the type
-                match env.resolve(&v.name) {
-                    Some(resolved_v) => {
-                        v.bind(env.clone());
-                        let var_ty = v.ty.clone();
-                        let resolved_ty = resolved_v.get_type();
-                        //let mut v = v.clone();
-                        //v.bind(resolved_ty.clone());
-                        let  v = Ast::Variable(v.clone());
-
-                        // variable matches the type of resolved
-                        self.equations.push(logic::Expr::Eq(var_ty, resolved_ty));
-
-                        (v, env)
-                    }
-                    None => {
-                        eprintln!("unresolved variable: {:?}", &v);
-                        unimplemented!();
-                    }
-                }
-                */
             }
 
-            Ast::Apply(f, ref args) => {
+            Ast::Apply(mut var, ref args) => {
                 let mut env = env.clone();
-                let mut f = *f.clone();
 
                 // resolve the args, which can be entire expressions
                 for arg in args {
@@ -160,53 +136,9 @@ impl AstBuilder {
                     env = this_env;
                 }
 
-                let ty = f.get_type();
-                match f {
-                    Ast::Variable(mut v) => {
-                        // resolve the name of the function
-                        // This can yield multiple results and they need to match with parameters
-                        // We accomplish this here by making use of the type unification system
-                        // This also means we don't know the resolution until after types are
-                        // unified.
-
-                        v.bind(env.clone());
-                        self.to_resolve.push(v.clone());
-
-                        // create equation for all matches for the function
-                        // We could filter this based on the known arguments so far
-                        // It could be none, and so we could return an error now, rather
-                        // than waiting for unification
-                        /*
-                        let possible = env
-                            .resolve_all(&v.name)
-                            .iter()
-                            .cloned()
-                            .map(|v| {
-                                v.get_type()
-                            })
-                            .collect::<Vec<_>>();
-                        self.equations.push(logic::Expr::OneOf(ty, possible));
-                        */
-                        (Ast::Apply(Ast::Variable(v).into(), args.clone()), env)
-                    }
-
-                    Ast::Function {
-                        ref params,
-                        ref body,
-                        ref ty,
-                    } => {
-                        // Already resolved
-                        // TODO:
-                        // args are unbound
-                        // bind any free variables in the body
-                        //
-                        // name resolve on the body
-                        let (b, this_env) = self.name_resolve(*body.clone(), env);
-                        env = this_env;
-                        unreachable!()
-                    }
-                    _ => unimplemented!(),
-                }
+                var.bind(env.clone());
+                self.to_resolve.push(var.clone());
+                (Ast::Apply(var, args.clone()), env)
             }
 
             Ast::Function { params, body, ty } => {
@@ -374,24 +306,18 @@ impl AstBuilder {
                 }
             }
 
-            Ast::Apply(f, args) => {
+            Ast::Apply(var, args) => {
                 // We need to map f to a concrete function
                 // We need the definition id that represents the compiled version of the function
-
-                match Box::deref(f) {
-                    Ast::Variable(_) => {
-                        let lowered_f = self.lower(f, env.clone())?;
-                        let args = self.lower_list(args, env.clone())?;
-                        let subst = SymbolTable::default();
-                        let sig = f.get_type().children();
-                        //eprintln!("f: {:?}", f);
-                        //eprintln!("sig: {:?}", sig);
-                        let sig = Type::lower_list(&sig, &subst)?;
-                        let ty = hir::FunctionType::export(sig);
-                        Ok(hir::FunctionCall::new(lowered_f, args, ty).into())
-                    }
-                    _ => unreachable!(),
-                }
+                let lowered_var = hir::DefinitionId(var.id.0).to_variable();
+                let args = self.lower_list(args, env.clone())?;
+                let subst = SymbolTable::default();
+                let sig = var.ty.children();
+                //eprintln!("f: {:?}", f);
+                //eprintln!("sig: {:?}", sig);
+                let sig = Type::lower_list(&sig, &subst)?;
+                let ty = hir::FunctionType::export(sig);
+                Ok(hir::FunctionCall::new(lowered_var, args, ty).into())
             }
 
             Ast::Internal(v) => match v {
