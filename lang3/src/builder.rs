@@ -273,35 +273,8 @@ impl AstBuilder {
 
         // Generate equations
         for v in &self.to_resolve {
-            //eprintln!("resolve = {:?}", v);
-            let var_env = v.env.as_ref().unwrap();
-            match &v.ty {
-                Type::Func(_) => {
-                    let possible = var_env
-                        .resolve_all(&v.name)
-                        .iter()
-                        .cloned()
-                        .map(|v| v.get_type())
-                        .collect::<Vec<_>>();
-                    self.equations
-                        .push(logic::Expr::OneOf(v.ty.clone(), possible));
-                }
-                _ => {
-                    match var_env.resolve(&v.name) {
-                        Some(resolved_v) => {
-                            let var_ty = v.ty.clone();
-                            let resolved_ty = resolved_v.get_type();
-
-                            // variable matches the type of resolved
-                            self.equations.push(logic::Expr::Eq(var_ty, resolved_ty));
-                        }
-                        None => {
-                            eprintln!("unresolved variable: {:?}", &v);
-                            unimplemented!();
-                        }
-                    }
-                }
-            }
+            let eq = v.generate_equations();
+            self.equations.push(eq);
         }
 
         // infer all types

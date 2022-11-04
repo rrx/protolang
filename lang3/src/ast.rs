@@ -19,8 +19,7 @@ pub struct Variable {
     pub id: VariableId,
     pub ty: Type,
     pub name: String,
-    pub bound: Option<Type>,
-    pub env: Option<Environment>,
+    env: Option<Environment>,
 }
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
@@ -32,7 +31,6 @@ impl Variable {
     pub fn named(name: String, id: VariableId, ty: Type) -> Self {
         Self {
             name,
-            bound: None,
             id,
             ty,
             env: None,
@@ -42,7 +40,6 @@ impl Variable {
         let name = format!("v{}", id.0);
         Self {
             name,
-            bound: None,
             id,
             ty,
             env: None,
@@ -51,12 +48,74 @@ impl Variable {
     pub fn bind(&mut self, env: Environment) {
         self.env.replace(env);
     }
-    pub fn resolve(&self, subst: &SymbolTable) -> Self {
+
+    /// Just replace the type with the value in the symbol table
+    pub fn resolve_type(&self, subst: &SymbolTable) -> Self {
         let mut v = self.clone();
         v.ty = v.ty.resolve(subst);
         v
     }
+
+    /// resolve a variable
+    /// If the variable resolves to another variable, then we are referencing and unbound function
+    /// parameter.  If the variable resolves to a declaration, then we replace with the variable in
+    /// the declaration.  We might want to implement this differently, so it's more clear what's
+    /// stored in the environment.  We want to lookup a variable and check it it exists in the
+    /// current environment.  If it exists, then it can be unbound (function parameter), or bound
+    /// (regular variable declaration). 
+    pub fn resolve(&self, subst: &SymbolTable) -> Self {
+        if let Some(env) = self.env.as_ref() {
+            if let Some(v) = env.resolve(&self.name) {
+                match v {
+                    // declared variables
+                    Ast::Declare(var, _) => {
+                        // just return the variable
+                        return var.clone().resolve_type(subst);
+                    }
+
+                    // parameters in functions
+                    Ast::Variable(var) => {
+                        return var.clone().resolve_type(subst);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+        self.resolve_type(subst)
+    }
+
+    /// generate type equations for the variable that can be used for unification
+    pub fn generate_equations(&self) -> logic::Expr<Type> {
+        let var_env = self.env.as_ref().unwrap();
+        match &self.ty {
+            Type::Func(_) => {
+                let possible = var_env
+                    .resolve_all(&self.name)
+                    .iter()
+                    .cloned()
+                    .map(|v| v.get_type())
+                    .collect::<Vec<_>>();
+                logic::Expr::OneOf(self.ty.clone(), possible)
+            }
+            _ => {
+                match var_env.resolve(&self.name) {
+                    Some(resolved_v) => {
+                        let var_ty = self.ty.clone();
+                        let resolved_ty = resolved_v.get_type();
+
+                        // variable matches the type of resolved
+                        logic::Expr::Eq(var_ty, resolved_ty)
+                    }
+                    None => {
+                        eprintln!("unresolved variable: {:?}", &self);
+                        unimplemented!();
+                    }
+                }
+            }
+        }
+    }
 }
+
 impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "V{}", &self.id.0)
@@ -65,6 +124,7 @@ impl fmt::Display for Variable {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Builtin {
+    // This implementation is awkward and doesn't work very well.
     AddInt(Box<Ast>, Box<Ast>),
     AddFloat(Box<Ast>, Box<Ast>),
 }
@@ -113,33 +173,21 @@ pub enum Ast {
     Declare(Variable, Box<Ast>),
 }
 
+impl LayerValue for Ast {}
+
 fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Vec<Ast> {
     exprs.iter().cloned().map(|e| e.resolve(subst)).collect()
 }
 
 impl Ast {
+    pub fn int(i: i64) -> Self {
+        Self::Literal(Literal::Int(i as u64))
+    }
+
     pub fn replace_variable(&self, subst: &SymbolTable) -> Self {
         match &self {
             Self::Variable(v) => {
-                // replace with resolved?
-                if let Some(env) = v.env.as_ref() {
-                    if let Some(v) = env.resolve(&v.name) {
-                        eprintln!("R: {:?}", &v);
-                        match v {
-                            // declared variables
-                            Ast::Declare(var, expr) => {
-                                return var.clone().into();
-                            }
-
-                            // parameters in functions
-                            Ast::Variable(var) => {
-                                return var.clone().into();
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-                Self::Variable(v.resolve(subst))
+                Ast::Variable(v.clone().resolve(subst))
             }
             _ => unreachable!(),
         }
@@ -149,28 +197,19 @@ impl Ast {
         let before = self.clone();
         let after = match &self {
             Self::Literal(_) => self.clone(),
-            Self::Variable(v) => {
-                // replace with resolved?
+            Self::Variable(_) => {
                 self.replace_variable(subst)
-                /*
-                if let Some(env) = v.env.as_ref() {
-                    if let Some(v) = env.resolve(&v.name) {
-                        return v.clone();
-                    }
-                }
-                */
-                //Self::Variable(v.resolve(subst))
             }
             Self::Extern(types) => Self::Extern(Type::resolve_list(&types, subst)),
             Self::Builtin(types) => Self::Builtin(Type::resolve_list(&types, subst)),
             Self::Internal(v) => self.clone(),
             Self::Declare(var, expr) => {
-                Self::Declare(var.resolve(subst), expr.resolve(subst).into())
+                Self::Declare(var.resolve_type(subst), expr.resolve(subst).into())
             }
             Self::Assign(name, expr) => Self::Assign(name.clone(), expr.resolve(subst).into()),
             Self::Function { params, body, ty } => {
                 // resolve the types in the params
-                let params = params.iter().map(|p| p.resolve(subst)).collect::<Vec<_>>();
+                let params = params.iter().map(|p| p.resolve_type(subst)).collect::<Vec<_>>();
                 let ty = ty.resolve(&subst);
                 Self::Function {
                     params,
@@ -270,41 +309,3 @@ impl fmt::Display for Ast {
     }
 }
 
-fn format_list<T: fmt::Display>(args: &Vec<T>) -> String {
-    args.iter()
-        .map(|x| format!("{}", x))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/*
-impl<T: fmt::Debug> fmt::Debug for Ast<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            //Ast::Variable(x) => {
-                //write!(f, "V{}", &x.id.0)?;
-            //}
-            _ => {
-                write!(f, "{:?}", &self)
-            }
-        }
-    }
-}
-*/
-
-impl LayerValue for Ast {}
-
-impl Ast {
-    pub fn int(i: i64) -> Self {
-        Self::Literal(Literal::Int(i as u64))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use test_log::test;
-
-    #[test]
-    fn lower() {}
-}
