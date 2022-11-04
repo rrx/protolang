@@ -14,14 +14,12 @@ pub enum Literal {
     String(String),
 }
 
-pub type AstType = Type;
-
 #[derive(Clone, Debug)]
 pub struct Variable {
     pub id: VariableId,
     pub ty: Type,
     pub name: String,
-    pub bound: Option<AstType>,
+    pub bound: Option<Type>,
     pub env: Option<Environment>
 }
 impl PartialEq for Variable {
@@ -29,7 +27,6 @@ impl PartialEq for Variable {
         self.id == other.id
     }
 }
-
 
 impl Variable {
     pub fn named(name: String, id: VariableId, ty: Type) -> Self {
@@ -39,8 +36,8 @@ impl Variable {
         let name = format!("v{}", id.0);
         Self { name, bound: None, id, ty, env: None }
     }
-    pub fn bind(&mut self, ast: AstType) {
-        self.bound.replace(ast);
+    pub fn bind(&mut self, env: Environment) {
+        self.env.replace(env);
     }
     pub fn resolve(&self, subst: &SymbolTable) -> Self {
         let mut v = self.clone();
@@ -51,6 +48,21 @@ impl Variable {
 impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "V{}", &self.id.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Builtin {
+    AddInt(Box<Ast>, Box<Ast>),
+    AddFloat(Box<Ast>, Box<Ast>),
+}
+impl Builtin {
+    pub fn children(&self) -> Vec<&Ast> {
+        match self {
+            Self::AddInt(a, b) => vec![a, b],
+            Self::AddFloat(a, b) => vec![a, b],
+            _ => unimplemented!()
+        }
     }
 }
 
@@ -72,6 +84,8 @@ pub enum Ast {
     // similar to extern, but it get's handled internally
     Builtin(Vec<Type>), // args
 
+    Internal(Builtin),
+
     // A function that is defined as part of the program
     Function { params: Vec<Variable>, body: Box<Ast>, ty: Type},
 
@@ -88,12 +102,48 @@ fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Vec<Ast> {
 }
 
 impl Ast {
+    pub fn replace_variable(&self, subst: &SymbolTable) -> Self {
+        match &self {
+            Self::Variable(v) => {
+                // replace with resolved?
+                if let Some(env) = v.env.as_ref() {
+                    if let Some(v) = env.resolve(&v.name) {
+                        eprintln!("R: {:?}", &v);
+                        match v {
+                            // declared variables
+                            Ast::Declare(var, expr) => {
+                                return var.clone().into();
+                            }
+
+                            // parameters in functions
+                            Ast::Variable(var) => {
+                                return var.clone().into();
+                            }
+                            _ => unreachable!()
+                        }
+                    }
+                }
+                Self::Variable(v.resolve(subst))
+            }
+            _ => unreachable!()
+        }
+    }
+
     pub fn resolve(&self, subst: &SymbolTable) -> Self {
         let before = self.clone();
         let after = match &self {
             Self::Literal(_) => self.clone(),
             Self::Variable(v) => {
-                Self::Variable(v.resolve(subst))
+                // replace with resolved?
+                self.replace_variable(subst)
+                /*
+                if let Some(env) = v.env.as_ref() {
+                    if let Some(v) = env.resolve(&v.name) {
+                        return v.clone();
+                    }
+                }
+                */
+                //Self::Variable(v.resolve(subst))
             }
             Self::Extern(types) => {
                 Self::Extern(Type::resolve_list(&types, subst))
@@ -101,6 +151,7 @@ impl Ast {
             Self::Builtin(types) => {
                 Self::Builtin(Type::resolve_list(&types, subst))
             }
+            Self::Internal(v) => self.clone(),
             Self::Declare(var, expr) => {
                 Self::Declare(var.resolve(subst), expr.resolve(subst).into())
             }
@@ -122,7 +173,7 @@ impl Ast {
 
             Self::Type(ty) => Self::Type(ty.resolve(subst)),
         };
-        eprintln!("RESOLVE: {:?} => {:?}", &before, &after);
+        //eprintln!("RESOLVE: {:?} => {:?}", &before, &after);
         after
     }
 
@@ -139,6 +190,7 @@ impl Ast {
             Self::Assign(_, expr) => expr.get_type(),
             Self::Variable(v) => v.ty.clone(),
             Self::Extern(args) | Self::Builtin(args) => Type::Func(args.clone()),
+            Self::Internal(_) => unimplemented!(),
             Self::Type(_) => Type::Type,
         }
     }
@@ -181,6 +233,7 @@ impl fmt::Display for Ast {
             }
 
             Ast::Builtin(types) => write!(f, "Builtin({})", format_list(&types))?,
+            Ast::Internal(v) => write!(f, "Internal({:?})", &v)?,
 
             Ast::Function { params, body, ty } => {
                 write!(f, "Func({}, {}, {})", format_list(&params), &body, &ty)?;

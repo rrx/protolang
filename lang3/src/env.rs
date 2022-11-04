@@ -80,10 +80,13 @@ impl<K: LayerKey, V: LayerValue> fmt::Display for EnvLayers<K, V> {
 
 impl<K: LayerKey, V: LayerValue> fmt::Debug for EnvLayers<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (k, v) in self.iter() {
-            write!(f, "{}={:?}\n", k, v)?;
-        }
-        Ok(())
+        f.debug_map()
+            .entries(self.iter().map(|(k, v)| (k, v)))
+            .finish()
+        //for (k, v) in self.iter() {
+            //write!(f, "{}={:?}\n", k, v)?;
+        //}
+        //Ok(())
     }
 }
 
@@ -180,7 +183,7 @@ mod tests {
         assert_eq!(Some(&1), env.resolve(&"Asdf".into()));
         env.define("Asdf".into(), 2);
         assert_eq!(Some(&2), env.resolve(&"Asdf".into()));
-        println!("{:?}", (&env));
+        //println!("{:?}", (&env));
 
         let all_asdf = env.resolve_all(&"Asdf".to_string());
         assert_eq!(all_asdf.len(), 2);
@@ -197,9 +200,9 @@ mod tests {
         assert_eq!(None, env.resolve(&"Asdf2".into()));
         assert_eq!(None, env2.resolve(&"Asdf2".into()));
 
-        env3.iter().for_each(|(k, v)| {
-            println!("x: {:?}", (k, v));
-        });
+        //env3.iter().for_each(|(k, v)| {
+            //println!("x: {:?}", (k, v));
+        //});
     }
 
     #[test]

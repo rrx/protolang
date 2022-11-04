@@ -51,8 +51,7 @@ impl<'a> LLVMBackend<'a> {
     }
 
     pub fn compile_module(&mut self, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
-        self.lower.compile_module(&self.context.context, name, ast).unwrap();
-        Ok(())
+        self.lower.compile_module(&self.context.context, name, ast)
     }
 
     pub fn run(&self) -> Result<i64, Box<dyn Error>> {
@@ -119,7 +118,7 @@ mod tests {
         let dfib = Definition::variable(fib.clone(), f.into());
 
         let call = FunctionCall::new(fib.clone().into(), vec![
-                                            Ast::i64(0), Ast::i64(1), Ast::i64(10)
+                                     Ast::i64(0), Ast::i64(1), Ast::i64(10)
         ], typ.clone());
 
         // single parameter function type for main

@@ -8,11 +8,13 @@ use std::ops::Deref;
 pub struct AstBuilder {
     last_id: usize,
     pub equations: Vec<logic::Expr<Type>>,
+    to_resolve: Vec<Variable>,
+    base: Vec<Ast>
 }
 
 impl Visitor<SymbolTable<Ast>> for AstBuilder {
     fn enter(&mut self, e: &Ast, n: &mut SymbolTable<Ast>) -> visitor::VResult {
-        println!("Visit AST: {}", e);
+        //println!("Visit AST: {}", e);
         Ok(())
     }
 }
@@ -67,7 +69,7 @@ impl AstBuilder {
         match env.resolve(&n.to_string()) {
             Some(v) => v.clone(),
             None => {
-                println!("Unable to find symbol: {}", n);
+                eprintln!("Unable to find symbol: {}", n);
                 unimplemented!();
             }
         }
@@ -106,21 +108,30 @@ impl AstBuilder {
     fn name_resolve(&mut self, ast: Ast, env: Environment) -> (Ast, Environment) {
         match ast {
             Ast::Literal(_) => (ast, env),
+            Ast::Extern(_) => (ast, env),
 
             Ast::Declare(var, rhs) => {
                 let (new_rhs, mut env) = self.name_resolve(*rhs, env);
-                env.define(var.name.clone(), new_rhs.clone());
-                (Ast::Declare(var, new_rhs.into()), env)
+                let name = var.name.clone();
+                let d = Ast::Declare(var, new_rhs.into());
+                env.define(name, d.clone());
+                (d, env)
             }
 
-            Ast::Variable(v) => {
+            Ast::Variable(mut v) => {
+                v.bind(env.clone());
+                self.to_resolve.push(v.clone());
+                (v.into(), env)
+                /*
+                // Resolve the variable, and get the type
                 match env.resolve(&v.name) {
                     Some(resolved_v) => {
+                        v.bind(env.clone());
                         let var_ty = v.ty.clone();
                         let resolved_ty = resolved_v.get_type();
                         //let mut v = v.clone();
                         //v.bind(resolved_ty.clone());
-                        let v = Ast::Variable(v.clone());
+                        let  v = Ast::Variable(v.clone());
 
                         // variable matches the type of resolved
                         self.equations.push(logic::Expr::Eq(var_ty, resolved_ty));
@@ -132,10 +143,12 @@ impl AstBuilder {
                         unimplemented!();
                     }
                 }
+                */
             }
 
             Ast::Apply(f, ref args) => {
                 let mut env = env.clone();
+                let mut f = *f.clone();
 
                 // resolve the args, which can be entire expressions
                 for arg in args {
@@ -143,20 +156,23 @@ impl AstBuilder {
                     env = this_env;
                 }
 
-                match *f {
-                    Ast::Variable(ref v) => {
+                let ty = f.get_type();
+                match f {
+                    Ast::Variable(mut v) => {
                         // resolve the name of the function
                         // This can yield multiple results and they need to match with parameters
                         // We accomplish this here by making use of the type unification system
                         // This also means we don't know the resolution until after types are 
                         // unified.
                         
-                        let name = v.name.clone();
-                        
+                        v.bind(env.clone());
+                        self.to_resolve.push(v.clone());
+
                         // create equation for all matches for the function
                         // We could filter this based on the known arguments so far
                         // It could be none, and so we could return an error now, rather
                         // than waiting for unification
+                        /*
                         let possible = env
                             .resolve_all(&v.name)
                             .iter()
@@ -165,7 +181,9 @@ impl AstBuilder {
                                 v.get_type()
                             })
                             .collect::<Vec<_>>();
-                        self.equations.push(logic::Expr::OneOf(f.get_type(), possible));
+                        self.equations.push(logic::Expr::OneOf(ty, possible));
+                        */
+                        (Ast::Apply(Ast::Variable(v).into(), args.clone()), env)
                     }
 
                     Ast::Function { ref params, ref body, ref ty } => {
@@ -181,7 +199,6 @@ impl AstBuilder {
                     }
                     _ => unimplemented!(),
                 }
-                (Ast::Apply(f.clone(), args.clone()), env)
             }
 
             Ast::Function { params, body, ty } => {
@@ -205,10 +222,22 @@ impl AstBuilder {
                     updated.push(new_ast);
                 }
                 // return original scope
-                (self.block(updated), env)
+                (Ast::Block(updated), env)
+            }
+
+            Ast::Internal(v) => {
+                // we should build a new Internal, but that's currently hard, and needs to be done
+                // for every variant
+                let mut env = env.clone();
+                for expr in v.children() {
+                    let (new_ast, new_env) = self.name_resolve(expr.clone(), env.clone());
+                    let env = new_env;
+                }
+                (Ast::Internal(v), env)
+
             }
             _ => {
-                println!("{:?}", &ast);
+                eprintln!("{:?}", &ast);
                 unimplemented!()
             }
         }
@@ -228,32 +257,89 @@ impl AstBuilder {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
 
+        // Generate equations
+        for v in &self.to_resolve {
+            //eprintln!("resolve = {:?}", v);
+            let var_env = v.env.as_ref().unwrap();
+            match &v.ty {
+                Type::Func(_) => {
+                    let possible = var_env
+                        .resolve_all(&v.name)
+                        .iter()
+                        .cloned()
+                        .map(|v| {
+                            v.get_type()
+                        })
+                    .collect::<Vec<_>>();
+                    self.equations.push(logic::Expr::OneOf(v.ty.clone(), possible));
+                }
+                _ => {
+                    match var_env.resolve(&v.name) {
+                        Some(resolved_v) => {
+                            let var_ty = v.ty.clone();
+                            let resolved_ty = resolved_v.get_type();
+
+                            // variable matches the type of resolved
+                            self.equations.push(logic::Expr::Eq(var_ty, resolved_ty));
+                        }
+                        None => {
+                            eprintln!("unresolved variable: {:?}", &v);
+                            unimplemented!();
+                        }
+                    }
+                }
+            }
+        }
+
         // infer all types
         let eqs = self.equations.clone();
         for eq in &eqs {
-            println!("EQ: {:?}", &eq);
+            eprintln!("EQ: {:?}", &eq);
         }
         let (res, subst) = logic::unify_start(eqs);
 
-        println!("AST: {}", &ast);
-        println!("ENV: {}", env);
-        println!("RES: {:?}", res);
-        println!("SUB: {:?}", subst);
+        eprintln!("AST: {}", &ast);
+        eprintln!("ENV: {}", env);
+        eprintln!("RES: {:?}", res);
+        eprintln!("SUB: {:?}", subst);
         if res == UnifyResult::Ok {
             //let _ = visitor::visit(&ast, self, &mut subst).unwrap();
-            //println!("SUB: {:?}", subst);
+            //eprintln!("SUB: {:?}", subst);
+
+            // we have solved types
+            for v in &self.to_resolve {
+                eprintln!("resolve = {:?}", v.resolve(&subst));
+                //v.replace_variable(subst);
+            }
         }
 
+
         (res, ast, env, subst)
+    }
+
+    fn gen_add(&mut self) -> Ast {
+        // define add
+        let a = self.var_named("a", Type::Int);
+        let b = self.var_named("b", Type::Int);
+        let params = vec![a.clone(), b.clone()];
+        let sig = vec![Type::Int, Type::Int, Type::Int];
+        let body = Ast::Internal(Builtin::AddInt(Box::new(a.into()), Box::new(b.into())));//sig.clone());
+        self.func(params, body, sig)
     }
 
     pub fn base_env(&mut self) -> Environment {
         let mut env = Environment::default();
 
-        let params = vec![self.var_named("a", Type::Int), self.var_named("b", Type::Int)];
-        let sig = vec![Type::Int, Type::Int, Type::Int];
-        let body = Ast::Builtin(sig.clone());
-        env.define("+".to_string(), self.func(params, body, sig));
+        let rhs = self.gen_add();
+
+        // declare
+        let ty = rhs.get_type();
+        let v = self.var_named("+", ty.clone());
+        let d = Ast::Declare(v.clone(), rhs.into());
+
+        env.define("+".to_string(), v.into());
+        self.base.push(d);
+
         env
     }
 
@@ -263,6 +349,11 @@ impl AstBuilder {
             Ast::Literal(Literal::Int(u)) => Ok(hir::Ast::i64(*u as i64)),
             Ast::Literal(Literal::Float(f)) => Ok(hir::Ast::f64(*f)),
             Ast::Variable(v) => Ok(hir::DefinitionId(v.id.0).to_variable()),
+            Ast::Extern(sig) => {
+                let subst = SymbolTable::default();
+                let sig = Type::lower_list(&sig, &subst)?;
+                Ok(hir::Extern::new("+".to_string(), hir::FunctionType::export(sig).into()).into())
+            }
             Ast::Declare(v, expr) => {
                 let d = hir::Definition {
                     variable: hir::DefinitionId(v.id.0),
@@ -307,8 +398,8 @@ impl AstBuilder {
                         let args = self.lower_list(args, env.clone())?;
                         let subst = SymbolTable::default();
                         let sig = f.get_type().children();
-                        eprintln!("f: {:?}", f);
-                        eprintln!("sig: {:?}", sig);
+                        //eprintln!("f: {:?}", f);
+                        //eprintln!("sig: {:?}", sig);
                         let sig = Type::lower_list(&sig, &subst)?;
                         let ty = hir::FunctionType::export(sig);
                         Ok(hir::FunctionCall::new(lowered_f, args, ty).into())
@@ -317,8 +408,21 @@ impl AstBuilder {
                 }
             }
 
+
+            Ast::Internal(v) => {
+                match v {
+                    Builtin::AddInt(a, b) => Ok(hir::Builtin::AddInt(
+                            self.lower(a, env.clone())?.into(),
+                            self.lower(b, env.clone())?.into()
+                            ).into()),
+                    Builtin::AddFloat(a, b) => Ok(hir::Builtin::AddFloat(
+                            self.lower(a, env.clone())?.into(),
+                            self.lower(b, env.clone())?.into()
+                            ).into())
+                }
+            }
             _ => {
-                println!("{:?}", &ast);
+                eprintln!("{:?}", &ast);
                 unimplemented!()
             }
         }
@@ -330,6 +434,10 @@ impl AstBuilder {
             out.push(self.lower(e, env.clone())?);
         }
         Ok(out)
+    }
+
+    fn base_ast(&self) -> Ast {
+        Ast::Block(self.base.clone())
     }
 }
 
@@ -390,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn test_function() {
+    fn test_function_types() {
         let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
 
@@ -423,6 +531,10 @@ mod tests {
         println!("{:?}", &ast.get_type());
         assert!(ast.resolve(&subst).get_type().unknown().is_none());
         assert_eq!(ty, Type::Int);
+
+        let hir = b.lower(&ast, env.clone()).unwrap();
+        println!("HIR:{:?}", &hir);
+        println!("AST:{:?}", &ast);
     }
 
     #[test]
@@ -463,7 +575,10 @@ mod tests {
         let mut env = Environment::default();
 
         // predefined variable "a"
-        env.define("a".into(), b.int(1));
+
+        let v = b.int(1);
+        let d = b.declare("a", v);
+        env.define("a".into(), d);
 
         // create a variable that references "a"
         let ty = b.type_unknown();
@@ -486,38 +601,62 @@ mod tests {
     }
 
     #[test]
-    fn codegen() {
+    fn add_builtin() {
         let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
-        let ty = b.type_unknown();
 
-        // simple function that increments and returns the number
-        // f(x) => x + 1
-        let p = b.var_unnamed(ty.clone());
-        let one = b.int(1);
-        let add = b.binary("+", one, p.clone().into());
-        let f = b.func(vec![p], add, vec![Type::Int, Type::Int]);
-        let df = b.declare("main", f);
+        let add = b.binary("+", b.int(1), b.int(2));
+        let main = b.func(vec![], add, vec![Type::Int]);
+        let dmain = b.declare("main", main);
 
-        let ast = b.block(vec![df]);
-
-        let (res, ast, env, subst) = b.resolve(ast, env.clone());
-        assert_eq!(res, UnifyResult::Ok);
-
-        // the ast should have a function type, since it's the last item of block
-        let ty = ast.get_type().resolve(&subst);
-        assert_eq!(ty, Type::Func(vec![Type::Int, Type::Int]));
-
-        let ast = &ast.resolve(&subst);
-        println!("AST:{}", &ast);
-        println!("AST:{:?}", &ast);
+        let block = b.block(vec![b.base_ast(), dmain]);
+        let (res, ast, env, subst) = b.resolve(block, env.clone());
+        let ast = ast.resolve(&subst);
+        println!("r: {:?}", &b.to_resolve);
+        println!("AST: {:?}", &ast);
+        println!("AST: {}", &ast);
 
         let hir = b.lower(&ast, env.clone()).unwrap();
         println!("HIR:{:?}", &hir);
+
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("main", hir);
+        b.compile_module("main", hir).unwrap();
         let ret = b.run().unwrap();
-        assert_eq!(11, ret);
+        assert_eq!(3, ret);
+    }
+
+    #[test]
+    fn call_with_param() {
+        let mut b: AstBuilder = AstBuilder::default();
+        let env = b.base_env();
+
+        // f() => 1
+        let p = b.var_unnamed(Type::Int);
+        let f = b.func(vec![p.clone()], p.into(), vec![Type::Int, Type::Int]);
+        let df = b.declare("f", f);
+       
+        // main
+        // call f
+        let call = b.apply_name("f", vec![b.int(2)]);
+        let main = b.func(vec![], call, vec![Type::Int]);
+        let dmain = b.declare("main", main);
+
+        let ast = b.block(vec![df, dmain]);
+
+        let (res, ast, env, subst) = b.resolve(ast, env.clone());
+        let ast = ast.resolve(&subst);
+        println!("r: {:?}", &b.to_resolve);
+        println!("AST: {:?}", &ast);
+        println!("AST: {}", &ast);
+
+        let hir = b.lower(&ast, env.clone()).unwrap();
+        println!("HIR:{:?}", &hir);
+
+        let context = LLVMBackendContext::new();
+        let mut b = context.backend();
+        b.compile_module("main", hir).unwrap();
+        let ret = b.run().unwrap();
+        assert_eq!(2, ret);
     }
 }
