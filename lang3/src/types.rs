@@ -50,11 +50,7 @@ impl Type {
     pub fn lower(&self, subst: &SymbolTable) -> Result<hir::Type, Box<dyn Error>> {
         match self {
             Self::Func(sig) => {
-                let mut out = vec![];
-                for ty in sig {
-                    out.push(ty.lower(subst)?);
-                }
-                Ok(hir::FunctionType::export(out).into())
+                Ok(hir::FunctionType::export(Self::lower_list(sig, subst)?).into())
             }
             Self::Variable(def) => match subst.get(def) {
                 Some(v) => v.lower(subst),

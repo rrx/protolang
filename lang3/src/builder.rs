@@ -222,13 +222,6 @@ impl AstBuilder {
         eprintln!("SUB: {:?}", subst);
         if res == UnifyResult::Ok {
             //let _ = visitor::visit(&ast, self, &mut subst).unwrap();
-            //eprintln!("SUB: {:?}", subst);
-
-            // we have solved types
-            for v in &self.to_resolve {
-                eprintln!("resolve = {:?}", v.resolve(&subst));
-                //v.replace_variable(subst);
-            }
         }
 
         (res, ast, env, subst)
