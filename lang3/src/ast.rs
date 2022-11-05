@@ -177,9 +177,11 @@ pub enum Ast {
     // function application
     Apply(Variable, Vec<Ast>), // function, args
 
-    Assign(String, Box<Ast>),
+    Assign(Variable, Box<Ast>),
 
     Declare(Variable, Box<Ast>),
+
+    Return(Box<Ast>)
 }
 
 impl LayerValue for Ast {}
@@ -191,6 +193,10 @@ fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Vec<Ast> {
 impl Ast {
     pub fn int(i: i64) -> Self {
         Self::Literal(Literal::Int(i as u64))
+    }
+
+    pub fn string(s: String) -> Self {
+        Self::Literal(Literal::String(s))
     }
 
     pub fn replace_variable(&self, subst: &SymbolTable) -> Self {
@@ -230,6 +236,7 @@ impl Ast {
             Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)),
 
             Self::Type(ty) => Self::Type(ty.resolve(subst)),
+            Self::Return(expr) => Self::Return(expr.resolve(subst).into()),
         };
         //eprintln!("RESOLVE: {:?} => {:?}", &before, &after);
         after
@@ -254,8 +261,10 @@ impl Ast {
             Self::Extern(args) | Self::Builtin(args) => Type::Func(args.clone()),
             Self::Internal(_) => unimplemented!(),
             Self::Type(_) => Type::Type,
+            Self::Return(expr) => expr.get_type()
         }
     }
+
 }
 
 impl From<Variable> for Ast {
@@ -311,6 +320,10 @@ impl fmt::Display for Ast {
 
             Ast::Declare(var, expr) => {
                 write!(f, "Declare(V{}, {})", &var.id.0, &expr)?;
+            }
+
+            Ast::Return(expr) => {
+                write!(f, "Return({})", &expr)?;
             }
         }
         Ok(())

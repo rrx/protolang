@@ -5,8 +5,8 @@ mod types;
 mod visitor;
 mod printer;
 
-use ast::*;
-use builder::*;
+pub use ast::*;
+pub use builder::*;
 use env::*;
 use types::*;
 use visitor::*;

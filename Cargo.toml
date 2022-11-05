@@ -1,7 +1,8 @@
 [workspace]
 members = [
-  "lang1",
-  "lang2",
+  #"lang1",
+  #"lang2",
+  "frontend",
   "lang3",
   "logic",
   "codegen"

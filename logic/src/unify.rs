@@ -101,7 +101,6 @@ impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
                 }
             }
             Func(x, y, z, f) => f(x.clone(), y.clone(), z.clone(), subst),
-            _ => unimplemented!(),
         }
     }
 }

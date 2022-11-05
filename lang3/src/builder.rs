@@ -2,6 +2,12 @@ use crate::*;
 use codegen::hir;
 use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 use std::error::Error;
+use codegen::llvm::JitExecute;
+
+pub trait Lower {
+    fn lower(&self, b: &mut AstBuilder) -> Result<Ast, Box<dyn Error>>;
+}
+
 
 #[derive(Default)]
 pub struct AstBuilder {
@@ -113,6 +119,22 @@ impl AstBuilder {
             Ast::Literal(_) => (ast, env),
             Ast::Extern(_) => (ast, env),
 
+            Ast::Assign(var, rhs) => {
+                let name = var.name.clone();
+                match env.resolve(&name) {
+                    Some(v) => {
+                        let (rhs, env) = self.name_resolve(*rhs, env.clone());
+                        (v.clone(), env)
+                    }
+                    None => {
+                        //eprintln!("Unable to resolve: {:?}", &var);
+                        // name doesn't resolve, so we can't assign, declare instead
+                        self.name_resolve(Ast::Declare(var, rhs), env)
+                        //unimplemented!()
+                    }
+                }
+            }
+
             Ast::Declare(var, rhs) => {
                 let (new_rhs, mut env) = self.name_resolve(*rhs, env);
                 let name = var.name.clone();
@@ -183,8 +205,7 @@ impl AstBuilder {
                 (Ast::Internal(v), env)
             }
             _ => {
-                eprintln!("{:?}", &ast);
-                unimplemented!()
+                unimplemented!("{:?}", &ast)
             }
         }
     }
@@ -193,6 +214,21 @@ impl AstBuilder {
         let ty = rhs.get_type();
         let v = self.var_named(name, ty.clone());
         Ast::Declare(v, rhs.into())
+    }
+
+    pub fn assign(&mut self, name: &str, rhs: Ast) -> Ast {
+        let ty = rhs.get_type();
+        let v = self.var_named(name, ty.clone());
+        Ast::Assign(v, rhs.into())
+    }
+
+    pub fn resolve_ast(&mut self,
+                       ast: Ast) -> Result<Ast, Box<dyn Error>> {
+        let env = self.base_env();
+        let (res, ast, env, subst) = self.resolve(ast, env.clone());
+        assert_eq!(res, logic::UnifyResult::Ok);
+        let ast = ast.resolve(&subst);
+        Ok(ast)
     }
 
     pub fn resolve(
@@ -253,11 +289,12 @@ impl AstBuilder {
         env
     }
 
-    pub fn lower(&mut self, ast: &Ast, env: Environment) -> Result<hir::Ast, Box<dyn Error>> {
+    pub fn lower(&mut self, ast: &Ast) -> Result<hir::Ast, Box<dyn Error>> {
         match ast {
             Ast::Literal(Literal::Bool(b)) => Ok(hir::Ast::bool(*b)),
             Ast::Literal(Literal::Int(u)) => Ok(hir::Ast::i64(*u as i64)),
             Ast::Literal(Literal::Float(f)) => Ok(hir::Ast::f64(*f)),
+            Ast::Literal(Literal::String(f)) => unimplemented!("Strings are not implemented yet"),
             Ast::Variable(v) => Ok(hir::DefinitionId(v.id.0).to_variable()),
             Ast::Extern(sig) => {
                 let subst = SymbolTable::default();
@@ -268,7 +305,7 @@ impl AstBuilder {
                 let d = hir::Definition {
                     variable: hir::DefinitionId(v.id.0),
                     name: Some(v.name.clone()),
-                    expr: self.lower(expr, env)?.into(),
+                    expr: self.lower(expr)?.into(),
                 }
                 .into();
                 Ok(hir::Ast::Definition(d))
@@ -276,7 +313,7 @@ impl AstBuilder {
             Ast::Block(exprs) => {
                 let mut out = vec![];
                 for e in exprs {
-                    out.push(self.lower(e, env.clone())?);
+                    out.push(self.lower(e)?);
                 }
                 Ok(hir::Sequence::new(out).into())
             }
@@ -287,7 +324,7 @@ impl AstBuilder {
                     let v = d.into();
                     new_params.push(v);
                 }
-                let body = self.lower(body, env.clone())?;
+                let body = self.lower(body)?;
 
                 let subst = SymbolTable::default();
                 if let Type::Func(sig) = ty {
@@ -303,7 +340,7 @@ impl AstBuilder {
                 // We need to map f to a concrete function
                 // We need the definition id that represents the compiled version of the function
                 let lowered_var = hir::DefinitionId(var.id.0).to_variable();
-                let args = self.lower_list(args, env.clone())?;
+                let args = self.lower_list(args)?;
                 let subst = SymbolTable::default();
                 let sig = var.ty.children();
                 //eprintln!("f: {:?}", f);
@@ -315,31 +352,38 @@ impl AstBuilder {
 
             Ast::Internal(v) => match v {
                 Builtin::AddInt(a, b) => Ok(hir::Builtin::AddInt(
-                    self.lower(a, env.clone())?.into(),
-                    self.lower(b, env.clone())?.into(),
+                    self.lower(a)?.into(),
+                    self.lower(b)?.into(),
                 )
                 .into()),
                 Builtin::AddFloat(a, b) => Ok(hir::Builtin::AddFloat(
-                    self.lower(a, env.clone())?.into(),
-                    self.lower(b, env.clone())?.into(),
+                    self.lower(a)?.into(),
+                    self.lower(b)?.into(),
                 )
                 .into()),
             },
             _ => {
-                eprintln!("{:?}", &ast);
-                unimplemented!()
+                unimplemented!("{:?}", &ast)
             }
         }
     }
 
+    pub fn lower_list_ast<T: Lower>(&mut self, vs: &Vec<T>) -> Result<Vec<Ast>, Box<dyn Error>> {
+        let mut out = vec![];
+        for a in vs {
+            out.push(a.lower(self)?);
+        }
+        Ok(out)
+    }
+
+
     fn lower_list(
         &mut self,
         exprs: &Vec<Ast>,
-        env: Environment,
     ) -> Result<Vec<hir::Ast>, Box<dyn Error>> {
         let mut out = vec![];
         for e in exprs {
-            out.push(self.lower(e, env.clone())?);
+            out.push(self.lower(e)?);
         }
         Ok(out)
     }
@@ -347,6 +391,18 @@ impl AstBuilder {
     fn base_ast(&self) -> Ast {
         Ast::Block(self.base.clone())
     }
+
+
+    pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
+        let base_hir = self.lower(&self.base_ast())?;
+        let module_hir = self.lower(ast)?;
+
+        let new_hir: hir::Ast = hir::Sequence::new(vec![base_hir, module_hir]).into();
+        println!("HIR: {:#?}", &new_hir);
+        new_hir.run_main()
+    }
+
+
 }
 
 #[cfg(test)]
@@ -437,7 +493,7 @@ mod tests {
         assert!(ast.resolve(&subst).get_type().unknown().is_none());
         assert_eq!(ty, Type::Int);
 
-        let hir = b.lower(&ast, env.clone()).unwrap();
+        let hir = b.lower(&ast).unwrap();
         println!("HIR:{:?}", &hir);
         println!("AST:{:?}", &ast);
     }
@@ -480,7 +536,6 @@ mod tests {
         let mut env = Environment::default();
 
         // predefined variable "a"
-
         let v = b.int(1);
         let d = b.declare("a", v);
         env.define("a".into(), d);
@@ -521,12 +576,12 @@ mod tests {
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
 
-        let hir = b.lower(&ast, env.clone()).unwrap();
+        let hir = b.lower(&ast).unwrap();
         println!("HIR:{:?}", &hir);
 
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("main", hir).unwrap();
+        b.compile_module("main", &hir).unwrap();
         let ret = b.run().unwrap();
         assert_eq!(3, ret);
     }
@@ -555,12 +610,12 @@ mod tests {
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
 
-        let hir = b.lower(&ast, env.clone()).unwrap();
+        let hir = b.lower(&ast).unwrap();
         println!("HIR:{:?}", &hir);
 
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("main", hir).unwrap();
+        b.compile_module("main", &hir).unwrap();
         let ret = b.run().unwrap();
         assert_eq!(2, ret);
     }

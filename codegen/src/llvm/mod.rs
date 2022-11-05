@@ -50,12 +50,25 @@ impl<'a> LLVMBackend<'a> {
         Self { context, lower }
     }
 
-    pub fn compile_module(&mut self, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
+    pub fn compile_module(&mut self, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
         self.lower.compile_module(&self.context.context, name, ast)
     }
 
     pub fn run(&self) -> Result<i64, Box<dyn Error>> {
         self.lower.run(&self.context.context)
+    }
+}
+
+pub trait JitExecute {
+    fn run_main(&self) -> Result<i64, Box<dyn Error>>;
+}
+
+impl JitExecute for Ast {
+    fn run_main(&self) -> Result<i64, Box<dyn Error>> {
+        let context = LLVMBackendContext::new();
+        let mut b = context.backend();
+        b.compile_module("main", &self).unwrap();
+        b.run()
     }
 }
 
@@ -138,7 +151,7 @@ mod tests {
 
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("main", Sequence::new(vec![dfib.into(), df_main.into()]).into()).unwrap();
+        b.compile_module("main", &Sequence::new(vec![dfib.into(), df_main.into()]).into()).unwrap();
         let ret = b.run().unwrap();
         assert_eq!(55, ret);
     }
@@ -167,8 +180,8 @@ mod tests {
         let df_main = defs.new_definition("main", f_main.into());
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("test", Sequence::new(vec![dx1.into()]).into()).unwrap();
-        b.compile_module("main", Sequence::new(vec![df_main.into()]).into()).unwrap();
+        b.compile_module("test", &Sequence::new(vec![dx1.into()]).into()).unwrap();
+        b.compile_module("main", &Sequence::new(vec![df_main.into()]).into()).unwrap();
         let ret = b.run().unwrap();
         assert_eq!(11, ret);
     }

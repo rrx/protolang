@@ -77,7 +77,7 @@ impl<'a> Lower<'a> {
         Self { modules: ModuleMap::new(), optimizer: pass_manager, link_optimizer: link_time_optimizations }
     }
 
-    pub fn compile_module(&mut self, context: &'a Context, name: &str, ast: Ast) -> Result<(), Box<dyn Error>> {
+    pub fn compile_module(&mut self, context: &'a Context, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
         let module = context.create_module(name);
 
         let mut codegen = Generator {
