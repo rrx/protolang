@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use serde::Serialize;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Type {
     Int,
     Float,

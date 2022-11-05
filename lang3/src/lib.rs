@@ -14,8 +14,9 @@ use printer::*;
 use std::fmt;
 
 use logic::{UnifyResult, UnifyValue};
+use serde::{Serialize, ser::{Serializer, SerializeStruct}};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct DefinitionId(pub usize);
 impl logic::UnifyKey for DefinitionId {}
 

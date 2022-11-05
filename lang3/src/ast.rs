@@ -1,12 +1,12 @@
 use super::*;
 use crate::env::LayerValue;
 use std::fmt;
-use serde::Serialize;
+use serde::{Serialize, ser::{Serializer, SerializeStruct}};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct VariableId(pub usize);
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Literal {
     Bool(bool),
     Int(u64),
@@ -24,6 +24,17 @@ pub struct Variable {
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
+    }
+}
+
+impl Serialize for Variable {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        let mut state = serializer.serialize_struct("Variable", 3)?;
+        state.serialize_field("id", &self.id)?;
+        state.serialize_field("ty", &self.ty)?;
+        state.serialize_field("name", &self.name)?;
+        state.end()
     }
 }
 
@@ -130,7 +141,7 @@ impl fmt::Display for Variable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Builtin {
     // This implementation is awkward and doesn't work very well.
     AddInt(Box<Ast>, Box<Ast>),
@@ -146,7 +157,7 @@ impl Builtin {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Ast {
     Type(Type),
 
