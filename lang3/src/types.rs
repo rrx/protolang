@@ -3,6 +3,7 @@ use codegen::hir;
 use logic::{DefinitionId, TypeSignature};
 use std::error::Error;
 use std::fmt;
+use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {

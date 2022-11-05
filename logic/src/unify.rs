@@ -239,7 +239,7 @@ fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
         log::debug!("subst: {:?}={:?}", k, v);
     }
     for v in out.iter() {
-        log::debug!("Eq: {:?}", v);
+        log::debug!("Unsatisfied Eq: {:?}", v);
     }
 
     (out, subst)

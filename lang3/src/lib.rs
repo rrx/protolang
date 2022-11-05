@@ -8,7 +8,7 @@ mod printer;
 pub use ast::*;
 pub use builder::*;
 use env::*;
-use types::*;
+pub use types::*;
 use visitor::*;
 use printer::*;
 

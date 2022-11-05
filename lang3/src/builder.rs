@@ -81,7 +81,7 @@ impl AstBuilder {
     }
 
     pub fn block(&self, exprs: Vec<Ast>) -> Ast {
-        Ast::Block(exprs)
+        Ast::block(exprs)
     }
 
     pub fn func(&mut self, params: Vec<Variable>, body: Ast, sig: Vec<Type>) -> Ast {
@@ -140,6 +140,7 @@ impl AstBuilder {
                 var.bind(env.clone());
                 let name = var.name.clone();
                 //self.to_resolve.push(var.clone());
+                //self.equations.push(logic::Expr::Eq(var.ty.clone(), new_rhs.get_type()));
                 let d = Ast::Declare(var, new_rhs.into());
                 env.define(name, d.clone());
                 (d, env)
@@ -147,7 +148,7 @@ impl AstBuilder {
 
             Ast::Variable(mut v) => {
                 v.bind(env.clone());
-                self.to_resolve.push(v.clone());
+                //self.to_resolve.push(v.clone());
                 (v.into(), env)
             }
 
@@ -183,7 +184,7 @@ impl AstBuilder {
                 sig.push(body.get_type());
 
                 let internal_ty = Type::Func(sig);
-                self.equations.push(logic::Expr::Eq(ty.clone(), internal_ty));
+                //self.equations.push(logic::Expr::Eq(ty.clone(), internal_ty));
                 (
                     Ast::Function {
                         params,
@@ -194,7 +195,7 @@ impl AstBuilder {
                 )
             }
 
-            Ast::Block(exprs) => {
+            Ast::Block(exprs, ty) => {
                 let mut local_env = env.clone();
                 let mut updated = vec![];
                 for expr in exprs {
@@ -203,7 +204,7 @@ impl AstBuilder {
                     updated.push(new_ast);
                 }
                 // return original scope
-                (Ast::Block(updated), env)
+                (Ast::block(updated), env)
             }
 
             Ast::Internal(v) => {
@@ -331,7 +332,7 @@ impl AstBuilder {
                 .into();
                 Ok(hir::Ast::Definition(d))
             }
-            Ast::Block(exprs) => {
+            Ast::Block(exprs, ty) => {
                 let mut out = vec![];
                 for e in exprs {
                     out.push(self.lower(e)?);
@@ -410,14 +411,14 @@ impl AstBuilder {
     }
 
     fn base_ast(&self) -> Ast {
-        Ast::Block(self.base.clone())
+        Ast::block(self.base.clone())
     }
 
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
         let mut exprs = self.base.clone();
         match ast {
-            Ast::Block(more) => exprs.extend(more.clone()),
+            Ast::Block(more, _) => exprs.extend(more.clone()),
             _ => exprs.push(ast.clone())
         }
         let block = self.block(exprs);

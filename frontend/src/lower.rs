@@ -79,7 +79,7 @@ impl<A: ast::AstPayload> Lower for ast::AstStmtP<A> {
                 Ok(L::Ast::Assign(lhs.into(), rhs.into()))
             }
             //AssignModify(AstAssignP<P>, AssignOp, Box<AstExprP<P>>),
-            Statements(stmts) => Ok(L::Ast::Block(b.lower_list_ast(&stmts)?)),
+            Statements(stmts) => Ok(L::Ast::block(b.lower_list_ast(&stmts)?)),
             Def(ident, params, _, body, _) => {
                 let name: String = ident.node.0.clone();
                 let body = body.lower(b)?;
@@ -128,9 +128,19 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
             //Tuple(Vec<AstExprP<P>>),
             //Dot(Box<AstExprP<P>>, AstString),
             Call(expr, args) => {
-                let fexpr = expr.lower(b)?;
-                let fargs = b.lower_list_ast(&args)?;
-                unimplemented!()
+                match &expr.node {
+                    ast::ExprP::Identifier(s, _) => {
+                        let fargs = b.lower_list_ast(&args)?;
+                        let mut sig = fargs.iter().map(|t| t.get_type()).collect::<Vec<_>>();
+                        let ret_ty = b.type_unknown();
+                        sig.push(ret_ty);
+                        let ty = L::Type::Func(sig);
+                        let var = b.var_named(s, ty);
+                        let fargs = b.lower_list_ast(&args)?;
+                        Ok(b.apply(&var, fargs))
+                    }
+                    _ => unimplemented!()
+                }
             }
             //ArrayIndirection(Box<(AstExprP<P>, AstExprP<P>)>),
             //Slice(

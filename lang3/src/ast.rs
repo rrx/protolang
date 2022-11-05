@@ -2,6 +2,7 @@ use super::*;
 use crate::env::LayerValue;
 use logic::TypeSignature;
 use std::fmt;
+use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VariableId(pub usize);
@@ -156,7 +157,7 @@ pub enum Ast {
     // Variable, represented by a String
     Variable(Variable),
 
-    Block(Vec<Ast>),
+    Block(Vec<Ast>, Type),
 
     // A function that is defined externally
     Extern(Vec<Type>), // args
@@ -190,6 +191,12 @@ fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Vec<Ast> {
 }
 
 impl Ast {
+
+    pub fn block(exprs: Vec<Self>) -> Self {
+         let ty = exprs.last().expect("Empty Block").get_type();
+         Self::Block(exprs, ty)
+    }
+
     pub fn int(i: i64) -> Self {
         Self::Literal(Literal::Int(i as u64))
     }
@@ -231,7 +238,9 @@ impl Ast {
                     ty,
                 }
             }
-            Self::Block(exprs) => Self::Block(resolve_list(exprs, &subst)),
+            Self::Block(exprs, ty) => {
+                Self::block(resolve_list(exprs, &subst))//, ty.clone()),
+            }
             Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)),
 
             Self::Type(ty) => Self::Type(ty.resolve(subst)),
@@ -248,7 +257,7 @@ impl Ast {
             Self::Literal(Literal::Bool(_)) => Type::Bool,
             Self::Literal(Literal::String(_)) => Type::String,
             Self::Function { ty, .. } => ty.clone(),
-            Self::Block(exprs) => exprs.last().expect("Empty Block").get_type(),
+            Self::Block(exprs, ty) => ty.clone(),//exprs.last().expect("Empty Block").get_type(),
             Self::Apply(var, _) => var.ty
                 .children()
                 .last()
@@ -297,8 +306,8 @@ impl fmt::Display for Ast {
                 write!(f, "Type({})", &t)?;
             }
 
-            Ast::Block(exprs) => {
-                write!(f, "Block({})", format_list(&exprs))?;
+            Ast::Block(exprs, ty) => {
+                write!(f, "Block({},{})", format_list(&exprs), &ty)?;
             }
 
             Ast::Extern(types) => {

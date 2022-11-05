@@ -6,6 +6,7 @@ use std::env;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
     let dialect = Dialect::Extended;
     for arg in env::args().skip(1) {
         let path = std::path::Path::new(&arg);
