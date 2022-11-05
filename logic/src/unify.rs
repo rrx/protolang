@@ -1,9 +1,9 @@
 use std::fmt;
-pub type SymbolTable<T> = rpds::HashTrieMap<DefinitionId, T>;
+pub type SymbolTable<K, T> = rpds::HashTrieMap<K, T>;
 
-pub fn subst_get_type_by_id<T: Clone + TypeSignature<T>>(
-    subst: &SymbolTable<T>,
-    ty_id: &DefinitionId,
+pub fn subst_get_type_by_id<K: UnifyKey, T: UnifyValue<Key=K, Value=T>>(
+    subst: &SymbolTable<K, T>,
+    ty_id: &K,
 ) -> Option<T> {
     let mut ty_id = *ty_id;
     loop {
@@ -21,25 +21,13 @@ pub fn subst_get_type_by_id<T: Clone + TypeSignature<T>>(
     None
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DefinitionId(pub usize);
-
-impl From<usize> for DefinitionId {
-    fn from(item: usize) -> Self {
-        Self(item)
-    }
-}
-
-impl fmt::Display for DefinitionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl fmt::Debug for DefinitionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+pub trait UnifyKey: Clone + Copy + PartialEq + std::cmp::Eq + std::hash::Hash + fmt::Debug + fmt::Display {}
+pub trait UnifyValue: Clone + fmt::Debug + PartialEq {
+    type Key;
+    type Value;
+    fn children(&self) -> Vec<Self::Value>;
+    fn unknown(&self) -> Option<Self::Key>;
+    fn var(u: Self::Key) -> Self::Value;
 }
 
 #[derive(Debug, PartialEq)]
@@ -51,26 +39,26 @@ pub enum UnifyResult {
     Ok,
 }
 
-pub trait TypeSignature<T> {
-    fn children(&self) -> Vec<T>;
-    fn unknown(&self) -> Option<DefinitionId>;
-    fn var(u: DefinitionId) -> T;
-}
+//pub trait TypeSignature<D, T>: UnifyValue {
+    //fn children(&self) -> Vec<T>;
+    //fn unknown(&self) -> Option<D>;
+    //fn var(u: D) -> T;
+//}
 
 use self::Expr::*;
 
-type ExprFunc<T> = fn(T, T, T, SymbolTable<T>) -> (UnifyResult, SymbolTable<T>);
+type ExprFunc<K, T> = fn(T, T, T, SymbolTable<K, T>) -> (UnifyResult, SymbolTable<K, T>);
 
 #[derive(Clone, Debug, Hash)]
-pub enum Expr<T> {
+pub enum Expr<K, T> {
     OneOf(T, Vec<T>),
     Eq(T, T),
-    Or(Vec<Expr<T>>),
-    Func(T, T, T, ExprFunc<T>),
+    Or(Vec<Expr<K, T>>),
+    Func(T, T, T, ExprFunc<K, T>),
 }
 
-impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
-    fn unify(&self, subst: SymbolTable<T>) -> (UnifyResult, SymbolTable<T>) {
+impl<K: UnifyKey, T: UnifyValue<Key=K, Value=T>> Expr<K, T> {
+    fn unify(&self, subst: SymbolTable<K, T>) -> (UnifyResult, SymbolTable<K, T>) {
         match self {
             Eq(ty1, ty2) => unify_eq(vec![ty1.clone()], vec![ty2.clone()], subst),
             OneOf(ty1, types) => {
@@ -105,7 +93,7 @@ impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
     }
 }
 
-fn subs_if_exists<T: Clone + TypeSignature<T>>(ty: &T, subst: SymbolTable<T>) -> T {
+fn subs_if_exists<K: UnifyKey, T: UnifyValue<Key=K, Value=T>>(ty: &T, subst: SymbolTable<K, T>) -> T {
     let mut ty = ty.clone();
     if let Some(type_id) = ty.unknown() {
         if subst.contains_key(&type_id) {
@@ -115,11 +103,11 @@ fn subs_if_exists<T: Clone + TypeSignature<T>>(ty: &T, subst: SymbolTable<T>) ->
     ty
 }
 
-fn unify<T: PartialEq + Clone + fmt::Debug + TypeSignature<T>>(
+fn unify<K: UnifyKey, T: UnifyValue<Key=K, Value=T>>(
     ty1: T,
     ty2: T,
-    subst: SymbolTable<T>,
-) -> (UnifyResult, SymbolTable<T>) {
+    subst: SymbolTable<K, T>,
+) -> (UnifyResult, SymbolTable<K, T>) {
     // substitute
     let ty1 = subs_if_exists(&ty1, subst.clone());
     let ty2 = subs_if_exists(&ty2, subst.clone());
@@ -172,11 +160,11 @@ fn unify<T: PartialEq + Clone + fmt::Debug + TypeSignature<T>>(
     (res, subst)
 }
 
-fn unify_eq<T: fmt::Debug + PartialEq + Clone + TypeSignature<T>>(
+fn unify_eq<K: UnifyKey, T: UnifyValue<Key=K, Value=T>>(
     sig1: Vec<T>,
     sig2: Vec<T>,
-    mut subst: SymbolTable<T>,
-) -> (UnifyResult, SymbolTable<T>) {
+    mut subst: SymbolTable<K, T>,
+) -> (UnifyResult, SymbolTable<K, T>) {
     // ensure we have the same shape
     let (res, subst) = if sig1.len() != sig2.len() {
         (UnifyResult::MismatchShape, subst)
@@ -208,7 +196,7 @@ fn unify_eq<T: fmt::Debug + PartialEq + Clone + TypeSignature<T>>(
 }
 
 // Does ty1 occur in ty2?
-fn occurs_check<T: PartialEq + fmt::Debug + TypeSignature<T>>(ty: &T, ty2: &T) -> bool {
+fn occurs_check<K, T: UnifyValue<Key=K, Value=T>>(ty: &T, ty2: &T) -> bool {
     let children = ty2.children();
     // if ty1 occurs in any of a functions parameters
     let res = children.iter().any(|s| s == ty);
@@ -216,10 +204,10 @@ fn occurs_check<T: PartialEq + fmt::Debug + TypeSignature<T>>(ty: &T, ty2: &T) -
     res
 }
 
-fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
-    equations: Vec<Expr<T>>,
-    mut subst: SymbolTable<T>,
-) -> (Vec<Expr<T>>, SymbolTable<T>) {
+fn unify_all<K: UnifyKey, T: UnifyValue<Key=K, Value=T>>(
+    equations: Vec<Expr<K, T>>,
+    mut subst: SymbolTable<K, T>,
+) -> (Vec<Expr<K, T>>, SymbolTable<K, T>) {
     let mut out = vec![];
     for (i, eq) in equations.into_iter().enumerate() {
         let (res, s) = eq.unify(subst.clone());
@@ -245,9 +233,9 @@ fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
     (out, subst)
 }
 
-pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
-    mut equations: Vec<Expr<T>>,
-) -> (UnifyResult, SymbolTable<T>) {
+pub fn unify_start<K: UnifyKey, T: UnifyValue<Key=K, Value=T>>(
+    mut equations: Vec<Expr<K, T>>,
+) -> (UnifyResult, SymbolTable<K, T>) {
     let mut subst = SymbolTable::default();
     let mut count = subst.size();
     let mut res = UnifyResult::Ok;
@@ -279,6 +267,29 @@ mod test {
     use test_log::test;
     use Type::*;
 
+    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct DefinitionId(pub usize);
+
+    impl UnifyKey for DefinitionId {}
+
+    impl From<usize> for DefinitionId {
+        fn from(item: usize) -> Self {
+            Self(item)
+        }
+    }
+
+    impl fmt::Display for DefinitionId {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl fmt::Debug for DefinitionId {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub enum Type {
         Int,
@@ -288,7 +299,9 @@ mod test {
         Var(DefinitionId),
     }
 
-    impl TypeSignature<Type> for Type {
+    impl UnifyValue for Type {
+        type Key = DefinitionId;
+        type Value = Type;
         fn unknown(&self) -> Option<DefinitionId> {
             match self {
                 Type::Var(id) => Some(*id),
@@ -305,6 +318,8 @@ mod test {
             Type::Var(u)
         }
     }
+
+    type ExprSeq = Vec<Expr<DefinitionId, Type>>;
 
     fn var(u: usize) -> Type {
         Type::Var(u.into())
@@ -359,7 +374,7 @@ mod test {
 
     #[test]
     fn logic_no_solution() {
-        let start: Vec<Expr<Type>> = vec![Eq(name("a"), name("b"))];
+        let start: ExprSeq = vec![Eq(name("a"), name("b"))];
 
         let (res, _) = unify_start(start);
 
@@ -369,7 +384,7 @@ mod test {
 
     #[test]
     fn logic_no_solution_2() {
-        let start: Vec<Expr<Type>> = vec![Eq(
+        let start: ExprSeq = vec![Eq(
             seq(vec![name("a"), name("b")]),
             seq(vec![name("c"), name("d")]),
         )];
@@ -381,7 +396,7 @@ mod test {
 
     #[test]
     fn logic_no_solution_3() {
-        let start: Vec<Expr<Type>> = vec![
+        let start: ExprSeq = vec![
             Eq(Type::Int, Type::Float),
             OneOf(Type::Int, vec![Type::Float]),
         ];
@@ -393,7 +408,7 @@ mod test {
 
     #[test]
     fn logic_func() {
-        let start: Vec<Expr<Type>> = vec![
+        let start: ExprSeq = vec![
             Eq(Type::Seq(vec![Type::Int]), Type::Seq(vec![var(0)])),
             Eq(var(1), Type::Float),
         ];
@@ -416,7 +431,7 @@ mod test {
             seq(vec![name("c"), var(2)]),
         ]);
 
-        let start: Vec<Expr<Type>> = vec![Eq(s1, s2)];
+        let start: ExprSeq = vec![Eq(s1, s2)];
 
         let (res, _) = unify_start(start);
         assert_eq!(UnifyResult::Ok, res);
@@ -438,7 +453,7 @@ mod test {
 
     #[test]
     fn empty() {
-        let (res, _) = unify_start::<Type>(vec![]);
+        let (res, _) = unify_start::<DefinitionId, Type>(vec![]);
         assert_eq!(UnifyResult::Ok, res);
     }
 

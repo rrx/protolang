@@ -1,6 +1,5 @@
 use super::*;
 use codegen::hir;
-use logic::{DefinitionId, TypeSignature};
 use std::error::Error;
 use std::fmt;
 use serde::Serialize;
@@ -29,7 +28,10 @@ impl fmt::Display for Type {
     }
 }
 
-impl TypeSignature<Type> for Type {
+impl logic::UnifyValue for Type {
+    type Key = DefinitionId;
+    type Value = Type;
+
     fn unknown(&self) -> Option<DefinitionId> {
         match self {
             Type::Variable(id) => Some(*id),

@@ -1,6 +1,5 @@
 use super::*;
 use crate::env::LayerValue;
-use logic::TypeSignature;
 use std::fmt;
 use serde::Serialize;
 
@@ -86,7 +85,7 @@ impl Variable {
     }
 
     /// generate type equations for the variable that can be used for unification
-    pub fn generate_equations(&self) -> logic::Expr<Type> {
+    pub fn generate_equations(&self) -> UnifyExpr {
 
         let var_env = self.env.as_ref().unwrap();
         match &self.ty {

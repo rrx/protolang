@@ -1,8 +1,8 @@
 use crate::*;
 use codegen::hir;
-use logic::{self, SymbolTable, TypeSignature, UnifyResult};
 use std::error::Error;
 use codegen::llvm::JitExecute;
+use logic::UnifyValue;
 
 pub trait Lower {
     fn lower(&self, b: &mut AstBuilder) -> Result<Ast, Box<dyn Error>>;
@@ -12,21 +12,21 @@ pub trait Lower {
 #[derive(Default)]
 pub struct AstBuilder {
     last_id: usize,
-    pub equations: Vec<logic::Expr<Type>>,
+    pub equations: ExprSeq,
     to_resolve: Vec<Variable>,
     base: Vec<Ast>,
 }
 
-impl Visitor<SymbolTable<Ast>> for AstBuilder {
-    fn enter(&mut self, e: &Ast, n: &mut SymbolTable<Ast>) -> visitor::VResult {
+impl Visitor<SymbolTable> for AstBuilder {
+    fn enter(&mut self, e: &Ast, n: &mut SymbolTable) -> visitor::VResult {
         //println!("Visit AST: {}", e);
         Ok(())
     }
 }
 
 impl AstBuilder {
-    pub fn type_next_id(&mut self) -> logic::DefinitionId {
-        let d = logic::DefinitionId(self.last_id);
+    pub fn type_next_id(&mut self) -> DefinitionId {
+        let d = DefinitionId(self.last_id);
         self.last_id += 1;
         d
     }
@@ -252,7 +252,7 @@ impl AstBuilder {
         &mut self,
         ast: Ast,
         env: Environment,
-    ) -> (UnifyResult, Ast, Environment, SymbolTable<Type>) {
+    ) -> (UnifyResult, Ast, Environment, SymbolTable) {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
 
