@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut builder = AstBuilder::default();
         let ast = module.lower(&mut builder)?;
-        println!("AST: {:#?}", &ast);
+        println!("AST: {}", ast.to_ron()?);
 
         let ret = builder.run_jit_main(&ast)?;
         println!("Ret {}", &ret);

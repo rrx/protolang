@@ -2,6 +2,8 @@ use super::*;
 use crate::env::LayerValue;
 use std::fmt;
 use serde::{Serialize, ser::{Serializer, SerializeStruct}};
+use std::error::Error;
+use ron::ser::{to_string_pretty, PrettyConfig};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct VariableId(pub usize);
@@ -201,6 +203,13 @@ fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Vec<Ast> {
 }
 
 impl Ast {
+    pub fn to_ron(&self) -> Result<String, ron::Error> {
+        let pretty = PrettyConfig::new()
+            //.depth_limit(3)
+            .compact_arrays(true)
+            ;
+        to_string_pretty(&self, pretty)
+    }
 
     pub fn block(exprs: Vec<Self>) -> Self {
          let ty = exprs.last().expect("Empty Block").get_type();
