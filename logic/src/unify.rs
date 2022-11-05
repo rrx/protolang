@@ -92,7 +92,7 @@ impl<T: TypeSignature<T> + Clone + fmt::Debug + PartialEq> Expr<T> {
                     let s = subst;
                     for expr in exprs {
                         let (res1, s1) = expr.unify(s.clone());
-                        println!("or: {:?}", (&expr, &res1));
+                        log::debug!("or: {:?}", (&expr, &res1));
                         if res1 == UnifyResult::Ok {
                             return (res1, s1);
                         }
@@ -135,13 +135,17 @@ fn unify<T: PartialEq + Clone + fmt::Debug + TypeSignature<T>>(
         if occurs_check(&ty1, &ty2) {
             (UnifyResult::OccursCheck, subst)
         } else if children1.len() == children2.len() {
-            if children1.len() > 1 {
+            // if there are no children, this is just a simple type and we can compare
+            // directory.  Otherwise, unify on the children
+            if children1.len() == 0 {
+                if ty1 == ty2 {
+                    (UnifyResult::Ok, subst)
+                } else {
+                    (UnifyResult::NoSolution, subst)
+                }
+            } else {
                 // iterate over children
                 unify_eq(children1, children2, subst)
-            } else if ty1 == ty2 {
-                (UnifyResult::Ok, subst)
-            } else {
-                (UnifyResult::NoSolution, subst)
             }
         } else {
             (UnifyResult::MismatchShape, subst)
@@ -169,20 +173,20 @@ fn unify<T: PartialEq + Clone + fmt::Debug + TypeSignature<T>>(
 }
 
 fn unify_eq<T: fmt::Debug + PartialEq + Clone + TypeSignature<T>>(
-    ty1: Vec<T>,
-    ty2: Vec<T>,
+    sig1: Vec<T>,
+    sig2: Vec<T>,
     mut subst: SymbolTable<T>,
 ) -> (UnifyResult, SymbolTable<T>) {
     // ensure we have the same shape
-    let (res, subst) = if ty1.len() != ty2.len() {
+    let (res, subst) = if sig1.len() != sig2.len() {
         (UnifyResult::MismatchShape, subst)
-    } else if ty1.len() == 0 {
+    } else if sig1.len() == 0 {
         (UnifyResult::MismatchShape, subst)
-    } else if ty1 == ty2 {
+    } else if sig1 == sig2 {
         (UnifyResult::Ok, subst)
     } else {
         let mut new_res = UnifyResult::Ok;
-        for (a1, a2) in ty1.iter().zip(ty2.iter()) {
+        for (a1, a2) in sig1.iter().zip(sig2.iter()) {
             let (res, new_subst) = unify(a1.clone(), a2.clone(), subst);
             match res {
                 UnifyResult::Ok => {
@@ -198,7 +202,7 @@ fn unify_eq<T: fmt::Debug + PartialEq + Clone + TypeSignature<T>>(
         (new_res, subst)
     };
 
-    log::debug!("unify_eq: {:?} :: {:?} :: {:?}", ty1, ty2, &res);
+    log::debug!("unify_eq: {:?} :: {:?} :: {:?}", sig1, sig2, &res);
 
     (res, subst)
 }
@@ -217,31 +221,25 @@ fn unify_all<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
     mut subst: SymbolTable<T>,
 ) -> (Vec<Expr<T>>, SymbolTable<T>) {
     let mut out = vec![];
-    println!("Start");
     for (i, eq) in equations.into_iter().enumerate() {
         let (res, s) = eq.unify(subst.clone());
-        println!("Unify[{}]: {:?} => {:?}", i, &eq, res);
+        log::debug!("Unify[{}]: {:?} => {:?}", i, &eq, res);
         match res {
             UnifyResult::Ok => {
                 subst = s;
             }
             _ => {
-                println!("no unify on {:?}", (res, &eq));
+                log::error!("no unify on {:?}", &eq);
                 out.push(eq);
             }
         }
     }
 
-    println!("x:{}, {}", out.len(), subst.size());
-    //for i in 0..subst.size() {
-    //let v = subst.get(&i.into()).unwrap();
-    //println!("{:?}={:?}", i, v);
-    //}
     for (k, v) in subst.iter() {
-        println!("{:?}={:?}", k, v);
+        log::debug!("subst: {:?}={:?}", k, v);
     }
     for v in out.iter() {
-        println!("Eq: {:?}", v);
+        log::debug!("Eq: {:?}", v);
     }
 
     (out, subst)
@@ -251,7 +249,7 @@ pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
     mut equations: Vec<Expr<T>>,
 ) -> (UnifyResult, SymbolTable<T>) {
     let mut subst = SymbolTable::default();
-    let mut count = equations.len();
+    let mut count = subst.size();
     let mut res = UnifyResult::Ok;
 
     loop {
@@ -260,6 +258,10 @@ pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
             break;
         }
 
+        let (results, s) = unify_all(equations, subst.clone());
+        subst = s;
+        equations = results;
+        
         // check if anything has changed
         if subst.size() == count {
             res = UnifyResult::NoSolution;
@@ -267,9 +269,6 @@ pub fn unify_start<T: TypeSignature<T> + Clone + PartialEq + fmt::Debug>(
         }
         count = subst.size();
 
-        let (results, s) = unify_all(equations, subst.clone());
-        subst = s;
-        equations = results;
     }
     (res, subst)
 }
@@ -391,6 +390,19 @@ mod test {
         // no solution, because types do not match
         assert_eq!(UnifyResult::NoSolution, res);
     }
+
+    #[test]
+    fn logic_func() {
+        let start: Vec<Expr<Type>> = vec![
+            Eq(Type::Seq(vec![Type::Int]), Type::Seq(vec![var(0)])),
+            Eq(var(1), Type::Float),
+        ];
+
+        let (res, _) = unify_start(start);
+        // no solution, because types do not match
+        assert_eq!(UnifyResult::Ok, res);
+    }
+
 
     #[test]
     fn logic_nested() {

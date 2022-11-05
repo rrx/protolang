@@ -123,7 +123,7 @@ impl AstBuilder {
                 let name = var.name.clone();
                 match env.resolve(&name) {
                     Some(v) => {
-                        let (rhs, env) = self.name_resolve(*rhs, env.clone());
+                        let (_, env) = self.name_resolve(*rhs, env.clone());
                         (v.clone(), env)
                     }
                     None => {
@@ -135,9 +135,11 @@ impl AstBuilder {
                 }
             }
 
-            Ast::Declare(var, rhs) => {
+            Ast::Declare(mut var, rhs) => {
                 let (new_rhs, mut env) = self.name_resolve(*rhs, env);
+                var.bind(env.clone());
                 let name = var.name.clone();
+                //self.to_resolve.push(var.clone());
                 let d = Ast::Declare(var, new_rhs.into());
                 env.define(name, d.clone());
                 (d, env)
@@ -167,11 +169,21 @@ impl AstBuilder {
                 let mut local_env = env.clone();
                 // The parameters on a function will be unbound, and don't need name resolution
                 // When we resolve the body, we want the parameters to exist in the local environment
+                let mut sig = vec![];
                 for arg in &params {
                     let name = arg.name.clone();
-                    local_env.define(name, Ast::Variable(arg.clone()));
+                    let mut arg = arg.clone();
+                    arg.bind(env.clone());
+                    sig.push(arg.ty.clone());
+                    local_env.define(name, Ast::Variable(arg.into()));
                 }
                 let (body, local_env) = self.name_resolve(*body.clone(), local_env);
+           
+                // type should match the return type of the body
+                sig.push(body.get_type());
+
+                let internal_ty = Type::Func(sig);
+                self.equations.push(logic::Expr::Eq(ty.clone(), internal_ty));
                 (
                     Ast::Function {
                         params,
@@ -204,6 +216,11 @@ impl AstBuilder {
                 }
                 (Ast::Internal(v), env)
             }
+
+            Ast::Return(expr) => {
+                self.name_resolve(*expr, env)
+            }
+
             _ => {
                 unimplemented!("{:?}", &ast)
             }
@@ -222,8 +239,7 @@ impl AstBuilder {
         Ast::Assign(v, rhs.into())
     }
 
-    pub fn resolve_ast(&mut self,
-                       ast: Ast) -> Result<Ast, Box<dyn Error>> {
+    pub fn resolve_ast(&mut self, ast: Ast) -> Result<Ast, Box<dyn Error>> {
         let env = self.base_env();
         let (res, ast, env, subst) = self.resolve(ast, env.clone());
         assert_eq!(res, logic::UnifyResult::Ok);
@@ -250,6 +266,10 @@ impl AstBuilder {
         for eq in &eqs {
             eprintln!("EQ: {:?}", &eq);
         }
+        if eqs.len() == 0 {
+            eprintln!("No equations");
+        }
+
         let (res, subst) = logic::unify_start(eqs);
 
         eprintln!("AST: {}", &ast);
@@ -280,7 +300,8 @@ impl AstBuilder {
 
         // declare
         let ty = rhs.get_type();
-        let v = self.var_named("+", ty.clone());
+        let mut v = self.var_named("+", ty.clone());
+        v.bind(env.clone());
         let d = Ast::Declare(v.clone(), rhs.into());
 
         env.define("+".to_string(), v.into());
@@ -394,12 +415,16 @@ impl AstBuilder {
 
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
-        let base_hir = self.lower(&self.base_ast())?;
-        let module_hir = self.lower(ast)?;
+        let mut exprs = self.base.clone();
+        match ast {
+            Ast::Block(more) => exprs.extend(more.clone()),
+            _ => exprs.push(ast.clone())
+        }
+        let block = self.block(exprs);
 
-        let new_hir: hir::Ast = hir::Sequence::new(vec![base_hir, module_hir]).into();
-        println!("HIR: {:#?}", &new_hir);
-        new_hir.run_main()
+        let low = self.lower(&block)?;
+        println!("HIR: {:#?}", &low);
+        low.run_main()
     }
 
 
@@ -506,10 +531,6 @@ mod tests {
         let two = b.int(2);
         let add = b.binary("+", one, two);
         let ast = b.declare("f", add);
-
-        for eq in &b.equations {
-            println!("EQ: {:?}", &eq);
-        }
 
         let (res, ast, env, subst) = b.resolve(ast, env.clone());
         println!("{}", env);

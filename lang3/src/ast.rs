@@ -112,12 +112,11 @@ impl Variable {
                         let var_ty = self.ty.clone();
                         let resolved_ty = resolved_v.get_type();
 
-                        // variable matches the type of resolved
+                        // variable matches the type of resolve
                         logic::Expr::Eq(var_ty, resolved_ty)
                     }
                     None => {
-                        eprintln!("unresolved variable: {:?}", &self);
-                        unimplemented!();
+                        unimplemented!("unresolved variable: {} {:?}", &self.name, &self);
                     }
                 }
             }
@@ -259,7 +258,10 @@ impl Ast {
             Self::Assign(_, expr) => expr.get_type(),
             Self::Variable(v) => v.ty.clone(),
             Self::Extern(args) | Self::Builtin(args) => Type::Func(args.clone()),
-            Self::Internal(_) => unimplemented!(),
+            Self::Internal(_) => {
+                /// TODO: not correct, hardwired for now
+                Type::Int
+            }
             Self::Type(_) => Type::Type,
             Self::Return(expr) => expr.get_type()
         }
@@ -307,7 +309,7 @@ impl fmt::Display for Ast {
             Ast::Internal(v) => write!(f, "Internal({:?})", &v)?,
 
             Ast::Function { params, body, ty } => {
-                write!(f, "Func({}, {}, {})", format_list(&params), &body, &ty)?;
+                write!(f, "Func(({}), {}, {})", format_list(&params), &body, &ty)?;
             }
 
             Ast::Apply(func, args) => {
