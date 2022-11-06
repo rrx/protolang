@@ -23,7 +23,6 @@ pub struct Variable {
     pub id: VariableId,
     pub ty: Type,
     pub name: String,
-    //env: Option<Environment>,
 }
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
@@ -48,7 +47,6 @@ impl Variable {
             name,
             id,
             ty,
-            //env: None,
         }
     }
     pub fn unnamed(id: VariableId, ty: Type) -> Self {
@@ -57,12 +55,8 @@ impl Variable {
             name,
             id,
             ty,
-            //env: None,
         }
     }
-    //pub fn bind(&mut self, env: Environment) {
-        //self.env.replace(env);
-    //}
 
     /// Just replace the type with the value in the symbol table
     pub fn resolve_type(&self, subst: &SymbolTable) -> Self {
@@ -95,55 +89,12 @@ impl Variable {
                     _ => unreachable!(),
                 }
             }
-            //None => unreachable!("Variable not found in substition: {:?}", self),
-            _ => self.clone()
+
+            // if it's not found, then it's probably a parameter
+            None => self.clone()
         };
         var.resolve_type(subst)
     }
-
-    /*
-    /// generate type equations for the variable that can be used for unification
-    pub fn generate_equations(&self) -> UnifyExpr {
-
-        let var_env = self.env.as_ref().unwrap();
-        match &self.ty {
-            /*
-            Type::Func(_) => {
-                // resolve the name of the function
-                // This can yield multiple results and they need to match with parameters
-                // We accomplish this here by making use of the type unification system
-                //
-                // create equation for all matches for the function
-                // We could filter this based on the known arguments so far
-                // It could be none, and so we could return an error now, rather
-                // than waiting for unification
-                let possible = var_env
-                    .resolve_all(&self.name)
-                    .into_iter()
-                    .cloned()
-                    //.map(|v| v.get_type())
-                    .collect::<Vec<_>>();
-                logic::Expr::OneOfValues(self.clone().into(), possible)
-            }
-            */
-            _ => {
-                match var_env.resolve(&self.name) {
-                    Some(resolved_v) => {
-                        let var_ty = self.ty.clone();
-                        let resolved_ty = resolved_v.get_type();
-
-                        // variable matches the type of resolve
-                        logic::Expr::Eq(var_ty, resolved_ty)
-                    }
-                    None => {
-                        unimplemented!("unresolved variable: {} {:?}", &self.name, &self);
-                    }
-                }
-            }
-        }
-    }
-*/
-
 }
 
 impl fmt::Display for Variable {

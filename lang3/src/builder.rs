@@ -13,7 +13,6 @@ pub trait Lower {
 pub struct AstBuilder {
     last_id: usize,
     pub equations: ExprSeq,
-    //to_resolve: Vec<Variable>,
     base: Vec<Ast>,
 }
 
@@ -129,24 +128,23 @@ impl AstBuilder {
                     None => {
                         //eprintln!("Unable to resolve: {:?}", &var);
                         // name doesn't resolve, so we can't assign, declare instead
+                        // We could make this configurable behavior.  By default, we may not
+                        // want to declare new variables, to prevent shadowing.  Python does this
+                        // but it's not necessarily a good thing.
                         self.name_resolve(Ast::Declare(var, rhs), env)
-                        //unimplemented!()
                     }
                 }
             }
 
-            Ast::Declare(mut var, rhs) => {
+            Ast::Declare(var, rhs) => {
                 let (new_rhs, mut env) = self.name_resolve(*rhs, env);
-                //var.bind(env.clone());
                 let name = var.name.clone();
-                //self.to_resolve.push(var.clone());
-                //self.equations.push(logic::Expr::Eq(var.ty.clone(), new_rhs.get_type()));
                 let d = Ast::Declare(var, new_rhs.into());
                 env.define(name, d.clone());
                 (d, env)
             }
 
-            Ast::Variable(mut v) => {
+            Ast::Variable(v) => {
 
                 // resolve the name from the environment
                 match env.resolve(&v.name) {
@@ -162,12 +160,10 @@ impl AstBuilder {
                     }
                 }
 
-                //v.bind(env.clone());
-                //self.to_resolve.push(v.clone());
                 (v.into(), env)
             }
 
-            Ast::Apply(mut var, ref args) => {
+            Ast::Apply(var, ref args) => {
                 let mut env = env.clone();
                 
                 // get the list of possible matches
@@ -185,9 +181,6 @@ impl AstBuilder {
                     env = this_env;
                 }
 
-                //var.bind(env.clone());
-
-                //self.to_resolve.push(var.clone());
                 (Ast::Apply(var, args.clone()), env)
             }
 
@@ -198,8 +191,7 @@ impl AstBuilder {
                 let mut sig = vec![];
                 for arg in &params {
                     let name = arg.name.clone();
-                    let mut arg = arg.clone();
-                    //arg.bind(env.clone());
+                    let arg = arg.clone();
                     sig.push(arg.ty.clone());
                     local_env.define(name, Ast::Variable(arg.into()));
                 }
@@ -209,7 +201,6 @@ impl AstBuilder {
                 sig.push(body.get_type());
 
                 let internal_ty = Type::Func(sig);
-                //self.equations.push(logic::Expr::Eq(ty.clone(), internal_ty));
                 (
                     Ast::Function {
                         params,
@@ -285,12 +276,6 @@ impl AstBuilder {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
 
-        // Generate equations
-        //for v in &self.to_resolve {
-            //let eq = v.generate_equations();
-            //self.equations.push(eq);
-        //}
-
         // infer all types
         let eqs = self.equations.clone();
         for eq in &eqs {
@@ -331,7 +316,6 @@ impl AstBuilder {
         // declare
         let ty = rhs.get_type();
         let mut v = self.var_named("+", ty.clone());
-        //v.bind(env.clone());
         let d = Ast::Declare(v.clone(), rhs.into());
 
         env.define("+".to_string(), v.into());
@@ -394,8 +378,6 @@ impl AstBuilder {
                 let args = self.lower_list(args)?;
                 let subst = SymbolTable::default();
                 let sig = var.ty.children();
-                //eprintln!("f: {:?}", f);
-                //eprintln!("sig: {:?}", sig);
                 let sig = Type::lower_list(&sig, &subst)?;
                 let ty = hir::FunctionType::export(sig);
                 Ok(hir::FunctionCall::new(lowered_var, args, ty).into())
@@ -632,7 +614,6 @@ mod tests {
         let block = b.block(vec![b.base_ast(), dmain]);
         let (res, ast, env, subst) = b.resolve(block, env.clone());
         let ast = ast.resolve(&subst);
-        //println!("r: {:?}", &b.to_resolve);
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
 
@@ -666,7 +647,6 @@ mod tests {
 
         let (res, ast, env, subst) = b.resolve(ast, env.clone());
         let ast = ast.resolve(&subst);
-        //println!("r: {:?}", &b.to_resolve);
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
 
