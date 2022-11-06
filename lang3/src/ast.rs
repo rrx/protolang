@@ -129,7 +129,7 @@ pub enum Ast {
     // Variable, represented by a String
     Variable(Variable),
 
-    Block(Vec<Ast>, Type),
+    Block(Vec<Ast>),
 
     // A function that is defined externally
     Extern(Vec<Type>), // args
@@ -172,8 +172,8 @@ impl Ast {
     }
 
     pub fn block(exprs: Vec<Self>) -> Self {
-         let ty = exprs.last().expect("Empty Block").get_type();
-         Self::Block(exprs, ty)
+         //let ty = exprs.last().expect("Empty Block").get_type();
+         Self::Block(exprs)
     }
 
     pub fn int(i: i64) -> Self {
@@ -221,7 +221,7 @@ impl Ast {
                     ty,
                 }
             }
-            Self::Block(exprs, ty) => {
+            Self::Block(exprs) => {
                 Self::block(resolve_list(exprs, &subst))
             }
             Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)),
@@ -257,7 +257,10 @@ impl logic::UnifyValue for Ast {
             Self::Literal(Literal::Bool(_)) => Type::Bool,
             Self::Literal(Literal::String(_)) => Type::String,
             Self::Function { ty, .. } => ty.clone(),
-            Self::Block(exprs, ty) => ty.clone(),//exprs.last().expect("Empty Block").get_type(),
+            Self::Block(exprs) => {
+                // TODO: maybe empty blocks can just return unit type?
+                exprs.last().expect("Empty Block").get_type()
+            }
             Self::Apply(var, _) => var.ty
                 .children()
                 .last()
@@ -313,8 +316,8 @@ impl fmt::Display for Ast {
                 write!(f, "Type({})", &t)?;
             }
 
-            Ast::Block(exprs, ty) => {
-                write!(f, "Block({},{})", format_list(&exprs), &ty)?;
+            Ast::Block(exprs) => {
+                write!(f, "Block({})", format_list(&exprs))?;
             }
 
             Ast::Extern(types) => {

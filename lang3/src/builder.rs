@@ -211,7 +211,7 @@ impl AstBuilder {
                 )
             }
 
-            Ast::Block(exprs, ty) => {
+            Ast::Block(exprs) => {
                 let mut local_env = env.clone();
                 let mut updated = vec![];
                 for expr in exprs {
@@ -345,7 +345,7 @@ impl AstBuilder {
                 .into();
                 Ok(hir::Ast::Definition(d))
             }
-            Ast::Block(exprs, ty) => {
+            Ast::Block(exprs) => {
                 let mut out = vec![];
                 for e in exprs {
                     out.push(self.lower(e)?);
@@ -429,7 +429,7 @@ impl AstBuilder {
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
         let mut exprs = self.base.clone();
         match ast {
-            Ast::Block(more, _) => exprs.extend(more.clone()),
+            Ast::Block(more) => exprs.extend(more.clone()),
             _ => exprs.push(ast.clone())
         }
         let block = self.block(exprs);

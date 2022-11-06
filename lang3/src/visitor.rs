@@ -41,7 +41,7 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
         Ast::Declare(_name, rhs) => {
             visit(rhs, f, n)?;
         }
-        Ast::Block(exprs,_) => {
+        Ast::Block(exprs) => {
             for e in exprs {
                 visit(e, f, n)?;
             }
