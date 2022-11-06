@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use serde::Serialize;
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Hash)]
 pub enum Type {
     Int,
     Float,
@@ -28,11 +28,8 @@ impl fmt::Display for Type {
     }
 }
 
-impl logic::UnifyValue for Type {
-    type Key = DefinitionId;
-    type Value = Type;
-
-    fn unknown(&self) -> Option<DefinitionId> {
+impl logic::UnifyType<DefinitionId> for Type {
+    fn try_unknown(&self) -> Option<DefinitionId> {
         match self {
             Type::Variable(id) => Some(*id),
             _ => None,
@@ -44,9 +41,6 @@ impl logic::UnifyValue for Type {
             _ => vec![],
         }
     }
-    fn var(u: DefinitionId) -> Type {
-        Type::Variable(u)
-    }
 }
 
 impl Type {
@@ -56,7 +50,7 @@ impl Type {
                 Ok(hir::FunctionType::export(Self::lower_list(sig, subst)?).into())
             }
             Self::Variable(def) => match subst.get(def) {
-                Some(v) => v.lower(subst),
+                Some(v) => v.try_type().unwrap().lower(subst),
                 None => {
                     eprintln!("Not found in subsitution: {:?}", def);
                     unreachable!()
@@ -96,9 +90,11 @@ impl Type {
 
     pub fn resolve(&self, subst: &SymbolTable) -> Type {
         match self {
-            Type::Variable(v) => match subst.get(&v) {
-                Some(ty) => ty.clone(),
-                None => self.clone(),
+            Type::Variable(v) => {
+                match subst.get(&v) {
+                    Some(v) => v.try_type().unwrap().clone(),
+                    None => self.clone(),
+                }
             },
             Type::Func(sig) => {
                 let resolved_sig = sig.iter().map(|t| t.resolve(subst)).collect::<Vec<_>>();

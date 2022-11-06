@@ -2,7 +2,7 @@ use crate::*;
 use codegen::hir;
 use std::error::Error;
 use codegen::llvm::JitExecute;
-use logic::UnifyValue;
+use logic::{UnifyValue, UnifyType};
 
 pub trait Lower {
     fn lower(&self, b: &mut AstBuilder) -> Result<Ast, Box<dyn Error>>;
@@ -31,8 +31,8 @@ impl AstBuilder {
         d
     }
 
-    pub fn var_next_id(&mut self) -> VariableId {
-        let d = VariableId(self.last_id);
+    pub fn var_next_id(&mut self) -> DefinitionId {
+        let d = DefinitionId(self.last_id);
         self.last_id += 1;
         d
     }
@@ -248,6 +248,10 @@ impl AstBuilder {
         Ok(ast)
     }
 
+    fn unify(eqs: ExprSeq) -> (UnifyResult, SymbolTable) {
+        logic::Unify::<DefinitionId, Type, Ast>::start(eqs)
+    }
+
     pub fn resolve(
         &mut self,
         ast: Ast,
@@ -271,7 +275,7 @@ impl AstBuilder {
             eprintln!("No equations");
         }
 
-        let (res, subst) = logic::unify_start(eqs);
+        let (res, subst) = Self::unify(eqs);
 
         eprintln!("AST: {}", &ast);
         eprintln!("ENV: {}", env);
@@ -445,13 +449,22 @@ mod tests {
         }
     }
 
+    fn start(eqs: ExprSeq) -> (UnifyResult, SymbolTable) {
+        logic::Unify::<DefinitionId, Type, Ast>::start(eqs)
+    }
+
+
     #[test]
     fn test_unify() {
-        let eqs = vec![logic::Expr::OneOf(
-            Type::Func(vec![Type::Variable(0.into()), Type::Int]),
-            vec![Type::Func(vec![Type::Int, Type::Int])],
-        )];
-        let (res, subst) = logic::unify_start(eqs);
+        let x = Variable::named("x".into(), DefinitionId(0).into(), Type::Float); 
+        let eqs = vec![
+            logic::Expr::OneOfTypes(
+                Type::Func(vec![Type::Variable(1.into()), Type::Int]),
+                vec![Type::Func(vec![Type::Int, Type::Int])],
+                ),
+            logic::Expr::OneOfValues(x.into(), vec![Ast::int(2), Ast::float(2.)]),
+        ];
+        let (res, subst) = logic::Unify::start(eqs);
         println!("SUB: {:?}", subst);
         assert_eq!(res, UnifyResult::Ok);
     }
@@ -512,11 +525,11 @@ mod tests {
         let ty = ast.get_type().resolve(&subst);
         assert_eq!(ty, Type::Int);
 
-        assert!(ast.get_type().unknown().is_some());
+        assert!(ast.get_type().try_unknown().is_some());
 
         let ast = ast.resolve(&subst);
         println!("{:?}", &ast.get_type());
-        assert!(ast.resolve(&subst).get_type().unknown().is_none());
+        assert!(ast.resolve(&subst).get_type().try_unknown().is_none());
         assert_eq!(ty, Type::Int);
 
         let hir = b.lower(&ast).unwrap();

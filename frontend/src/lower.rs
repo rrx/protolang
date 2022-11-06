@@ -3,6 +3,7 @@ use crate::syntax::{ast, AstModule, lexer};
 use std::error::Error;
 use lang3 as L;
 use lang3::Lower;
+use lang3::{UnifyValue};
 
 pub type LResult = Result<lang3::Ast, Box<dyn Error>>;
 type Builder = L::AstBuilder;

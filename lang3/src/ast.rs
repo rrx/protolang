@@ -4,9 +4,11 @@ use std::fmt;
 use serde::{Serialize, ser::{Serializer, SerializeStruct}};
 use std::error::Error;
 use ron::ser::{to_string_pretty, PrettyConfig};
+use logic::{UnifyType};
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct VariableId(pub usize);
+//#[derive(Clone, Debug, PartialEq, Serialize)]
+//pub struct VariableId(pub usize);
+pub type VariableId = DefinitionId;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Literal {
@@ -117,7 +119,7 @@ impl Variable {
                     .cloned()
                     .map(|v| v.get_type())
                     .collect::<Vec<_>>();
-                logic::Expr::OneOf(self.ty.clone(), possible)
+                logic::Expr::OneOfTypes(self.ty.clone(), possible)
             }
             _ => {
                 match var_env.resolve(&self.name) {
@@ -220,6 +222,10 @@ impl Ast {
         Self::Literal(Literal::Int(i as u64))
     }
 
+    pub fn float(f: f64) -> Self {
+        Self::Literal(Literal::Float(f))
+    }
+
     pub fn string(s: String) -> Self {
         Self::Literal(Literal::String(s))
     }
@@ -258,7 +264,7 @@ impl Ast {
                 }
             }
             Self::Block(exprs, ty) => {
-                Self::block(resolve_list(exprs, &subst))//, ty.clone()),
+                Self::block(resolve_list(exprs, &subst))
             }
             Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)),
 
@@ -268,8 +274,25 @@ impl Ast {
         //eprintln!("RESOLVE: {:?} => {:?}", &before, &after);
         after
     }
+}
 
-    pub fn get_type(&self) -> Type {
+impl logic::UnifyValue for Ast {
+    type Key = VariableId;
+    type Type = Type;
+    fn new_type(ty: Type) -> Self {
+        Self::Type(ty)
+    }
+    fn new_unknown(v_id: VariableId, ty: Type) -> Self {
+        Self::Variable(Variable::unnamed(v_id, ty))
+    }
+    fn try_type(&self) -> Option<Type> {
+        if let Self::Type(ty) = self {
+            Some(ty.clone())
+        } else {
+            None
+        }
+    }
+    fn get_type(&self) -> Type {
         match self {
             Self::Literal(Literal::Int(_)) => Type::Int,
             Self::Literal(Literal::Float(_)) => Type::Float,
@@ -295,6 +318,13 @@ impl Ast {
         }
     }
 
+    fn try_unknown(&self) -> Option<Self::Key> {
+        if let Self::Variable(v) = self {
+            Some(v.id)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<Variable> for Ast {

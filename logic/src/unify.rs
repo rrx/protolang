@@ -14,7 +14,7 @@ pub trait UnifyValue: Clone + fmt::Debug  {
     fn new_unknown(v_id: Self::Key, ty: Self::Type) -> Self;
     fn get_type(&self) -> Self::Type;
     //fn children(&self) -> Vec<Self::Type>;
-    fn unknown(&self) -> Option<Self::Key>;
+    fn try_unknown(&self) -> Option<Self::Key>;
     fn try_type(&self) -> Option<Self::Type>;
 }
 
@@ -76,7 +76,7 @@ impl <K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Expr<K, T, V> 
 use std::marker::PhantomData;
 
 #[derive(Default)]
-struct Unify<K, T, V> {
+pub struct Unify<K, T, V> {
     _k: PhantomData<K>,
     _t: PhantomData<T>,
     _v: PhantomData<V>,
@@ -99,7 +99,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
     }
 
     fn subs_value(v: &V, subst: SymbolTable<K, V>) -> V {
-        if let Some(v_id) = v.unknown() {
+        if let Some(v_id) = v.try_unknown() {
             let ty = v.get_type();
             let ty = Self::subs_type(&ty, subst);
             V::new_unknown(v_id, ty)
@@ -116,7 +116,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
     ) -> (UnifyResult, SymbolTable<K, V>) {
         let v1 = Self::subs_value(&v1, subst.clone());
         let v2 = Self::subs_value(&v2, subst.clone());
-        let u1 = v1.unknown();
+        let u1 = v1.try_unknown();
         let ty1 = v1.get_type();
         let ty2 = v2.get_type();
 
@@ -359,7 +359,7 @@ mod test {
             //vec![]
         //}
 
-        fn unknown(&self) -> Option<Self::Key> {
+        fn try_unknown(&self) -> Option<Self::Key> {
             if let Self::Unknown(v_id, _) = self {
                 Some(*v_id)
             } else {

@@ -13,7 +13,7 @@ use visitor::*;
 use printer::*;
 use std::fmt;
 
-use logic::{UnifyResult, UnifyValue};
+pub use logic::{UnifyResult, UnifyValue};
 use serde::{Serialize, ser::{Serializer, SerializeStruct}};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -38,9 +38,9 @@ impl fmt::Debug for DefinitionId {
     }
 }
 
-pub type UnifyExpr = logic::Expr<DefinitionId, Type>;
+pub type UnifyExpr = logic::Expr<DefinitionId, Type, Ast>;
 pub type ExprSeq = Vec<UnifyExpr>;
-pub type SymbolTable = logic::SymbolTable<DefinitionId, Type>;
+pub type SymbolTable = logic::SymbolTable<DefinitionId, Ast>;
 
 pub type Environment = EnvLayers<String, Ast>;
 impl LayerKey for String {}
