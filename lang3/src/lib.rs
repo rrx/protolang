@@ -1,20 +1,23 @@
 mod ast;
 mod builder;
 mod env;
+mod printer;
 mod types;
 mod visitor;
-mod printer;
 
 pub use ast::*;
 pub use builder::*;
 use env::*;
-pub use types::*;
-use visitor::*;
 use printer::*;
 use std::fmt;
+pub use types::*;
+use visitor::*;
 
 pub use logic::{UnifyResult, UnifyValue};
-use serde::{Serialize, ser::{Serializer, SerializeStruct}};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Serialize,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct DefinitionId(pub usize);
@@ -44,4 +47,3 @@ pub type SymbolTable = logic::SymbolTable<DefinitionId, Ast>;
 
 pub type Environment = EnvLayers<String, Ast>;
 impl LayerKey for String {}
-

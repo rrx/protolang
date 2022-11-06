@@ -1,10 +1,13 @@
 use super::*;
 use crate::env::LayerValue;
-use std::fmt;
-use serde::{Serialize, ser::{Serializer, SerializeStruct}};
-use std::error::Error;
+use logic::UnifyType;
 use ron::ser::{to_string_pretty, PrettyConfig};
-use logic::{UnifyType};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Serialize,
+};
+use std::error::Error;
+use std::fmt;
 
 //#[derive(Clone, Debug, PartialEq, Serialize)]
 //pub struct VariableId(pub usize);
@@ -32,7 +35,9 @@ impl PartialEq for Variable {
 
 impl Serialize for Variable {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer {
+    where
+        S: Serializer,
+    {
         let mut state = serializer.serialize_struct("Variable", 3)?;
         state.serialize_field("id", &self.id)?;
         state.serialize_field("ty", &self.ty)?;
@@ -43,19 +48,11 @@ impl Serialize for Variable {
 
 impl Variable {
     pub fn named(name: String, id: VariableId, ty: Type) -> Self {
-        Self {
-            name,
-            id,
-            ty,
-        }
+        Self { name, id, ty }
     }
     pub fn unnamed(id: VariableId, ty: Type) -> Self {
         let name = format!("v{}", id.0);
-        Self {
-            name,
-            id,
-            ty,
-        }
+        Self { name, id, ty }
     }
 
     /// Just replace the type with the value in the symbol table
@@ -71,7 +68,7 @@ impl Variable {
     /// the declaration.  We might want to implement this differently, so it's more clear what's
     /// stored in the environment.  We want to lookup a variable and check it it exists in the
     /// current environment.  If it exists, then it can be unbound (function parameter), or bound
-    /// (regular variable declaration). 
+    /// (regular variable declaration).
     pub fn resolve(&self, subst: &SymbolTable) -> Self {
         let var = match subst.get(&self.id) {
             Some(v) => {
@@ -83,15 +80,13 @@ impl Variable {
                     }
 
                     // parameters in functions
-                    Ast::Variable(var) => {
-                        var.clone().resolve_type(subst)
-                    }
+                    Ast::Variable(var) => var.clone().resolve_type(subst),
                     _ => unreachable!(),
                 }
             }
 
             // if it's not found, then it's probably a parameter
-            None => self.clone()
+            None => self.clone(),
         };
         var.resolve_type(subst)
     }
@@ -153,7 +148,7 @@ pub enum Ast {
 
     Declare(Variable, Box<Ast>),
 
-    Return(Box<Ast>)
+    Return(Box<Ast>),
 }
 
 impl LayerValue for Ast {}
@@ -166,14 +161,13 @@ impl Ast {
     pub fn to_ron(&self) -> Result<String, ron::Error> {
         let pretty = PrettyConfig::new()
             //.depth_limit(3)
-            .compact_arrays(true)
-            ;
+            .compact_arrays(true);
         to_string_pretty(&self, pretty)
     }
 
     pub fn block(exprs: Vec<Self>) -> Self {
-         //let ty = exprs.last().expect("Empty Block").get_type();
-         Self::Block(exprs)
+        //let ty = exprs.last().expect("Empty Block").get_type();
+        Self::Block(exprs)
     }
 
     pub fn int(i: i64) -> Self {
@@ -190,9 +184,7 @@ impl Ast {
 
     pub fn replace_variable(&self, subst: &SymbolTable) -> Self {
         match &self {
-            Self::Variable(v) => {
-                Ast::Variable(v.clone().resolve(subst))
-            }
+            Self::Variable(v) => Ast::Variable(v.clone().resolve(subst)),
             _ => unreachable!(),
         }
     }
@@ -201,9 +193,7 @@ impl Ast {
         let before = self.clone();
         let after = match &self {
             Self::Literal(_) => self.clone(),
-            Self::Variable(_) => {
-                self.replace_variable(subst)
-            }
+            Self::Variable(_) => self.replace_variable(subst),
             Self::Extern(types) => Self::Extern(Type::resolve_list(&types, subst)),
             Self::Builtin(types) => Self::Builtin(Type::resolve_list(&types, subst)),
             Self::Internal(v) => self.clone(),
@@ -213,7 +203,10 @@ impl Ast {
             Self::Assign(name, expr) => Self::Assign(name.clone(), expr.resolve(subst).into()),
             Self::Function { params, body, ty } => {
                 // resolve the types in the params
-                let params = params.iter().map(|p| p.resolve_type(subst)).collect::<Vec<_>>();
+                let params = params
+                    .iter()
+                    .map(|p| p.resolve_type(subst))
+                    .collect::<Vec<_>>();
                 let ty = ty.resolve(&subst);
                 Self::Function {
                     params,
@@ -221,9 +214,7 @@ impl Ast {
                     ty,
                 }
             }
-            Self::Block(exprs) => {
-                Self::block(resolve_list(exprs, &subst))
-            }
+            Self::Block(exprs) => Self::block(resolve_list(exprs, &subst)),
             Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)),
 
             Self::Type(ty) => Self::Type(ty.resolve(subst)),
@@ -261,11 +252,7 @@ impl logic::UnifyValue for Ast {
                 // TODO: maybe empty blocks can just return unit type?
                 exprs.last().expect("Empty Block").get_type()
             }
-            Self::Apply(var, _) => var.ty
-                .children()
-                .last()
-                .expect("No Return Type")
-                .clone(),
+            Self::Apply(var, _) => var.ty.children().last().expect("No Return Type").clone(),
             Self::Declare(_, expr) => expr.get_type(),
             Self::Assign(_, expr) => expr.get_type(),
             Self::Variable(v) => v.ty.clone(),
@@ -275,7 +262,7 @@ impl logic::UnifyValue for Ast {
                 Type::Int
             }
             Self::Type(_) => Type::Type,
-            Self::Return(expr) => expr.get_type()
+            Self::Return(expr) => expr.get_type(),
         }
     }
 
@@ -350,4 +337,3 @@ impl fmt::Display for Ast {
         Ok(())
     }
 }
-

@@ -24,5 +24,3 @@ impl Add for CharIndex {
         CharIndex(self.0 + rhs.0)
     }
 }
-
-

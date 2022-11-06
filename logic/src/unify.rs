@@ -1,13 +1,18 @@
 use std::fmt;
 pub type SymbolTable<K, T> = rpds::HashTrieMap<K, T>;
 
-pub trait UnifyKey: Clone + Copy + PartialEq + std::cmp::Eq + std::hash::Hash + fmt::Debug + fmt::Display {}
-pub trait UnifyType<K: UnifyKey>: Clone + PartialEq + std::cmp::Eq + std::hash::Hash + fmt::Debug + fmt::Display {
+pub trait UnifyKey:
+    Clone + Copy + PartialEq + std::cmp::Eq + std::hash::Hash + fmt::Debug + fmt::Display
+{
+}
+pub trait UnifyType<K: UnifyKey>:
+    Clone + PartialEq + std::cmp::Eq + std::hash::Hash + fmt::Debug + fmt::Display
+{
     fn children(&self) -> Vec<Self>;
     fn try_unknown(&self) -> Option<K>;
 }
 
-pub trait UnifyValue: Clone + fmt::Debug  {
+pub trait UnifyValue: Clone + fmt::Debug {
     type Key;
     type Type;
     fn new_type(ty: Self::Type) -> Self;
@@ -34,10 +39,10 @@ pub enum Expr<K, T, V> {
     OneOfValues(V, Vec<V>),
     OneOfTypes(T, Vec<T>),
     Eq(T, T),
-    _Unreachable(PhantomData<K>)
+    _Unreachable(PhantomData<K>),
 }
 
-impl <K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Expr<K, T, V> {
+impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Expr<K, T, V> {
     fn unify(&self, subst: SymbolTable<K, V>) -> (UnifyResult, SymbolTable<K, V>) {
         match self {
             Eq(ty1, ty2) => Unify::unify_eq(vec![ty1.clone()], vec![ty2.clone()], subst),
@@ -82,14 +87,14 @@ pub struct Unify<K, T, V> {
     _v: PhantomData<V>,
 }
 
-impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> {
+impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Unify<K, T, V> {
     fn subs_type(ty: &T, subst: SymbolTable<K, V>) -> T {
         let mut ty = ty.clone();
         if let Some(type_id) = ty.try_unknown() {
             if subst.contains_key(&type_id) {
                 let v = subst.get(&type_id).unwrap().clone();
                 if let Some(ty) = v.try_type() {
-                    return ty
+                    return ty;
                 } else {
                     unreachable!()
                 }
@@ -108,12 +113,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
         }
     }
 
-
-    fn unify_value(
-        v1: V,
-        v2: V,
-        subst: SymbolTable<K, V>,
-    ) -> (UnifyResult, SymbolTable<K, V>) {
+    fn unify_value(v1: V, v2: V, subst: SymbolTable<K, V>) -> (UnifyResult, SymbolTable<K, V>) {
         let v1 = Self::subs_value(&v1, subst.clone());
         let v2 = Self::subs_value(&v2, subst.clone());
         let u1 = v1.try_unknown();
@@ -135,11 +135,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
         }
     }
 
-    fn unify_type(
-        ty1: T,
-        ty2: T,
-        subst: SymbolTable<K, V>,
-    ) -> (UnifyResult, SymbolTable<K, V>) {
+    fn unify_type(ty1: T, ty2: T, subst: SymbolTable<K, V>) -> (UnifyResult, SymbolTable<K, V>) {
         // substitute
         let ty1 = Self::subs_type(&ty1, subst.clone());
         let ty2 = Self::subs_type(&ty2, subst.clone());
@@ -172,10 +168,16 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
             }
         } else if u1.is_none() && u2.is_some() {
             // one unknown
-            (UnifyResult::Ok, subst.insert(u2.unwrap(), V::new_type(ty1.clone())))
+            (
+                UnifyResult::Ok,
+                subst.insert(u2.unwrap(), V::new_type(ty1.clone())),
+            )
         } else if u1.is_some() && u2.is_none() {
             // one unknown
-            (UnifyResult::Ok, subst.insert(u1.unwrap(), V::new_type(ty2.clone())))
+            (
+                UnifyResult::Ok,
+                subst.insert(u1.unwrap(), V::new_type(ty2.clone())),
+            )
         } else if u1.is_some() && u2.is_some() {
             // two unknowns, nothing to do
             if u1 == u2 {
@@ -268,9 +270,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
         (out, subst)
     }
 
-    pub fn start(
-        mut equations: Vec<Expr<K, T, V>>,
-    ) -> (UnifyResult, SymbolTable<K, V>) {
+    pub fn start(mut equations: Vec<Expr<K, T, V>>) -> (UnifyResult, SymbolTable<K, V>) {
         let mut subst = SymbolTable::default();
         let mut count = subst.size();
         let mut res = UnifyResult::Ok;
@@ -286,14 +286,13 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
             let (results, s) = Self::unify_all(equations, subst.clone());
             subst = s;
             equations = results;
-            
+
             // check if anything has changed
             if subst.size() == count {
                 res = UnifyResult::NoSolution;
                 break;
             }
             count = subst.size();
-
         }
         (res, subst)
     }
@@ -357,11 +356,11 @@ mod test {
                 Self::Float(_) => Type::Float,
                 Self::String(_) => Type::TString,
                 Self::TypeValue(_) => Type::Type,
-                Self::Unknown(_,ty) => ty.clone()
+                Self::Unknown(_, ty) => ty.clone(),
             }
         }
         //fn children(&self) -> Vec<Self::Type> {
-            //vec![]
+        //vec![]
         //}
 
         fn try_unknown(&self) -> Option<Self::Key> {
@@ -470,7 +469,10 @@ mod test {
         let (res, subst) = start(eqs);
         assert_eq!(UnifyResult::Ok, res);
         assert_eq!(subst.get(&8.into()).unwrap().try_type().unwrap(), Type::Int);
-        assert_eq!(subst.get(&13.into()).unwrap().try_type().unwrap(), name("z"));
+        assert_eq!(
+            subst.get(&13.into()).unwrap().try_type().unwrap(),
+            name("z")
+        );
     }
 
     #[test]
@@ -480,9 +482,7 @@ mod test {
         let int_v = Value::Int(1);
         let float_v = Value::Float(1.);
 
-        let eqs: ExprSeq = vec![
-            OneOfValues(x.clone(), vec![int_v.clone(), float_v])
-        ];
+        let eqs: ExprSeq = vec![OneOfValues(x.clone(), vec![int_v.clone(), float_v])];
 
         let (res, subst) = start(eqs);
 
@@ -518,7 +518,10 @@ mod test {
     fn logic_no_solution_3() {
         let start: ExprSeq = vec![
             Eq(Type::Int, Type::Float),
-            OneOfValues(Value::new_type(Type::Int), vec![Value::new_type(Type::Float)]),
+            OneOfValues(
+                Value::new_type(Type::Int),
+                vec![Value::new_type(Type::Float)],
+            ),
         ];
 
         let (res, _) = Unify::<DefinitionId, Type, Value>::start(start);
@@ -538,7 +541,6 @@ mod test {
         assert_eq!(UnifyResult::Ok, res);
     }
 
-
     #[test]
     fn logic_nested() {
         let s1 = seq(vec![
@@ -557,11 +559,9 @@ mod test {
         assert_eq!(UnifyResult::Ok, res);
     }
 
-
     #[test]
     fn empty() {
         let (res, _) = Unify::<DefinitionId, Type, Value>::start(vec![]);
         assert_eq!(UnifyResult::Ok, res);
     }
-
 }

@@ -1,9 +1,9 @@
 //use lang3::*;
-use crate::syntax::{ast, AstModule, lexer};
-use std::error::Error;
+use crate::syntax::{ast, lexer, AstModule};
 use lang3 as L;
 use lang3::Lower;
-use lang3::{UnifyValue};
+use lang3::UnifyValue;
+use std::error::Error;
 
 pub type LResult = Result<lang3::Ast, Box<dyn Error>>;
 type Builder = L::AstBuilder;
@@ -15,20 +15,20 @@ impl AstModule {
         builder.resolve_ast(ast)
     }
 }
-    
+
 //impl<A: ast::AstPayload> Lower for ast::AssignP<A> {
-    //fn lower(&self, b: &mut Builder) -> LResult {
-        //match self {
-            //Self::Identifier(x) => x.lower(b),
-            //_ => unimplemented!("{:?}", &self)
-        //}
-    //}
+//fn lower(&self, b: &mut Builder) -> LResult {
+//match self {
+//Self::Identifier(x) => x.lower(b),
+//_ => unimplemented!("{:?}", &self)
+//}
+//}
 //}
 
 //impl<A: ast::AstPayload> Lower for ast::AssignIdentP<A> {
-    //fn lower(&self, b: &mut Builder) -> LResult {
-        //Ok(b.var_named(&self.0.clone(), ty).into())
-    //}
+//fn lower(&self, b: &mut Builder) -> LResult {
+//Ok(b.var_named(&self.0.clone(), ty).into())
+//}
 //}
 
 impl<A: ast::AstPayload> ast::AstParameterP<A> {
@@ -37,9 +37,9 @@ impl<A: ast::AstPayload> ast::AstParameterP<A> {
             ast::ParameterP::Normal(ident, _) => {
                 let ty = b.type_unknown();
                 let name = ident.0.to_string();
-                b.var_named(&name, ty) 
-            },
-            _ => unimplemented!()
+                b.var_named(&name, ty)
+            }
+            _ => unimplemented!(),
         }
     }
 }
@@ -50,7 +50,10 @@ impl<A: ast::AstPayload> Lower for ast::AstParameterP<A> {
     }
 }
 
-fn params_to_vars<A: ast::AstPayload>(params: &Vec<ast::AstParameterP<A>>, b: &mut Builder) -> Vec<L::Variable> {
+fn params_to_vars<A: ast::AstPayload>(
+    params: &Vec<ast::AstParameterP<A>>,
+    b: &mut Builder,
+) -> Vec<L::Variable> {
     let mut out = vec![];
     for p in params {
         out.push(p.to_variable(b));
@@ -75,7 +78,7 @@ impl<A: ast::AstPayload> Lower for ast::AstStmtP<A> {
                         let name = x.0.to_string();
                         b.var_named(&name, ty)
                     }
-                    _ => unimplemented!("{:?}", &self)
+                    _ => unimplemented!("{:?}", &self),
                 };
                 Ok(L::Ast::Assign(lhs.into(), rhs.into()))
             }
@@ -92,7 +95,7 @@ impl<A: ast::AstPayload> Lower for ast::AstStmtP<A> {
                 let f = b.func(params, body, sig);
                 Ok(b.declare(&name, f))
             }
-            _ => unimplemented!("{:?}", &self.node)
+            _ => unimplemented!("{:?}", &self.node),
         }
     }
 }
@@ -102,7 +105,7 @@ impl<A: ast::AstPayload> Lower for ast::AstArgumentP<A> {
         use crate::syntax::ast::ArgumentP::*;
         match &self.node {
             Positional(expr) => expr.lower(b),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -110,14 +113,12 @@ impl<A: ast::AstPayload> Lower for ast::AstArgumentP<A> {
 impl Lower for ast::AstLiteral {
     fn lower(&self, b: &mut Builder) -> LResult {
         match self {
-            Self::Int(int) => {
-                match &int.node {
-                    lexer::TokenInt::I32(i) => Ok(L::Ast::int(*i as i64)),
-                    _ => unimplemented!()
-                }
-            }
+            Self::Int(int) => match &int.node {
+                lexer::TokenInt::I32(i) => Ok(L::Ast::int(*i as i64)),
+                _ => unimplemented!(),
+            },
             Self::String(v) => Ok(L::Ast::string(v.node.clone())),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -128,30 +129,28 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
         match &self.node {
             //Tuple(Vec<AstExprP<P>>),
             //Dot(Box<AstExprP<P>>, AstString),
-            Call(expr, args) => {
-                match &expr.node {
-                    ast::ExprP::Identifier(s, _) => {
-                        let fargs = b.lower_list_ast(&args)?;
-                        let mut sig = fargs.iter().map(|t| t.get_type()).collect::<Vec<_>>();
-                        let ret_ty = b.type_unknown();
-                        sig.push(ret_ty);
-                        let ty = L::Type::Func(sig);
-                        let var = b.var_named(s, ty);
-                        let fargs = b.lower_list_ast(&args)?;
-                        Ok(b.apply(&var, fargs))
-                    }
-                    _ => unimplemented!()
+            Call(expr, args) => match &expr.node {
+                ast::ExprP::Identifier(s, _) => {
+                    let fargs = b.lower_list_ast(&args)?;
+                    let mut sig = fargs.iter().map(|t| t.get_type()).collect::<Vec<_>>();
+                    let ret_ty = b.type_unknown();
+                    sig.push(ret_ty);
+                    let ty = L::Type::Func(sig);
+                    let var = b.var_named(s, ty);
+                    let fargs = b.lower_list_ast(&args)?;
+                    Ok(b.apply(&var, fargs))
                 }
-            }
+                _ => unimplemented!(),
+            },
             //ArrayIndirection(Box<(AstExprP<P>, AstExprP<P>)>),
             //Slice(
             Identifier(s, p) => {
                 let ty = b.type_unknown();
                 Ok(b.var_named(&s.node, ty).into())
-            },
+            }
             Lambda(params, body, p) => {
                 unimplemented!("{:?}", &self)
-            },
+            }
             Literal(x) => x.lower(b),
             //Not(Box<AstExprP<P>>),
             //Minus(Box<AstExprP<P>>),
@@ -161,10 +160,8 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
                 let lhs = lhs.lower(b)?;
                 let rhs = rhs.lower(b)?;
                 match op {
-                    ast::BinOp::Add => {
-                        Ok(b.binary("+", lhs, rhs))
-                    }
-                    _ => unimplemented!("{}", &op)
+                    ast::BinOp::Add => Ok(b.binary("+", lhs, rhs)),
+                    _ => unimplemented!("{}", &op),
                 }
             }
             //If(Box<(AstExprP<P>, AstExprP<P>, AstExprP<P>)>), // Order: condition, v1, v2 <=> v1 if condition else v2
@@ -172,8 +169,7 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
             //Dict(Vec<(AstExprP<P>, AstExprP<P>)>),
             //ListComprehension(Box<AstExprP<P>>, Box<ForClauseP<P>>, Vec<ClauseP<P>>),
             //DictComprehension(
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
-

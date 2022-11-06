@@ -1,8 +1,8 @@
 use super::*;
 use codegen::hir;
+use serde::Serialize;
 use std::error::Error;
 use std::fmt;
-use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Hash)]
 pub enum Type {
@@ -46,9 +46,7 @@ impl logic::UnifyType<DefinitionId> for Type {
 impl Type {
     pub fn lower(&self, subst: &SymbolTable) -> Result<hir::Type, Box<dyn Error>> {
         match self {
-            Self::Func(sig) => {
-                Ok(hir::FunctionType::export(Self::lower_list(sig, subst)?).into())
-            }
+            Self::Func(sig) => Ok(hir::FunctionType::export(Self::lower_list(sig, subst)?).into()),
             Self::Variable(def) => match subst.get(def) {
                 Some(v) => v.try_type().unwrap().lower(subst),
                 None => {
@@ -90,11 +88,9 @@ impl Type {
 
     pub fn resolve(&self, subst: &SymbolTable) -> Type {
         match self {
-            Type::Variable(v) => {
-                match subst.get(&v) {
-                    Some(v) => v.try_type().unwrap().clone(),
-                    None => self.clone(),
-                }
+            Type::Variable(v) => match subst.get(&v) {
+                Some(v) => v.try_type().unwrap().clone(),
+                None => self.clone(),
             },
             Type::Func(sig) => {
                 let resolved_sig = sig.iter().map(|t| t.resolve(subst)).collect::<Vec<_>>();

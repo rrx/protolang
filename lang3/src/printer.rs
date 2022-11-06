@@ -6,4 +6,3 @@ pub fn format_list<T: fmt::Display>(args: &Vec<T>) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
-

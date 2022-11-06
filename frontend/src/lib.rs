@@ -1,9 +1,8 @@
 #![feature(box_patterns)]
 #![feature(box_syntax)]
-mod codemap;
-pub mod syntax;
-mod errors;
-mod values;
 mod assert;
+mod codemap;
+mod errors;
 pub mod lower;
-
+pub mod syntax;
+mod values;

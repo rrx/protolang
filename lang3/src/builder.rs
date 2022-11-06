@@ -1,13 +1,12 @@
 use crate::*;
 use codegen::hir;
-use std::error::Error;
 use codegen::llvm::JitExecute;
-use logic::{UnifyValue, UnifyType};
+use logic::{UnifyType, UnifyValue};
+use std::error::Error;
 
 pub trait Lower {
     fn lower(&self, b: &mut AstBuilder) -> Result<Ast, Box<dyn Error>>;
 }
-
 
 #[derive(Default)]
 pub struct AstBuilder {
@@ -144,7 +143,6 @@ impl AstBuilder {
             }
 
             Ast::Variable(v) => {
-
                 // resolve the name from the environment
                 match env.resolve(&v.name) {
                     Some(resolved_v) => {
@@ -164,7 +162,7 @@ impl AstBuilder {
 
             Ast::Apply(var, ref args) => {
                 let mut env = env.clone();
-                
+
                 // get the list of possible matches
                 // so we an resolve this as part of unification
                 let possible = env
@@ -172,7 +170,8 @@ impl AstBuilder {
                     .into_iter()
                     .cloned()
                     .collect::<Vec<_>>();
-                self.equations.push(logic::Expr::OneOfValues(var.clone().into(), possible));
+                self.equations
+                    .push(logic::Expr::OneOfValues(var.clone().into(), possible));
 
                 // resolve the args, which can be entire expressions
                 for arg in args {
@@ -195,13 +194,14 @@ impl AstBuilder {
                     local_env.define(name, Ast::Variable(arg.into()));
                 }
                 let (body, _local_env) = self.name_resolve(*body.clone(), local_env);
-           
+
                 // type should match the return type of the body
                 sig.push(body.get_type());
 
                 // make sure parameters are unified
                 let internal_ty = Type::Func(sig);
-                self.equations.push(logic::Expr::Eq(ty.clone(), internal_ty)); 
+                self.equations
+                    .push(logic::Expr::Eq(ty.clone(), internal_ty));
 
                 (
                     Ast::Function {
@@ -236,9 +236,7 @@ impl AstBuilder {
                 (Ast::Internal(v), env)
             }
 
-            Ast::Return(expr) => {
-                self.name_resolve(*expr, env)
-            }
+            Ast::Return(expr) => self.name_resolve(*expr, env),
 
             _ => {
                 unimplemented!("{:?}", &ast)
@@ -386,16 +384,12 @@ impl AstBuilder {
             }
 
             Ast::Internal(v) => match v {
-                Builtin::AddInt(a, b) => Ok(hir::Builtin::AddInt(
-                    self.lower(a)?.into(),
-                    self.lower(b)?.into(),
-                )
-                .into()),
-                Builtin::AddFloat(a, b) => Ok(hir::Builtin::AddFloat(
-                    self.lower(a)?.into(),
-                    self.lower(b)?.into(),
-                )
-                .into()),
+                Builtin::AddInt(a, b) => {
+                    Ok(hir::Builtin::AddInt(self.lower(a)?.into(), self.lower(b)?.into()).into())
+                }
+                Builtin::AddFloat(a, b) => {
+                    Ok(hir::Builtin::AddFloat(self.lower(a)?.into(), self.lower(b)?.into()).into())
+                }
             },
             _ => {
                 unimplemented!("{:?}", &ast)
@@ -411,11 +405,7 @@ impl AstBuilder {
         Ok(out)
     }
 
-
-    fn lower_list(
-        &mut self,
-        exprs: &Vec<Ast>,
-    ) -> Result<Vec<hir::Ast>, Box<dyn Error>> {
+    fn lower_list(&mut self, exprs: &Vec<Ast>) -> Result<Vec<hir::Ast>, Box<dyn Error>> {
         let mut out = vec![];
         for e in exprs {
             out.push(self.lower(e)?);
@@ -427,12 +417,11 @@ impl AstBuilder {
         Ast::block(self.base.clone())
     }
 
-
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
         let mut exprs = self.base.clone();
         match ast {
             Ast::Block(more) => exprs.extend(more.clone()),
-            _ => exprs.push(ast.clone())
+            _ => exprs.push(ast.clone()),
         }
         let block = self.block(exprs);
 
@@ -440,8 +429,6 @@ impl AstBuilder {
         println!("HIR: {:#?}", &low);
         low.run_main()
     }
-
-
 }
 
 #[cfg(test)]
@@ -462,15 +449,14 @@ mod tests {
         logic::Unify::<DefinitionId, Type, Ast>::start(eqs)
     }
 
-
     #[test]
     fn test_unify() {
-        let x = Variable::named("x".into(), DefinitionId(0).into(), Type::Float); 
+        let x = Variable::named("x".into(), DefinitionId(0).into(), Type::Float);
         let eqs = vec![
             logic::Expr::OneOfTypes(
                 Type::Func(vec![Type::Variable(1.into()), Type::Int]),
                 vec![Type::Func(vec![Type::Int, Type::Int])],
-                ),
+            ),
             logic::Expr::OneOfValues(x.into(), vec![Ast::int(2), Ast::float(2.)]),
         ];
         let (res, subst) = logic::Unify::start(eqs);

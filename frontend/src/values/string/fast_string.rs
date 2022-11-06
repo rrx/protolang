@@ -196,5 +196,4 @@ pub(crate) fn contains(haystack: &str, needle: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}
