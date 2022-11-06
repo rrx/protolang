@@ -3,8 +3,8 @@ pub type SymbolTable<K, T> = rpds::HashTrieMap<K, T>;
 
 pub trait UnifyKey: Clone + Copy + PartialEq + std::cmp::Eq + std::hash::Hash + fmt::Debug + fmt::Display {}
 pub trait UnifyType<K: UnifyKey>: Clone + PartialEq + std::cmp::Eq + std::hash::Hash + fmt::Debug + fmt::Display {
-    fn unknown(&self) -> Option<K>;
     fn children(&self) -> Vec<Self>;
+    fn try_unknown(&self) -> Option<K>;
 }
 
 pub trait UnifyValue: Clone + fmt::Debug  {
@@ -13,7 +13,7 @@ pub trait UnifyValue: Clone + fmt::Debug  {
     fn new_type(ty: Self::Type) -> Self;
     fn new_unknown(v_id: Self::Key, ty: Self::Type) -> Self;
     fn get_type(&self) -> Self::Type;
-    fn children(&self) -> Vec<Self::Type>;
+    //fn children(&self) -> Vec<Self::Type>;
     fn unknown(&self) -> Option<Self::Key>;
     fn try_type(&self) -> Option<Self::Type>;
 }
@@ -85,7 +85,7 @@ struct Unify<K, T, V> {
 impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> {
     fn subs_type(ty: &T, subst: SymbolTable<K, V>) -> T {
         let mut ty = ty.clone();
-        if let Some(type_id) = ty.unknown() {
+        if let Some(type_id) = ty.try_unknown() {
             if subst.contains_key(&type_id) {
                 let v = subst.get(&type_id).unwrap().clone();
                 if let Some(ty) = v.try_type() {
@@ -139,8 +139,8 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
         let ty1 = Self::subs_type(&ty1, subst.clone());
         let ty2 = Self::subs_type(&ty2, subst.clone());
 
-        let u1 = ty1.unknown();
-        let u2 = ty2.unknown();
+        let u1 = ty1.try_unknown();
+        let u2 = ty2.try_unknown();
 
         let (res, subst) = if u1.is_none() && u2.is_none() {
             // both are known
@@ -355,9 +355,9 @@ mod test {
                 Self::Unknown(_,ty) => ty.clone()
             }
         }
-        fn children(&self) -> Vec<Self::Type> {
-            vec![]
-        }
+        //fn children(&self) -> Vec<Self::Type> {
+            //vec![]
+        //}
 
         fn unknown(&self) -> Option<Self::Key> {
             if let Self::Unknown(v_id, _) = self {
@@ -391,7 +391,7 @@ mod test {
     }
 
     impl UnifyType<DefinitionId> for Type {
-        fn unknown(&self) -> Option<DefinitionId> {
+        fn try_unknown(&self) -> Option<DefinitionId> {
             match self {
                 Type::Var(id) => Some(*id),
                 _ => None,
