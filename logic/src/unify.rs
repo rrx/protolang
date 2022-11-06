@@ -123,8 +123,13 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key=K, Type=T>> Unify<K, T, V> 
         // if v1 is unknown and the type of v2 matches, then we unify the value to be the same
         // otherwise it's not a match
 
-        if u1.is_some() && ty1 == ty2 {
-            (UnifyResult::Ok, subst.insert(u1.unwrap(), v2))
+        if u1.is_some() {
+            // match type recursively
+            let (res, mut subst) = Self::unify_eq(vec![ty1], vec![ty2], subst);
+            if res == UnifyResult::Ok {
+                subst = subst.insert(u1.unwrap(), v2);
+            }
+            (res, subst)
         } else {
             (UnifyResult::NoSolution, subst)
         }

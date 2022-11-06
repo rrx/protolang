@@ -115,11 +115,11 @@ impl Variable {
                 // than waiting for unification
                 let possible = var_env
                     .resolve_all(&self.name)
-                    .iter()
+                    .into_iter()
                     .cloned()
-                    .map(|v| v.get_type())
+                    //.map(|v| v.get_type())
                     .collect::<Vec<_>>();
-                logic::Expr::OneOfTypes(self.ty.clone(), possible)
+                logic::Expr::OneOfValues(self.clone().into(), possible)
             }
             _ => {
                 match var_env.resolve(&self.name) {
