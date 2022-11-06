@@ -23,7 +23,7 @@ pub struct Variable {
     pub id: VariableId,
     pub ty: Type,
     pub name: String,
-    env: Option<Environment>,
+    //env: Option<Environment>,
 }
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
@@ -48,7 +48,7 @@ impl Variable {
             name,
             id,
             ty,
-            env: None,
+            //env: None,
         }
     }
     pub fn unnamed(id: VariableId, ty: Type) -> Self {
@@ -57,12 +57,12 @@ impl Variable {
             name,
             id,
             ty,
-            env: None,
+            //env: None,
         }
     }
-    pub fn bind(&mut self, env: Environment) {
-        self.env.replace(env);
-    }
+    //pub fn bind(&mut self, env: Environment) {
+        //self.env.replace(env);
+    //}
 
     /// Just replace the type with the value in the symbol table
     pub fn resolve_type(&self, subst: &SymbolTable) -> Self {
@@ -79,31 +79,35 @@ impl Variable {
     /// current environment.  If it exists, then it can be unbound (function parameter), or bound
     /// (regular variable declaration). 
     pub fn resolve(&self, subst: &SymbolTable) -> Self {
-        if let Some(env) = self.env.as_ref() {
-            if let Some(v) = env.resolve(&self.name) {
+        let var = match subst.get(&self.id) {
+            Some(v) => {
                 match v {
                     // declared variables
                     Ast::Declare(var, _) => {
                         // just return the variable
-                        return var.clone().resolve_type(subst);
+                        var.clone().resolve_type(subst)
                     }
 
                     // parameters in functions
                     Ast::Variable(var) => {
-                        return var.clone().resolve_type(subst);
+                        var.clone().resolve_type(subst)
                     }
                     _ => unreachable!(),
                 }
             }
-        }
-        self.resolve_type(subst)
+            //None => unreachable!("Variable not found in substition: {:?}", self),
+            _ => self.clone()
+        };
+        var.resolve_type(subst)
     }
 
+    /*
     /// generate type equations for the variable that can be used for unification
     pub fn generate_equations(&self) -> UnifyExpr {
 
         let var_env = self.env.as_ref().unwrap();
         match &self.ty {
+            /*
             Type::Func(_) => {
                 // resolve the name of the function
                 // This can yield multiple results and they need to match with parameters
@@ -121,6 +125,7 @@ impl Variable {
                     .collect::<Vec<_>>();
                 logic::Expr::OneOfValues(self.clone().into(), possible)
             }
+            */
             _ => {
                 match var_env.resolve(&self.name) {
                     Some(resolved_v) => {
@@ -137,6 +142,8 @@ impl Variable {
             }
         }
     }
+*/
+
 }
 
 impl fmt::Display for Variable {

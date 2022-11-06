@@ -13,7 +13,7 @@ pub trait Lower {
 pub struct AstBuilder {
     last_id: usize,
     pub equations: ExprSeq,
-    to_resolve: Vec<Variable>,
+    //to_resolve: Vec<Variable>,
     base: Vec<Ast>,
 }
 
@@ -137,7 +137,7 @@ impl AstBuilder {
 
             Ast::Declare(mut var, rhs) => {
                 let (new_rhs, mut env) = self.name_resolve(*rhs, env);
-                var.bind(env.clone());
+                //var.bind(env.clone());
                 let name = var.name.clone();
                 //self.to_resolve.push(var.clone());
                 //self.equations.push(logic::Expr::Eq(var.ty.clone(), new_rhs.get_type()));
@@ -147,13 +147,37 @@ impl AstBuilder {
             }
 
             Ast::Variable(mut v) => {
-                v.bind(env.clone());
+
+                // resolve the name from the environment
+                match env.resolve(&v.name) {
+                    Some(resolved_v) => {
+                        let var_ty = v.ty.clone();
+                        let resolved_ty = resolved_v.get_type();
+
+                        // variable matches the type of resolve
+                        self.equations.push(logic::Expr::Eq(var_ty, resolved_ty));
+                    }
+                    None => {
+                        unimplemented!("unresolved variable: {} {:?}", &v.name, &v);
+                    }
+                }
+
+                //v.bind(env.clone());
                 //self.to_resolve.push(v.clone());
                 (v.into(), env)
             }
 
             Ast::Apply(mut var, ref args) => {
                 let mut env = env.clone();
+                
+                // get the list of possible matches
+                // so we an resolve this as part of unification
+                let possible = env
+                    .resolve_all(&var.name)
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                self.equations.push(logic::Expr::OneOfValues(var.clone().into(), possible));
 
                 // resolve the args, which can be entire expressions
                 for arg in args {
@@ -161,8 +185,9 @@ impl AstBuilder {
                     env = this_env;
                 }
 
-                var.bind(env.clone());
-                self.to_resolve.push(var.clone());
+                //var.bind(env.clone());
+
+                //self.to_resolve.push(var.clone());
                 (Ast::Apply(var, args.clone()), env)
             }
 
@@ -174,7 +199,7 @@ impl AstBuilder {
                 for arg in &params {
                     let name = arg.name.clone();
                     let mut arg = arg.clone();
-                    arg.bind(env.clone());
+                    //arg.bind(env.clone());
                     sig.push(arg.ty.clone());
                     local_env.define(name, Ast::Variable(arg.into()));
                 }
@@ -261,10 +286,10 @@ impl AstBuilder {
         let (ast, env) = self.name_resolve(ast, env);
 
         // Generate equations
-        for v in &self.to_resolve {
-            let eq = v.generate_equations();
-            self.equations.push(eq);
-        }
+        //for v in &self.to_resolve {
+            //let eq = v.generate_equations();
+            //self.equations.push(eq);
+        //}
 
         // infer all types
         let eqs = self.equations.clone();
@@ -306,7 +331,7 @@ impl AstBuilder {
         // declare
         let ty = rhs.get_type();
         let mut v = self.var_named("+", ty.clone());
-        v.bind(env.clone());
+        //v.bind(env.clone());
         let d = Ast::Declare(v.clone(), rhs.into());
 
         env.define("+".to_string(), v.into());
@@ -607,7 +632,7 @@ mod tests {
         let block = b.block(vec![b.base_ast(), dmain]);
         let (res, ast, env, subst) = b.resolve(block, env.clone());
         let ast = ast.resolve(&subst);
-        println!("r: {:?}", &b.to_resolve);
+        //println!("r: {:?}", &b.to_resolve);
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
 
@@ -641,7 +666,7 @@ mod tests {
 
         let (res, ast, env, subst) = b.resolve(ast, env.clone());
         let ast = ast.resolve(&subst);
-        println!("r: {:?}", &b.to_resolve);
+        //println!("r: {:?}", &b.to_resolve);
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
 
