@@ -17,7 +17,7 @@ pub struct AstBuilder {
 }
 
 impl Visitor<SymbolTable> for AstBuilder {
-    fn enter(&mut self, e: &Ast, n: &mut SymbolTable) -> visitor::VResult {
+    fn enter(&mut self, _: &Ast, _: &mut SymbolTable) -> visitor::VResult {
         //println!("Visit AST: {}", e);
         Ok(())
     }
@@ -84,7 +84,6 @@ impl AstBuilder {
     }
 
     pub fn func(&mut self, params: Vec<Variable>, body: Ast, sig: Vec<Type>) -> Ast {
-        let ty = Type::Func(sig.clone());
         Ast::Function {
             params,
             body: body.into(),
@@ -195,12 +194,15 @@ impl AstBuilder {
                     sig.push(arg.ty.clone());
                     local_env.define(name, Ast::Variable(arg.into()));
                 }
-                let (body, local_env) = self.name_resolve(*body.clone(), local_env);
+                let (body, _local_env) = self.name_resolve(*body.clone(), local_env);
            
                 // type should match the return type of the body
                 sig.push(body.get_type());
 
+                // make sure parameters are unified
                 let internal_ty = Type::Func(sig);
+                self.equations.push(logic::Expr::Eq(ty.clone(), internal_ty)); 
+
                 (
                     Ast::Function {
                         params,
@@ -228,8 +230,8 @@ impl AstBuilder {
                 // for every variant
                 let mut env = env.clone();
                 for expr in v.children() {
-                    let (new_ast, new_env) = self.name_resolve(expr.clone(), env.clone());
-                    let env = new_env;
+                    let (_, new_env) = self.name_resolve(expr.clone(), env.clone());
+                    env = new_env;
                 }
                 (Ast::Internal(v), env)
             }
@@ -258,7 +260,7 @@ impl AstBuilder {
 
     pub fn resolve_ast(&mut self, ast: Ast) -> Result<Ast, Box<dyn Error>> {
         let env = self.base_env();
-        let (res, ast, env, subst) = self.resolve(ast, env.clone());
+        let (res, ast, _, subst) = self.resolve(ast, env.clone());
         assert_eq!(res, logic::UnifyResult::Ok);
         let ast = ast.resolve(&subst);
         Ok(ast)
@@ -315,7 +317,7 @@ impl AstBuilder {
 
         // declare
         let ty = rhs.get_type();
-        let mut v = self.var_named("+", ty.clone());
+        let v = self.var_named("+", ty.clone());
         let d = Ast::Declare(v.clone(), rhs.into());
 
         env.define("+".to_string(), v.into());
@@ -329,7 +331,7 @@ impl AstBuilder {
             Ast::Literal(Literal::Bool(b)) => Ok(hir::Ast::bool(*b)),
             Ast::Literal(Literal::Int(u)) => Ok(hir::Ast::i64(*u as i64)),
             Ast::Literal(Literal::Float(f)) => Ok(hir::Ast::f64(*f)),
-            Ast::Literal(Literal::String(f)) => unimplemented!("Strings are not implemented yet"),
+            Ast::Literal(Literal::String(_)) => unimplemented!("Strings are not implemented yet"),
             Ast::Variable(v) => Ok(hir::DefinitionId(v.id.0).to_variable()),
             Ast::Extern(sig) => {
                 let subst = SymbolTable::default();
@@ -612,7 +614,7 @@ mod tests {
         let dmain = b.declare("main", main);
 
         let block = b.block(vec![b.base_ast(), dmain]);
-        let (res, ast, env, subst) = b.resolve(block, env.clone());
+        let (_res, ast, _env, subst) = b.resolve(block, env.clone());
         let ast = ast.resolve(&subst);
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
@@ -645,7 +647,7 @@ mod tests {
 
         let ast = b.block(vec![df, dmain]);
 
-        let (res, ast, env, subst) = b.resolve(ast, env.clone());
+        let (_res, ast, _env, subst) = b.resolve(ast, env.clone());
         let ast = ast.resolve(&subst);
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
