@@ -142,27 +142,33 @@ impl AstBuilder {
                 (d, env)
             }
 
-            Ast::Variable(v) => {
+            Ast::Variable(ref v) => {
                 // resolve the name from the environment
                 match env.resolve(&v.name) {
                     Some(resolved_v) => {
+                        let eq = logic::Expr::EqValue(ast.clone(), resolved_v.clone());
+                        self.equations.push(eq);
                         let var_ty = v.ty.clone();
                         let resolved_ty = resolved_v.get_type();
 
                         // variable matches the type of resolve
-                        self.equations.push(logic::Expr::Eq(var_ty, resolved_ty));
+                        let eq = logic::Expr::Eq(var_ty, resolved_ty);
+                        log::debug!("searching for var: {}, {:?}", &v.name, &eq);
+                        //v = resolved_v;
+                        self.equations.push(eq);
                     }
                     None => {
                         unimplemented!("unresolved variable: {} {:?}", &v.name, &v);
                     }
                 }
 
-                (v.into(), env)
+                (ast, env)
             }
 
             Ast::Apply(var, ref args) => {
                 let mut env = env.clone();
 
+                log::debug!("searching for function: {}", &var.name);
                 // get the list of possible matches
                 // so we an resolve this as part of unification
                 let possible = env
@@ -170,6 +176,14 @@ impl AstBuilder {
                     .into_iter()
                     .cloned()
                     .collect::<Vec<_>>();
+
+                if possible.len() == 0 {
+                    // unable to find anything in the environment matching the name
+                    log::debug!("no match: {}", &env);
+                    env.debug();
+                    unreachable!()
+                }
+
                 self.equations
                     .push(logic::Expr::OneOfValues(var.clone().into(), possible));
 
@@ -210,7 +224,7 @@ impl AstBuilder {
                         ty,
                     },
                     env,
-                )
+                    )
             }
 
             Ast::Block(exprs) => {
@@ -258,7 +272,9 @@ impl AstBuilder {
 
     pub fn resolve_ast(&mut self, ast: Ast) -> Result<Ast, Box<dyn Error>> {
         let env = self.base_env();
-        let (res, ast, _, subst) = self.resolve(ast, env.clone());
+        let mut base = self.base.clone();
+        base.push(ast);
+        let (res, ast, _, subst) = self.resolve(self.block(base), env.clone());
         assert_eq!(res, logic::UnifyResult::Ok);
         let ast = ast.resolve(&subst);
         Ok(ast)
@@ -272,7 +288,7 @@ impl AstBuilder {
         &mut self,
         ast: Ast,
         env: Environment,
-    ) -> (UnifyResult, Ast, Environment, SymbolTable) {
+        ) -> (UnifyResult, Ast, Environment, SymbolTable) {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
 
@@ -418,7 +434,7 @@ impl AstBuilder {
     }
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
-        let mut exprs = self.base.clone();
+        let mut exprs = vec![];//self.base.clone();
         match ast {
             Ast::Block(more) => exprs.extend(more.clone()),
             _ => exprs.push(ast.clone()),
@@ -426,7 +442,8 @@ impl AstBuilder {
         let block = self.block(exprs);
 
         let low = self.lower(&block)?;
-        println!("HIR: {:#?}", &low);
+        println!("HIR:{}", &low.to_ron().unwrap());
+        //println!("HIR: {:#?}", &low);
         low.run_main()
     }
 }
@@ -456,8 +473,8 @@ mod tests {
             logic::Expr::OneOfTypes(
                 Type::Func(vec![Type::Variable(1.into()), Type::Int]),
                 vec![Type::Func(vec![Type::Int, Type::Int])],
-            ),
-            logic::Expr::OneOfValues(x.into(), vec![Ast::int(2), Ast::float(2.)]),
+                ),
+                logic::Expr::OneOfValues(x.into(), vec![Ast::int(2), Ast::float(2.)]),
         ];
         let (res, subst) = logic::Unify::start(eqs);
         println!("SUB: {:?}", subst);
@@ -528,7 +545,7 @@ mod tests {
         assert_eq!(ty, Type::Int);
 
         let hir = b.lower(&ast).unwrap();
-        println!("HIR:{:?}", &hir);
+        println!("HIR:{}", &hir.to_ron().unwrap());
         println!("AST:{:?}", &ast);
     }
 
@@ -620,14 +637,15 @@ mod tests {
         let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
 
-        // f() => 1
+        // f(x) => x 
         let p = b.var_unnamed(Type::Int);
-        let f = b.func(vec![p.clone()], p.into(), vec![Type::Int, Type::Int]);
+        let block = b.block(vec![p.clone().into()]);
+        let f = b.func(vec![p.clone()], block.into(), vec![Type::Int, Type::Int]);
         let df = b.declare("f", f);
 
         // main
         // call f
-        let call = b.apply_name("f", vec![b.int(2)]);
+        let call = b.apply_name("f", vec![b.int(3)]);
         let main = b.func(vec![], call, vec![Type::Int]);
         let dmain = b.declare("main", main);
 
@@ -635,7 +653,7 @@ mod tests {
 
         let (_res, ast, _env, subst) = b.resolve(ast, env.clone());
         let ast = ast.resolve(&subst);
-        println!("AST: {:?}", &ast);
+        println!("AST: {}", &ast.to_ron().unwrap());
         println!("AST: {}", &ast);
 
         let hir = b.lower(&ast).unwrap();
@@ -645,6 +663,6 @@ mod tests {
         let mut b = context.backend();
         b.compile_module("main", &hir).unwrap();
         let ret = b.run().unwrap();
-        assert_eq!(2, ret);
+        assert_eq!(3, ret);
     }
 }

@@ -1,7 +1,8 @@
 use crate::util::fmap;
 use std::fmt::{self, Display};
+use serde::Serialize;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum FloatKind {
     F32,
     F64,
@@ -16,7 +17,7 @@ impl Display for FloatKind {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum IntegerKind {
     I8,
     I16,
@@ -30,7 +31,7 @@ pub enum IntegerKind {
     Usz,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub enum PrimitiveType {
     Integer(IntegerKind),
     Float(FloatKind),
@@ -40,7 +41,7 @@ pub enum PrimitiveType {
     Pointer, // An opaque pointer type
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub struct FunctionType {
     pub parameters: Vec<Type>,
     pub return_type: Box<Type>,
@@ -58,7 +59,7 @@ impl FunctionType {
 /// Removes all references to generics and user-defined types.
 /// Union variants are also absent, being represented by a struct
 /// value and a cast to a different struct type of the largest variant.
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize)]
 pub enum Type {
     Primitive(PrimitiveType),
     Function(FunctionType),

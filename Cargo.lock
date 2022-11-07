@@ -158,6 +158,8 @@ dependencies = [
  "colored",
  "goldentests",
  "inkwell",
+ "ron",
+ "serde",
 ]
 
 [[package]]
@@ -398,12 +400,14 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "lang3",
+ "log",
  "logos",
  "lsp-types",
  "memchr",
  "num-bigint",
  "num-traits",
  "once_cell",
+ "ron",
  "serde",
  "serde_json",
  "static_assertions",

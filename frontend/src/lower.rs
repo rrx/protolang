@@ -138,6 +138,7 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
                     let ty = L::Type::Func(sig);
                     let var = b.var_named(s, ty);
                     let fargs = b.lower_list_ast(&args)?;
+                    log::debug!("call: {:?}", (&var, &fargs));
                     Ok(b.apply(&var, fargs))
                 }
                 _ => unimplemented!(),
@@ -159,10 +160,13 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
             Op(lhs, op, rhs) => {
                 let lhs = lhs.lower(b)?;
                 let rhs = rhs.lower(b)?;
-                match op {
-                    ast::BinOp::Add => Ok(b.binary("+", lhs, rhs)),
+                let call = match op {
+                    ast::BinOp::Add => b.binary("+", lhs, rhs),
                     _ => unimplemented!("{}", &op),
-                }
+                };
+
+                log::debug!("call: {:?}", (&call));
+                Ok(call)
             }
             //If(Box<(AstExprP<P>, AstExprP<P>, AstExprP<P>)>), // Order: condition, v1, v2 <=> v1 if condition else v2
             //List(Vec<AstExprP<P>>),

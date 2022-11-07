@@ -11,13 +11,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     for arg in env::args().skip(1) {
         let path = std::path::Path::new(&arg);
         let module = AstModule::parse_file(&path, &dialect)?;
-        println!("{:#?}", module);
-        println!("{:?}", module);
+        module.print();
 
         let mut builder = AstBuilder::default();
         let ast = module.lower(&mut builder)?;
         println!("AST: {}", ast.to_ron()?);
 
+        // resolve and un ify
+        let ast = builder.resolve_ast(ast)?;
+
+        // compile and execute
         let ret = builder.run_jit_main(&ast)?;
         println!("Ret {}", &ret);
     }

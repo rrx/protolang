@@ -14,13 +14,17 @@ mod types;
 pub use module::ModuleBuilder;
 
 pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Serialize,
+};
 
 use std::rc::Rc;
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct DefinitionId(pub usize);
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Literal {
     Integer(u64, IntegerKind),
     Float(u64, FloatKind),
@@ -49,6 +53,18 @@ pub struct DefinitionInfo {
     pub name: Option<String>,
 }
 
+impl Serialize for DefinitionInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Variable", 3)?;
+        state.serialize_field("definition_id", &self.definition_id)?;
+        state.serialize_field("name", &self.name)?;
+        state.end()
+    }
+}
+
 pub type Variable = DefinitionInfo;
 
 impl From<DefinitionId> for Variable {
@@ -65,7 +81,7 @@ impl DefinitionId {
 
 /// \a b. expr
 /// Function definitions are also desugared to a ast::Definition with a ast::Lambda as its body
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Lambda {
     pub args: Vec<Variable>,
     pub body: Box<Ast>,
@@ -78,7 +94,7 @@ impl Lambda {
 }
 
 /// foo a b c
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FunctionCall {
     pub function: Box<Ast>,
     pub args: Vec<Ast>,
@@ -101,7 +117,7 @@ impl FunctionCall {
 /// Unlike ast::Definition, hir::Definition
 /// is desugared of any patterns, its lhs must
 /// be a single variable to simplify backends.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Definition {
     pub variable: DefinitionId,
     pub name: Option<String>,
@@ -130,7 +146,7 @@ impl From<Definition> for DefinitionInfo {
 }
 
 /// if condition then expression else expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct If {
     pub condition: Box<Ast>,
     pub then: Box<Ast>,
@@ -138,7 +154,7 @@ pub struct If {
     pub result_type: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Match {
     // Unlike ast::Match this only contains the parts of the
     // branch after the ->.
@@ -167,7 +183,7 @@ pub struct Match {
 // }
 // ```
 // Where two different paths need to share the same leaf branch.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum DecisionTree {
     Leaf(usize),
     Definition(Definition, Box<DecisionTree>),
@@ -175,7 +191,7 @@ pub enum DecisionTree {
 }
 
 /// return expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Return {
     pub expression: Box<Ast>,
 }
@@ -189,7 +205,7 @@ impl Return {
 /// statement2
 /// ...
 /// statementN
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Sequence {
     pub statements: Vec<Ast>,
 }
@@ -206,7 +222,7 @@ impl Sequence {
 ///     declaration2
 ///     ...
 ///     declarationN
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Extern {
     pub name: String,
     pub typ: Type,
@@ -217,19 +233,19 @@ impl Extern {
     }
 }
 /// lhs := rhs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Assignment {
     pub lhs: Box<Ast>,
     pub rhs: Box<Ast>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MemberAccess {
     pub lhs: Box<Ast>,
     pub member_index: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Tuple {
     pub fields: Vec<Ast>,
 }
@@ -239,13 +255,13 @@ pub struct Tuple {
 /// then lowered to this. lhs's type should be the same
 /// size as the target type, though there may be
 /// padding differences currently.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ReinterpretCast {
     pub lhs: Box<Ast>,
     pub target_type: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Builtin {
     AddInt(Box<Ast>, Box<Ast>),
     AddFloat(Box<Ast>, Box<Ast>),
@@ -297,7 +313,7 @@ pub enum Builtin {
     StackAlloc(Box<Ast>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Ast {
     Literal(Literal),
     Variable(Variable),
@@ -334,6 +350,14 @@ impl Ast {
     }
     pub fn string(s: String) -> Self {
         Ast::Literal(Literal::CString(s))
+    }
+
+    pub fn to_ron(&self) -> Result<String, ron::Error> {
+        use ron::ser::{PrettyConfig, to_string_pretty};
+        let pretty = PrettyConfig::new()
+            //.depth_limit(3)
+            .compact_arrays(true);
+        to_string_pretty(&self, pretty)
     }
 }
 

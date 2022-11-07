@@ -39,6 +39,7 @@ pub enum Expr<K, T, V> {
     OneOfValues(V, Vec<V>),
     OneOfTypes(T, Vec<T>),
     Eq(T, T),
+    EqValue(V, V),
     _Unreachable(PhantomData<K>),
 }
 
@@ -46,6 +47,13 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Expr<K, T, 
     fn unify(&self, subst: SymbolTable<K, V>) -> (UnifyResult, SymbolTable<K, V>) {
         match self {
             Eq(ty1, ty2) => Unify::unify_eq(vec![ty1.clone()], vec![ty2.clone()], subst),
+            EqValue(v1, v2) => {
+                if let Some(var_id) = v1.try_unknown() {
+                    (UnifyResult::Ok, subst.insert(var_id, v2.clone()))
+                } else {
+                    (UnifyResult::NoSolution, subst)
+                }
+            }
             OneOfTypes(ty1, types) => {
                 let s = subst;
                 for ty2 in types {
