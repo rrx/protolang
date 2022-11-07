@@ -37,7 +37,7 @@ impl Interpreter {
     pub fn run(&mut self, ast: &Ast) -> Result<Ast, Box<dyn Error>> {
         let env = Environment::default();
         let env = base_env(env, &mut self.builder);
-        let ast = self.builder.resolve_ast(ast, env.clone())?;
+        let (ast, env, subst) = self.builder.resolve(ast, env.clone())?;
 
         //let (_res, ast, _env, subst) = self.builder.resolve(ast, env.clone());
         //let ast = ast.resolve(&subst);

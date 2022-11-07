@@ -102,14 +102,18 @@ impl fmt::Display for Variable {
 pub enum Builtin {
     // This implementation is awkward and doesn't work very well.
     AddInt(Box<Ast>, Box<Ast>),
+    SubInt(Box<Ast>, Box<Ast>),
+    EqInt(Box<Ast>, Box<Ast>),
     AddFloat(Box<Ast>, Box<Ast>),
 }
 impl Builtin {
     pub fn children(&self) -> Vec<&Ast> {
         match self {
             Self::AddInt(a, b) => vec![a, b],
+            Self::SubInt(a, b) => vec![a, b],
+            Self::EqInt(a, b) => vec![a, b],
             Self::AddFloat(a, b) => vec![a, b],
-            _ => unimplemented!(),
+            //_ => unimplemented!(),
         }
     }
 }
@@ -124,7 +128,12 @@ pub enum Ast {
     // Variable, represented by a String
     Variable(Variable),
 
+
+    // A block is a lexical scope
     Block(Vec<Ast>),
+
+    // A sequence is not a lexical scope
+    Sequence(Vec<Ast>),
 
     // A function that is defined externally
     Extern(Vec<Type>), // args
@@ -149,12 +158,19 @@ pub enum Ast {
     Declare(Variable, Box<Ast>),
 
     Return(Box<Ast>),
+
+    Condition(Box<Ast>, Box<Ast>, Option<Box<Ast>>) 
 }
 
 impl LayerValue for Ast {}
 
-fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Vec<Ast> {
-    exprs.iter().cloned().map(|e| e.resolve(subst)).collect()
+fn resolve_list(exprs: &Vec<Ast>, subst: &SymbolTable) -> Result<Vec<Ast>, Box<dyn Error>> {
+    let mut out = vec![];
+    for expr in exprs {
+        let ast = expr.resolve(subst)?;
+        out.push(ast);
+    }
+    Ok(out)
 }
 
 impl Ast {
@@ -166,8 +182,11 @@ impl Ast {
     }
 
     pub fn block(exprs: Vec<Self>) -> Self {
-        //let ty = exprs.last().expect("Empty Block").get_type();
         Self::Block(exprs)
+    }
+
+    pub fn seq(exprs: Vec<Self>) -> Self {
+        Self::Sequence(exprs)
     }
 
     pub fn try_int(&self) -> Option<u64> {
@@ -197,7 +216,7 @@ impl Ast {
         }
     }
 
-    pub fn resolve(&self, subst: &SymbolTable) -> Self {
+    pub fn resolve(&self, subst: &SymbolTable) -> Result<Self, Box<dyn Error>> {
         let before = self.clone();
         let after = match &self {
             Self::Literal(_) => self.clone(),
@@ -206,9 +225,9 @@ impl Ast {
             Self::Builtin(types) => Self::Builtin(Type::resolve_list(&types, subst)),
             Self::Internal(v) => self.clone(),
             Self::Declare(var, expr) => {
-                Self::Declare(var.resolve_type(subst), expr.resolve(subst).into())
+                Self::Declare(var.resolve_type(subst), expr.resolve(subst)?.into())
             }
-            Self::Assign(name, expr) => Self::Assign(name.clone(), expr.resolve(subst).into()),
+            Self::Assign(name, expr) => Self::Assign(name.clone(), expr.resolve(subst)?.into()),
             Self::Function { params, body, ty } => {
                 // resolve the types in the params
                 let params = params
@@ -218,18 +237,29 @@ impl Ast {
                 let ty = ty.resolve(&subst);
                 Self::Function {
                     params,
-                    body: body.resolve(subst).into(),
+                    body: body.resolve(subst)?.into(),
                     ty,
                 }
             }
-            Self::Block(exprs) => Self::block(resolve_list(exprs, &subst)),
-            Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)),
+            Self::Block(exprs) => Self::block(resolve_list(exprs, &subst)?),
+            Self::Sequence(exprs) => Self::seq(resolve_list(exprs, &subst)?),
+            Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)?),
 
             Self::Type(ty) => Self::Type(ty.resolve(subst)),
-            Self::Return(expr) => Self::Return(expr.resolve(subst).into()),
+            Self::Return(expr) => Self::Return(expr.resolve(subst)?.into()),
+            Self::Condition(condition, istrue, isfalse) => {
+                let condition = condition.resolve(subst)?;
+                let istrue = istrue.resolve(subst)?;
+                let isfalse = if let Some(v) = isfalse {
+                    Some(v.resolve(subst)?.into())
+                } else {
+                    None
+                };
+                Self::Condition(condition.into(), istrue.into(), isfalse)
+            }
         };
         //eprintln!("RESOLVE: {:?} => {:?}", &before, &after);
-        after
+        Ok(after)
     }
 }
 
@@ -256,21 +286,27 @@ impl logic::UnifyValue for Ast {
             Self::Literal(Literal::Bool(_)) => Type::Bool,
             Self::Literal(Literal::String(_)) => Type::String,
             Self::Function { ty, .. } => ty.clone(),
-            Self::Block(exprs) => {
-                // TODO: maybe empty blocks can just return unit type?
-                exprs.last().expect("Empty Block").get_type()
+            Self::Block(exprs) | Self::Sequence(exprs) => {
+                // empty blocks just return unit type
+                exprs.last().map_or(Type::Unit, |e| e.get_type())
             }
             Self::Apply(var, _) => var.ty.children().last().expect("No Return Type").clone(),
             Self::Declare(_, expr) => expr.get_type(),
             Self::Assign(_, expr) => expr.get_type(),
             Self::Variable(v) => v.ty.clone(),
             Self::Extern(args) | Self::Builtin(args) => Type::Func(args.clone()),
-            Self::Internal(_) => {
-                /// TODO: not correct, hardwired for now
-                Type::Int
+            Self::Internal(b) => {
+                use Builtin::*;
+                match b {
+                    SubInt(_,_) | AddInt(_,_) | AddFloat(_,_) => Type::Int,
+                    EqInt(_,_) => Type::Bool
+                }
             }
             Self::Type(_) => Type::Type,
             Self::Return(expr) => expr.get_type(),
+
+            // get the type of istrue, we check to make sure these match elsewhere
+            Self::Condition(_, istrue, isfalse) => istrue.get_type(),
         }
     }
 
@@ -315,6 +351,10 @@ impl fmt::Display for Ast {
                 write!(f, "Block({})", format_list(&exprs))?;
             }
 
+            Ast::Sequence(exprs) => {
+                write!(f, "Sequence({})", format_list(&exprs))?;
+            }
+
             Ast::Extern(types) => {
                 write!(f, "Extern({})", format_list(&types))?;
             }
@@ -340,6 +380,13 @@ impl fmt::Display for Ast {
 
             Ast::Return(expr) => {
                 write!(f, "Return({})", &expr)?;
+            }
+            Ast::Condition(condition, istrue, isfalse) => {
+                if isfalse.is_some() {
+                    write!(f, "If({}, {}, {})", &condition, &istrue, &isfalse.as_ref().unwrap())?;
+                } else {
+                    write!(f, "If({}, {})", &condition, &istrue)?;
+                }
             }
         }
         Ok(())

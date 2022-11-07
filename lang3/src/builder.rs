@@ -111,7 +111,7 @@ impl AstBuilder {
         Ast::Apply(var, args)
     }
 
-    fn name_resolve(&mut self, ast: &Ast, env: Environment) -> (Ast, Environment) {
+    fn name_resolve(&mut self, ast: &Ast, mut env: Environment) -> (Ast, Environment) {
         match ast {
             Ast::Literal(_) => (ast.clone(), env),
             Ast::Extern(_) => (ast.clone(), env),
@@ -135,8 +135,18 @@ impl AstBuilder {
             }
 
             Ast::Declare(var, rhs) => {
-                let (new_rhs, mut env) = self.name_resolve(rhs, env);
                 let name = var.name.clone();
+
+                // define an empty name, so that the body can refer to itself
+                // the type needs to be correct here
+                let d = Ast::Declare(var.clone(), rhs.clone());
+                let mut temporary_env = env.clone();
+                temporary_env.define(name.clone(), d.clone());
+
+                // resolve rhs, ignore resulting env
+                let (new_rhs, _) = self.name_resolve(rhs, temporary_env);
+
+                // redeclare, on the original env
                 let d = Ast::Declare(var.clone(), new_rhs.into());
                 env.define(name, d.clone());
                 (d, env)
@@ -227,6 +237,7 @@ impl AstBuilder {
                 )
             }
 
+            // Block is a lexical scope
             Ast::Block(exprs) => {
                 let mut local_env = env.clone();
                 let mut updated = vec![];
@@ -236,6 +247,17 @@ impl AstBuilder {
                     updated.push(new_ast);
                 }
                 // return original scope
+                (Ast::block(updated), env)
+            }
+
+            // Sequence is not a lexical scope
+            Ast::Sequence(exprs) => {
+                let mut updated = vec![];
+                for expr in exprs {
+                    let (new_ast, new_env) = self.name_resolve(expr, env);
+                    env = new_env;
+                    updated.push(new_ast);
+                }
                 (Ast::block(updated), env)
             }
 
@@ -252,6 +274,17 @@ impl AstBuilder {
 
             Ast::Return(expr) => self.name_resolve(expr, env),
 
+            Ast::Condition(condition, istrue, isfalse) => {
+                self.equations.push(logic::Expr::Eq(condition.get_type(), Type::Bool));
+                let (istrue, _) = self.name_resolve(istrue, env.clone());
+                let isfalse = if let Some(v) = isfalse {
+                    self.equations.push(logic::Expr::Eq(istrue.get_type(), v.get_type()));
+                    Some(self.name_resolve(&v, env.clone()).0.clone().into())
+                } else {
+                    None
+                };
+                (Ast::Condition(condition.clone(), istrue.clone().into(), isfalse), env)
+            }
             _ => {
                 unimplemented!("{:?}", &ast)
             }
@@ -270,18 +303,11 @@ impl AstBuilder {
         Ast::Assign(v, rhs.into())
     }
 
-    pub fn resolve_ast(&mut self, ast: &Ast, env: Environment) -> Result<Ast, Box<dyn Error>> {
-        let (res, ast, _, subst) = self.resolve(ast, env);
-        assert_eq!(res, logic::UnifyResult::Ok);
-        let ast = ast.resolve(&subst);
-        Ok(ast)
-    }
-
-    pub fn resolve_ast_with_base(&mut self, ast: &Ast) -> Result<Ast, Box<dyn Error>> {
+    pub fn resolve_ast_with_base(&mut self, ast: &Ast) -> Result<(Ast, Environment, SymbolTable), Box<dyn Error>> {
         let env = self.base_env();
         let mut exprs = self.base.clone();
         exprs.push(ast.clone());
-        self.resolve_ast(&Ast::Block(exprs), env)
+        self.resolve(&Ast::Sequence(exprs), env)
     }
 
     fn unify(eqs: ExprSeq) -> (UnifyResult, SymbolTable) {
@@ -292,7 +318,7 @@ impl AstBuilder {
         &mut self,
         ast: &Ast,
         env: Environment,
-    ) -> (UnifyResult, Ast, Environment, SymbolTable) {
+    ) -> Result<(Ast, Environment, SymbolTable), Box<dyn Error>> {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
 
@@ -306,16 +332,19 @@ impl AstBuilder {
         }
 
         let (res, subst) = Self::unify(eqs);
+        let ast = ast.resolve(&subst)?;
 
-        eprintln!("AST: {}", &ast);
         eprintln!("ENV: {}", env);
         eprintln!("RES: {:?}", res);
         eprintln!("SUB: {:?}", subst);
+        eprintln!("AST: {}", &ast.to_ron().unwrap());
         if res == UnifyResult::Ok {
             //let _ = visitor::visit(&ast, self, &mut subst).unwrap();
         }
-
-        (res, ast, env, subst)
+        match res {
+            logic::UnifyResult::Ok => Ok((ast, env, subst)),
+            _ => unimplemented!("unable to unify")
+        }
     }
 
     fn gen_add(&mut self) -> Ast {
@@ -324,23 +353,48 @@ impl AstBuilder {
         let b = self.var_named("b", Type::Int);
         let params = vec![a.clone(), b.clone()];
         let sig = vec![Type::Int, Type::Int, Type::Int];
-        let body = Ast::Internal(Builtin::AddInt(Box::new(a.into()), Box::new(b.into()))); //sig.clone());
+        let body = Ast::Internal(Builtin::AddInt(Box::new(a.into()), Box::new(b.into())));
         self.func(params, body, sig)
     }
 
-    pub fn base_env(&mut self) -> Environment {
-        let mut env = Environment::default();
+    fn gen_sub(&mut self) -> Ast {
+        // define add
+        let a = self.var_named("a", Type::Int);
+        let b = self.var_named("b", Type::Int);
+        let params = vec![a.clone(), b.clone()];
+        let sig = vec![Type::Int, Type::Int, Type::Int];
+        let body = Ast::Internal(Builtin::SubInt(Box::new(a.into()), Box::new(b.into())));
+        self.func(params, body, sig)
+    }
 
-        let rhs = self.gen_add();
+    fn gen_eq(&mut self) -> Ast {
+        // define add
+        let a = self.var_named("a", Type::Int);
+        let b = self.var_named("b", Type::Int);
+        let params = vec![a.clone(), b.clone()];
+        let sig = vec![Type::Int, Type::Int, Type::Bool];
+        let body = Ast::Internal(Builtin::EqInt(Box::new(a.into()), Box::new(b.into())));
+        self.func(params, body, sig)
+    }
 
+    fn add_gen_to_env(&mut self, name: &str, ast: Ast, mut env: Environment) -> Environment {
         // declare
-        let ty = rhs.get_type();
-        let v = self.var_named("+", ty.clone());
-        let d = Ast::Declare(v.clone(), rhs.into());
-
-        env.define("+".to_string(), v.into());
+        let ty = ast.get_type();
+        let v = self.var_named(name, ty.clone());
+        let d = Ast::Declare(v.clone(), ast.into());
+        env.define(name.to_string(), v.into());
         self.base.push(d);
+        env
+    }
 
+    pub fn base_env(&mut self) -> Environment {
+        let env = Environment::default();
+        let add = self.gen_add();
+        let sub = self.gen_sub();
+        let eq = self.gen_eq();
+        let env = self.add_gen_to_env("+", add, env);
+        let env = self.add_gen_to_env("-", sub, env.clone());
+        let env = self.add_gen_to_env("==", eq, env.clone());
         env
     }
 
@@ -404,6 +458,12 @@ impl AstBuilder {
             }
 
             Ast::Internal(v) => match v {
+                Builtin::SubInt(a, b) => {
+                    Ok(hir::Builtin::SubInt(self.lower(a)?.into(), self.lower(b)?.into()).into())
+                }
+                Builtin::EqInt(a, b) => {
+                    Ok(hir::Builtin::EqInt(self.lower(a)?.into(), self.lower(b)?.into()).into())
+                }
                 Builtin::AddInt(a, b) => {
                     Ok(hir::Builtin::AddInt(self.lower(a)?.into(), self.lower(b)?.into()).into())
                 }
@@ -411,8 +471,29 @@ impl AstBuilder {
                     Ok(hir::Builtin::AddFloat(self.lower(a)?.into(), self.lower(b)?.into()).into())
                 }
             },
+
+            Ast::Condition(condition, istrue, isfalse) => {
+                let result_type = istrue.get_type();
+                let istrue = self.lower(istrue)?;
+                let isfalse = if let Some(v) = isfalse {
+                    let else_result_type = v.get_type();
+                    let v = self.lower(v)?;
+                    assert_eq!(result_type, else_result_type);
+                    Some(v.into())
+                } else {
+                    None
+                };
+
+                let subst = SymbolTable::default();
+                Ok(hir::If {
+                    condition: self.lower(condition)?.into(),
+                    then: istrue.into(),
+                    otherwise: isfalse, 
+                    result_type: result_type.lower(&subst)?,
+                }.into())
+            }
             _ => {
-                unimplemented!("{:?}", &ast)
+                unimplemented!("lower: {:?}", &ast)
             }
         }
     }
@@ -432,10 +513,6 @@ impl AstBuilder {
         }
         Ok(out)
     }
-
-    //fn base_ast(&self) -> Ast {
-        //Ast::block(self.base.clone())
-    //}
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
         let mut exprs = vec![]; //self.base.clone();
@@ -498,13 +575,13 @@ mod tests {
         let block = b.block(vec![decl1, decl2]);
         let ast = b.declare("c", block.clone());
 
-        let (res, _ast, env, _) = b.resolve(&ast, env.clone());
+        let (ast, env, _) = b.resolve(&ast, env.clone()).unwrap();
 
         println!("a = {:?}", env.resolve(&"a".into()));
         println!("b = {:?}", env.resolve(&"b".into()));
         println!("c = {:?}", env.resolve(&"c".into()));
 
-        assert_eq!(res, UnifyResult::Ok);
+        //assert_eq!(res, UnifyResult::Ok);
 
         // a and b should not be visible from the outer lexical scope
         // c should be visible though
@@ -532,20 +609,17 @@ mod tests {
 
         let ast = b.block(vec![df, call]);
 
-        let (res, ast, env, subst) = b.resolve(&ast, env.clone());
+        let (ast, env, subst) = b.resolve(&ast, env.clone()).unwrap();
         println!("{}", env);
         println!("{}", &ast);
-        assert_eq!(res, UnifyResult::Ok);
 
         // the block returns an int from the call
         let ty = ast.get_type().resolve(&subst);
         assert_eq!(ty, Type::Int);
 
-        assert!(ast.get_type().try_unknown().is_some());
-
-        let ast = ast.resolve(&subst);
+        let ast = ast.resolve(&subst).unwrap();
         println!("{:?}", &ast.get_type());
-        assert!(ast.resolve(&subst).get_type().try_unknown().is_none());
+        assert!(ast.resolve(&subst).unwrap().get_type().try_unknown().is_none());
         assert_eq!(ty, Type::Int);
 
         let hir = b.lower(&ast).unwrap();
@@ -556,26 +630,18 @@ mod tests {
     #[test]
     fn test_binary() {
         let mut b: AstBuilder = AstBuilder::default();
-        let env = b.base_env();
         let one = b.int(1);
         let two = b.int(2);
         let add = b.binary("+", one, two);
         let ast = b.declare("f", add);
 
-        let (res, ast, env, subst) = b.resolve(&ast, env.clone());
-        println!("{}", env);
-        println!("{}", &ast);
-        assert_eq!(res, UnifyResult::Ok);
+        let (ast, env, subst) = b.resolve_ast_with_base(&ast).unwrap();
 
         let call = env.resolve(&"f".into()).unwrap();
         println!("call = {:?}", call);
 
-        for (k, v) in subst.iter() {
-            println!("subst = {:?} => {:?}", k, v);
-        }
-
         // make sure type is correct
-        let ty = ast.resolve(&subst).get_type();
+        let ty = ast.get_type();
         let ty = ty.resolve(&subst);
         println!("ty = {:?}", &ty);
         assert_eq!(ty, Type::Int);
@@ -596,17 +662,16 @@ mod tests {
         let v = b.var_named("a", ty);
 
         println!("AST:{:?}", &v);
-        let (res, ast, env, subst) = b.resolve(&v.into(), env);
+        let (ast, env, subst) = b.resolve(&v.into(), env).unwrap();
         println!("ENV:{}", env);
         println!("AST:{}", &ast);
-        assert_eq!(res, UnifyResult::Ok);
 
         for (k, v) in subst.iter() {
             println!("subst = {:?} => {:?}", k, v);
         }
 
         // make sure the types match
-        let ty = ast.resolve(&subst).get_type();
+        let ty = ast.resolve(&subst).unwrap().get_type();
         let ty = ty.resolve(&subst);
         assert_eq!(ty, Type::Int);
     }
@@ -614,19 +679,14 @@ mod tests {
     #[test]
     fn add_builtin() {
         let mut b: AstBuilder = AstBuilder::default();
-        //let env = b.base_env();
 
         let add = b.binary("+", b.int(1), b.int(2));
         let main = b.func(vec![], add, vec![Type::Int]);
         let dmain = b.declare("main", main);
 
-        let ast = b.resolve_ast_with_base(&dmain).unwrap();
+        let (ast, _env, _subst) = b.resolve_ast_with_base(&dmain).unwrap();
 
-        //let block = b.block(vec![b.base_ast(), dmain]);
-        //let (_res, ast, _env, subst) = b.resolve(&block, env.clone());
-        //let ast = ast.resolve(&subst);
         println!("AST: {:?}", &ast);
-        println!("AST: {}", &ast);
 
         let hir = b.lower(&ast).unwrap();
         println!("HIR:{:?}", &hir);
@@ -657,8 +717,8 @@ mod tests {
 
         let ast = b.block(vec![df, dmain]);
 
-        let (_res, ast, _env, subst) = b.resolve(&ast, env.clone());
-        let ast = ast.resolve(&subst);
+        let (ast, env, subst) = b.resolve_ast_with_base(&ast).unwrap();
+
         println!("AST: {}", &ast.to_ron().unwrap());
         println!("AST: {}", &ast);
 

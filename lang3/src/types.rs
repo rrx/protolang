@@ -50,8 +50,7 @@ impl Type {
             Self::Variable(def) => match subst.get(def) {
                 Some(v) => v.try_type().unwrap().lower(subst),
                 None => {
-                    eprintln!("Not found in subsitution: {:?}", def);
-                    unreachable!()
+                    unreachable!("Not found in subsitution: {:?}", def);
                 }
             },
             Self::Int => Ok(hir::Type::i64()),

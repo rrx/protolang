@@ -12,7 +12,8 @@ type Builder = L::AstBuilder;
 impl AstModule {
     pub fn lower(&self, builder: &mut Builder) -> LResult {
         let ast = self.statement.lower(builder)?;
-        builder.resolve_ast_with_base(&ast)
+        let (ast, env, subst) = builder.resolve_ast_with_base(&ast)?;
+        Ok(ast)
     }
 }
 
@@ -63,8 +64,14 @@ fn params_to_vars<A: ast::AstPayload>(
 
 impl<A: ast::AstPayload> Lower for ast::AstStmtP<A> {
     fn lower(&self, b: &mut Builder) -> LResult {
+        self.node.lower(b)
+    }
+}
+
+impl<A: ast::AstPayload> Lower for ast::StmtP<A> {
+    fn lower(&self, b: &mut Builder) -> LResult {
         use ast::StmtP::*;
-        match &self.node {
+        match &self {
             Return(Some(expr)) => Ok(L::Ast::Return(expr.lower(b)?.into())),
             Return(None) => unimplemented!(),
             Expression(expr) => Ok(expr.lower(b)?),
@@ -95,7 +102,22 @@ impl<A: ast::AstPayload> Lower for ast::AstStmtP<A> {
                 let f = b.func(params, body, sig);
                 Ok(b.declare(&name, f))
             }
-            _ => unimplemented!("{:?}", &self.node),
+            If(condition, istrue) => {
+                let condition = condition.lower(b)?;
+                let istrue = istrue.lower(b)?;
+                Ok(L::Ast::Condition(condition.into(), istrue.into(), None))
+            }
+
+            IfElse(condition, body) => {
+                let istrue = &body.0;
+                let isfalse = &body.1;
+                let condition = condition.lower(b)?;
+                let istrue = istrue.lower(b)?;
+                let isfalse = isfalse.lower(b)?;
+                Ok(L::Ast::Condition(condition.into(), istrue.into(), Some(isfalse.into())))
+            }
+
+            _ => unimplemented!("{:?}", &self),
         }
     }
 }
@@ -162,6 +184,8 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
                 let rhs = rhs.lower(b)?;
                 let call = match op {
                     ast::BinOp::Add => b.binary("+", lhs, rhs),
+                    ast::BinOp::Equal => b.binary("==", lhs, rhs),
+                    ast::BinOp::Subtract => b.binary("-", lhs, rhs),
                     _ => unimplemented!("{}", &op),
                 };
 
