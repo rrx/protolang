@@ -413,9 +413,9 @@ impl AstBuilder {
 
     pub fn lower(&mut self, ast: &Ast) -> Result<hir::Ast, Box<dyn Error>> {
         match ast {
-            Ast::Literal(Literal::Bool(b)) => Ok(hir::Ast::bool(*b)),
-            Ast::Literal(Literal::Int(u)) => Ok(hir::Ast::i64(*u as i64)),
-            Ast::Literal(Literal::Float(f)) => Ok(hir::Ast::f64(*f)),
+            Ast::Literal(Literal::Bool(b)) => Ok(hir::bool(*b)),
+            Ast::Literal(Literal::Int(u)) => Ok(hir::i64(*u as i64)),
+            Ast::Literal(Literal::Float(f)) => Ok(hir::f64(*f)),
             Ast::Literal(Literal::String(_)) => unimplemented!("Strings are not implemented yet"),
             Ast::Variable(v) => Ok(hir::DefinitionId(v.id.0).to_variable()),
             Ast::Extern(sig) => {

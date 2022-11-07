@@ -10,6 +10,8 @@
 mod module;
 mod printer;
 mod types;
+pub mod constructors;
+pub use constructors::*;
 
 pub use module::ModuleBuilder;
 
@@ -333,25 +335,6 @@ pub enum Ast {
 }
 
 impl Ast {
-    pub fn i64(u: i64) -> Self {
-        unsafe { Self::Literal(Literal::Integer(std::mem::transmute(u), IntegerKind::I64)) }
-    }
-    pub fn u64(u: u64) -> Self {
-        Self::Literal(Literal::Integer(u, IntegerKind::U64))
-    }
-    pub fn f64(f: f64) -> Self {
-        unsafe {
-            let u = std::mem::transmute(f);
-            Self::Literal(Literal::Float(u, FloatKind::F64))
-        }
-    }
-    pub fn bool(u: bool) -> Self {
-        Ast::Literal(Literal::Bool(u))
-    }
-    pub fn string(s: String) -> Self {
-        Ast::Literal(Literal::CString(s))
-    }
-
     pub fn to_ron(&self) -> Result<String, ron::Error> {
         use ron::ser::{to_string_pretty, PrettyConfig};
         let pretty = PrettyConfig::new()

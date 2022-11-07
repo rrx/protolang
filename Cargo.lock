@@ -156,8 +156,11 @@ name = "codegen"
 version = "0.0.1"
 dependencies = [
  "colored",
+ "data",
+ "env_logger",
  "goldentests",
  "inkwell",
+ "log",
  "ron",
  "serde",
 ]
@@ -284,6 +287,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b2466559f260f48ad25fe6317b3c8dac77b5bdb5763ac7d9d6103530663bc90"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "data"
+version = "0.1.0"
+dependencies = [
+ "im",
+ "log",
+ "rpds",
 ]
 
 [[package]]

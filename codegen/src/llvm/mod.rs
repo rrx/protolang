@@ -75,8 +75,8 @@ impl JitExecute for Ast {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hir::*;
-    use crate::lower::{self, Definitions};
+    use crate::hir::{self, *};
+    use crate::lower::{self};
 
     #[test]
     fn codegen_fib() {
@@ -105,32 +105,22 @@ mod tests {
         let b = defs.new_variable();
         let n = defs.new_variable();
 
-        let eq0 = lower::eq(n.clone().into(), Ast::i64(0));
+        let eq0 = eq(n.clone().into(), hir::i64(0));
 
-        let ret_a: Ast = Return::new(a.clone().into()).into();
-        let branch1 = If {
-            condition: eq0.into(),
-            then: ret_a.into(),
-            otherwise: None,
-            result_type: Type::Primitive(PrimitiveType::Unit),
-        };
+        let ret_a: Ast = hir::new_return(a.clone().into());
+        let branch1 = hir::new_condition(eq0.into(), ret_a, None, Type::Primitive(PrimitiveType::Unit));
 
-        let eq1 = lower::eq(n.clone().into(), Ast::i64(1));
+        let eq1 = hir::eq(n.clone().into(), hir::i64(1));
         let ret_b: Ast = Return::new(b.clone().into()).into();
-        let branch2 = If {
-            condition: eq1.into(),
-            then: ret_b.into(),
-            otherwise: None,
-            result_type: Type::Primitive(PrimitiveType::Unit),
-        };
+        let branch2 = hir::new_condition(eq1.into(), ret_b, None, Type::Primitive(PrimitiveType::Unit));
 
         // call the function that we've created and then increment
-        let call = FunctionCall::new(
+        let call = hir::new_call(
             fib.clone().into(),
             vec![
                 b.clone().into(),
-                lower::add(a.clone().into(), b.clone().into()),
-                lower::sub(n.clone().into(), Ast::i64(1)),
+                hir::add(a.clone().into(), b.clone().into()),
+                hir::sub(n.clone().into(), hir::i64(1)),
             ],
             typ.clone(),
         );
@@ -142,7 +132,7 @@ mod tests {
         // define the function using the definition id
         let dfib = Definition::variable(fib.clone(), f.into());
 
-        let call = FunctionCall::new(fib.clone().into(), vec![Ast::i64(0), Ast::i64(1), Ast::i64(10)], typ.clone());
+        let call = hir::new_call(fib.clone().into(), vec![hir::i64(0), hir::i64(1), hir::i64(10)], typ.clone());
 
         // single parameter function type for main
         let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
@@ -167,14 +157,14 @@ mod tests {
             // x1(x) => x+1
             // increment by 1
             let p = defs.new_variable();
-            Lambda::new(vec![p.clone()], lower::add(p.clone().into(), Ast::i64(1)), typ.clone())
+            hir::new_lambda(vec![p.clone()], hir::add(p.clone().into(), hir::i64(1)), typ.clone())
         };
         let dx1 = defs.new_definition("x1", x1.into());
 
         // main function
         let extern1 = Extern::new("x1".to_string(), typ.clone().into());
         // call extern
-        let call_extern = FunctionCall::new(extern1.clone().into(), vec![Ast::i64(10)], typ.clone());
+        let call_extern = hir::new_call(extern1.clone().into(), vec![hir::i64(10)], typ.clone());
         let f_main = Lambda::new(vec![], call_extern.into(), typ.clone());
 
         let df_main = defs.new_definition("main", f_main.into());

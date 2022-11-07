@@ -12,48 +12,6 @@ use std::error::Error;
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
-pub struct Definitions {
-    next_id: usize,
-}
-impl Definitions {
-    pub fn new() -> Self {
-        Self { next_id: 0 }
-    }
-    pub fn new_definition(&mut self, name: &str, ast: Ast) -> Definition {
-        let d = Definition { variable: DefinitionId(self.next_id), name: Some(name.to_string()), expr: ast.into() };
-        self.next_id += 1;
-        d
-    }
-
-    pub fn named_variable(&mut self, name: &str) -> Variable {
-        let v = Variable { definition: None, definition_id: DefinitionId(self.next_id), name: Some(name.to_string()) };
-        self.next_id += 1;
-        v
-    }
-
-    pub fn new_variable(&mut self) -> Variable {
-        let v = Variable { definition: None, definition_id: DefinitionId(self.next_id), name: None };
-        self.next_id += 1;
-        v
-    }
-}
-
-pub fn add(a: Ast, b: Ast) -> Ast {
-    Builtin::AddInt(a.into(), b.into()).into()
-}
-
-pub fn sub(a: Ast, b: Ast) -> Ast {
-    Builtin::SubInt(a.into(), b.into()).into()
-}
-
-pub fn lt(a: Ast, b: Ast) -> Ast {
-    Builtin::LessSigned(a.into(), b.into()).into()
-}
-
-pub fn eq(a: Ast, b: Ast) -> Ast {
-    Builtin::EqInt(a.into(), b.into()).into()
-}
-
 pub struct Lower<'a> {
     modules: ModuleMap<'a>,
     optimizer: PassManager<Module<'a>>,
