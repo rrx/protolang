@@ -7,10 +7,10 @@ def fibonacci(a, b, n):
     return fibonacci(b, a + b, n - 1)
 
 def fib(n):
-  return fibonacci(0, 1, n)
+    return fibonacci(0, 1, n)
 
 def f(x):
-  return 3 + x
+    return 3 + x
 
 def main():
-  return 2+1+f(2)+fib(10)
+    return 2+1+f(2)+fib(10)
