@@ -13,11 +13,11 @@ mod types;
 
 pub use module::ModuleBuilder;
 
-pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
 use serde::{
     ser::{SerializeStruct, Serializer},
     Serialize,
 };
+pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
 
 use std::rc::Rc;
 
@@ -353,7 +353,7 @@ impl Ast {
     }
 
     pub fn to_ron(&self) -> Result<String, ron::Error> {
-        use ron::ser::{PrettyConfig, to_string_pretty};
+        use ron::ser::{to_string_pretty, PrettyConfig};
         let pretty = PrettyConfig::new()
             //.depth_limit(3)
             .compact_arrays(true);

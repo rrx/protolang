@@ -224,7 +224,7 @@ impl AstBuilder {
                         ty,
                     },
                     env,
-                    )
+                )
             }
 
             Ast::Block(exprs) => {
@@ -288,7 +288,7 @@ impl AstBuilder {
         &mut self,
         ast: Ast,
         env: Environment,
-        ) -> (UnifyResult, Ast, Environment, SymbolTable) {
+    ) -> (UnifyResult, Ast, Environment, SymbolTable) {
         // name resolution
         let (ast, env) = self.name_resolve(ast, env);
 
@@ -434,7 +434,7 @@ impl AstBuilder {
     }
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
-        let mut exprs = vec![];//self.base.clone();
+        let mut exprs = vec![]; //self.base.clone();
         match ast {
             Ast::Block(more) => exprs.extend(more.clone()),
             _ => exprs.push(ast.clone()),
@@ -473,8 +473,8 @@ mod tests {
             logic::Expr::OneOfTypes(
                 Type::Func(vec![Type::Variable(1.into()), Type::Int]),
                 vec![Type::Func(vec![Type::Int, Type::Int])],
-                ),
-                logic::Expr::OneOfValues(x.into(), vec![Ast::int(2), Ast::float(2.)]),
+            ),
+            logic::Expr::OneOfValues(x.into(), vec![Ast::int(2), Ast::float(2.)]),
         ];
         let (res, subst) = logic::Unify::start(eqs);
         println!("SUB: {:?}", subst);
@@ -637,7 +637,7 @@ mod tests {
         let mut b: AstBuilder = AstBuilder::default();
         let env = b.base_env();
 
-        // f(x) => x 
+        // f(x) => x
         let p = b.var_unnamed(Type::Int);
         let block = b.block(vec![p.clone().into()]);
         let f = b.func(vec![p.clone()], block.into(), vec![Type::Int, Type::Int]);

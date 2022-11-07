@@ -1,6 +1,6 @@
 use crate::util::fmap;
-use std::fmt::{self, Display};
 use serde::Serialize;
+use std::fmt::{self, Display};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum FloatKind {
