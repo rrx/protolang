@@ -1,7 +1,8 @@
 use crate::*;
 use std::error::Error;
 
-struct Interpreter {
+pub struct Interpreter {
+    builder: AstBuilder
 }
 
 fn gen_add(builder: &mut AstBuilder) -> Ast {
@@ -30,19 +31,27 @@ pub fn base_env(mut env: Environment, builder: &mut AstBuilder) -> Environment {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self { }
+        Self { builder: AstBuilder::default() }
     }
 
-    pub fn run(&mut self, ast: &Ast, env: Environment) -> Result<Ast, Box<dyn Error>> {
-        eval(self, ast, env)
+    pub fn run(&mut self, ast: &Ast) -> Result<Ast, Box<dyn Error>> {
+        let env = Environment::default();
+        let env = base_env(env, &mut self.builder);
+        let ast = self.builder.resolve_ast(ast, env.clone())?;
+
+        //let (_res, ast, _env, subst) = self.builder.resolve(ast, env.clone());
+        //let ast = ast.resolve(&subst);
+        println!("Eval {}", &ast);
+        let (ast, _) = eval(self, &ast, env)?;
+        Ok(ast)
     }
 
-    pub fn call(&mut self, builtin: &Builtin, args: Vec<Ast>, env: Environment) -> Result<Ast, Box<dyn Error>> {
+    pub fn call(&mut self, builtin: &Builtin, args: Vec<Ast>, env: Environment) -> Result<(Ast, Environment), Box<dyn Error>> {
         match builtin {
             Builtin::AddInt(_, _) => {
                let lhs = args.get(0).unwrap().try_int().unwrap();
                let rhs = args.get(1).unwrap().try_int().unwrap();
-               Ok(Ast::int(lhs as i64 + rhs as i64))
+               Ok((Ast::int(lhs as i64 + rhs as i64), env))
             }
             _ => unimplemented!()
         }
@@ -71,21 +80,40 @@ fn lookup_builtin_by_name(name: &str, env: Environment) -> Option<Builtin> {
     None
 }
 
-fn eval(i: &mut Interpreter, ast: &Ast, env: Environment) -> Result<Ast, Box<dyn Error>> {
+fn eval(i: &mut Interpreter, ast: &Ast, mut env: Environment) -> Result<(Ast, Environment), Box<dyn Error>> {
     match ast {
         Ast::Apply(var, args) => {
             if let Some(builtin) = lookup_builtin_by_name(&var.name, env.clone()) {
                 let mut eval_args = vec![];
+                let mut env = env.clone();
                 for arg in args {
-                    eval_args.push(eval(i, arg, env.clone())?);
+                    let (arg, new_env) = eval(i, arg, env.clone())?;
+                    env = new_env;
+                    eval_args.push(arg);
                 }
-                return i.call(&builtin, eval_args, env.clone());
+                return i.call(&builtin, eval_args, env);
             } else {
                 unimplemented!("unable to resolve {:?}", &var.name)
             }
         }
-        Ast::Literal(_) => Ok(ast.clone()),
-        _ => unimplemented!()
+        Ast::Declare(var, rhs) => {
+            let (rhs, mut env) = eval(i, &rhs, env)?;
+            env.define(var.name.clone(), rhs.clone());
+            Ok((Ast::Declare(var.clone(), rhs.into()), env))
+        }
+
+        Ast::Block(exprs) => {
+            let mut original_env = env.clone();
+            let mut out = vec![];
+            for e in exprs {
+                let (e, new_env) = eval(i, e, env.clone())?;
+                env = new_env;
+                out.push(e);
+            }
+            Ok((Ast::Block(out), original_env))
+        }
+        Ast::Literal(_) | Ast::Function { .. } => Ok((ast.clone(), env)),
+        _ => unimplemented!("eval: {:?}", ast)
 
     }
 }
@@ -108,9 +136,7 @@ mod tests {
 
         let mut i = Interpreter::new();
 
-        let (_res, ast, _env, subst) = b.resolve(ast, env.clone());
-        let ast = ast.resolve(&subst);
-        let ret = i.run(&ast, env).unwrap();
+        let ret = i.run(&ast).unwrap();
         println!("RET: {}", ret);
         assert_eq!(Ast::int(3), ret);
     }

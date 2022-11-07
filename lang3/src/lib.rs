@@ -13,7 +13,7 @@ use printer::*;
 use std::fmt;
 pub use types::*;
 use visitor::*;
-use interpreter::*;
+pub use interpreter::*;
 
 pub use logic::{UnifyResult, UnifyValue};
 use serde::{

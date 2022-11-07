@@ -12,7 +12,7 @@ type Builder = L::AstBuilder;
 impl AstModule {
     pub fn lower(&self, builder: &mut Builder) -> LResult {
         let ast = self.statement.lower(builder)?;
-        builder.resolve_ast(ast)
+        builder.resolve_ast_with_base(&ast)
     }
 }
 

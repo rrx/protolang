@@ -111,16 +111,16 @@ impl AstBuilder {
         Ast::Apply(var, args)
     }
 
-    fn name_resolve(&mut self, ast: Ast, env: Environment) -> (Ast, Environment) {
+    fn name_resolve(&mut self, ast: &Ast, env: Environment) -> (Ast, Environment) {
         match ast {
-            Ast::Literal(_) => (ast, env),
-            Ast::Extern(_) => (ast, env),
+            Ast::Literal(_) => (ast.clone(), env),
+            Ast::Extern(_) => (ast.clone(), env),
 
             Ast::Assign(var, rhs) => {
                 let name = var.name.clone();
                 match env.resolve(&name) {
                     Some(v) => {
-                        let (_, env) = self.name_resolve(*rhs, env.clone());
+                        let (_, env) = self.name_resolve(rhs, env.clone());
                         (v.clone(), env)
                     }
                     None => {
@@ -129,15 +129,15 @@ impl AstBuilder {
                         // We could make this configurable behavior.  By default, we may not
                         // want to declare new variables, to prevent shadowing.  Python does this
                         // but it's not necessarily a good thing.
-                        self.name_resolve(Ast::Declare(var, rhs), env)
+                        self.name_resolve(&Ast::Declare(var.clone(), rhs.clone()), env)
                     }
                 }
             }
 
             Ast::Declare(var, rhs) => {
-                let (new_rhs, mut env) = self.name_resolve(*rhs, env);
+                let (new_rhs, mut env) = self.name_resolve(rhs, env);
                 let name = var.name.clone();
-                let d = Ast::Declare(var, new_rhs.into());
+                let d = Ast::Declare(var.clone(), new_rhs.into());
                 env.define(name, d.clone());
                 (d, env)
             }
@@ -162,7 +162,7 @@ impl AstBuilder {
                     }
                 }
 
-                (ast, env)
+                (ast.clone(), env)
             }
 
             Ast::Apply(var, ref args) => {
@@ -189,11 +189,11 @@ impl AstBuilder {
 
                 // resolve the args, which can be entire expressions
                 for arg in args {
-                    let (_f, this_env) = self.name_resolve(arg.clone(), env.clone());
+                    let (_f, this_env) = self.name_resolve(arg, env.clone());
                     env = this_env;
                 }
 
-                (Ast::Apply(var, args.clone()), env)
+                (Ast::Apply(var.clone(), args.clone()), env)
             }
 
             Ast::Function { params, body, ty } => {
@@ -201,13 +201,13 @@ impl AstBuilder {
                 // The parameters on a function will be unbound, and don't need name resolution
                 // When we resolve the body, we want the parameters to exist in the local environment
                 let mut sig = vec![];
-                for arg in &params {
+                for arg in params {
                     let name = arg.name.clone();
                     let arg = arg.clone();
                     sig.push(arg.ty.clone());
                     local_env.define(name, Ast::Variable(arg.into()));
                 }
-                let (body, _local_env) = self.name_resolve(*body.clone(), local_env);
+                let (body, _local_env) = self.name_resolve(body, local_env);
 
                 // type should match the return type of the body
                 sig.push(body.get_type());
@@ -219,9 +219,9 @@ impl AstBuilder {
 
                 (
                     Ast::Function {
-                        params,
+                        params: params.clone(),
                         body: body.into(),
-                        ty,
+                        ty: ty.clone(),
                     },
                     env,
                 )
@@ -231,7 +231,7 @@ impl AstBuilder {
                 let mut local_env = env.clone();
                 let mut updated = vec![];
                 for expr in exprs {
-                    let (new_ast, new_env) = self.name_resolve(expr.clone(), local_env);
+                    let (new_ast, new_env) = self.name_resolve(expr, local_env);
                     local_env = new_env;
                     updated.push(new_ast);
                 }
@@ -244,13 +244,13 @@ impl AstBuilder {
                 // for every variant
                 let mut env = env.clone();
                 for expr in v.children() {
-                    let (_, new_env) = self.name_resolve(expr.clone(), env.clone());
+                    let (_, new_env) = self.name_resolve(expr, env.clone());
                     env = new_env;
                 }
-                (Ast::Internal(v), env)
+                (Ast::Internal(v.clone()), env)
             }
 
-            Ast::Return(expr) => self.name_resolve(*expr, env),
+            Ast::Return(expr) => self.name_resolve(expr, env),
 
             _ => {
                 unimplemented!("{:?}", &ast)
@@ -270,14 +270,18 @@ impl AstBuilder {
         Ast::Assign(v, rhs.into())
     }
 
-    pub fn resolve_ast(&mut self, ast: Ast) -> Result<Ast, Box<dyn Error>> {
-        let env = self.base_env();
-        let mut base = self.base.clone();
-        base.push(ast);
-        let (res, ast, _, subst) = self.resolve(self.block(base), env.clone());
+    pub fn resolve_ast(&mut self, ast: &Ast, env: Environment) -> Result<Ast, Box<dyn Error>> {
+        let (res, ast, _, subst) = self.resolve(ast, env);
         assert_eq!(res, logic::UnifyResult::Ok);
         let ast = ast.resolve(&subst);
         Ok(ast)
+    }
+
+    pub fn resolve_ast_with_base(&mut self, ast: &Ast) -> Result<Ast, Box<dyn Error>> {
+        let env = self.base_env();
+        let mut exprs = self.base.clone();
+        exprs.push(ast.clone());
+        self.resolve_ast(&Ast::Block(exprs), env)
     }
 
     fn unify(eqs: ExprSeq) -> (UnifyResult, SymbolTable) {
@@ -286,7 +290,7 @@ impl AstBuilder {
 
     pub fn resolve(
         &mut self,
-        ast: Ast,
+        ast: &Ast,
         env: Environment,
     ) -> (UnifyResult, Ast, Environment, SymbolTable) {
         // name resolution
@@ -429,9 +433,9 @@ impl AstBuilder {
         Ok(out)
     }
 
-    fn base_ast(&self) -> Ast {
-        Ast::block(self.base.clone())
-    }
+    //fn base_ast(&self) -> Ast {
+        //Ast::block(self.base.clone())
+    //}
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
         let mut exprs = vec![]; //self.base.clone();
@@ -494,7 +498,7 @@ mod tests {
         let block = b.block(vec![decl1, decl2]);
         let ast = b.declare("c", block.clone());
 
-        let (res, _ast, env, _) = b.resolve(ast, env.clone());
+        let (res, _ast, env, _) = b.resolve(&ast, env.clone());
 
         println!("a = {:?}", env.resolve(&"a".into()));
         println!("b = {:?}", env.resolve(&"b".into()));
@@ -528,7 +532,7 @@ mod tests {
 
         let ast = b.block(vec![df, call]);
 
-        let (res, ast, env, subst) = b.resolve(ast, env.clone());
+        let (res, ast, env, subst) = b.resolve(&ast, env.clone());
         println!("{}", env);
         println!("{}", &ast);
         assert_eq!(res, UnifyResult::Ok);
@@ -558,7 +562,7 @@ mod tests {
         let add = b.binary("+", one, two);
         let ast = b.declare("f", add);
 
-        let (res, ast, env, subst) = b.resolve(ast, env.clone());
+        let (res, ast, env, subst) = b.resolve(&ast, env.clone());
         println!("{}", env);
         println!("{}", &ast);
         assert_eq!(res, UnifyResult::Ok);
@@ -592,7 +596,7 @@ mod tests {
         let v = b.var_named("a", ty);
 
         println!("AST:{:?}", &v);
-        let (res, ast, env, subst) = b.resolve(v.into(), env);
+        let (res, ast, env, subst) = b.resolve(&v.into(), env);
         println!("ENV:{}", env);
         println!("AST:{}", &ast);
         assert_eq!(res, UnifyResult::Ok);
@@ -610,15 +614,17 @@ mod tests {
     #[test]
     fn add_builtin() {
         let mut b: AstBuilder = AstBuilder::default();
-        let env = b.base_env();
+        //let env = b.base_env();
 
         let add = b.binary("+", b.int(1), b.int(2));
         let main = b.func(vec![], add, vec![Type::Int]);
         let dmain = b.declare("main", main);
 
-        let block = b.block(vec![b.base_ast(), dmain]);
-        let (_res, ast, _env, subst) = b.resolve(block, env.clone());
-        let ast = ast.resolve(&subst);
+        let ast = b.resolve_ast_with_base(&dmain).unwrap();
+
+        //let block = b.block(vec![b.base_ast(), dmain]);
+        //let (_res, ast, _env, subst) = b.resolve(&block, env.clone());
+        //let ast = ast.resolve(&subst);
         println!("AST: {:?}", &ast);
         println!("AST: {}", &ast);
 
@@ -651,7 +657,7 @@ mod tests {
 
         let ast = b.block(vec![df, dmain]);
 
-        let (_res, ast, _env, subst) = b.resolve(ast, env.clone());
+        let (_res, ast, _env, subst) = b.resolve(&ast, env.clone());
         let ast = ast.resolve(&subst);
         println!("AST: {}", &ast.to_ron().unwrap());
         println!("AST: {}", &ast);
