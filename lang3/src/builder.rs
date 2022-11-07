@@ -157,15 +157,16 @@ impl AstBuilder {
                 match env.resolve(&v.name) {
                     Some(resolved_v) => {
                         let eq = logic::Expr::EqValue(ast.clone(), resolved_v.clone());
+                        log::debug!("searching for var: {}, {:?}", &v.name, &eq);
                         self.equations.push(eq);
                         let var_ty = v.ty.clone();
                         let resolved_ty = resolved_v.get_type();
 
                         // variable matches the type of resolve
-                        let eq = logic::Expr::Eq(var_ty, resolved_ty);
-                        log::debug!("searching for var: {}, {:?}", &v.name, &eq);
-                        //v = resolved_v;
-                        self.equations.push(eq);
+                        if var_ty.try_unknown().is_some() || resolved_ty.try_unknown().is_some() {
+                            let eq = logic::Expr::Eq(var_ty, resolved_ty);
+                            self.equations.push(eq);
+                        }
                     }
                     None => {
                         unimplemented!("unresolved variable: {} {:?}", &v.name, &v);
@@ -178,7 +179,7 @@ impl AstBuilder {
             Ast::Apply(var, ref args) => {
                 let mut env = env.clone();
 
-                log::debug!("searching for function: {}", &var.name);
+                log::debug!("searching for function: {} for var {}", &var.name, &var.id);
                 // get the list of possible matches
                 // so we an resolve this as part of unification
                 let possible = env
@@ -215,7 +216,8 @@ impl AstBuilder {
                     let name = arg.name.clone();
                     let arg = arg.clone();
                     sig.push(arg.ty.clone());
-                    local_env.define(name, Ast::Variable(arg.into()));
+                    // declare variables as parameters, so we know they are unbound
+                    local_env.define(name, Ast::Parameter(arg.into()));
                 }
                 let (body, _local_env) = self.name_resolve(body, local_env);
 
@@ -275,15 +277,26 @@ impl AstBuilder {
             Ast::Return(expr) => self.name_resolve(expr, env),
 
             Ast::Condition(condition, istrue, isfalse) => {
-                self.equations.push(logic::Expr::Eq(condition.get_type(), Type::Bool));
-                let (istrue, _) = self.name_resolve(istrue, env.clone());
-                let isfalse = if let Some(v) = isfalse {
-                    self.equations.push(logic::Expr::Eq(istrue.get_type(), v.get_type()));
-                    Some(self.name_resolve(&v, env.clone()).0.clone().into())
+                let (condition, env) = self.name_resolve(condition, env);
+
+                // add an equation if condition is unknown
+                let ty = condition.get_type();
+                if let Some(ty_id) = ty.try_unknown() {
+                    self.equations.push(logic::Expr::Eq(ty, Type::Bool));
+                }
+
+                let (istrue, env) = self.name_resolve(istrue, env);
+                let (isfalse, env) = if let Some(v) = isfalse {
+                    let ty = v.get_type();
+                    if let Some(ty_id) = ty.try_unknown() {
+                        self.equations.push(logic::Expr::Eq(ty, istrue.get_type()));
+                    }
+                    (Some(self.name_resolve(&v, env.clone()).0.clone().into()), env)
+
                 } else {
-                    None
+                    (None, env)
                 };
-                (Ast::Condition(condition.clone(), istrue.clone().into(), isfalse), env)
+                (Ast::Condition(condition.into(), istrue.clone().into(), isfalse), env)
             }
             _ => {
                 unimplemented!("{:?}", &ast)

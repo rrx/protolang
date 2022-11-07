@@ -81,12 +81,16 @@ impl Variable {
 
                     // parameters in functions
                     Ast::Variable(var) => var.clone().resolve_type(subst),
+                    Ast::Parameter(var) => var.clone().resolve_type(subst),
                     _ => unreachable!("unable to resolve this type: {:?}", v),
                 }
             }
 
             // if it's not found, then it's probably a parameter
-            None => self.clone(),
+            None => {
+                log::debug!("unable to resolve parameter: {:?}", &self);
+                self.clone()
+            }
         };
         var.resolve_type(subst)
     }
@@ -128,6 +132,8 @@ pub enum Ast {
     // Variable, represented by a String
     Variable(Variable),
 
+    // A parameter is unbound
+    Parameter(Variable),
 
     // A block is a lexical scope
     Block(Vec<Ast>),
@@ -221,6 +227,7 @@ impl Ast {
         let after = match &self {
             Self::Literal(_) => self.clone(),
             Self::Variable(_) => self.replace_variable(subst),
+            Self::Parameter(_) => self.clone(),
             Self::Extern(types) => Self::Extern(Type::resolve_list(&types, subst)),
             Self::Builtin(types) => Self::Builtin(Type::resolve_list(&types, subst)),
             Self::Internal(v) => self.clone(),
@@ -294,6 +301,7 @@ impl logic::UnifyValue for Ast {
             Self::Declare(_, expr) => expr.get_type(),
             Self::Assign(_, expr) => expr.get_type(),
             Self::Variable(v) => v.ty.clone(),
+            Self::Parameter(v) => v.ty.clone(),
             Self::Extern(args) | Self::Builtin(args) => Type::Func(args.clone()),
             Self::Internal(b) => {
                 use Builtin::*;
@@ -343,6 +351,11 @@ impl fmt::Display for Ast {
             Ast::Variable(x) => {
                 write!(f, "V{}", &x.id.0)?;
             }
+
+            Ast::Parameter(x) => {
+                write!(f, "P{}", &x.id.0)?;
+            }
+
             Ast::Type(t) => {
                 write!(f, "Type({})", &t)?;
             }
