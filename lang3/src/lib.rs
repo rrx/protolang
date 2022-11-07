@@ -4,6 +4,7 @@ mod env;
 mod printer;
 mod types;
 mod visitor;
+mod interpreter;
 
 pub use ast::*;
 pub use builder::*;
@@ -12,6 +13,7 @@ use printer::*;
 use std::fmt;
 pub use types::*;
 use visitor::*;
+use interpreter::*;
 
 pub use logic::{UnifyResult, UnifyValue};
 use serde::{

@@ -81,7 +81,7 @@ impl Variable {
 
                     // parameters in functions
                     Ast::Variable(var) => var.clone().resolve_type(subst),
-                    _ => unreachable!(),
+                    _ => unreachable!("unable to resolve this type: {:?}", v),
                 }
             }
 
@@ -168,6 +168,14 @@ impl Ast {
     pub fn block(exprs: Vec<Self>) -> Self {
         //let ty = exprs.last().expect("Empty Block").get_type();
         Self::Block(exprs)
+    }
+
+    pub fn try_int(&self) -> Option<u64> {
+        if let Self::Literal(Literal::Int(u)) = self {
+            Some(*u)
+        } else {
+            None
+        }
     }
 
     pub fn int(i: i64) -> Self {
