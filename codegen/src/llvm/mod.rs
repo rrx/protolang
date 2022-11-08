@@ -85,11 +85,26 @@ mod tests {
         let mut b = context.backend();
         let mut defs = Definitions::new();
 
-        let fib = gen_fib(&mut defs);
-        b.compile_module("main", &fib).unwrap();
+        let ast = gen_fib(&mut defs);
+        println!("AST: {}", &ast.to_ron());
+        b.compile_module("main", &ast).unwrap();
         let ret = b.run().unwrap();
 
         assert_eq!(55, ret);
+    }
+
+    #[test]
+    fn codegen_selfref() {
+        let context = LLVMBackendContext::new();
+        let mut b = context.backend();
+        let mut defs = Definitions::new();
+
+        let ast = gen_self_reference(&mut defs);
+        println!("AST: {}", &ast.to_ron());
+        // this currently fails to compile
+        //b.compile_module("main", &ast).unwrap();
+        //let ret = b.run().unwrap();
+        //assert_eq!(55, ret);
     }
 
     #[test]

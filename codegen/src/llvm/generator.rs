@@ -25,14 +25,31 @@ use std::convert::TryFrom;
 
 use super::builtin;
 use std::rc::Rc;
+use crate::visit;
 
 #[derive(Debug)]
 pub enum DefinitionValue<'context> {
     Compiled(BasicValueEnum<'context>),
-    //Value(Rc<Ast>)
+    Value(Rc<Ast>)
 }
 
 pub type DefinitionsMap<'context> = HashMap<DefinitionId, DefinitionValue<'context>>;
+
+struct DefinitionVisitor {}
+impl<'context> visit::Visitor<DefinitionsMap<'context>> for DefinitionVisitor {
+    fn definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionsMap<'context>) -> visit::VResult {
+        //Ast::Definition(d)
+        let ast: Ast = d.clone().into();
+        println!("def: {}", ast.to_ron());
+        defmap.insert(d.variable, DefinitionValue::Value(Rc::new(ast)));
+        Ok(())
+    }
+}
+
+pub fn generate_definitions(defmap: &mut DefinitionsMap, ast: &Ast) {
+    let mut f = DefinitionVisitor {};
+    visit::visit(&ast, &mut f, defmap).unwrap();
+}
 
 /// The (code) Generator provides all the needed context for generating LLVM IR
 /// while walking the Ast.
@@ -57,9 +74,9 @@ impl<'context> DefinitionValue<'context> {
     fn get_or_codegen(&self, generator: &mut Generator<'context>) -> BasicValueEnum<'context> {
         match self {
             Self::Compiled(value) => *value,
-            //Self::Value(astrc) => {
-            //astrc.as_ref().codegen(generator)
-            //}
+            Self::Value(astrc) => {
+                astrc.as_ref().codegen(generator)
+            }
         }
     }
 }

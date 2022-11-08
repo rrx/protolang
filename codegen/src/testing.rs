@@ -104,3 +104,21 @@ pub fn gen_main_simple(defs: &mut Definitions) -> Ast {
     let c = hir::new_call(v.into(), vec![], typ);
     hir::append(hir::append(dx1.into(), df_main.into()), c.into())
 }
+
+pub fn gen_self_reference(defs: &mut Definitions) -> Ast {
+    let typ = FunctionType::export(vec![Type::i64()]);
+    let a = defs.named_variable("a");
+    let b = defs.named_variable("main");
+
+    let call_a = hir::new_call(a.clone().into(), vec![], typ.clone());
+    let call_b = hir::new_call(b.clone().into(), vec![], typ.clone());
+
+    let f_a = hir::new_lambda(vec![], call_a, typ.clone());
+    let f_b = hir::new_lambda(vec![], call_b, typ.clone());
+
+    append(
+        hir::definition_from_variable(&b, f_a).into(),
+        hir::definition_from_variable(&a, f_b).into(),
+        )
+}
+

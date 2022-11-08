@@ -382,7 +382,7 @@ mod tests {
         let mut i = Interpreter::new();
 
         let (ret, env, defmap) = i.run(&ast).unwrap();
-        println!("RET: {}", ret.to_ron().unwrap());
+        println!("RET: {}", ret.to_ron());
         assert_eq!(Some(3), ret.try_i64());
     }
 
@@ -397,7 +397,7 @@ mod tests {
 
         let mut i = Interpreter::new();
         let (ret, env, defmap) = i.run_main(&ast).unwrap();
-        println!("RET: {}", ret.to_ron().unwrap());
+        println!("RET: {}", ret.to_ron());
         //assert_eq!(Some(10), ret.try_i64());
     }
 
@@ -417,7 +417,7 @@ mod tests {
         let mut i = Interpreter::new();
 
         let (ret, env, defmap) = i.run(&s).unwrap();
-        println!("RET: {}", ret.to_ron().unwrap());
+        println!("RET: {}", ret.to_ron());
 
         let body = resolve_definition_id_expr(&v2.definition_id, env.clone()).unwrap();
         println!("{:?}", body);

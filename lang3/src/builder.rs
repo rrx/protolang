@@ -538,7 +538,7 @@ impl AstBuilder {
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
         let low = self.lower(&ast)?;
-        println!("HIR:{}", &low.to_ron().unwrap());
+        println!("HIR:{}", &low.to_ron());
         low.run_main()
     }
 }
@@ -642,7 +642,7 @@ mod tests {
         assert_eq!(ty, Type::Int);
 
         let hir = b.lower(&ast).unwrap();
-        println!("HIR:{}", &hir.to_ron().unwrap());
+        println!("HIR:{}", &hir.to_ron());
         println!("AST:{:?}", &ast);
     }
 

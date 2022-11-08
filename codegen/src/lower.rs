@@ -1,6 +1,6 @@
 use crate::{
     hir::*,
-    llvm::generator::{CodeGen, Generator},
+    llvm::generator::{CodeGen, Generator, generate_definitions},
 };
 pub use inkwell::context::Context;
 use inkwell::module::Module;
@@ -38,11 +38,15 @@ impl<'a> Lower<'a> {
     pub fn compile_module(&mut self, context: &'a Context, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
         let module = context.create_module(name);
 
+        //let mut definitions = HashMap::new();
+        //generate_definitions(&mut definitions, ast);
+
         let mut codegen = Generator {
             module,
             context,
             builder: context.create_builder(),
             definitions: HashMap::new(),
+            //definitions,
             auto_derefs: HashSet::new(),
             current_function_info: None,
             current_definition_name: None,

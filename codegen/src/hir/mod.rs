@@ -36,6 +36,8 @@ pub enum Literal {
     Unit,
 }
 
+
+/*
 #[derive(Debug, Clone)]
 pub struct DefinitionInfo {
     /// The Ast for the Ast::Definition which defines this Variable.
@@ -66,6 +68,7 @@ impl Serialize for DefinitionInfo {
         state.end()
     }
 }
+*/
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Variable {
@@ -160,12 +163,14 @@ impl Definition {
     }
 }
 
+/*
 impl From<Definition> for DefinitionInfo {
     fn from(def: Definition) -> Self {
         let name = def.name.clone();
         DefinitionInfo { definition_id: def.variable, definition: Some(Rc::new(Ast::Definition(def))), name }
     }
 }
+*/
 
 /// if condition then expression else expression
 #[derive(Debug, Clone, Serialize)]
@@ -363,12 +368,12 @@ impl Ast {
         }
     }
 
-    pub fn to_ron(&self) -> Result<String, ron::Error> {
+    pub fn to_ron(&self) -> String {//Result<String, ron::Error> {
         use ron::ser::{to_string_pretty, PrettyConfig};
         let pretty = PrettyConfig::new()
             //.depth_limit(3)
             .compact_arrays(true);
-        to_string_pretty(&self, pretty)
+        to_string_pretty(&self, pretty).unwrap()
     }
 }
 
