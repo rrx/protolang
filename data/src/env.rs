@@ -6,6 +6,9 @@ use std::hash::Hash;
 pub trait LayerKey: Hash + Eq + fmt::Debug + fmt::Display + Clone {}
 pub trait LayerValue: fmt::Debug + fmt::Display + Clone {}
 
+impl LayerValue for usize {}
+impl LayerKey for String {}
+
 #[derive(Clone, PartialEq)]
 pub struct Layer<K: LayerKey, V> {
     values: HashTrieMap<K, V>,
@@ -165,8 +168,6 @@ mod tests {
     use super::*;
     //use test_log::test;
     pub type Environment = EnvLayers<String, usize>;
-    impl LayerValue for usize {}
-    impl LayerKey for String {}
 
     #[test]
     fn lexical_scope() {

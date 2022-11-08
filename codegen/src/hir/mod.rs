@@ -7,10 +7,10 @@
 //! - All trait function calls are replaced with references to the exact
 //!   function to call statically (monomorphisation) or are passed in as
 //!   arguments to calling functions (boxing).
+pub mod constructors;
 mod module;
 mod printer;
 mod types;
-pub mod constructors;
 pub use constructors::*;
 
 pub use module::ModuleBuilder;
@@ -67,11 +67,27 @@ impl Serialize for DefinitionInfo {
     }
 }
 
-pub type Variable = DefinitionInfo;
+#[derive(Debug, Clone, Serialize)]
+pub struct Variable {
+    pub definition_id: DefinitionId,
+    pub name: Option<String>,
+}
+
+//pub type Variable = DefinitionInfo;
 
 impl From<DefinitionId> for Variable {
     fn from(definition_id: DefinitionId) -> Variable {
-        Variable { definition_id, definition: None, name: None }
+        Variable {
+            definition_id,
+            //definition: None,
+            name: None,
+        }
+    }
+}
+
+impl From<Definition> for Variable {
+    fn from(definition: Definition) -> Variable {
+        Variable { definition_id: definition.variable, name: definition.name }
     }
 }
 
@@ -137,6 +153,10 @@ impl Definition {
     /// define a variable
     pub fn variable(var: Variable, expr: Ast) -> Self {
         Self { variable: var.definition_id, name: var.name.clone(), expr: expr.into() }
+    }
+
+    pub fn to_variable(&self) -> Variable {
+        Variable { definition_id: self.variable, name: self.name.clone() }
     }
 }
 
@@ -335,6 +355,14 @@ pub enum Ast {
 }
 
 impl Ast {
+    pub fn try_i64(&self) -> Option<i64> {
+        if let Self::Literal(Literal::Integer(u, IntegerKind::I64)) = self {
+            Some(*u as i64)
+        } else {
+            None
+        }
+    }
+
     pub fn to_ron(&self) -> Result<String, ron::Error> {
         use ron::ser::{to_string_pretty, PrettyConfig};
         let pretty = PrettyConfig::new()

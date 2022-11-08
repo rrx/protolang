@@ -165,7 +165,7 @@ pub enum Ast {
 
     Return(Box<Ast>),
 
-    Condition(Box<Ast>, Box<Ast>, Option<Box<Ast>>) 
+    Condition(Box<Ast>, Box<Ast>, Option<Box<Ast>>),
 }
 
 impl LayerValue for Ast {}
@@ -250,7 +250,9 @@ impl Ast {
             }
             Self::Block(exprs) => Self::block(resolve_list(exprs, &subst)?),
             Self::Sequence(exprs) => Self::seq(resolve_list(exprs, &subst)?),
-            Self::Apply(f, args) => Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)?),
+            Self::Apply(f, args) => {
+                Self::Apply(f.resolve(subst).into(), resolve_list(args, subst)?)
+            }
 
             Self::Type(ty) => Self::Type(ty.resolve(subst)),
             Self::Return(expr) => Self::Return(expr.resolve(subst)?.into()),
@@ -306,8 +308,8 @@ impl logic::UnifyValue for Ast {
             Self::Internal(b) => {
                 use Builtin::*;
                 match b {
-                    SubInt(_,_) | AddInt(_,_) | AddFloat(_,_) => Type::Int,
-                    EqInt(_,_) => Type::Bool
+                    SubInt(_, _) | AddInt(_, _) | AddFloat(_, _) => Type::Int,
+                    EqInt(_, _) => Type::Bool,
                 }
             }
             Self::Type(_) => Type::Type,
@@ -396,7 +398,13 @@ impl fmt::Display for Ast {
             }
             Ast::Condition(condition, istrue, isfalse) => {
                 if isfalse.is_some() {
-                    write!(f, "If({}, {}, {})", &condition, &istrue, &isfalse.as_ref().unwrap())?;
+                    write!(
+                        f,
+                        "If({}, {}, {})",
+                        &condition,
+                        &istrue,
+                        &isfalse.as_ref().unwrap()
+                    )?;
                 } else {
                     write!(f, "If({}, {})", &condition, &istrue)?;
                 }

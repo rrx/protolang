@@ -16,6 +16,7 @@ serde = { version = "1", features = ["derive"] }
 log = "0.4"
 env_logger = "0.9"
 data = { path = "../data" }
+rpds = "0.11"
 
 [dev-dependencies]
 goldentests = "1.1.0"

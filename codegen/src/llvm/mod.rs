@@ -77,72 +77,18 @@ mod tests {
     use super::*;
     use crate::hir::{self, *};
     use crate::lower::{self};
+    use crate::testing::*;
 
     #[test]
     fn codegen_fib() {
-        let mut defs = Definitions::new();
-        /*
-        function fibonacci(a, b, n) {
-          if (n === 0) {
-            return a;
-          }
-
-          if (n === 1) {
-            return b;
-          }
-
-           return fibonacci(b, a + b, n - 1);
-        }
-        */
-
-        // fib function type
-        let typ = FunctionType::export(vec![Type::i64(), Type::i64(), Type::i64(), Type::i64()]);
-
-        // variable for the function
-        let fib = defs.named_variable("fib");
-        // variable for the single parameter in the function
-        let a = defs.new_variable();
-        let b = defs.new_variable();
-        let n = defs.new_variable();
-
-        let eq0 = eq(n.clone().into(), hir::i64(0));
-
-        let ret_a: Ast = hir::new_return(a.clone().into());
-        let branch1 = hir::new_condition(eq0.into(), ret_a, None, Type::Primitive(PrimitiveType::Unit));
-
-        let eq1 = hir::eq(n.clone().into(), hir::i64(1));
-        let ret_b: Ast = Return::new(b.clone().into()).into();
-        let branch2 = hir::new_condition(eq1.into(), ret_b, None, Type::Primitive(PrimitiveType::Unit));
-
-        // call the function that we've created and then increment
-        let call = hir::new_call(
-            fib.clone().into(),
-            vec![
-                b.clone().into(),
-                hir::add(a.clone().into(), b.clone().into()),
-                hir::sub(n.clone().into(), hir::i64(1)),
-            ],
-            typ.clone(),
-        );
-
-        let block = Sequence::new(vec![branch1.into(), branch2.into(), call.into()]);
-        // create a function to associate with the variable
-        let f = Lambda::new(vec![a.clone(), b.clone(), n.clone()], block.into(), typ.clone());
-
-        // define the function using the definition id
-        let dfib = Definition::variable(fib.clone(), f.into());
-
-        let call = hir::new_call(fib.clone().into(), vec![hir::i64(0), hir::i64(1), hir::i64(10)], typ.clone());
-
-        // single parameter function type for main
-        let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
-        let f_main = Lambda::new(vec![], call.into(), typ.clone());
-        let df_main = defs.new_definition("main", f_main.into());
-
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("main", &Sequence::new(vec![dfib.into(), df_main.into()]).into()).unwrap();
+        let mut defs = Definitions::new();
+
+        let fib = gen_fib(&mut defs);
+        b.compile_module("main", &fib).unwrap();
         let ret = b.run().unwrap();
+
         assert_eq!(55, ret);
     }
 
@@ -150,29 +96,15 @@ mod tests {
     fn codegen_extern() {
         let mut defs = Definitions::new();
 
-        // single parameter function type
-        let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
+        let x1_module = gen_x1_module(&mut defs);
+        let x1_main = gen_x1_main(&mut defs);
 
-        let x1 = {
-            // x1(x) => x+1
-            // increment by 1
-            let p = defs.new_variable();
-            hir::new_lambda(vec![p.clone()], hir::add(p.clone().into(), hir::i64(1)), typ.clone())
-        };
-        let dx1 = defs.new_definition("x1", x1.into());
-
-        // main function
-        let extern1 = Extern::new("x1".to_string(), typ.clone().into());
-        // call extern
-        let call_extern = hir::new_call(extern1.clone().into(), vec![hir::i64(10)], typ.clone());
-        let f_main = Lambda::new(vec![], call_extern.into(), typ.clone());
-
-        let df_main = defs.new_definition("main", f_main.into());
         let context = LLVMBackendContext::new();
         let mut b = context.backend();
-        b.compile_module("test", &Sequence::new(vec![dx1.into()]).into()).unwrap();
-        b.compile_module("main", &Sequence::new(vec![df_main.into()]).into()).unwrap();
+        b.compile_module("test", &x1_module).unwrap();
+        b.compile_module("main", &x1_main).unwrap();
         let ret = b.run().unwrap();
+
         assert_eq!(11, ret);
     }
 }

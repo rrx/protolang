@@ -291,12 +291,17 @@ impl AstBuilder {
                     if let Some(ty_id) = ty.try_unknown() {
                         self.equations.push(logic::Expr::Eq(ty, istrue.get_type()));
                     }
-                    (Some(self.name_resolve(&v, env.clone()).0.clone().into()), env)
-
+                    (
+                        Some(self.name_resolve(&v, env.clone()).0.clone().into()),
+                        env,
+                    )
                 } else {
                     (None, env)
                 };
-                (Ast::Condition(condition.into(), istrue.clone().into(), isfalse), env)
+                (
+                    Ast::Condition(condition.into(), istrue.clone().into(), isfalse),
+                    env,
+                )
             }
             _ => {
                 unimplemented!("{:?}", &ast)
@@ -316,7 +321,10 @@ impl AstBuilder {
         Ast::Assign(v, rhs.into())
     }
 
-    pub fn resolve_ast_with_base(&mut self, ast: &Ast) -> Result<(Ast, Environment, SymbolTable), Box<dyn Error>> {
+    pub fn resolve_ast_with_base(
+        &mut self,
+        ast: &Ast,
+    ) -> Result<(Ast, Environment, SymbolTable), Box<dyn Error>> {
         let env = self.base_env();
         let mut exprs = self.base.clone();
         exprs.push(ast.clone());
@@ -356,7 +364,7 @@ impl AstBuilder {
         }
         match res {
             logic::UnifyResult::Ok => Ok((ast, env, subst)),
-            _ => unimplemented!("unable to unify")
+            _ => unimplemented!("unable to unify"),
         }
     }
 
@@ -501,9 +509,10 @@ impl AstBuilder {
                 Ok(hir::If {
                     condition: self.lower(condition)?.into(),
                     then: istrue.into(),
-                    otherwise: isfalse, 
+                    otherwise: isfalse,
                     result_type: result_type.lower(&subst)?,
-                }.into())
+                }
+                .into())
             }
             _ => {
                 unimplemented!("lower: {:?}", &ast)
@@ -528,16 +537,8 @@ impl AstBuilder {
     }
 
     pub fn run_jit_main(&mut self, ast: &Ast) -> Result<i64, Box<dyn Error>> {
-        let mut exprs = vec![]; //self.base.clone();
-        match ast {
-            Ast::Block(more) => exprs.extend(more.clone()),
-            _ => exprs.push(ast.clone()),
-        }
-        let block = self.block(exprs);
-
-        let low = self.lower(&block)?;
+        let low = self.lower(&ast)?;
         println!("HIR:{}", &low.to_ron().unwrap());
-        //println!("HIR: {:#?}", &low);
         low.run_main()
     }
 }
@@ -632,7 +633,12 @@ mod tests {
 
         let ast = ast.resolve(&subst).unwrap();
         println!("{:?}", &ast.get_type());
-        assert!(ast.resolve(&subst).unwrap().get_type().try_unknown().is_none());
+        assert!(ast
+            .resolve(&subst)
+            .unwrap()
+            .get_type()
+            .try_unknown()
+            .is_none());
         assert_eq!(ty, Type::Int);
 
         let hir = b.lower(&ast).unwrap();

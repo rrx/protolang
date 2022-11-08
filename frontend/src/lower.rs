@@ -114,7 +114,11 @@ impl<A: ast::AstPayload> Lower for ast::StmtP<A> {
                 let condition = condition.lower(b)?;
                 let istrue = istrue.lower(b)?;
                 let isfalse = isfalse.lower(b)?;
-                Ok(L::Ast::Condition(condition.into(), istrue.into(), Some(isfalse.into())))
+                Ok(L::Ast::Condition(
+                    condition.into(),
+                    istrue.into(),
+                    Some(isfalse.into()),
+                ))
             }
 
             _ => unimplemented!("{:?}", &self),

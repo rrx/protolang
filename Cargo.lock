@@ -162,6 +162,7 @@ dependencies = [
  "inkwell",
  "log",
  "ron",
+ "rpds",
  "serde",
 ]
 

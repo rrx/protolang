@@ -2,7 +2,7 @@ use crate::*;
 use std::error::Error;
 
 pub struct Interpreter {
-    builder: AstBuilder
+    builder: AstBuilder,
 }
 
 fn gen_add(builder: &mut AstBuilder) -> Ast {
@@ -23,15 +23,16 @@ pub fn base_env(mut env: Environment, builder: &mut AstBuilder) -> Environment {
     let v = builder.var_named("+", ty.clone());
     let d = Ast::Declare(v.clone(), rhs.into());
 
-    env.define("+".to_string(), d);//.into());
+    env.define("+".to_string(), d); //.into());
 
     env
 }
 
-
 impl Interpreter {
     pub fn new() -> Self {
-        Self { builder: AstBuilder::default() }
+        Self {
+            builder: AstBuilder::default(),
+        }
     }
 
     pub fn run(&mut self, ast: &Ast) -> Result<Ast, Box<dyn Error>> {
@@ -46,14 +47,19 @@ impl Interpreter {
         Ok(ast)
     }
 
-    pub fn call(&mut self, builtin: &Builtin, args: Vec<Ast>, env: Environment) -> Result<(Ast, Environment), Box<dyn Error>> {
+    pub fn call(
+        &mut self,
+        builtin: &Builtin,
+        args: Vec<Ast>,
+        env: Environment,
+    ) -> Result<(Ast, Environment), Box<dyn Error>> {
         match builtin {
             Builtin::AddInt(_, _) => {
-               let lhs = args.get(0).unwrap().try_int().unwrap();
-               let rhs = args.get(1).unwrap().try_int().unwrap();
-               Ok((Ast::int(lhs as i64 + rhs as i64), env))
+                let lhs = args.get(0).unwrap().try_int().unwrap();
+                let rhs = args.get(1).unwrap().try_int().unwrap();
+                Ok((Ast::int(lhs as i64 + rhs as i64), env))
             }
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -62,25 +68,29 @@ fn lookup_builtin_by_name(name: &str, env: Environment) -> Option<Builtin> {
     let v = env.resolve(&name.to_string());
     log::debug!("resolve {:?}", (&v));
     match v {
-        Some(Ast::Declare(var, func)) => {
-            match **func {
-                Ast::Function { ref params, ref body, ref ty } => {
-                    match **body {
-                        Ast::Internal(ref b) => {
-                            return Some(b.clone());
-                        }
-                        _ => ()
-                    }
+        Some(Ast::Declare(var, func)) => match **func {
+            Ast::Function {
+                ref params,
+                ref body,
+                ref ty,
+            } => match **body {
+                Ast::Internal(ref b) => {
+                    return Some(b.clone());
                 }
-                _ => ()
-            }
-        }
-        _ => ()
+                _ => (),
+            },
+            _ => (),
+        },
+        _ => (),
     }
     None
 }
 
-fn eval(i: &mut Interpreter, ast: &Ast, mut env: Environment) -> Result<(Ast, Environment), Box<dyn Error>> {
+fn eval(
+    i: &mut Interpreter,
+    ast: &Ast,
+    mut env: Environment,
+) -> Result<(Ast, Environment), Box<dyn Error>> {
     match ast {
         Ast::Apply(var, args) => {
             if let Some(builtin) = lookup_builtin_by_name(&var.name, env.clone()) {
@@ -113,16 +123,15 @@ fn eval(i: &mut Interpreter, ast: &Ast, mut env: Environment) -> Result<(Ast, En
             Ok((Ast::Block(out), original_env))
         }
         Ast::Literal(_) | Ast::Function { .. } => Ok((ast.clone(), env)),
-        _ => unimplemented!("eval: {:?}", ast)
-
+        _ => unimplemented!("eval: {:?}", ast),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_log::test;
     use crate::AstBuilder;
+    use test_log::test;
 
     #[test]
     fn interpreter() {
@@ -141,4 +150,3 @@ mod tests {
         assert_eq!(Ast::int(3), ret);
     }
 }
-

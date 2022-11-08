@@ -116,10 +116,12 @@ impl FmtAst for Literal {
 impl FmtAst for Variable {
     fn fmt_ast(&self, printer: &mut AstPrinter, f: &mut Formatter) -> fmt::Result {
         if !printer.already_printed.contains(&self.definition_id) {
+            /*
             if let Some(def) = self.definition.clone() {
                 printer.already_printed.insert(self.definition_id);
                 printer.queue.push_back(def);
             }
+            */
         }
 
         if let Some(name) = &self.name {

@@ -24,6 +24,15 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 
 use super::builtin;
+use std::rc::Rc;
+
+#[derive(Debug)]
+pub enum DefinitionValue<'context> {
+    Compiled(BasicValueEnum<'context>),
+    //Value(Rc<Ast>)
+}
+
+pub type DefinitionsMap<'context> = HashMap<DefinitionId, DefinitionValue<'context>>;
 
 /// The (code) Generator provides all the needed context for generating LLVM IR
 /// while walking the Ast.
@@ -34,7 +43,7 @@ pub struct Generator<'context> {
     pub builder: Builder<'context>,
 
     /// Cache of already compiled definitions
-    pub definitions: HashMap<DefinitionId, BasicValueEnum<'context>>,
+    pub definitions: DefinitionsMap<'context>,
 
     /// Contains all the definition ids that should be automatically dereferenced because they're
     /// either stored locally in an alloca or in a global.
@@ -42,6 +51,17 @@ pub struct Generator<'context> {
 
     pub current_function_info: Option<DefinitionId>,
     pub current_definition_name: Option<String>,
+}
+
+impl<'context> DefinitionValue<'context> {
+    fn get_or_codegen(&self, generator: &mut Generator<'context>) -> BasicValueEnum<'context> {
+        match self {
+            Self::Compiled(value) => *value,
+            //Self::Value(astrc) => {
+            //astrc.as_ref().codegen(generator)
+            //}
+        }
+    }
 }
 
 impl<'g> Generator<'g> {
@@ -94,7 +114,7 @@ impl<'g> Generator<'g> {
         let function_pointer = function.as_global_value().as_pointer_value().into();
 
         if let Some(id) = self.current_function_info.take() {
-            self.definitions.insert(id, function_pointer);
+            self.definitions.insert(id, DefinitionValue::Compiled(function_pointer));
         }
 
         let basic_block = self.context.append_basic_block(function, "entry");
@@ -345,15 +365,10 @@ impl<'g> CodeGen<'g> for hir::Literal {
 
 impl<'g> CodeGen<'g> for hir::Variable {
     fn codegen(&self, generator: &mut Generator<'g>) -> BasicValueEnum<'g> {
+        // check if the definition that the variable refers to has been compiled or not
         let mut value = match generator.definitions.get(&self.definition_id) {
-            Some(definition) => *definition,
-            None => {
-                match self.definition.as_ref() {
-                    Some(ast) => ast.codegen(generator),
-                    None => unreachable!("Definition for {} not yet compiled", self.definition_id),
-                };
-                generator.definitions[&self.definition_id]
-            },
+            Some(DefinitionValue::Compiled(d)) => *d,
+            _ => unreachable!("Definition for {} not yet compiled", self.definition_id),
         };
 
         if generator.auto_derefs.contains(&self.definition_id) {
@@ -375,7 +390,7 @@ impl<'g> CodeGen<'g> for hir::Lambda {
         for (i, parameter) in self.args.iter().enumerate() {
             let value =
                 expect_opt!(function.get_nth_param(i as u32), "Could not get parameter {} of function {}", i, self);
-            generator.definitions.insert(parameter.definition_id, value);
+            generator.definitions.insert(parameter.definition_id, DefinitionValue::Compiled(value));
         }
 
         let return_value = self.body.codegen(generator);
@@ -417,7 +432,7 @@ impl<'g> CodeGen<'g> for hir::Definition {
             generator.current_function_info = Some(self.variable);
             generator.current_definition_name = self.name.clone();
             let value = self.expr.codegen(generator);
-            generator.definitions.insert(self.variable, value);
+            generator.definitions.insert(self.variable, DefinitionValue::Compiled(value));
         }
 
         generator.unit_value()

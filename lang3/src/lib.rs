@@ -1,19 +1,19 @@
 mod ast;
 mod builder;
 mod env;
+mod interpreter;
 mod printer;
 mod types;
 mod visitor;
-mod interpreter;
 
 pub use ast::*;
 pub use builder::*;
 use env::*;
+pub use interpreter::*;
 use printer::*;
 use std::fmt;
 pub use types::*;
 use visitor::*;
-pub use interpreter::*;
 
 pub use logic::{UnifyResult, UnifyValue};
 use serde::{

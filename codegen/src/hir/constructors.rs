@@ -7,6 +7,7 @@ impl Definitions {
     pub fn new() -> Self {
         Self { next_id: 0 }
     }
+
     pub fn new_definition(&mut self, name: &str, ast: Ast) -> Definition {
         let d = Definition { variable: DefinitionId(self.next_id), name: Some(name.to_string()), expr: ast.into() };
         self.next_id += 1;
@@ -14,16 +15,28 @@ impl Definitions {
     }
 
     pub fn named_variable(&mut self, name: &str) -> Variable {
-        let v = Variable { definition: None, definition_id: DefinitionId(self.next_id), name: Some(name.to_string()) };
+        let v = Variable {
+            //definition: None,
+            definition_id: DefinitionId(self.next_id),
+            name: Some(name.to_string()),
+        };
         self.next_id += 1;
         v
     }
 
     pub fn new_variable(&mut self) -> Variable {
-        let v = Variable { definition: None, definition_id: DefinitionId(self.next_id), name: None };
+        let v = Variable {
+            //definition: None,
+            definition_id: DefinitionId(self.next_id),
+            name: None,
+        };
         self.next_id += 1;
         v
     }
+}
+
+pub fn definition_from_variable(var: &Variable, rhs: Ast) -> Definition {
+    Definition { variable: var.definition_id, name: var.name.clone(), expr: rhs.into() }
 }
 
 pub fn i64(u: i64) -> Ast {
@@ -54,12 +67,7 @@ pub fn new_lambda(args: Vec<Variable>, body: Ast, typ: FunctionType) -> Ast {
 }
 
 pub fn new_condition(condition: Ast, then: Ast, otherwise: Option<Ast>, result_type: Type) -> Ast {
-    If {
-        condition: condition.into(),
-        then: then.into(),
-        otherwise: otherwise.map(|v| v.into()),
-        result_type
-    }.into()
+    If { condition: condition.into(), then: then.into(), otherwise: otherwise.map(|v| v.into()), result_type }.into()
 }
 
 pub fn new_call(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Ast {
@@ -82,4 +90,17 @@ pub fn eq(a: Ast, b: Ast) -> Ast {
     Builtin::EqInt(a.into(), b.into()).into()
 }
 
-
+pub fn append(a: Ast, b: Ast) -> Ast {
+    let mut exprs = vec![]; //self.base.clone();
+    match a {
+        Ast::Sequence(Sequence { statements }) => {
+            exprs.extend(statements.clone());
+            Sequence::new(exprs).into()
+        },
+        _ => {
+            exprs.push(a.clone());
+            exprs.push(b.clone());
+            Sequence::new(exprs).into()
+        },
+    }
+}

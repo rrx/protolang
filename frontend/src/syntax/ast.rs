@@ -112,6 +112,12 @@ pub struct AstModule {
     pub(crate) dialect: Dialect,
 }
 
+impl AstModule {
+    pub fn print(&self) {
+        println!("{}", &self.statement.node);
+    }
+}
+
 // A trait rather than a function to allow .ast() chaining in the parser.
 pub(crate) trait ToAst: Sized {
     fn ast(self, begin: usize, end: usize) -> Spanned<Self> {
