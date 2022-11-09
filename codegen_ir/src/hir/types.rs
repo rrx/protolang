@@ -30,6 +30,19 @@ pub enum IntegerKind {
     U64,
     Usz,
 }
+impl IntegerKind {
+    /// Returns whether this type is unsigned (and therefore whether it should be sign-extended).
+    ///
+    /// Will bind the integer to an i32 if this integer is an IntegerKind::Inferred
+    /// that has not already been bound to a concrete type.
+    pub fn is_unsigned_integer(&self) -> bool {
+        use IntegerKind::*;
+        match self {
+            I8 | I16 | I32 | I64 | Isz => false,
+            U8 | U16 | U32 | U64 | Usz => true,
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub enum PrimitiveType {

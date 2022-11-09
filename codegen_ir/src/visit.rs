@@ -142,7 +142,6 @@ pub fn visit<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
 mod tests {
     use super::*;
     use crate::testing::*;
-    //type DefinitionMap = rpds::HashTrieMap<DefinitionId, Ast>;
     type DefinitionMap = std::collections::HashMap<DefinitionId, Ast>;
 
     #[test]
@@ -157,7 +156,6 @@ mod tests {
                 d: &hir::Definition,
                 defmap: &mut DefinitionMap,
             ) -> VResult {
-                //Ast::Definition(d)
                 let ast: Ast = d.clone().into();
                 println!("def: {}", ast.to_ron());
                 defmap.insert(d.variable, ast);

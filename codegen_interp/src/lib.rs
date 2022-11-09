@@ -1,12 +1,3 @@
-pub mod hir;
-
-#[macro_use]
-pub mod util;
-
-pub mod scan;
-pub mod testing;
-pub mod visit;
-
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

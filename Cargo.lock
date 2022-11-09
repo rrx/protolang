@@ -242,22 +242,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codegen"
-version = "0.0.1"
-dependencies = [
- "codegen_ir",
- "colored",
- "data",
- "env_logger",
- "goldentests",
- "inkwell",
- "log",
- "ron",
- "rpds 0.11.0",
- "serde",
-]
-
-[[package]]
 name = "codegen_ir"
 version = "0.1.0"
 dependencies = [
@@ -291,17 +275,6 @@ checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
 dependencies = [
  "termcolor",
  "unicode-width",
-]
-
-[[package]]
-name = "colored"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
-dependencies = [
- "atty",
- "lazy_static",
- "winapi",
 ]
 
 [[package]]
@@ -640,18 +613,6 @@ name = "gimli"
 version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22030e2c5a68ec659fde1e949a745124b48e6fa8b045b7ed5bd1fe4ccc5c4e5d"
-
-[[package]]
-name = "goldentests"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50fd8aa88e90e6cfee4b0781b623216f7631f24e671f5f687194c9bf4cccc1bf"
-dependencies = [
- "colored",
- "rayon",
- "shlex",
- "similar",
-]
 
 [[package]]
 name = "half"
@@ -1531,18 +1492,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "shlex"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
-
-[[package]]
-name = "similar"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62ac7f900db32bf3fd12e0117dd3dc4da74bc52ebaac97f39668446d89694803"
 
 [[package]]
 name = "siphasher"

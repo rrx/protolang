@@ -496,10 +496,10 @@ pub fn parse_str(s: &str) -> anyhow::Result<ExprNode> {
 mod tests {
     use super::error::print_result;
     use super::*;
-    use log::debug;
     use crate::lexer::*;
     use crate::program::Program;
     use crate::sexpr::SExpr;
+    use log::debug;
     use nom::multi::many1;
     use test_log::test;
 

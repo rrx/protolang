@@ -5,7 +5,8 @@ use codegen_ir::hir::Ast;
 use inkwell::OptimizationLevel;
 use std::error::Error;
 
-use crate::codegen::{generate, DefinitionMap, Executor};
+use crate::codegen::{generate, DefinitionMap};
+use crate::Executor;
 
 pub struct LLVMBackendContext {
     context: Context,

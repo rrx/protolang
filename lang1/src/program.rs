@@ -197,11 +197,11 @@ impl Program {
     }
 
     //pub fn check_str(&mut self, s: &str, env: ir::Environment) -> anyhow::Result<IR> {
-        //self.checker.check_str(s, env)
+    //self.checker.check_str(s, env)
     //}
 
     //pub fn check_file(&mut self, filename: &str, env: ir::Environment) -> anyhow::Result<IR> {
-        //self.checker.check_file(filename, env)
+    //self.checker.check_file(filename, env)
     //}
 }
 
