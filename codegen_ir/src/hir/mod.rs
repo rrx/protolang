@@ -8,13 +8,10 @@
 //!   function to call statically (monomorphisation) or are passed in as
 //!   arguments to calling functions (boxing).
 pub mod constructors;
-mod module;
 mod printer;
 mod types;
 pub use constructors::*;
 use data::env::*;
-
-pub use module::ModuleBuilder;
 
 use serde::Serialize;
 pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};

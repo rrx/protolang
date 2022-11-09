@@ -2,9 +2,6 @@
 //! Mostly consists of convenience functions for iterators such as `fmap`.
 use std::{collections::BTreeSet, fmt::Display, path::PathBuf, process::Command};
 
-#[macro_use]
-pub mod trustme;
-
 /// Equivalent to .iter().map(f).collect()
 pub fn fmap<T, U, F>(iterable: T, f: F) -> Vec<U>
 where
