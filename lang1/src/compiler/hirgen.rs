@@ -353,53 +353,53 @@ mod tests {
     use test_log::test;
 
     /*
-    #[test]
-    fn function() {
-        let mut gen = HIRCodeGen::default();
-        //let mut args = llvm::CompileArgs::default();
-        args.stdout = true;
+        #[test]
+        fn function() {
+            let mut gen = HIRCodeGen::default();
+            //let mut args = llvm::CompileArgs::default();
+            args.stdout = true;
 
-        let one = hir::Ast::Literal(hir::Literal::Integer(1, hir::IntegerKind::U64));
-        let two = hir::Ast::Literal(hir::Literal::Integer(2, hir::IntegerKind::U64));
-        let add = hir::Ast::Builtin(hir::Builtin::AddInt(Box::new(one), Box::new(two)));
-        let return_type = hir::Type::Primitive(hir::PrimitiveType::Integer(hir::IntegerKind::U64));
+            let one = hir::Ast::Literal(hir::Literal::Integer(1, hir::IntegerKind::U64));
+            let two = hir::Ast::Literal(hir::Literal::Integer(2, hir::IntegerKind::U64));
+            let add = hir::Ast::Builtin(hir::Builtin::AddInt(Box::new(one), Box::new(two)));
+            let return_type = hir::Type::Primitive(hir::PrimitiveType::Integer(hir::IntegerKind::U64));
 
-        let typ = hir::FunctionType {
-            parameters: vec![],
-            return_type: Box::new(return_type),
-            is_varargs: false,
-            export: true,
-        };
+            let typ = hir::FunctionType {
+                parameters: vec![],
+                return_type: Box::new(return_type),
+                is_varargs: false,
+                export: true,
+            };
 
-        let body = add;
-        let f = hir::Ast::Lambda(hir::Lambda {
-            args: vec![],
-            body: Box::new(body),
-            typ,
-        });
+            let body = add;
+            let f = hir::Ast::Lambda(hir::Lambda {
+                args: vec![],
+                body: Box::new(body),
+                typ,
+            });
 
-        let name = "main".to_string();
-        let v = hir::Ast::Definition(hir::Definition {
-            variable: gen.get_next_definition_id(),
-            name: Some(name),
-            expr: Box::new(f),
-        });
+            let name = "main".to_string();
+            let v = hir::Ast::Definition(hir::Definition {
+                variable: gen.get_next_definition_id(),
+                name: Some(name),
+                expr: Box::new(f),
+            });
 
-        println!("{:?}", &v);
-        //llvm::compile_and_run(&String::from("test"), v, &args).unwrap();
-    }
+            println!("{:?}", &v);
+            //llvm::compile_and_run(&String::from("test"), v, &args).unwrap();
+        }
 
-    #[test]
-    fn hir_lower() {
-        let mut args = llvm::CompileArgs::default();
-        args.stdout = true;
-        let mut gen = HIRCodeGen::default();
-        let expr = gen.results.parse_str("let main = \\x -> 1 + 2").unwrap();
-        println!("{:?}", expr);
-        //let ir = gen.lower(&expr).unwrap();
-        //println!("{:?}", ir);
-        //gen.results.print();
-        //llvm::compile_and_run(&String::from("test"), ir, &args).unwrap();
-    }
-*/
+        #[test]
+        fn hir_lower() {
+            let mut args = llvm::CompileArgs::default();
+            args.stdout = true;
+            let mut gen = HIRCodeGen::default();
+            let expr = gen.results.parse_str("let main = \\x -> 1 + 2").unwrap();
+            println!("{:?}", expr);
+            //let ir = gen.lower(&expr).unwrap();
+            //println!("{:?}", ir);
+            //gen.results.print();
+            //llvm::compile_and_run(&String::from("test"), ir, &args).unwrap();
+        }
+    */
 }

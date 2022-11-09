@@ -16,9 +16,7 @@ use data::env::*;
 
 pub use module::ModuleBuilder;
 
-use serde::{
-    Serialize,
-};
+use serde::Serialize;
 pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -36,7 +34,6 @@ pub enum Literal {
     Bool(bool),
     Unit,
 }
-
 
 /*
 #[derive(Debug, Clone)]
@@ -68,7 +65,7 @@ impl Variable {
     pub fn get_name(&self) -> String {
         match &self.name {
             Some(name) => name.clone(),
-            None => format!("v{}", &self.definition_id)
+            None => format!("v{}", &self.definition_id),
         }
     }
 }
@@ -87,7 +84,10 @@ impl From<DefinitionId> for Variable {
 
 impl From<Definition> for Variable {
     fn from(definition: Definition) -> Variable {
-        Variable { definition_id: definition.variable, name: definition.name }
+        Variable {
+            definition_id: definition.variable,
+            name: definition.name,
+        }
     }
 }
 
@@ -107,7 +107,11 @@ pub struct Lambda {
 }
 impl Lambda {
     pub fn new(args: Vec<Variable>, body: Ast, typ: FunctionType) -> Self {
-        Self { args, body: Box::new(body), typ: typ.clone() }
+        Self {
+            args,
+            body: Box::new(body),
+            typ: typ.clone(),
+        }
     }
 }
 
@@ -126,7 +130,11 @@ impl FunctionCall {
         }
 
         match f {
-            Ast::Extern(_) | Ast::Variable(_) => Self { function: Box::new(f.into()), args, function_type: typ },
+            Ast::Extern(_) | Ast::Variable(_) => Self {
+                function: Box::new(f.into()),
+                args,
+                function_type: typ,
+            },
             _ => unimplemented!(),
         }
     }
@@ -143,26 +151,41 @@ pub struct Definition {
 }
 impl Definition {
     pub fn named(definition_id: DefinitionId, name: &str, expr: Ast) -> Self {
-        Self { variable: definition_id, name: Some(name.to_string()), expr: expr.into() }
+        Self {
+            variable: definition_id,
+            name: Some(name.to_string()),
+            expr: expr.into(),
+        }
     }
 
     pub fn unamed(definition_id: DefinitionId, expr: Ast) -> Self {
-        Self { variable: definition_id, name: None, expr: expr.into() }
+        Self {
+            variable: definition_id,
+            name: None,
+            expr: expr.into(),
+        }
     }
 
     /// define a variable
     pub fn variable(var: Variable, expr: Ast) -> Self {
-        Self { variable: var.definition_id, name: var.name.clone(), expr: expr.into() }
+        Self {
+            variable: var.definition_id,
+            name: var.name.clone(),
+            expr: expr.into(),
+        }
     }
 
     pub fn to_variable(&self) -> Variable {
-        Variable { definition_id: self.variable, name: self.name.clone() }
+        Variable {
+            definition_id: self.variable,
+            name: self.name.clone(),
+        }
     }
 
     pub fn get_name(&self) -> String {
         match &self.name {
             Some(name) => name.clone(),
-            None => format!("v{}", &self.variable)
+            None => format!("v{}", &self.variable),
         }
     }
 }
@@ -218,7 +241,11 @@ pub struct Match {
 pub enum DecisionTree {
     Leaf(usize),
     Definition(Definition, Box<DecisionTree>),
-    Switch { int_to_switch_on: Box<Ast>, cases: Vec<(u32, DecisionTree)>, else_case: Option<Box<DecisionTree>> },
+    Switch {
+        int_to_switch_on: Box<Ast>,
+        cases: Vec<(u32, DecisionTree)>,
+        else_case: Option<Box<DecisionTree>>,
+    },
 }
 
 /// return expression
@@ -228,7 +255,9 @@ pub struct Return {
 }
 impl Return {
     pub fn new(ast: Ast) -> Self {
-        Self { expression: ast.into() }
+        Self {
+            expression: ast.into(),
+        }
     }
 }
 
@@ -372,7 +401,8 @@ impl Ast {
         }
     }
 
-    pub fn to_ron(&self) -> String {//Result<String, ron::Error> {
+    pub fn to_ron(&self) -> String {
+        //Result<String, ron::Error> {
         use ron::ser::{to_string_pretty, PrettyConfig};
         let pretty = PrettyConfig::new()
             //.depth_limit(3)

@@ -40,7 +40,12 @@ impl AstPrinter {
         Ok(())
     }
 
-    fn fmt_call(&mut self, func: impl FmtAst, args: &[impl FmtAst], f: &mut Formatter) -> fmt::Result {
+    fn fmt_call(
+        &mut self,
+        func: impl FmtAst,
+        args: &[impl FmtAst],
+        f: &mut Formatter,
+    ) -> fmt::Result {
         write!(f, "(")?;
         func.fmt_ast(self, f)?;
 
@@ -52,7 +57,13 @@ impl AstPrinter {
         write!(f, ")")
     }
 
-    fn fmt_cast(&mut self, func: impl FmtAst, arg: impl FmtAst, typ: &Type, f: &mut Formatter) -> fmt::Result {
+    fn fmt_cast(
+        &mut self,
+        func: impl FmtAst,
+        arg: impl FmtAst,
+        typ: &Type,
+        f: &mut Formatter,
+    ) -> fmt::Result {
         write!(f, "(")?;
         func.fmt_ast(self, f)?;
         write!(f, " ")?;
@@ -60,7 +71,13 @@ impl AstPrinter {
         write!(f, " {})", typ)
     }
 
-    fn fmt_offset(&mut self, ptr: impl FmtAst, offset: impl FmtAst, size: u32, f: &mut Formatter) -> fmt::Result {
+    fn fmt_offset(
+        &mut self,
+        ptr: impl FmtAst,
+        offset: impl FmtAst,
+        size: u32,
+        f: &mut Formatter,
+    ) -> fmt::Result {
         write!(f, "(#Offset")?;
         write!(f, " ")?;
         ptr.fmt_ast(self, f)?;
@@ -103,7 +120,7 @@ impl FmtAst for Literal {
         match self {
             Literal::Integer(x, kind) => {
                 write!(f, "{}_{}", x, kind)
-            },
+            }
             Literal::Float(x, kind) => write!(f, "{}_{}", f64::from_bits(*x), kind),
             Literal::CString(cstr) => write!(f, "\"{}\"", cstr),
             Literal::Char(c) => write!(f, "'{}'", c),
@@ -312,8 +329,12 @@ impl FmtAst for DecisionTree {
                 def.fmt_ast(printer, f)?;
                 printer.newline(f)?;
                 tree.fmt_ast(printer, f)
-            },
-            DecisionTree::Switch { int_to_switch_on, cases, else_case } => {
+            }
+            DecisionTree::Switch {
+                int_to_switch_on,
+                cases,
+                else_case,
+            } => {
                 write!(f, "switch ")?;
                 int_to_switch_on.fmt_ast(printer, f)?;
                 for (tag, case) in cases {
@@ -330,7 +351,7 @@ impl FmtAst for DecisionTree {
                     printer.block(case.as_ref(), f)?;
                 }
                 Ok(())
-            },
+            }
         }
     }
 }

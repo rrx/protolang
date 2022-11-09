@@ -62,9 +62,15 @@ pub fn link(object_filename: &str, binary_filename: &str) {
 /// as a result of compiling the program with the given entry module.
 pub fn binary_name(module_name: &str) -> String {
     if cfg!(target_os = "windows") {
-        PathBuf::from(module_name).with_extension("exe").to_string_lossy().into()
+        PathBuf::from(module_name)
+            .with_extension("exe")
+            .to_string_lossy()
+            .into()
     } else {
-        PathBuf::from(module_name).with_extension("").to_string_lossy().into()
+        PathBuf::from(module_name)
+            .with_extension("")
+            .to_string_lossy()
+            .into()
     }
 }
 

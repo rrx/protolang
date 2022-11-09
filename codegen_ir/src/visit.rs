@@ -1,5 +1,5 @@
-use crate::*;
 use crate::hir::{self, *};
+use crate::*;
 
 #[derive(Debug)]
 pub enum VisitError {
@@ -71,7 +71,12 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
             f.exit_definition(def, n)?;
         }
 
-        Ast::If(If {condition, then, otherwise, ..}) => {
+        Ast::If(If {
+            condition,
+            then,
+            otherwise,
+            ..
+        }) => {
             visit(condition, f, n)?;
             visit(then, f, n)?;
             if let Some(v) = otherwise {
@@ -88,14 +93,14 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
             f.exit_sequence(seq, n)?;
         }
 
-        Ast::Return(Return { expression}) => {
+        Ast::Return(Return { expression }) => {
             visit(expression, f, n)?;
         }
 
         Ast::Builtin(builtin) => {
             use Builtin::*;
             match builtin {
-                AddInt(a, b) | EqInt(a,b) | SubInt(a,b) => {
+                AddInt(a, b) | EqInt(a, b) | SubInt(a, b) => {
                     visit(a, f, n)?;
                     visit(b, f, n)?;
                 }
@@ -112,7 +117,11 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
 
         Ast::FunctionCall(call) => {
             f.enter_call(call, n)?;
-            let FunctionCall { function, args, function_type } = call;
+            let FunctionCall {
+                function,
+                args,
+                function_type,
+            } = call;
             for arg in args {
                 visit(arg, f, n)?;
             }
@@ -143,7 +152,11 @@ mod tests {
         println!("AST: {}", &ast.to_ron());
         struct Test {}
         impl Visitor<DefinitionMap> for Test {
-            fn enter_definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionMap) -> VResult {
+            fn enter_definition(
+                &mut self,
+                d: &hir::Definition,
+                defmap: &mut DefinitionMap,
+            ) -> VResult {
                 //Ast::Definition(d)
                 let ast: Ast = d.clone().into();
                 println!("def: {}", ast.to_ron());

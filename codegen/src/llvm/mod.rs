@@ -20,8 +20,8 @@ pub use compile::*;
 use generator::*;
 use inkwell::context::Context;
 
-use codegen_ir::hir::Ast;
 use crate::lower::Lower;
+use codegen_ir::hir::Ast;
 use inkwell::OptimizationLevel;
 use std::error::Error;
 

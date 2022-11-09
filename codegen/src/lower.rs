@@ -1,6 +1,4 @@
-use crate::{
-    llvm::generator::{CodeGen, Generator, generate_definitions},
-};
+use crate::llvm::generator::{generate_definitions, CodeGen, Generator};
 use codegen_ir::hir::*;
 pub use inkwell::context::Context;
 use inkwell::module::Module;

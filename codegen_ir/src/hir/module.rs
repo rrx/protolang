@@ -16,7 +16,11 @@ impl ModuleBuilder {
     }
 
     pub fn define(&mut self, name: &str, expr: Ast) -> Definition {
-        Definition { variable: self.next_id(), name: Some(name.to_string()), expr: expr.into() }
+        Definition {
+            variable: self.next_id(),
+            name: Some(name.to_string()),
+            expr: expr.into(),
+        }
     }
 
     pub fn u64(&self, u: u64) -> Ast {
@@ -31,8 +35,12 @@ impl ModuleBuilder {
         match f {
             Ast::Lambda(lambda) => {
                 let function_type = lambda.typ.clone();
-                Ast::FunctionCall(FunctionCall { function: Ast::Lambda(lambda).into(), args, function_type })
-            },
+                Ast::FunctionCall(FunctionCall {
+                    function: Ast::Lambda(lambda).into(),
+                    args,
+                    function_type,
+                })
+            }
 
             Ast::Definition(def) => self.apply(*def.expr, args),
 
@@ -49,7 +57,7 @@ impl ModuleBuilder {
             _ => {
                 println!("{:?}", (&f));
                 unreachable!()
-            },
+            }
         }
     }
 
@@ -64,10 +72,18 @@ impl ModuleBuilder {
     pub fn function(&mut self, name: &str, body: Ast) -> Definition {
         let return_type = Type::Primitive(PrimitiveType::Integer(IntegerKind::I64));
 
-        let typ =
-            FunctionType { parameters: vec![], return_type: Box::new(return_type), is_varargs: false, export: true };
+        let typ = FunctionType {
+            parameters: vec![],
+            return_type: Box::new(return_type),
+            is_varargs: false,
+            export: true,
+        };
 
-        let f = Ast::Lambda(Lambda { args: vec![], body: body.into(), typ });
+        let f = Ast::Lambda(Lambda {
+            args: vec![],
+            body: body.into(),
+            typ,
+        });
 
         self.define(name, f)
     }

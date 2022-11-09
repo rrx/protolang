@@ -51,7 +51,12 @@ pub struct FunctionType {
 impl FunctionType {
     pub fn export(mut args: Vec<Type>) -> Self {
         let ret = args.split_off(args.len() - 1).pop().unwrap();
-        Self { parameters: args, return_type: ret.into(), is_varargs: false, export: true }
+        Self {
+            parameters: args,
+            return_type: ret.into(),
+            is_varargs: false,
+            export: true,
+        }
     }
 }
 
@@ -114,7 +119,7 @@ impl std::fmt::Display for Type {
             Type::Tuple(elems) => {
                 let elems = fmap(elems, ToString::to_string);
                 write!(f, "{{{}}}", elems.join(", "))
-            },
+            }
         }
     }
 }

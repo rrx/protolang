@@ -1,34 +1,39 @@
-use inkwell::context::{Context, ContextRef};
-use inkwell::module::{Module, Linkage};
-use inkwell::builder::Builder;
-use inkwell::types::{FunctionType, BasicTypeEnum, BasicType, PointerType};
-use inkwell::values::{BasicValueEnum, FunctionValue, InstructionOpcode, IntValue, BasicValue, CallableValue};
-use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use inkwell::basic_block::BasicBlock;
+use inkwell::builder::Builder;
+use inkwell::context::{Context, ContextRef};
+use inkwell::module::{Linkage, Module};
+use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, PointerType};
+use inkwell::values::{
+    BasicValue, BasicValueEnum, CallableValue, FunctionValue, InstructionOpcode, IntValue,
+};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 //use codegen_ir::hir::builtin;
 use inkwell::attributes::{Attribute, AttributeLoc};
 
 //use crate::llvm::CodeGen;
-use codegen_ir::{hir::{self,*}, *};
+use codegen_ir::util::fmap;
 use codegen_ir::visit;
-use codegen_ir::util::{fmap};
+use codegen_ir::{
+    hir::{self, *},
+    *,
+};
 
 #[derive(Debug)]
 pub enum MapValue<'a> {
     FunctionDeclaration(FunctionValue<'a>),
     Value(BasicValueEnum<'a>),
-    AstFragment(hir::Ast)
+    AstFragment(hir::Ast),
 }
 
 use MapValue::*;
 
 pub type DefinitionMap<'a> = std::collections::HashMap<DefinitionId, MapValue<'a>>;
 
-
 pub fn convert_function_type<'g>(context: &'g Context, f: &hir::FunctionType) -> PointerType<'g> {
     let parameters = fmap(&f.parameters, |param| convert_type(context, param).into());
     let ret = convert_type(context, &f.return_type);
-    ret.fn_type(&parameters, false).ptr_type(AddressSpace::Generic)
+    ret.fn_type(&parameters, false)
+        .ptr_type(AddressSpace::Generic)
 }
 
 pub fn convert_type<'g>(context: &'g Context, typ: &hir::Type) -> BasicTypeEnum<'g> {
@@ -36,9 +41,9 @@ pub fn convert_type<'g>(context: &'g Context, typ: &hir::Type) -> BasicTypeEnum<
         hir::Type::Primitive(p) => {
             use hir::PrimitiveType;
             match p {
-                PrimitiveType::Integer(kind) => {
-                    context.custom_width_int_type(integer_bit_count(*kind)).into()
-                },
+                PrimitiveType::Integer(kind) => context
+                    .custom_width_int_type(integer_bit_count(*kind))
+                    .into(),
                 PrimitiveType::Float(FloatKind::F32) => context.f32_type().into(),
                 PrimitiveType::Float(FloatKind::F64) => context.f64_type().into(),
                 PrimitiveType::Char => context.i8_type().into(),
@@ -46,12 +51,12 @@ pub fn convert_type<'g>(context: &'g Context, typ: &hir::Type) -> BasicTypeEnum<
                 PrimitiveType::Unit => context.bool_type().into(),
                 PrimitiveType::Pointer => context.i8_type().ptr_type(AddressSpace::Generic).into(),
             }
-        },
+        }
         hir::Type::Function(f) => convert_function_type(context, f).into(),
         hir::Type::Tuple(tuple) => {
             let fields = fmap(tuple, |typ| convert_type(context, typ));
             context.struct_type(&fields, true).into()
-        },
+        }
     }
 }
 
@@ -97,15 +102,16 @@ fn is_unsigned_integer(int_kind: hir::IntegerKind) -> bool {
 fn lookup_var<'a>(var: &Variable, defmap: &DefinitionMap<'a>) -> BasicValueEnum<'a> {
     let value = defmap.get(&var.definition_id).expect("Variable not found");
     match value {
-        FunctionDeclaration(fn_val) => {
-            fn_val.as_global_value().as_pointer_value().into()
-        }
+        FunctionDeclaration(fn_val) => fn_val.as_global_value().as_pointer_value().into(),
         Value(v) => *v,
-        _ => unreachable!("{:?}", (&var, value))
+        _ => unreachable!("{:?}", (&var, value)),
     }
 }
 
-fn lookup_function_declaration_by_id<'a>(definition_id: &DefinitionId, defmap: &DefinitionMap<'a>) -> Option<FunctionValue<'a>> {
+fn lookup_function_declaration_by_id<'a>(
+    definition_id: &DefinitionId,
+    defmap: &DefinitionMap<'a>,
+) -> Option<FunctionValue<'a>> {
     let r = defmap.get(&definition_id);
     if let Some(FunctionDeclaration(fn_val)) = r {
         Some(*fn_val)
@@ -114,12 +120,16 @@ fn lookup_function_declaration_by_id<'a>(definition_id: &DefinitionId, defmap: &
     }
 }
 
-fn lookup_function_declaration<'a>(ast: &Ast, defmap: &DefinitionMap<'a>) -> Option<FunctionValue<'a>> {
+fn lookup_function_declaration<'a>(
+    ast: &Ast,
+    defmap: &DefinitionMap<'a>,
+) -> Option<FunctionValue<'a>> {
     match ast {
-        Ast::Variable(Variable { definition_id, ref name }) => {
-            lookup_function_declaration_by_id(definition_id, defmap)
-        }
-        _ => unimplemented!()
+        Ast::Variable(Variable {
+            definition_id,
+            ref name,
+        }) => lookup_function_declaration_by_id(definition_id, defmap),
+        _ => unimplemented!(),
     }
 }
 
@@ -132,24 +142,37 @@ struct DeclarationScan<'a> {
 impl<'a> DeclarationScan<'a> {
     fn new(context: &'a Context, name: &str) -> Self {
         let module = context.create_module(name);
-        Self { context, module, builder: context.create_builder() }
+        Self {
+            context,
+            module,
+            builder: context.create_builder(),
+        }
     }
 
-    fn write_func_definition(&mut self, d: &hir::Definition, lambda: &Lambda, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
+    fn write_func_definition(
+        &mut self,
+        d: &hir::Definition,
+        lambda: &Lambda,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> visit::VResult {
         let ast: Ast = d.clone().into();
         let name = match &d.name {
             Some(name) => name.clone(),
-            None => format!("v{}", &d.variable)
+            None => format!("v{}", &d.variable),
         };
 
-        let raw_function_type = convert_function_type(self.context, &lambda.typ).get_element_type().into_function_type();
+        let raw_function_type = convert_function_type(self.context, &lambda.typ)
+            .get_element_type()
+            .into_function_type();
 
         let mut linkage = Linkage::Internal;
         if lambda.typ.export {
             linkage = Linkage::External;
         }
 
-        let fn_val = self.module.add_function(&name, raw_function_type, Some(linkage));
+        let fn_val = self
+            .module
+            .add_function(&name, raw_function_type, Some(linkage));
         defmap.insert(d.variable, FunctionDeclaration(fn_val));
 
         println!("Enter: {:?}", name);
@@ -160,12 +183,14 @@ impl<'a> DeclarationScan<'a> {
 // record the definitions, so we can refer to them later
 // we need this so we can call variables that might be defined later
 impl<'a> visit::Visitor<DefinitionMap<'a>> for DeclarationScan<'a> {
-    fn enter_definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
+    fn enter_definition(
+        &mut self,
+        d: &hir::Definition,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> visit::VResult {
         match &*d.expr {
-            Ast::Lambda(lambda) => {
-                self.write_func_definition(d, lambda, defmap)
-            }
-            _ => unimplemented!()
+            Ast::Lambda(lambda) => self.write_func_definition(d, lambda, defmap),
+            _ => unimplemented!(),
         }
     }
 }
@@ -181,8 +206,10 @@ struct ModuleGenerator<'a> {
 
 impl<'a> ModuleGenerator<'a> {
     fn new(context: &'a Context, module: Module<'a>) -> Self {
-        Self { 
-            context, module, builder: context.create_builder(),
+        Self {
+            context,
+            module,
+            builder: context.create_builder(),
             current_definition: vec![],
             current_function: vec![],
             current_args: vec![],
@@ -205,17 +232,22 @@ impl<'a> ModuleGenerator<'a> {
         self.module.print_to_stderr()
     }
 
-
     fn add_int(&mut self, a: IntValue<'a>, b: IntValue<'a>) -> BasicValueEnum<'a> {
-        self.builder.build_int_add(a, b, "add").as_basic_value_enum()
+        self.builder
+            .build_int_add(a, b, "add")
+            .as_basic_value_enum()
     }
 
     fn sub_int(&mut self, a: IntValue<'a>, b: IntValue<'a>) -> BasicValueEnum<'a> {
-        self.builder.build_int_sub(a, b, "sub").as_basic_value_enum()
+        self.builder
+            .build_int_sub(a, b, "sub")
+            .as_basic_value_enum()
     }
 
     fn eq_int(&mut self, a: IntValue<'a>, b: IntValue<'a>) -> BasicValueEnum<'a> {
-        self.builder.build_int_compare(IntPredicate::EQ, a, b, "eq").as_basic_value_enum()
+        self.builder
+            .build_int_compare(IntPredicate::EQ, a, b, "eq")
+            .as_basic_value_enum()
     }
 
     fn unit_value(&self) -> BasicValueEnum<'a> {
@@ -225,7 +257,6 @@ impl<'a> ModuleGenerator<'a> {
         i1.const_int(0, false).into()
     }
 
-    
     /// Return the inkwell function we're currently inserting into
     pub fn current_function(&self) -> FunctionValue<'a> {
         self.current_block().get_parent().unwrap()
@@ -235,7 +266,7 @@ impl<'a> ModuleGenerator<'a> {
     pub fn current_block(&self) -> BasicBlock<'a> {
         self.builder.get_insert_block().unwrap()
     }
-    
+
     /// Does the given llvm instruction terminate its BasicBlock?
     /// This currently only checks for cases that can actually occur
     /// while codegening an arbitrary Ast node.
@@ -247,7 +278,11 @@ impl<'a> ModuleGenerator<'a> {
         )
     }
 
-    pub fn call_builtin(&mut self, builtin: &Builtin, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
+    pub fn call_builtin(
+        &mut self,
+        builtin: &Builtin,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> BasicValueEnum<'a> {
         let current_function = self.current_function();
         let always_inline = Attribute::get_named_enum_kind_id("alwaysinline");
         assert_ne!(always_inline, 0);
@@ -272,14 +307,17 @@ impl<'a> ModuleGenerator<'a> {
                 let b = self.codegen_int(b, defmap);
                 self.eq_int(a, b)
             }
-            _ => unimplemented!("{:?}", builtin)
+            _ => unimplemented!("{:?}", builtin),
         }
     }
 
     pub fn integer_value(&mut self, value: u64, kind: hir::IntegerKind) -> BasicValueEnum<'a> {
         let bits = integer_bit_count(kind);
         let unsigned = is_unsigned_integer(kind);
-        self.context.custom_width_int_type(bits).const_int(value, unsigned).as_basic_value_enum()
+        self.context
+            .custom_width_int_type(bits)
+            .const_int(value, unsigned)
+            .as_basic_value_enum()
     }
 
     fn char_value(&self, value: u64) -> BasicValueEnum<'a> {
@@ -287,7 +325,10 @@ impl<'a> ModuleGenerator<'a> {
     }
 
     fn bool_value(&self, value: bool) -> BasicValueEnum<'a> {
-        self.context.bool_type().const_int(value as u64, true).into()
+        self.context
+            .bool_type()
+            .const_int(value as u64, true)
+            .into()
     }
 
     fn float_value(&self, value: f64, kind: FloatKind) -> BasicValueEnum<'a> {
@@ -296,13 +337,15 @@ impl<'a> ModuleGenerator<'a> {
             FloatKind::F64 => self.context.f64_type().const_float(value).into(),
         }
     }
-    
+
     /// Perform codegen for a string literal. This will create a global
     /// value for the string itself
     fn cstring_value(&mut self, contents: &str) -> BasicValueEnum<'a> {
         let literal = self.context.const_string(contents.as_bytes(), true);
 
-        let global = self.module.add_global(literal.get_type(), None, "string_literal");
+        let global = self
+            .module
+            .add_global(literal.get_type(), None, "string_literal");
 
         global.set_initializer(&literal);
 
@@ -310,11 +353,13 @@ impl<'a> ModuleGenerator<'a> {
 
         let cstring_type = self.context.i8_type().ptr_type(AddressSpace::Generic);
 
-        let cast = self.builder.build_pointer_cast(value, cstring_type, "string_cast");
+        let cast = self
+            .builder
+            .build_pointer_cast(value, cstring_type, "string_cast");
 
         cast.as_basic_value_enum()
     }
-    
+
     /// It is an error in llvm to insert a block terminator (like a br) after
     /// the block has already ended from another block terminator (like a return).
     ///
@@ -322,9 +367,14 @@ impl<'a> ModuleGenerator<'a> {
     /// check that the branch hasn't yet terminated before inserting a br after
     /// a then/else branch, pattern match, or looping construct.
     pub fn codegen_branch(
-        &mut self, branch: &hir::Ast, end_block: BasicBlock<'a>,
-        defmap: &mut DefinitionMap<'a>
-    ) -> (BasicTypeEnum<'a>, Option<(BasicValueEnum<'a>, BasicBlock<'a>)>) {
+        &mut self,
+        branch: &hir::Ast,
+        end_block: BasicBlock<'a>,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> (
+        BasicTypeEnum<'a>,
+        Option<(BasicValueEnum<'a>, BasicBlock<'a>)>,
+    ) {
         let branch_value = self.codegen(branch, defmap);
 
         if self.current_instruction_is_block_terminator() {
@@ -339,14 +389,18 @@ impl<'a> ModuleGenerator<'a> {
     fn codegen_if(&mut self, v: &If, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
         let condition = self.codegen(&v.condition, defmap);
 
-        let current_function = self.current_function();//.unwrap();
+        let current_function = self.current_function(); //.unwrap();
         let then_block = self.context.append_basic_block(current_function, "then");
         let end_block = self.context.append_basic_block(current_function, "end_if");
 
         if let Some(otherwise) = &v.otherwise {
             // Setup conditional jump
             let else_block = self.context.append_basic_block(current_function, "else");
-            self.builder.build_conditional_branch(condition.into_int_value(), then_block, else_block);
+            self.builder.build_conditional_branch(
+                condition.into_int_value(),
+                then_block,
+                else_block,
+            );
 
             self.builder.position_at_end(then_block);
             let (if_type, then_option) = self.codegen_branch(&v.then, end_block, defmap);
@@ -364,7 +418,7 @@ impl<'a> ModuleGenerator<'a> {
                     let phi = self.builder.build_phi(then_value.get_type(), "if_result");
                     phi.add_incoming(&[(&then_value, then_branch), (&else_value, else_branch)]);
                     phi.as_basic_value()
-                },
+                }
                 (Some((then_value, _)), None) => then_value,
                 (None, Some((else_value, _))) => else_value,
                 (None, None) => {
@@ -374,10 +428,14 @@ impl<'a> ModuleGenerator<'a> {
                     // If we return None the compiler would crash while compiling
                     // `2 + if true return "uh" else return "oh"`
                     undef_value(if_type)
-                },
+                }
             }
         } else {
-            self.builder.build_conditional_branch(condition.into_int_value(), then_block, end_block);
+            self.builder.build_conditional_branch(
+                condition.into_int_value(),
+                then_block,
+                end_block,
+            );
 
             self.builder.position_at_end(then_block);
             self.codegen_branch(&v.then, end_block, defmap);
@@ -408,29 +466,46 @@ impl<'a> ModuleGenerator<'a> {
         value
     }
 
-    fn codegen_call(&mut self, v: &FunctionCall, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
+    fn codegen_call(
+        &mut self,
+        v: &FunctionCall,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> BasicValueEnum<'a> {
         let function = self.codegen(&v.function, defmap).into_pointer_value();
         let args = fmap(&v.args, |arg| self.codegen(arg, defmap).into());
 
         let function = CallableValue::try_from(function).unwrap();
-        self.builder.build_call(function, &args, "").try_as_basic_value().left().unwrap()
+        self.builder
+            .build_call(function, &args, "")
+            .try_as_basic_value()
+            .left()
+            .unwrap()
     }
 
-    fn codegen_lambda(&mut self, lambda: &Lambda, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
+    fn codegen_lambda(
+        &mut self,
+        lambda: &Lambda,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> BasicValueEnum<'a> {
         //let caller_block = generator.current_block();
         let def = self.current_definition.pop().unwrap();
 
-        let fn_val = lookup_function_declaration_by_id(&def.variable, defmap).expect("Missing declaration");
+        let fn_val =
+            lookup_function_declaration_by_id(&def.variable, defmap).expect("Missing declaration");
         let name = def.name.unwrap_or("lambda".into());
         //let name = self.current_definition._name.take().unwrap_or_else(|| "lambda".into());
-        
+
         // start writing a new function
         let entry = self.context.append_basic_block(fn_val, "entry");
         self.builder.position_at_end(entry);
 
         for (i, parameter) in lambda.args.iter().enumerate() {
-            let value =
-                expect_opt!(fn_val.get_nth_param(i as u32), "Could not get parameter {} of function {}", i, lambda);
+            let value = expect_opt!(
+                fn_val.get_nth_param(i as u32),
+                "Could not get parameter {} of function {}",
+                i,
+                lambda
+            );
             defmap.insert(parameter.definition_id, Value(value));
         }
 
@@ -444,10 +519,14 @@ impl<'a> ModuleGenerator<'a> {
         function_pointer
     }
 
-    fn codegen_definition(&mut self, def: &hir::Definition, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
+    fn codegen_definition(
+        &mut self,
+        def: &hir::Definition,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> BasicValueEnum<'a> {
         let name = match &def.name {
             Some(name) => name.clone(),
-            None => format!("v{}", &def.variable)
+            None => format!("v{}", &def.variable),
         };
 
         self.current_definition.push(def.clone());
@@ -460,28 +539,34 @@ impl<'a> ModuleGenerator<'a> {
         self.unit_value()
     }
 
-    fn codegen_extern(&mut self, v: &hir::Extern, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
+    fn codegen_extern(
+        &mut self,
+        v: &hir::Extern,
+        defmap: &mut DefinitionMap<'a>,
+    ) -> BasicValueEnum<'a> {
         let name = &v.name;
         let llvm_type = convert_type(&self.context, &v.typ);
 
         if matches!(&v.typ, hir::Type::Function(_)) {
-            let function_type = llvm_type.into_pointer_type().get_element_type().into_function_type();
+            let function_type = llvm_type
+                .into_pointer_type()
+                .get_element_type()
+                .into_function_type();
 
-            self
-                .module
+            self.module
                 .add_function(name, function_type, Some(Linkage::External))
                 .as_global_value()
                 .as_basic_value_enum()
         } else {
-            self.module.add_global(llvm_type, None, name).as_basic_value_enum()
+            self.module
+                .add_global(llvm_type, None, name)
+                .as_basic_value_enum()
         }
     }
 
     fn codegen(&mut self, ast: &Ast, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
         match ast {
-            Ast::Variable(var) => {
-                lookup_var(var, defmap)
-            }
+            Ast::Variable(var) => lookup_var(var, defmap),
             Ast::Sequence(Sequence { statements }) => {
                 assert!(!statements.is_empty());
 
@@ -491,31 +576,25 @@ impl<'a> ModuleGenerator<'a> {
 
                 self.codegen(statements.last().unwrap(), defmap)
             }
-            Ast::If(v) => {
-                self.codegen_if(v, defmap)
-            }
-            Ast::Builtin(builtin) => {
-                self.call_builtin(builtin, defmap)
-            }
-            Ast::Literal(literal) => {
-                self.codegen_literal(literal)
-            }
+            Ast::If(v) => self.codegen_if(v, defmap),
+            Ast::Builtin(builtin) => self.call_builtin(builtin, defmap),
+            Ast::Literal(literal) => self.codegen_literal(literal),
             Ast::Return(ret) => self.codegen_return(ret, defmap),
             Ast::FunctionCall(ret) => self.codegen_call(ret, defmap),
             Ast::Lambda(lambda) => self.codegen_lambda(lambda, defmap),
             Ast::Definition(def) => self.codegen_definition(def, defmap),
 
             Ast::Extern(v) => self.codegen_extern(v, defmap),
-            _ => unimplemented!("{:?}", ast)
+            _ => unimplemented!("{:?}", ast),
         }
     }
 }
 
 use inkwell::passes::{PassManager, PassManagerBuilder};
-use inkwell::OptimizationLevel;
-use std::error::Error;
-use std::collections::HashMap;
 use inkwell::targets::{InitializationConfig, Target, TargetMachine};
+use inkwell::OptimizationLevel;
+use std::collections::HashMap;
+use std::error::Error;
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
@@ -539,9 +618,10 @@ impl<'a> Executor<'a> {
         let link_time_optimizations = PassManager::create(());
         pass_manager_builder.populate_lto_pass_manager(&link_time_optimizations, false, true);
 
-        Self { 
+        Self {
             modules: vec![],
-            optimizer: pass_manager, link_optimizer: link_time_optimizations
+            optimizer: pass_manager,
+            link_optimizer: link_time_optimizations,
         }
     }
 
@@ -554,36 +634,48 @@ impl<'a> Executor<'a> {
                 module.print_to_stderr();
                 self.modules.push(module);
                 Ok(())
-            },
+            }
             Err(error) => {
                 module.print_to_stderr();
                 Err(error.into())
-            },
+            }
         }
     }
 
     pub fn run<T>(&self) -> Result<T, Box<dyn Error>> {
         let config = InitializationConfig::default();
         Target::initialize_native(&config)?;
-        eprintln!("Default: {:?}", TargetMachine::get_default_triple().as_str());
+        eprintln!(
+            "Default: {:?}",
+            TargetMachine::get_default_triple().as_str()
+        );
         eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
 
         let mut iter = self.modules.iter();
-        let ee = iter.next().expect("No modules").create_jit_execution_engine(OptimizationLevel::None)?;
+        let ee = iter
+            .next()
+            .expect("No modules")
+            .create_jit_execution_engine(OptimizationLevel::None)?;
         for module in iter {
             ee.add_module(&module).unwrap();
         }
 
         unsafe {
-            let f = ee.get_function::<unsafe extern "C" fn(i32) -> T>("main").unwrap();
+            let f = ee
+                .get_function::<unsafe extern "C" fn(i32) -> T>("main")
+                .unwrap();
             let ret = f.call(0);
             Ok(ret)
         }
     }
 }
 
-
-pub fn generate<'a>(context: &'a Context, name: &str, ast: &Ast, defmap: &mut DefinitionMap<'a>) -> Result<Module<'a>, Box<dyn Error>> {
+pub fn generate<'a>(
+    context: &'a Context,
+    name: &str,
+    ast: &Ast,
+    defmap: &mut DefinitionMap<'a>,
+) -> Result<Module<'a>, Box<dyn Error>> {
     let mut scan = DeclarationScan::new(context, name);
     visit::visit(ast, &mut scan, defmap).unwrap();
 
@@ -617,7 +709,6 @@ mod tests {
         println!("ret: {:?}", ret);
         assert_eq!(ret, 55);
     }
-
 
     #[test]
     fn test_selfref() {

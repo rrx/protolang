@@ -5,7 +5,7 @@ use codegen_ir::hir::Ast;
 use inkwell::OptimizationLevel;
 use std::error::Error;
 
-use crate::codegen::{generate, Executor, DefinitionMap};
+use crate::codegen::{generate, DefinitionMap, Executor};
 
 pub struct LLVMBackendContext {
     context: Context,
@@ -25,13 +25,16 @@ pub struct LLVMBackend<'a> {
     context: &'a LLVMBackendContext,
     //lower: Lower<'a>,
     exec: Executor<'a>,
-    modules: Vec<Module<'a>>
+    modules: Vec<Module<'a>>,
 }
 
 impl<'a> LLVMBackend<'a> {
     pub fn new(context: &'a LLVMBackendContext) -> Self {
-
-        Self { context, exec: Executor::new(OptimizationLevel::None, 0), modules: vec![] }
+        Self {
+            context,
+            exec: Executor::new(OptimizationLevel::None, 0),
+            modules: vec![],
+        }
     }
 
     pub fn compile_module(&mut self, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
@@ -109,5 +112,3 @@ mod tests {
         assert_eq!(11, ret);
     }
 }
-
-

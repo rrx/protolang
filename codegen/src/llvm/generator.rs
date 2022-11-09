@@ -9,9 +9,9 @@
 //! function and lazily codegens each Definition that is used so that only what is
 //! used is actually compiled into the resulting binary. Once this walk is finished
 //! the resulting inkwell::Module is optimized then linked with gcc.
+use codegen_ir::expect_opt;
 use codegen_ir::hir::{self, dispatch_on_hir, Ast, DefinitionId, FloatKind};
 use codegen_ir::util::fmap;
-use codegen_ir::expect_opt;
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
@@ -25,13 +25,13 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 
 use super::builtin;
-use std::rc::Rc;
 use codegen_ir::visit;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum DefinitionValue<'context> {
     Compiled(BasicValueEnum<'context>),
-    Value(Rc<Ast>)
+    Value(Rc<Ast>),
 }
 
 pub type DefinitionsMap<'context> = HashMap<DefinitionId, DefinitionValue<'context>>;
@@ -75,9 +75,7 @@ impl<'context> DefinitionValue<'context> {
     fn get_or_codegen(&self, generator: &mut Generator<'context>) -> BasicValueEnum<'context> {
         match self {
             Self::Compiled(value) => *value,
-            Self::Value(astrc) => {
-                astrc.as_ref().codegen(generator)
-            }
+            Self::Value(astrc) => astrc.as_ref().codegen(generator),
         }
     }
 }

@@ -7,8 +7,8 @@
 //! to get the corresponding builtin operation. Since these operations
 //! expect the llvm::Function to have a certain signature, the `builtin`
 //! function is prevented from being used outside the prelude.
-use codegen_ir::hir::{Ast, Builtin, IntegerKind, PrimitiveType, Type};
 use crate::llvm::{CodeGen, Generator};
+use codegen_ir::hir::{Ast, Builtin, IntegerKind, PrimitiveType, Type};
 
 use inkwell::attributes::{Attribute, AttributeLoc};
 use inkwell::types::BasicType;

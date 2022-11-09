@@ -9,7 +9,11 @@ impl Definitions {
     }
 
     pub fn new_definition(&mut self, name: &str, ast: Ast) -> Definition {
-        let d = Definition { variable: DefinitionId(self.next_id), name: Some(name.to_string()), expr: ast.into() };
+        let d = Definition {
+            variable: DefinitionId(self.next_id),
+            name: Some(name.to_string()),
+            expr: ast.into(),
+        };
         self.next_id += 1;
         d
     }
@@ -36,7 +40,11 @@ impl Definitions {
 }
 
 pub fn definition_from_variable(var: &Variable, rhs: Ast) -> Definition {
-    Definition { variable: var.definition_id, name: var.name.clone(), expr: rhs.into() }
+    Definition {
+        variable: var.definition_id,
+        name: var.name.clone(),
+        expr: rhs.into(),
+    }
 }
 
 pub fn i64(u: i64) -> Ast {
@@ -67,7 +75,13 @@ pub fn new_lambda(args: Vec<Variable>, body: Ast, typ: FunctionType) -> Ast {
 }
 
 pub fn new_condition(condition: Ast, then: Ast, otherwise: Option<Ast>, result_type: Type) -> Ast {
-    If { condition: condition.into(), then: then.into(), otherwise: otherwise.map(|v| v.into()), result_type }.into()
+    If {
+        condition: condition.into(),
+        then: then.into(),
+        otherwise: otherwise.map(|v| v.into()),
+        result_type,
+    }
+    .into()
 }
 
 pub fn new_call(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Ast {
@@ -96,11 +110,11 @@ pub fn append(a: Ast, b: Ast) -> Ast {
         Ast::Sequence(Sequence { statements }) => {
             exprs.extend(statements.clone());
             Sequence::new(exprs).into()
-        },
+        }
         _ => {
             exprs.push(a.clone());
             exprs.push(b.clone());
             Sequence::new(exprs).into()
-        },
+        }
     }
 }

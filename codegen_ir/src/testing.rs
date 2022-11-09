@@ -28,27 +28,49 @@ pub fn gen_fib(defs: &mut Definitions) -> Ast {
     let eq0 = eq(n.clone().into(), hir::i64(0));
 
     let ret_a: Ast = hir::new_return(a.clone().into());
-    let branch1 = hir::new_condition(eq0.into(), ret_a, None, Type::Primitive(PrimitiveType::Unit));
+    let branch1 = hir::new_condition(
+        eq0.into(),
+        ret_a,
+        None,
+        Type::Primitive(PrimitiveType::Unit),
+    );
 
     let eq1 = hir::eq(n.clone().into(), hir::i64(1));
     let ret_b: Ast = Return::new(b.clone().into()).into();
-    let branch2 = hir::new_condition(eq1.into(), ret_b, None, Type::Primitive(PrimitiveType::Unit));
+    let branch2 = hir::new_condition(
+        eq1.into(),
+        ret_b,
+        None,
+        Type::Primitive(PrimitiveType::Unit),
+    );
 
     // call the function that we've created and then increment
     let call = hir::new_call(
         fib.clone().into(),
-        vec![b.clone().into(), hir::add(a.clone().into(), b.clone().into()), hir::sub(n.clone().into(), hir::i64(1))],
+        vec![
+            b.clone().into(),
+            hir::add(a.clone().into(), b.clone().into()),
+            hir::sub(n.clone().into(), hir::i64(1)),
+        ],
         typ.clone(),
     );
 
     let block = Sequence::new(vec![branch1.into(), branch2.into(), call.into()]);
     // create a function to associate with the variable
-    let f = hir::new_lambda(vec![a.clone(), b.clone(), n.clone()], block.into(), typ.clone());
+    let f = hir::new_lambda(
+        vec![a.clone(), b.clone(), n.clone()],
+        block.into(),
+        typ.clone(),
+    );
 
     // define the function using the definition id
     let dfib = Definition::variable(fib.clone(), f.into());
 
-    let call = hir::new_call(fib.clone().into(), vec![hir::i64(0), hir::i64(1), hir::i64(10)], typ.clone());
+    let call = hir::new_call(
+        fib.clone().into(),
+        vec![hir::i64(0), hir::i64(1), hir::i64(10)],
+        typ.clone(),
+    );
 
     // single parameter function type for main
     let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
@@ -64,7 +86,11 @@ pub fn gen_x1_module(defs: &mut Definitions) -> Ast {
     // x1(x) => x+1
     // increment by 1
     let p = defs.new_variable();
-    let x1 = hir::new_lambda(vec![p.clone()], hir::add(p.clone().into(), hir::i64(1)), typ.clone());
+    let x1 = hir::new_lambda(
+        vec![p.clone()],
+        hir::add(p.clone().into(), hir::i64(1)),
+        typ.clone(),
+    );
     let dx1 = defs.new_definition("x1", x1.into());
     dx1.into()
 }
@@ -88,7 +114,11 @@ pub fn gen_main_simple(defs: &mut Definitions) -> Ast {
     // increment by 1
     let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
     let p = defs.named_variable("a");
-    let x1 = hir::new_lambda(vec![p.clone()], hir::add(p.clone().into(), hir::i64(1)), typ.clone());
+    let x1 = hir::new_lambda(
+        vec![p.clone()],
+        hir::add(p.clone().into(), hir::i64(1)),
+        typ.clone(),
+    );
     let dx1 = defs.new_definition("x1", x1.into());
     //let x1 = gen_x1_module(defs);
     let v = dx1.to_variable();
@@ -119,6 +149,5 @@ pub fn gen_self_reference(defs: &mut Definitions) -> Ast {
     append(
         hir::definition_from_variable(&b, f_a).into(),
         hir::definition_from_variable(&a, f_b).into(),
-        )
+    )
 }
-
