@@ -1,4 +1,5 @@
-use crate::{hir::{self,*}, *};
+use crate::*;
+use crate::hir::{self, *};
 
 #[derive(Debug)]
 pub enum VisitError {

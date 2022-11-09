@@ -7,7 +7,7 @@
 //! to get the corresponding builtin operation. Since these operations
 //! expect the llvm::Function to have a certain signature, the `builtin`
 //! function is prevented from being used outside the prelude.
-use crate::hir::{Ast, Builtin, IntegerKind, PrimitiveType, Type};
+use codegen_ir::hir::{Ast, Builtin, IntegerKind, PrimitiveType, Type};
 use crate::llvm::{CodeGen, Generator};
 
 use inkwell::attributes::{Attribute, AttributeLoc};
@@ -269,7 +269,7 @@ fn stack_alloc<'g>(x: &Ast, generator: &mut Generator<'g>) -> BasicValueEnum<'g>
     let alloca = generator.builder.build_alloca(value.get_type(), "alloca");
     generator.builder.build_store(alloca, value);
 
-    let ptr_type = &crate::hir::Type::Primitive(PrimitiveType::Pointer);
+    let ptr_type = &codegen_ir::hir::Type::Primitive(PrimitiveType::Pointer);
     let opaque_ptr_type = Generator::convert_type(generator.context, ptr_type).into_pointer_type();
 
     generator.builder.build_pointer_cast(alloca, opaque_ptr_type, "bitcast").as_basic_value_enum()

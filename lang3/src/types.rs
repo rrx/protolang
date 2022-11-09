@@ -1,5 +1,5 @@
 use super::*;
-use codegen::hir;
+use codegen_ir::hir;
 use serde::Serialize;
 use std::error::Error;
 use std::fmt;

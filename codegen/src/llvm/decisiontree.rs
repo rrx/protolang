@@ -1,9 +1,9 @@
 //! llvm/decisiontree.rs - Defines how to codegen a decision tree
 //! via `codegen_tree`. This decisiontree is the result of compiling
 //! a match expression into a decisiontree during type inference.
-use crate::hir;
+use codegen_ir::hir;
 use crate::llvm::{CodeGen, Generator};
-use crate::util::fmap;
+use codegen_ir::util::fmap;
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::values::BasicValueEnum;

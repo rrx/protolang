@@ -1,6 +1,6 @@
 use crate::*;
-use codegen::hir;
-use codegen::llvm::JitExecute;
+use codegen_ir::hir;
+use codegen_llvm::JitExecute;
 use logic::{UnifyType, UnifyValue};
 use std::error::Error;
 
@@ -546,7 +546,7 @@ impl AstBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codegen::llvm::LLVMBackendContext;
+    use codegen_llvm::LLVMBackendContext;
     use test_log::test;
 
     struct Test {}

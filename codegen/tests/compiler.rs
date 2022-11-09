@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use codegen::hir;
-    use codegen::llvm;
+    //use codegen::hir;
+    //use codegen::llvm;
     //use test_log::test;
 
     /*

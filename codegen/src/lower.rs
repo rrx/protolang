@@ -1,7 +1,7 @@
 use crate::{
-    hir::*,
     llvm::generator::{CodeGen, Generator, generate_definitions},
 };
+use codegen_ir::hir::*;
 pub use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::passes::{PassManager, PassManagerBuilder};

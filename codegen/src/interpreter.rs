@@ -1,12 +1,12 @@
-use crate::hir::*;
-use crate::*;
+use codegen_ir::hir::{self, *};
+//use crate::*;
 use data::env::*;
 use std::error::Error;
 //use std::collections::HashMap;
 use rpds::HashTrieMap;
 
-impl LayerKey for DefinitionId {}
-impl LayerValue for Ast {}
+//impl LayerKey for DefinitionId {}
+//impl LayerValue for Ast {}
 
 type DefinitionMap = HashTrieMap<DefinitionId, Ast>;
 type Environment = EnvLayers<DefinitionId, Ast>;
@@ -367,7 +367,7 @@ fn eval(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::*;
+    use codegen_ir::testing::*;
 
     #[test]
     fn interp_add() {

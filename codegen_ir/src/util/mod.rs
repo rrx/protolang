@@ -3,8 +3,6 @@
 use std::{collections::BTreeSet, fmt::Display, path::PathBuf, process::Command};
 
 #[macro_use]
-//pub mod logging;
-//pub mod timing;
 pub mod trustme;
 
 /// Equivalent to .iter().map(f).collect()
@@ -77,6 +75,7 @@ pub fn stdlib_dir() -> PathBuf {
     }
 }
 
+#[macro_export]
 macro_rules! expect_opt {( $result:expr , $fmt_string:expr $( , $($msg:tt)* )? ) => ({
     match $result {
         Some(t) => t,

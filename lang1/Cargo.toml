@@ -27,7 +27,7 @@ im = "15"
 miette = { version = "3.1", features = ["fancy"] }
 thiserror = "*"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm13-0"] }
-codegen = { path = "../codegen" }
+codegen_ir = { path = "../codegen_ir" }
 
 [dev-dependencies]
 criterion = "0.3"

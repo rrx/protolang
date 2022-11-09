@@ -12,6 +12,7 @@ mod module;
 mod printer;
 mod types;
 pub use constructors::*;
+use data::env::*;
 
 pub use module::ModuleBuilder;
 
@@ -22,6 +23,9 @@ pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct DefinitionId(pub usize);
+
+impl LayerKey for DefinitionId {}
+impl LayerValue for Ast {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Literal {
@@ -443,6 +447,7 @@ impl std::fmt::Display for DefinitionId {
     }
 }
 
+#[macro_export]
 macro_rules! dispatch_on_hir {
     ( $expr_name:expr, $function:expr $(, $($args:expr),* )? ) => ({
         match $expr_name {
@@ -465,7 +470,7 @@ macro_rules! dispatch_on_hir {
     });
 }
 
-pub(crate) use dispatch_on_hir;
+pub use dispatch_on_hir;
 
 //use crate::lexer::token::FloatKind;
 

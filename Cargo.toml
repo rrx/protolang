@@ -1,11 +1,13 @@
 [workspace]
 members = [
-  #"lang1",
+  "lang1",
   #"lang2",
   "frontend",
   "lang3",
   "logic",
   "codegen",
+  "codegen_ir",
+  "codegen_llvm",
   "data"
 ]
 

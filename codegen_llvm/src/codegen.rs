@@ -5,16 +5,16 @@ use inkwell::types::{FunctionType, BasicTypeEnum, BasicType, PointerType};
 use inkwell::values::{BasicValueEnum, FunctionValue, InstructionOpcode, IntValue, BasicValue, CallableValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use inkwell::basic_block::BasicBlock;
-use super::builtin;
+//use codegen_ir::hir::builtin;
 use inkwell::attributes::{Attribute, AttributeLoc};
 
 //use crate::llvm::CodeGen;
-use crate::{hir::{self,*}, *};
-use crate::visit;
-use crate::util::fmap;
+use codegen_ir::{hir::{self,*}, *};
+use codegen_ir::visit;
+use codegen_ir::util::{fmap};
 
 #[derive(Debug)]
-enum MapValue<'a> {
+pub enum MapValue<'a> {
     FunctionDeclaration(FunctionValue<'a>),
     Value(BasicValueEnum<'a>),
     AstFragment(hir::Ast)
@@ -22,7 +22,7 @@ enum MapValue<'a> {
 
 use MapValue::*;
 
-type DefinitionMap<'a> = std::collections::HashMap<DefinitionId, MapValue<'a>>;
+pub type DefinitionMap<'a> = std::collections::HashMap<DefinitionId, MapValue<'a>>;
 
 
 pub fn convert_function_type<'g>(context: &'g Context, f: &hir::FunctionType) -> PointerType<'g> {
@@ -460,6 +460,23 @@ impl<'a> ModuleGenerator<'a> {
         self.unit_value()
     }
 
+    fn codegen_extern(&mut self, v: &hir::Extern, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
+        let name = &v.name;
+        let llvm_type = convert_type(&self.context, &v.typ);
+
+        if matches!(&v.typ, hir::Type::Function(_)) {
+            let function_type = llvm_type.into_pointer_type().get_element_type().into_function_type();
+
+            self
+                .module
+                .add_function(name, function_type, Some(Linkage::External))
+                .as_global_value()
+                .as_basic_value_enum()
+        } else {
+            self.module.add_global(llvm_type, None, name).as_basic_value_enum()
+        }
+    }
+
     fn codegen(&mut self, ast: &Ast, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
         match ast {
             Ast::Variable(var) => {
@@ -488,6 +505,7 @@ impl<'a> ModuleGenerator<'a> {
             Ast::Lambda(lambda) => self.codegen_lambda(lambda, defmap),
             Ast::Definition(def) => self.codegen_definition(def, defmap),
 
+            Ast::Extern(v) => self.codegen_extern(v, defmap),
             _ => unimplemented!("{:?}", ast)
         }
     }
@@ -501,7 +519,7 @@ use inkwell::targets::{InitializationConfig, Target, TargetMachine};
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
-struct Executor<'a> {
+pub struct Executor<'a> {
     modules: Vec<Module<'a>>,
     optimizer: PassManager<Module<'a>>,
     link_optimizer: PassManager<Module<'a>>,
@@ -565,7 +583,7 @@ impl<'a> Executor<'a> {
 }
 
 
-fn generate<'a>(context: &'a Context, name: &str, ast: &Ast, defmap: &mut DefinitionMap<'a>) -> Result<Module<'a>, Box<dyn Error>> {
+pub fn generate<'a>(context: &'a Context, name: &str, ast: &Ast, defmap: &mut DefinitionMap<'a>) -> Result<Module<'a>, Box<dyn Error>> {
     let mut scan = DeclarationScan::new(context, name);
     visit::visit(ast, &mut scan, defmap).unwrap();
 
@@ -580,7 +598,7 @@ fn generate<'a>(context: &'a Context, name: &str, ast: &Ast, defmap: &mut Defini
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::*;
+    use codegen_ir::testing::*;
 
     #[test]
     fn test_fib() {
