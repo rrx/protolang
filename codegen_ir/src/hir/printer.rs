@@ -4,8 +4,8 @@ use std::rc::Rc;
 use std::{collections::HashSet, fmt::Formatter};
 
 use super::*;
-use crate::hir::Ast;
 use crate::dispatch_on_hir;
+use crate::hir::Ast;
 
 #[derive(Default)]
 pub struct AstPrinter {

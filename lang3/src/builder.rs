@@ -23,7 +23,10 @@ impl Visitor<SymbolTable> for AstBuilder {
 }
 
 pub fn lower_variable(var: &Variable) -> hir::Variable {
-    hir::Variable { definition_id: hir::DefinitionId(var.id.0), name: Some(var.name.clone()) }
+    hir::Variable {
+        definition_id: hir::DefinitionId(var.id.0),
+        name: Some(var.name.clone()),
+    }
 }
 
 impl AstBuilder {

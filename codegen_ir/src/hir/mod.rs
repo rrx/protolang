@@ -49,17 +49,6 @@ impl Variable {
     }
 }
 
-/*
-impl From<DefinitionId> for Variable {
-    fn from(definition_id: DefinitionId) -> Variable {
-        Variable {
-            definition_id,
-            name: None,
-        }
-    }
-}
-*/
-
 impl From<Definition> for Variable {
     fn from(definition: Definition) -> Variable {
         Variable {
@@ -68,15 +57,6 @@ impl From<Definition> for Variable {
         }
     }
 }
-
-
-/*
-impl DefinitionId {
-    pub fn to_variable(self) -> Ast {
-        Ast::Variable(self.into())
-    }
-}
-*/
 
 /// \a b. expr
 /// Function definitions are also desugared to a ast::Definition with a ast::Lambda as its body
@@ -375,7 +355,6 @@ impl Ast {
     }
 
     pub fn to_ron(&self) -> String {
-        //Result<String, ron::Error> {
         use ron::ser::{to_string_pretty, PrettyConfig};
         let pretty = PrettyConfig::new()
             //.depth_limit(3)

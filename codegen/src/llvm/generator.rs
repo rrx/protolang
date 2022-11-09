@@ -9,9 +9,9 @@
 //! function and lazily codegens each Definition that is used so that only what is
 //! used is actually compiled into the resulting binary. Once this walk is finished
 //! the resulting inkwell::Module is optimized then linked with gcc.
+use codegen_ir::dispatch_on_hir;
 use codegen_ir::expect_opt;
 use codegen_ir::hir::{self, Ast, DefinitionId, FloatKind};
-use codegen_ir::dispatch_on_hir;
 use codegen_ir::util::fmap;
 
 use inkwell::basic_block::BasicBlock;
