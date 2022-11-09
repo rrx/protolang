@@ -5,15 +5,15 @@ type DefinitionMap = std::collections::HashMap<DefinitionId, Ast>;
 type DefinitionNames = std::collections::HashMap<String, DefinitionId>;
 type Environment = EnvLayers<DefinitionId, Ast>;
 
+use codegen_ir::util::fmap;
 use std::error::Error;
 use std::fmt;
-use codegen_ir::util::fmap;
 
 type EResult = Result<Ast, Box<dyn Error>>;
 
 #[derive(Debug, Clone)]
 enum InterpError {
-    Error(String)
+    Error(String),
 }
 impl Error for InterpError {}
 impl fmt::Display for InterpError {
@@ -25,12 +25,12 @@ impl fmt::Display for InterpError {
 #[derive(Default)]
 struct Interp {
     names: DefinitionNames,
-    env: Environment
+    env: Environment,
 }
 fn lookup_var<'a>(var: &Variable, defmap: &DefinitionMap) -> EResult {
     match defmap.get(&var.definition_id) {
         Some(value) => Ok(value.clone()),
-        None => Err(InterpError::Error("Variable not found".into()).into())
+        None => Err(InterpError::Error("Variable not found".into()).into()),
     }
 }
 
@@ -51,9 +51,7 @@ impl Interp {
     fn eval_variable(&mut self, var: &Variable, defmap: &mut DefinitionMap) -> EResult {
         let result = match self.env.resolve(&var.definition_id) {
             Some(r) => Ok(r.clone()),
-            None => {
-                lookup_var(var, defmap)
-            }
+            None => lookup_var(var, defmap),
         };
         //println!("find: {:?}", (&var, &result));
         result
@@ -75,7 +73,11 @@ impl Interp {
     }
 
     fn eval_call(&mut self, call: &FunctionCall, defmap: &mut DefinitionMap) -> EResult {
-        let FunctionCall { function, args, function_type } = call;
+        let FunctionCall {
+            function,
+            args,
+            function_type,
+        } = call;
         match **function {
             Ast::Variable(ref var) => {
                 let value = lookup_var(&var, defmap)?;
@@ -101,27 +103,27 @@ impl Interp {
                             self.env.define(definition_id, v);
                         }
 
-                        let mut result = self.eval(&lambda.body, defmap)?; 
+                        let mut result = self.eval(&lambda.body, defmap)?;
                         match result {
                             Ast::Return(ret) => {
                                 result = self.eval(&ret.expression, defmap)?;
                             }
-                            _ => ()
+                            _ => (),
                         }
                         self.env = original_env;
                         Ok(result)
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
     fn eval_i64(&mut self, ast: &Ast, defmap: &mut DefinitionMap) -> Result<i64, Box<dyn Error>> {
         match self.eval(ast, defmap)?.try_i64() {
             Some(v) => Ok(v),
-            None => Err(InterpError::Error("int cast failed".into()).into())
+            None => Err(InterpError::Error("int cast failed".into()).into()),
         }
     }
 
@@ -131,19 +133,19 @@ impl Interp {
                 let lhs = self.eval_i64(lhs, defmap)?;
                 let rhs = self.eval_i64(rhs, defmap)?;
                 Ok(hir::i64(lhs as i64 + rhs as i64))
-            },
+            }
             Builtin::SubInt(lhs, rhs) => {
                 let lhs = self.eval_i64(lhs, defmap)?;
                 let rhs = self.eval_i64(rhs, defmap)?;
                 Ok(hir::i64(lhs as i64 - rhs as i64))
-            },
+            }
             Builtin::EqInt(lhs, rhs) => {
                 let lhs = self.eval_i64(lhs, defmap)?;
                 let rhs = self.eval_i64(rhs, defmap)?;
                 let result = hir::bool(lhs == rhs);
                 //println!("eq: {}, {} => {}", lhs, rhs, result);
                 Ok(result)
-            },
+            }
             _ => unimplemented!(),
         }
     }
@@ -162,11 +164,7 @@ impl Interp {
         Ok(def.into())
     }
 
-    fn eval(
-        &mut self,
-        ast: &Ast,
-        defmap: &mut DefinitionMap,
-        ) -> EResult {
+    fn eval(&mut self, ast: &Ast, defmap: &mut DefinitionMap) -> EResult {
         //println!("eval({:?})", ast);
         match ast {
             Ast::Variable(var) => self.eval_variable(var, defmap),
@@ -192,7 +190,7 @@ impl Interp {
                         Ast::Return(_) => {
                             return Ok(result);
                         }
-                        _ => ()
+                        _ => (),
                     }
                 }
 
@@ -205,20 +203,22 @@ impl Interp {
     fn call_name(&mut self, name: &str, args: Vec<Ast>, defmap: &mut DefinitionMap) -> EResult {
         match self.names.get(name) {
             Some(def_id) => {
-                let var = Variable { definition_id: *def_id, name: Some(name.to_string()) };
+                let var = Variable {
+                    definition_id: *def_id,
+                    name: Some(name.to_string()),
+                };
                 let value = lookup_var(&var, defmap)?;
                 match value {
                     Ast::Lambda(lambda) => {
                         let call = FunctionCall::new(var.into(), args, lambda.typ);
                         self.eval(&call.into(), defmap)
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
-            None => Err(InterpError::Error("name does not exist".into()).into())
+            None => Err(InterpError::Error("name does not exist".into()).into()),
         }
     }
-
 }
 
 #[cfg(test)]

@@ -84,7 +84,10 @@ impl FunctionCall {
     pub fn new(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Self {
         // params should match the type, anything else isn't supported
         if args.len() != typ.parameters.len() {
-            unreachable!("Parameters must match the type signature: {:?}, {:?}, {:?}", args, typ.parameters, f)
+            unreachable!(
+                "Parameters must match the type signature: {:?}, {:?}, {:?}",
+                args, typ.parameters, f
+            )
         }
 
         match f {
