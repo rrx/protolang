@@ -1,21 +1,48 @@
 use crate::ast::*;
 use crate::eval::*;
-use crate::ir::{self, TypeChecker, IR};
+//use crate::ir::{self, TypeChecker, IR};
 use crate::results::*;
 use crate::tokens::{FileId, Tok, TokensList};
 use nom::InputIter;
 
 use log::*;
 
+#[derive(Default)]
+pub struct Results {
+    results: Compiler,
+}
+
+impl Results {
+    pub fn print(&self) {
+        self.results.print();
+    }
+
+    pub fn clear(&mut self) {
+        self.results.clear();
+    }
+
+    pub fn push_error(&mut self, r: LangError) {
+        self.results.push(r);
+    }
+
+    pub fn add_source(&mut self, filename: String, source: String) -> FileId {
+        self.results.add_source(filename, source)
+    }
+
+    pub fn has_errors(&self) -> bool {
+        self.results.has_errors
+    }
+}
+
 pub struct Program {
-    checker: TypeChecker,
+    checker: Results,
     pub value: ExprRefWithEnv,
 }
 
 impl Program {
     pub fn new() -> Self {
         Self {
-            checker: TypeChecker::default(),
+            checker: Results::default(),
             value: ExprRefWithEnv::new(Expr::Void.into(), Environment::default()),
         }
     }
@@ -169,13 +196,13 @@ impl Program {
         }
     }
 
-    pub fn check_str(&mut self, s: &str, env: ir::Environment) -> anyhow::Result<IR> {
-        self.checker.check_str(s, env)
-    }
+    //pub fn check_str(&mut self, s: &str, env: ir::Environment) -> anyhow::Result<IR> {
+        //self.checker.check_str(s, env)
+    //}
 
-    pub fn check_file(&mut self, filename: &str, env: ir::Environment) -> anyhow::Result<IR> {
-        self.checker.check_file(filename, env)
-    }
+    //pub fn check_file(&mut self, filename: &str, env: ir::Environment) -> anyhow::Result<IR> {
+        //self.checker.check_file(filename, env)
+    //}
 }
 
 #[cfg(test)]

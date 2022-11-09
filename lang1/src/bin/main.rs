@@ -1,4 +1,4 @@
-use lang1::ir::{base_env, TypeChecker};
+//use lang1::ir::{base_env, TypeChecker};
 use lang1::repl::*;
 use std::error::Error;
 fn main() -> Result<(), Box<dyn Error>> {
@@ -17,6 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 cli(args.iter().skip(2).cloned().collect::<Vec<_>>())?;
             }
             "analyze" => {}
+            /*
             "check" => {
                 let env = base_env();
                 let mut c = TypeChecker::default();
@@ -35,6 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 println!("has_errors: {}", c.has_errors());
                 c.print();
             }
+            */
             _ => unimplemented!(),
         }
     }

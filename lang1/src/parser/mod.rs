@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::lexer::*;
 use crate::tokens::TokensList;
 use crate::tokens::*;
-use log::debug;
+//use log::debug;
 use nom::branch::*;
 use nom::bytes::complete::{take, take_while};
 use nom::combinator::verify;
@@ -496,6 +496,7 @@ pub fn parse_str(s: &str) -> anyhow::Result<ExprNode> {
 mod tests {
     use super::error::print_result;
     use super::*;
+    use log::debug;
     use crate::lexer::*;
     use crate::program::Program;
     use crate::sexpr::SExpr;
@@ -914,9 +915,10 @@ mod tests {
 
     #[test]
     fn locations() {
-        let env = crate::ir::base_env();
+        //let env = crate::ir::base_env();
+        let env = crate::eval::Environment::default();
         let mut program = Program::new();
-        let r = program.check_str("assert(1 == 1)", env).unwrap();
+        let r = program.eval("assert(1 == 1)", env).unwrap();
         program.print();
     }
 }
