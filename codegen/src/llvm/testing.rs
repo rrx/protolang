@@ -24,21 +24,6 @@ use MapValue::*;
 
 type DefinitionMap<'a> = std::collections::HashMap<DefinitionId, MapValue<'a>>;
 
-struct FirstPass<'a> {
-    context: &'a Context,
-    module: Module<'a>,
-    builder: Builder<'a>,
-}
-
-struct SecondPass<'a> {
-    context: &'a Context,
-    module: Module<'a>,
-    builder: Builder<'a>,
-    current_definition: Vec<Definition>,
-    current_function: Vec<FunctionValue<'a>>,
-    current_args: Vec<Ast>,
-
-}
 
 pub fn convert_function_type<'g>(context: &'g Context, f: &hir::FunctionType) -> PointerType<'g> {
     let parameters = fmap(&f.parameters, |param| convert_type(context, param).into());
@@ -138,7 +123,13 @@ fn lookup_function_declaration<'a>(ast: &Ast, defmap: &DefinitionMap<'a>) -> Opt
     }
 }
 
-impl<'a> FirstPass<'a> {
+struct DeclarationScan<'a> {
+    context: &'a Context,
+    module: Module<'a>,
+    builder: Builder<'a>,
+}
+
+impl<'a> DeclarationScan<'a> {
     fn new(context: &'a Context, name: &str) -> Self {
         let module = context.create_module(name);
         Self { context, module, builder: context.create_builder() }
@@ -159,23 +150,16 @@ impl<'a> FirstPass<'a> {
         }
 
         let fn_val = self.module.add_function(&name, raw_function_type, Some(linkage));
-        //let fn_type = self.context.f32_type().fn_type(&[], false);
-        //let fn_val = self.module.add_function(&name, fn_type, None);
         defmap.insert(d.variable, FunctionDeclaration(fn_val));
 
         println!("Enter: {:?}", name);
         Ok(())
     }
-
-    fn print(&self) {
-        self.module.print_to_stderr()
-    }
-
 }
 
 // record the definitions, so we can refer to them later
 // we need this so we can call variables that might be defined later
-impl<'a> visit::Visitor<DefinitionMap<'a>> for FirstPass<'a> {
+impl<'a> visit::Visitor<DefinitionMap<'a>> for DeclarationScan<'a> {
     fn enter_definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
         match &*d.expr {
             Ast::Lambda(lambda) => {
@@ -186,7 +170,16 @@ impl<'a> visit::Visitor<DefinitionMap<'a>> for FirstPass<'a> {
     }
 }
 
-impl<'a> SecondPass<'a> {
+struct ModuleGenerator<'a> {
+    context: &'a Context,
+    module: Module<'a>,
+    builder: Builder<'a>,
+    current_definition: Vec<Definition>,
+    current_function: Vec<FunctionValue<'a>>,
+    current_args: Vec<Ast>,
+}
+
+impl<'a> ModuleGenerator<'a> {
     fn new(context: &'a Context, module: Module<'a>) -> Self {
         Self { 
             context, module, builder: context.create_builder(),
@@ -253,7 +246,6 @@ impl<'a> SecondPass<'a> {
             Some(InstructionOpcode::Return | InstructionOpcode::Unreachable)
         )
     }
-    
 
     pub fn call_builtin(&mut self, builtin: &Builtin, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
         let current_function = self.current_function();
@@ -436,15 +428,6 @@ impl<'a> SecondPass<'a> {
         let entry = self.context.append_basic_block(fn_val, "entry");
         self.builder.position_at_end(entry);
 
-        //let (function, function_value) = generator.function(&name, &self.typ);
-
-        // Bind each parameter node to the nth parameter of `function`
-        //for (i, parameter) in lambda.args.iter().enumerate() {
-            //let value =
-                //expect_opt!(function.get_nth_param(i as u32), "Could not get parameter {} of function {}", i, self);
-            //defmap.insert(parameter.definition_id, DefinitionValue::Compiled(value));
-        //}
-
         for (i, parameter) in lambda.args.iter().enumerate() {
             let value =
                 expect_opt!(fn_val.get_nth_param(i as u32), "Could not get parameter {} of function {}", i, lambda);
@@ -452,8 +435,6 @@ impl<'a> SecondPass<'a> {
         }
 
         let return_value = self.codegen(&lambda.body, defmap);
-
-        //let return_value = self.body.codegen(generator);
 
         self.builder.build_return(Some(&return_value));
         //generator.builder.position_at_end(caller_block);
@@ -469,7 +450,6 @@ impl<'a> SecondPass<'a> {
             None => format!("v{}", &def.variable)
         };
 
-
         self.current_definition.push(def.clone());
 
         //self.current_function_info = Some(self.variable);
@@ -478,23 +458,7 @@ impl<'a> SecondPass<'a> {
         defmap.insert(def.variable, Value(value));
 
         self.unit_value()
-
-        /*
-        let r = defmap.get(&def.variable);
-        if let Some(FunctionDeclaration(fn_val)) = r {
-            self.push_function(*fn_val);
-            // start writing function
-            let entry = self.context.append_basic_block(*fn_val, "entry");
-            self.builder.position_at_end(entry);
-        } else {
-            unreachable!("{:?}", &r)
-        }
-
-        println!("Exit: {:?}", name);
-        */
-        //Ok(())
     }
-
 
     fn codegen(&mut self, ast: &Ast, defmap: &mut DefinitionMap<'a>) -> BasicValueEnum<'a> {
         match ast {
@@ -527,98 +491,6 @@ impl<'a> SecondPass<'a> {
             _ => unimplemented!("{:?}", ast)
         }
     }
-
-    fn write_call(&mut self, v: &hir::FunctionCall, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
-        // we must be writing in the context of a function
-        let current = self.get_current_function().unwrap();
-
-        let hir::FunctionCall { ref function, args, function_type } = v;
-        let fn_val = lookup_function_declaration(function, defmap).expect("Variable look up failed");
-        let args = fmap(args, |arg| self.codegen(arg, defmap).into());
-        let entry = self.context.append_basic_block(current, "entry");
-        self.builder.position_at_end(entry);
-        let ret_val = self.builder.build_call(fn_val, &args, "").try_as_basic_value().left().unwrap();
-        self.builder.build_return(Some(&ret_val));
-        println!("write call: {:?}", v);
-        Ok(())
-    }
-
-}
-
-impl<'a> visit::Visitor<DefinitionMap<'a>> for SecondPass<'a> {
-    /*
-    fn enter_call(&mut self, v: &hir::FunctionCall, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
-        let hir::FunctionCall { ref function, args, function_type } = v;
-        for arg in args {
-            self.current_args.push(arg.clone());
-        }
-        self.write_call(v, defmap) 
-    }
-    fn exit_call(&mut self, v: &hir::FunctionCall, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
-        Ok(())
-    }
-    */
-
-    /*
-    fn enter_lambda(&mut self, d: &hir::Lambda, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
-        // get the current function
-        //let current = self.get_current_function().unwrap();
-        let current = self.current_function();
-
-        // start writing a new function
-        let entry = self.context.append_basic_block(current, "entry");
-        self.builder.position_at_end(entry);
-
-        let Lambda { args, body, typ } = d;
-        // Bind each parameter node to the nth parameter of `function`
-        
-        if current.count_params() as usize != args.len() {
-            self.print();
-            unreachable!("Invalid args length: {:?}", (&current, &args))
-        }
-
-        for (i, parameter) in args.iter().enumerate() {
-            let value =
-                expect_opt!(current.get_nth_param(i as u32), "Could not get parameter {} of function {}", i, d);
-            defmap.insert(parameter.definition_id, Value(value));
-        }
-
-        let return_value = self.codegen(body, defmap);
-        Ok(())
-    }
-
-    fn exit_lambda(&mut self, d: &hir::Lambda, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
-        Ok(())
-    }
-    */
-
-    /*
-    fn enter_definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
-        let name = match &d.name {
-            Some(name) => name.clone(),
-            None => format!("v{}", &d.variable)
-        };
-
-        let r = defmap.get(&d.variable);
-        if let Some(FunctionDeclaration(fn_val)) = r {
-            self.push_function(*fn_val);
-            // start writing function
-            let entry = self.context.append_basic_block(*fn_val, "entry");
-            self.builder.position_at_end(entry);
-        } else {
-            unreachable!("{:?}", &r)
-        }
-
-        println!("Exit: {:?}", name);
-        Ok(())
-    }
-
-    fn exit_definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionMap<'a>) -> visit::VResult {
-        //self.codegen(d.into(), defmap);
-        self.pop_function();
-        Ok(())
-    }
-    */
 }
 
 use inkwell::passes::{PassManager, PassManagerBuilder};
@@ -629,14 +501,13 @@ use inkwell::targets::{InitializationConfig, Target, TargetMachine};
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
-struct ThirdPass<'a> {
-    //context: &'a Context,
-    modules: ModuleMap<'a>,
+struct Executor<'a> {
+    modules: Vec<Module<'a>>,
     optimizer: PassManager<Module<'a>>,
     link_optimizer: PassManager<Module<'a>>,
 }
 
-impl<'a> ThirdPass<'a> {
+impl<'a> Executor<'a> {
     pub fn new(optimization_level: OptimizationLevel, size_level: u32) -> Self {
         let pass_manager_builder = PassManagerBuilder::create();
 
@@ -651,22 +522,19 @@ impl<'a> ThirdPass<'a> {
         pass_manager_builder.populate_lto_pass_manager(&link_time_optimizations, false, true);
 
         Self { 
-            //context: pass.context,
-            modules: ModuleMap::default(),
-            //module: pass.module,
+            modules: vec![],
             optimizer: pass_manager, link_optimizer: link_time_optimizations
         }
     }
 
-    pub fn add(&mut self, second: SecondPass<'a>) -> Result<(), Box<dyn Error>> {
-        let module = second.module;
+    pub fn add(&mut self, module: Module<'a>) -> Result<(), Box<dyn Error>> {
         self.optimizer.run_on(&module);
-        let name = module.get_name().to_str().unwrap();
+        //let name = module.get_name().to_str().unwrap();
 
         match module.verify() {
             Ok(_) => {
                 module.print_to_stderr();
-                self.modules.insert(name.into(), module);
+                self.modules.push(module);
                 Ok(())
             },
             Err(error) => {
@@ -676,17 +544,15 @@ impl<'a> ThirdPass<'a> {
         }
     }
 
-    pub fn run<T>(&self, context: &'a Context) -> Result<T, Box<dyn Error>> {
+    pub fn run<T>(&self) -> Result<T, Box<dyn Error>> {
         let config = InitializationConfig::default();
         Target::initialize_native(&config)?;
         eprintln!("Default: {:?}", TargetMachine::get_default_triple().as_str());
         eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
 
-        // dummy module to just create the execution engine
-        let module = context.create_module("__xmain__");
-        let ee = module.create_jit_execution_engine(OptimizationLevel::None)?;
-
-        for (_name, module) in &self.modules {
+        let mut iter = self.modules.iter();
+        let ee = iter.next().expect("No modules").create_jit_execution_engine(OptimizationLevel::None)?;
+        for module in iter {
             ee.add_module(&module).unwrap();
         }
 
@@ -696,6 +562,19 @@ impl<'a> ThirdPass<'a> {
             Ok(ret)
         }
     }
+}
+
+
+fn generate<'a>(context: &'a Context, name: &str, ast: &Ast, defmap: &mut DefinitionMap<'a>) -> Result<Module<'a>, Box<dyn Error>> {
+    let mut scan = DeclarationScan::new(context, name);
+    visit::visit(ast, &mut scan, defmap).unwrap();
+
+    let mut gen = ModuleGenerator::new(&context, scan.module);
+    let v = gen.codegen(&ast, defmap);
+    println!("v: {:?}", v);
+    println!("def: {:?}", defmap);
+    gen.print();
+    Ok(gen.module)
 }
 
 #[cfg(test)]
@@ -711,17 +590,12 @@ mod tests {
 
         let context = Context::create();
         let mut defmap = DefinitionMap::default();
-        let mut first = FirstPass::new(&context, "test");
-        visit::visit(&ast, &mut first, &mut defmap).unwrap();
-        let mut second = SecondPass::new(&context, first.module);
-        visit::visit(&ast, &mut second, &mut defmap).unwrap();
-        let v = second.codegen(&ast, &mut defmap);
 
-        second.print();
-        println!("def: {:?}", defmap);
-        let mut third = ThirdPass::new(OptimizationLevel::None, 0);
-        third.add(second);
-        let ret = third.run::<i64>(&context).unwrap();
+        let module = generate(&context, "test", &ast, &mut defmap).unwrap();
+
+        let mut exec = Executor::new(OptimizationLevel::None, 0);
+        exec.add(module);
+        let ret = exec.run::<i64>().unwrap();
         println!("ret: {:?}", ret);
         assert_eq!(ret, 55);
     }
@@ -735,39 +609,6 @@ mod tests {
 
         let context = Context::create();
         let mut defmap = DefinitionMap::default();
-        let mut first = FirstPass::new(&context, "test");
-        visit::visit(&ast, &mut first, &mut defmap).unwrap();
-        let mut second = SecondPass::new(&context, first.module);
-        visit::visit(&ast, &mut second, &mut defmap).unwrap();
-        second.print();
-        println!("def: {:?}", defmap);
-    }
-
-    #[test]
-    fn test_function() {
-        let context = Context::create();
-        let module = context.create_module("my_module");
-
-        let builder = context.create_builder();
-        let fn_type = context.f32_type().fn_type(&[], false);
-        let fn1_val = module.add_function("f1", fn_type, None);
-        let fn2_val = module.add_function("f2", fn_type, None);
-
-        let entry1 = context.append_basic_block(fn1_val, "entry");
-        let entry2 = context.append_basic_block(fn2_val, "entry");
-
-        //let void_ty = context.void_type();
-
-        builder.position_at_end(entry1);
-        let ret_val = builder.build_call(fn2_val, &[], "call").try_as_basic_value().left().unwrap();
-        builder.build_return(Some(&ret_val));
-
-        builder.position_at_end(entry2);
-        let ret_val = builder.build_call(fn1_val, &[], "call").try_as_basic_value().left().unwrap();
-        builder.build_return(Some(&ret_val));
-
-        assert_eq!(fn1_val.get_name().to_str(), Ok("f1"));
-        assert_eq!(fn1_val.get_linkage(), Linkage::External);
-        module.print_to_stderr()
+        let module = generate(&context, "test", &ast, &mut defmap).unwrap();
     }
 }
