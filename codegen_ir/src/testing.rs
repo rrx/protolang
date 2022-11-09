@@ -72,8 +72,8 @@ pub fn gen_fib(defs: &mut Definitions) -> Ast {
         typ.clone(),
     );
 
-    // single parameter function type for main
-    let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
+    // no parameters on main function
+    let typ = FunctionType::export(vec![Type::i64()]);
     let f_main = hir::new_lambda(vec![], call.into(), typ.clone());
     let df_main = defs.new_definition("main", f_main.into());
     Sequence::new(vec![dfib.into(), df_main.into()]).into()

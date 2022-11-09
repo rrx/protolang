@@ -47,6 +47,10 @@ pub fn definition_from_variable(var: &Variable, rhs: Ast) -> Definition {
     }
 }
 
+pub fn unit() -> Ast {
+    Ast::Literal(Literal::Unit)
+}
+
 pub fn i64(u: i64) -> Ast {
     unsafe { Ast::Literal(Literal::Integer(std::mem::transmute(u), IntegerKind::I64)) }
 }

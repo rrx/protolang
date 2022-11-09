@@ -242,6 +242,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "codegen_interp"
+version = "0.1.0"
+dependencies = [
+ "codegen_ir",
+ "data",
+ "env_logger",
+ "log",
+]
+
+[[package]]
 name = "codegen_ir"
 version = "0.1.0"
 dependencies = [

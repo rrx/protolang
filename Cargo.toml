@@ -7,6 +7,7 @@ members = [
   #"codegen",
   "codegen_ir",
   "codegen_llvm",
+  "codegen_interp",
   "data"
 ]
 

@@ -84,7 +84,7 @@ impl FunctionCall {
     pub fn new(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Self {
         // params should match the type, anything else isn't supported
         if args.len() != typ.parameters.len() {
-            unimplemented!("Parameters must match the type signature")
+            unreachable!("Parameters must match the type signature: {:?}, {:?}, {:?}", args, typ.parameters, f)
         }
 
         match f {
@@ -346,6 +346,14 @@ impl Ast {
     pub fn try_i64(&self) -> Option<i64> {
         if let Self::Literal(Literal::Integer(u, IntegerKind::I64)) = self {
             Some(*u as i64)
+        } else {
+            None
+        }
+    }
+
+    pub fn try_bool(&self) -> Option<bool> {
+        if let Self::Literal(Literal::Bool(b)) = self {
+            Some(*b)
         } else {
             None
         }

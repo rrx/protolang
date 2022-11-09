@@ -1,9 +1,13 @@
 pub mod hir;
 
+pub use hir::*;
+
 #[macro_use]
 pub mod util;
 
 pub mod scan;
+pub use scan::*;
+
 pub mod testing;
 pub mod visit;
 

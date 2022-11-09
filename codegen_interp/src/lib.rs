@@ -1,3 +1,6 @@
+mod eval;
+pub use eval::*;
+
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

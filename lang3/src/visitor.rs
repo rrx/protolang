@@ -1,8 +1,8 @@
 use crate::*;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum VisitError {
-    Error,
+    Error(String),
 }
 
 pub type VResult = Result<(), VisitError>;
