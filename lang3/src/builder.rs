@@ -22,6 +22,10 @@ impl Visitor<SymbolTable> for AstBuilder {
     }
 }
 
+pub fn lower_variable(var: &Variable) -> hir::Variable {
+    hir::Variable { definition_id: hir::DefinitionId(var.id.0), name: Some(var.name.clone()) }
+}
+
 impl AstBuilder {
     pub fn type_next_id(&mut self) -> DefinitionId {
         let d = DefinitionId(self.last_id);
@@ -425,7 +429,7 @@ impl AstBuilder {
             Ast::Literal(Literal::Int(u)) => Ok(hir::i64(*u as i64)),
             Ast::Literal(Literal::Float(f)) => Ok(hir::f64(*f)),
             Ast::Literal(Literal::String(_)) => unimplemented!("Strings are not implemented yet"),
-            Ast::Variable(v) => Ok(hir::DefinitionId(v.id.0).to_variable()),
+            Ast::Variable(v) => Ok(lower_variable(v).into()),
             Ast::Extern(sig) => {
                 let subst = SymbolTable::default();
                 let sig = Type::lower_list(&sig, &subst)?;
@@ -449,10 +453,8 @@ impl AstBuilder {
             }
             Ast::Function { params, body, ty } => {
                 let mut new_params = vec![];
-                for p in params {
-                    let d = hir::DefinitionId(p.id.0);
-                    let v = d.into();
-                    new_params.push(v);
+                for var in params {
+                    new_params.push(lower_variable(var));
                 }
                 let body = self.lower(body)?;
 
@@ -469,13 +471,13 @@ impl AstBuilder {
             Ast::Apply(var, args) => {
                 // We need to map f to a concrete function
                 // We need the definition id that represents the compiled version of the function
-                let lowered_var = hir::DefinitionId(var.id.0).to_variable();
+                let lowered_var = lower_variable(var);
                 let args = self.lower_list(args)?;
                 let subst = SymbolTable::default();
                 let sig = var.ty.children();
                 let sig = Type::lower_list(&sig, &subst)?;
                 let ty = hir::FunctionType::export(sig);
-                Ok(hir::FunctionCall::new(lowered_var, args, ty).into())
+                Ok(hir::FunctionCall::new(lowered_var.into(), args, ty).into())
             }
 
             Ast::Internal(v) => match v {

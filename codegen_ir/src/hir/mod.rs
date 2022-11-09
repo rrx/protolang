@@ -35,27 +35,6 @@ pub enum Literal {
     Unit,
 }
 
-/*
-#[derive(Debug, Clone)]
-pub struct DefinitionInfo {
-    /// The Ast for the Ast::Definition which defines this Variable.
-    /// This may be None if this variable was defined from a function
-    /// parameter or a match pattern.
-    ///
-    /// This Ast is expected to contain a hir::Definition in the form
-    /// `id = expr` where id == self.definition_id. Most definitions will
-    /// be exactly this, but others may be a sequence of several definitions
-    /// in the case of e.g. tuple unpacking.
-    pub definition: Option<Rc<Ast>>,
-
-    pub definition_id: DefinitionId,
-
-    // This field isn't needed, it is used only to make the output
-    // of --show-hir more human readable for debugging.
-    pub name: Option<String>,
-}
-*/
-
 #[derive(Debug, Clone, Serialize)]
 pub struct Variable {
     pub definition_id: DefinitionId,
@@ -70,17 +49,16 @@ impl Variable {
     }
 }
 
-//pub type Variable = DefinitionInfo;
-
+/*
 impl From<DefinitionId> for Variable {
     fn from(definition_id: DefinitionId) -> Variable {
         Variable {
             definition_id,
-            //definition: None,
             name: None,
         }
     }
 }
+*/
 
 impl From<Definition> for Variable {
     fn from(definition: Definition) -> Variable {
@@ -91,11 +69,14 @@ impl From<Definition> for Variable {
     }
 }
 
+
+/*
 impl DefinitionId {
     pub fn to_variable(self) -> Ast {
         Ast::Variable(self.into())
     }
 }
+*/
 
 /// \a b. expr
 /// Function definitions are also desugared to a ast::Definition with a ast::Lambda as its body
@@ -190,15 +171,6 @@ impl Definition {
     }
 }
 
-/*
-impl From<Definition> for DefinitionInfo {
-    fn from(def: Definition) -> Self {
-        let name = def.name.clone();
-        DefinitionInfo { definition_id: def.variable, definition: Some(Rc::new(Ast::Definition(def))), name }
-    }
-}
-*/
-
 /// if condition then expression else expression
 #[derive(Debug, Clone, Serialize)]
 pub struct If {
@@ -292,6 +264,7 @@ impl Extern {
         Self { name, typ }
     }
 }
+
 /// lhs := rhs
 #[derive(Debug, Clone, Serialize)]
 pub struct Assignment {
@@ -499,10 +472,6 @@ macro_rules! dispatch_on_hir {
         }
     });
 }
-
-pub use dispatch_on_hir;
-
-//use crate::lexer::token::FloatKind;
 
 // Rust won't let us impl<T: FmtAst> Display for T
 macro_rules! impl_display {

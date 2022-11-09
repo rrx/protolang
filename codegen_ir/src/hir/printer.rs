@@ -5,6 +5,7 @@ use std::{collections::HashSet, fmt::Formatter};
 
 use super::*;
 use crate::hir::Ast;
+use crate::dispatch_on_hir;
 
 #[derive(Default)]
 pub struct AstPrinter {
