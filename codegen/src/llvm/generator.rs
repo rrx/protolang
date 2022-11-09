@@ -37,7 +37,7 @@ pub type DefinitionsMap<'context> = HashMap<DefinitionId, DefinitionValue<'conte
 
 struct DefinitionVisitor {}
 impl<'context> visit::Visitor<DefinitionsMap<'context>> for DefinitionVisitor {
-    fn definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionsMap<'context>) -> visit::VResult {
+    fn enter_definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionsMap<'context>) -> visit::VResult {
         //Ast::Definition(d)
         let ast: Ast = d.clone().into();
         println!("def: {}", ast.to_ron());

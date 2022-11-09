@@ -21,9 +21,9 @@ pub fn gen_fib(defs: &mut Definitions) -> Ast {
     // variable for the function
     let fib = defs.named_variable("fib");
     // variable for the single parameter in the function
-    let a = defs.new_variable();
-    let b = defs.new_variable();
-    let n = defs.new_variable();
+    let a = defs.named_variable("a");
+    let b = defs.named_variable("b");
+    let n = defs.named_variable("n");
 
     let eq0 = eq(n.clone().into(), hir::i64(0));
 

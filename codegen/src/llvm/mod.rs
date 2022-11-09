@@ -15,6 +15,7 @@ mod builtin;
 mod compile;
 mod decisiontree;
 pub mod generator;
+mod testing;
 
 pub use compile::*;
 use generator::*;

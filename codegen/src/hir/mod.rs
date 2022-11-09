@@ -16,12 +16,9 @@ pub use constructors::*;
 pub use module::ModuleBuilder;
 
 use serde::{
-    ser::{SerializeStruct, Serializer},
     Serialize,
 };
 pub use types::{FloatKind, FunctionType, IntegerKind, PrimitiveType, Type};
-
-use std::rc::Rc;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct DefinitionId(pub usize);
@@ -56,24 +53,20 @@ pub struct DefinitionInfo {
     // of --show-hir more human readable for debugging.
     pub name: Option<String>,
 }
-
-impl Serialize for DefinitionInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Variable", 3)?;
-        state.serialize_field("definition_id", &self.definition_id)?;
-        state.serialize_field("name", &self.name)?;
-        state.end()
-    }
-}
 */
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Variable {
     pub definition_id: DefinitionId,
     pub name: Option<String>,
+}
+impl Variable {
+    pub fn get_name(&self) -> String {
+        match &self.name {
+            Some(name) => name.clone(),
+            None => format!("v{}", &self.definition_id)
+        }
+    }
 }
 
 //pub type Variable = DefinitionInfo;
@@ -160,6 +153,13 @@ impl Definition {
 
     pub fn to_variable(&self) -> Variable {
         Variable { definition_id: self.variable, name: self.name.clone() }
+    }
+
+    pub fn get_name(&self) -> String {
+        match &self.name {
+            Some(name) => name.clone(),
+            None => format!("v{}", &self.variable)
+        }
     }
 }
 

@@ -17,15 +17,38 @@ pub trait Visitor<N> {
     fn leaf(&mut self, _: &Ast, _: &mut N) -> VResult {
         Ok(())
     }
-    fn definition(&mut self, _: &hir::Definition, _: &mut N) -> VResult {
+
+    fn enter_sequence(&mut self, _: &hir::Sequence, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn exit_sequence(&mut self, _: &hir::Sequence, _: &mut N) -> VResult {
+        Ok(())
+    }
+
+    fn enter_call(&mut self, _: &hir::FunctionCall, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn exit_call(&mut self, _: &hir::FunctionCall, _: &mut N) -> VResult {
+        Ok(())
+    }
+
+    fn enter_definition(&mut self, _: &hir::Definition, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn exit_definition(&mut self, _: &hir::Definition, _: &mut N) -> VResult {
+        Ok(())
+    }
+
+    fn enter_lambda(&mut self, _: &hir::Lambda, _: &mut N) -> VResult {
+        Ok(())
+    }
+    fn exit_lambda(&mut self, _: &hir::Lambda, _: &mut N) -> VResult {
         Ok(())
     }
     fn variable(&mut self, _: &Variable, _: &mut N) -> VResult {
         Ok(())
     }
-    fn call(&mut self, _: &FunctionCall, _: &mut N) -> VResult {
-        Ok(())
-    }
+
     fn literal(&mut self, _: &Literal, _: &mut N) -> VResult {
         Ok(())
     }
@@ -42,9 +65,11 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
             f.leaf(e, n)?;
         }
         Ast::Definition(def) => {
-            f.definition(def, n)?;
+            f.enter_definition(def, n)?;
             visit(&*def.expr, f, n)?;
+            f.exit_definition(def, n)?;
         }
+
         Ast::If(If {condition, then, otherwise, ..}) => {
             visit(condition, f, n)?;
             visit(then, f, n)?;
@@ -52,14 +77,20 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
                 visit(v, f, n)?;
             }
         }
-        Ast::Sequence(Sequence { statements }) => {
+
+        Ast::Sequence(seq) => {
+            f.enter_sequence(seq, n)?;
+            let Sequence { statements } = seq;
             for e in statements {
                 visit(e, f, n)?;
             }
+            f.exit_sequence(seq, n)?;
         }
+
         Ast::Return(Return { expression}) => {
             visit(expression, f, n)?;
         }
+
         Ast::Builtin(builtin) => {
             use Builtin::*;
             match builtin {
@@ -70,16 +101,21 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
                 _ => unimplemented!("{:?}", &e),
             }
         }
-        Ast::Lambda(Lambda { args, body, typ }) => {
+
+        Ast::Lambda(lambda) => {
+            let Lambda { args, body, typ } = lambda;
+            f.enter_lambda(lambda, n)?;
             visit(body, f, n)?;
+            f.exit_lambda(lambda, n)?;
         }
+
         Ast::FunctionCall(call) => {
-            if let FunctionCall { function, args, function_type } = call {
-                for arg in args {
-                    visit(arg, f, n)?;
-                }
-                f.call(call, n)?;
+            f.enter_call(call, n)?;
+            let FunctionCall { function, args, function_type } = call;
+            for arg in args {
+                visit(arg, f, n)?;
             }
+            f.exit_call(call, n)?;
         }
         _ => unimplemented!("{:?}", &e),
     };
@@ -106,7 +142,7 @@ mod tests {
         println!("AST: {}", &ast.to_ron());
         struct Test {}
         impl Visitor<DefinitionMap> for Test {
-            fn definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionMap) -> VResult {
+            fn enter_definition(&mut self, d: &hir::Definition, defmap: &mut DefinitionMap) -> VResult {
                 //Ast::Definition(d)
                 let ast: Ast = d.clone().into();
                 println!("def: {}", ast.to_ron());
