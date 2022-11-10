@@ -1,0 +1,15 @@
+[package]
+name = "watch"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+notify = { version = "5.0.0", features = ["serde"] }
+codegen_llvm = { path = "../codegen_llvm" }
+codegen_ir = { path = "../codegen_ir" }
+frontend = { path = "../frontend" }
+lang3 = { path = "../lang3" }
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm13-0"] }
+

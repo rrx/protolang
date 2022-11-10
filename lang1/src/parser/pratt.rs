@@ -37,7 +37,7 @@ struct Op {
 #[derive(Clone, Debug)]
 pub enum OpType {
     LeftChain,
-    RightChain,
+    _RightChain,
     LeftAssoc,
     RightAssoc,
     Default,
@@ -59,7 +59,7 @@ impl Op {
     }
 
     pub fn _new_right_chain(op: &Tok, p: i8) -> Self {
-        Self::new(op, Some(p), Some(p + 1), Some(p + 2), OpType::RightChain)
+        Self::new(op, Some(p), Some(p + 1), Some(p + 2), OpType::_RightChain)
     }
 
     pub fn new_left_assoc(op: &Tok, p: i8) -> Self {
@@ -189,7 +189,7 @@ fn _chain_left_denotation<'a>(
         let t0 = Expr::Binary(left_op.clone(), Box::new(x.clone()), Box::new(y));
 
         //let op = Operator::End;
-        let mut chain_node = ExprNode::new(t0, &i.to_location());
+        let chain_node = ExprNode::new(t0, &i.to_location());
         let t = Expr::Chain(token_op.clone(), vec![chain_node, t]);
         let node = ExprNode::new(t, &op_loc);
         Ok((i, node))
@@ -242,7 +242,7 @@ fn left_denotation<'a>(
             let loc = token.to_location();
             let op = OperatorNode::new_with_location(Operator::Conditional, loc);
             let value = Expr::Ternary(op, Box::new(left.clone()), Box::new(y), Box::new(z.clone()));
-            let mut node = ExprNode::new(value, &i.to_location());
+            let node = ExprNode::new(value, &i.to_location());
             (i, node)
         }
         /*
@@ -845,7 +845,6 @@ pub fn parse_expr_pratt<'a>(i: Tokens) -> RNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::*;
     use crate::parser::error::print_result;
     use crate::parser::Unparse;
     use crate::sexpr::SExpr;

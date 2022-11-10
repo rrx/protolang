@@ -4,6 +4,7 @@ members = [
   "frontend",
   "lang3",
   "logic",
+  "watch",
   #"codegen",
   "codegen_ir",
   "codegen_llvm",

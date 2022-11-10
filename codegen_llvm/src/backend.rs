@@ -41,7 +41,7 @@ impl<'a> LLVMBackend<'a> {
     pub fn compile_module(&mut self, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
         let mut defmap = DefinitionMap::default();
         let module = generate(&self.context.context, "test", &ast, &mut defmap)?;
-        self.exec.add(module);
+        self.exec.add(&module);
         Ok(())
     }
 
@@ -66,7 +66,7 @@ impl JitExecute for Ast {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codegen_ir::hir::{self, *};
+    use codegen_ir::hir::{*};
     use codegen_ir::testing::*;
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn codegen_selfref() {
         let context = LLVMBackendContext::new();
-        let mut b = context.backend();
+        let b = context.backend();
         let mut defs = Definitions::new();
 
         let ast = gen_self_reference(&mut defs);

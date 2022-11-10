@@ -608,7 +608,7 @@ mod tests {
         let module = generate(&context, "test", &ast, &mut defmap).unwrap();
 
         let mut exec = Executor::new(OptimizationLevel::None, 0);
-        exec.add(module);
+        exec.add(&module);
         let ret = exec.run::<i64>().unwrap();
         println!("ret: {:?}", ret);
         assert_eq!(ret, 55);
@@ -628,21 +628,22 @@ mod tests {
     #[test]
     fn codegen_extern() {
         let mut defs = Definitions::new();
-
         let x1_module = gen_x1_module(&mut defs);
         let x1_main = gen_x1_main(&mut defs);
 
         let context = Context::create();
-        let mut defmap = DefinitionMap::default();
         let mut exec = Executor::new(OptimizationLevel::None, 0);
-
-        let module = generate(&context, "test", &x1_module, &mut defmap).unwrap();
-        exec.add(module).unwrap();
-        let module = generate(&context, "main", &x1_main, &mut defmap).unwrap();
-        exec.add(module).unwrap();
+        let module = exec.compile("test", &x1_module, &context).unwrap();
+        exec.add(&module).unwrap();
+        let module = exec.compile("main", &x1_main, &context).unwrap();
+        exec.add(&module).unwrap();
 
         let ret = exec.run::<i64>().unwrap();
         println!("ret: {:?}", ret);
         assert_eq!(11, ret);
+    }
+
+    #[test]
+    fn hotreload() {
     }
 }
