@@ -3,7 +3,7 @@ use std::path::Path;
 use inkwell::context::Context;
 use inkwell::module::{Module};
 use inkwell::passes::{PassManager, PassManagerBuilder};
-use inkwell::targets::{InitializationConfig, Target, TargetMachine};
+use inkwell::targets::{InitializationConfig, FileType, Target, TargetMachine};
 use inkwell::execution_engine::ExecutionEngine;
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
@@ -53,6 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let module = e.compile(name, &hir, &context).unwrap();
             //let module = e.compile(&format!("m{}", count), &hir, &context).unwrap();
             count += 1;
+            //println!("{}", module.to_string());
             h.insert(path, module);
         }
     }

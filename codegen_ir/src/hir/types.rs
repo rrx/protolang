@@ -62,6 +62,15 @@ pub struct FunctionType {
     pub export: bool,
 }
 impl FunctionType {
+    pub fn internal(mut args: Vec<Type>) -> Self {
+        let ret = args.split_off(args.len() - 1).pop().unwrap();
+        Self {
+            parameters: args,
+            return_type: ret.into(),
+            is_varargs: false,
+            export: false,
+        }
+    }
     pub fn export(mut args: Vec<Type>) -> Self {
         let ret = args.split_off(args.len() - 1).pop().unwrap();
         Self {
