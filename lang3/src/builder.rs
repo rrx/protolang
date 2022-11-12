@@ -197,9 +197,9 @@ impl AstBuilder {
 
                 if possible.len() == 0 {
                     // unable to find anything in the environment matching the name
-                    log::debug!("no match: {}", &env);
+                    //log::debug!("no match: {}", &env);
                     env.debug();
-                    unreachable!()
+                    unreachable!("No match for {} in environment", &var.name)
                 }
 
                 self.equations

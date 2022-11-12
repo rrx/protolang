@@ -151,3 +151,18 @@ pub fn gen_self_reference(defs: &mut Definitions) -> Ast {
         hir::definition_from_variable(&a, f_b).into(),
     )
 }
+
+pub fn gen_extern(defs: &mut Definitions) -> Ast {
+    let typ = FunctionType::export(vec![Type::i64()]);
+    
+    let ext = hir::new_extern_function("testfunction", typ.clone());
+
+    let b = defs.named_variable("main");
+
+    let call = hir::new_call(ext.into(), vec![], typ.clone());
+
+    let f_main = hir::new_lambda(vec![], call, typ.clone());
+
+    hir::definition_from_variable(&b, f_main).into()
+}
+

@@ -10,3 +10,5 @@ doc:
 test:
 	cargo test -- --nocapture
 
+functions:
+	clang -c testfunction.c -o ./tmp/testfunction.o

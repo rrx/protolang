@@ -92,6 +92,10 @@ pub fn new_call(f: Ast, args: Vec<Ast>, typ: FunctionType) -> Ast {
     FunctionCall::new(f, args, typ).into()
 }
 
+pub fn new_extern_function(name: &str, typ: FunctionType) -> Ast {
+    Extern::new(name.to_string(), typ.into()).into()
+}
+
 pub fn add(a: Ast, b: Ast) -> Ast {
     Builtin::AddInt(a.into(), b.into()).into()
 }

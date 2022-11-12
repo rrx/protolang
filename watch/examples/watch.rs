@@ -10,6 +10,8 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::error::Error;
 use std::fs;
 use std::path::Path;
+use std::io::{Write};
+
 
 // eventually we want to be able to handle multiple input types
 // for now we only handle input from frontend, lowering to hir
@@ -40,13 +42,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().unwrap().to_string_lossy() == "py" {
-            let hir = compile(&path)?;
-            let name = "test";
-            //let name  = format!("m{}", count),
-            let _ = e.compile(name, &hir)?;
-            let ret: u64 = e.invoke("asdf", (10,))?;
-            println!("ret: {}", ret);
+        let ext = path.extension().unwrap().to_string_lossy();
+        match ext.as_ref() {
+            "py" => {
+                let hir = compile(&path)?;
+                let name = "test";
+                let _ = e.compile(name, &hir)?;
+                let ret: u64 = e.invoke("asdf", (10,))?;
+                println!("ret: {}", ret);
+            }
+            "o" => {
+                println!("loading object file {}", &path.to_string_lossy());
+                let _ = e.load_object_file(&path)?;
+            }
+            _ => {
+                println!("skipping {}", &path.to_string_lossy());
+            }
         }
     }
 
@@ -55,7 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     watcher.watch(dir, RecursiveMode::Recursive)?;
 
     for res in rx {
-        let mut changed_paths = vec![];
+        //let mut changed_paths = vec![];
         match res {
             Ok(notify::Event {
                 ref paths,
@@ -66,9 +77,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                     for path in paths {
                         match path.extension() {
                             Some(ext) => {
-                                if ext.to_string_lossy() == "py" {
-                                    println!("changed: {:?}", (path, kind));
-                                    changed_paths.push(path);
+                                match ext.to_string_lossy().as_ref() {
+                                    "py" => {
+                                        let hir = compile(&path)?;
+                                        let name = "test";
+                                        let _ = e.compile(name, &hir)?;
+                                        let ret: u64 = e.invoke("asdf", (10,))?;
+                                        println!("ret: {}", ret);
+                                    }
+                                    "o" => {
+                                        println!("loading object file {}", &path.to_string_lossy());
+                                        let _ = e.load_object_file(&path)?;
+                                    }
+                                    _ => {
+                                        println!("skipping {}", &path.to_string_lossy());
+                                    }
                                 }
                             }
                             None => (),
@@ -79,14 +102,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => println!("watch error: {:?}", e),
         };
 
-        for path in &changed_paths {
-            let hir = compile(&path)?;
-            let name = "test";
+        //for path in &changed_paths {
+            //let hir = compile(&path)?;
+            //let name = "test";
             //let name  = format!("m{}", count),
-            let _ = e.compile(name, &hir)?;
-            let ret: u64 = e.invoke("main", (100, 1))?;
-            println!("ret: {}", ret);
-        }
+            //let _ = e.compile(name, &hir)?;
+            //let ret: u64 = e.invoke("main", (100, 1))?;
+            //println!("ret: {}", ret);
+        //}
     }
     Ok(())
 }
