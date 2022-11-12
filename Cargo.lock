@@ -2049,9 +2049,7 @@ dependencies = [
  "codegen_ir",
  "codegen_llvm",
  "frontend",
- "inkwell",
  "lang3",
- "memmap",
  "notify",
 ]
 

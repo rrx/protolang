@@ -15,6 +15,7 @@ use std::path::Path;
 use codegen_ir::hir::*;
 
 pub struct LiveLink<'a> {
+    context: &'a Context,
     optimizer: PassManager<Module<'a>>,
     link_optimizer: PassManager<Module<'a>>,
     init_config: InitializationConfig,
@@ -182,6 +183,7 @@ impl CodePage {
 
 impl<'a> LiveLink<'a> {
     pub fn create(
+        context: &'a Context,
         optimization_level: OptimizationLevel,
         size_level: u32,
     ) -> Result<Self, Box<dyn Error>> {
@@ -221,6 +223,7 @@ impl<'a> LiveLink<'a> {
         pass_manager_builder.populate_lto_pass_manager(&link_time_optimizations, false, true);
 
         Ok(Self {
+            context,
             init_config: config,
             optimizer: pass_manager,
             link_optimizer: link_time_optimizations,
@@ -228,15 +231,15 @@ impl<'a> LiveLink<'a> {
         })
     }
 
-    pub fn compile(
-        &mut self,
-        name: &str,
-        ast: &Ast,
-        context: &'a Context,
-    ) -> Result<CodePage, Box<dyn Error>> {
+    pub fn compile(&self, name: &str, ast: &Ast) -> Result<CodePage, Box<dyn Error>> {
         println!("AST: {}", &ast.to_ron());
         let mut defmap = crate::DefinitionMap::default();
-        let module = crate::generate(&context, name, &ast, &mut defmap).unwrap();
+        let context = &self.context;
+        let module = crate::generate(context, name, &ast, &mut defmap).unwrap();
+
+        self.optimizer.run_on(&module);
+        module.verify()?;
+
         let asm_buf = self
             .target_machine
             .write_to_memory_buffer(&module, FileType::Assembly)
@@ -252,7 +255,6 @@ impl<'a> LiveLink<'a> {
         let code = CodePage::create(obj_buf.as_slice())?;
         code.disassemble();
         Ok(code)
-        //Ok(obj_buf.as_slice())
     }
 
     //pub fn link(&mut self, name: &str, buf: &[u8]) -> Result<CodePage, Box<dyn Error>> {
@@ -265,8 +267,7 @@ impl<'a> LiveLink<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use codegen_ir::hir::*;
+    //use codegen_ir::hir::*;
     use codegen_ir::testing::*;
 
     #[test]
@@ -274,8 +275,8 @@ mod tests {
         let context = Context::create();
         let mut defs = Definitions::new();
         let ast = gen_fib(&mut defs);
-        let mut e = LiveLink::create(OptimizationLevel::None, 0).unwrap();
-        let code = e.compile("test", &ast, &context).unwrap();
+        let e = LiveLink::create(&context, OptimizationLevel::None, 0).unwrap();
+        let code = e.compile("test", &ast).unwrap();
         let ret: u64 = code.run().unwrap();
         println!("ret1: {}", ret);
         assert_eq!(55, ret);

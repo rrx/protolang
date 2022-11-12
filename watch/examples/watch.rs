@@ -1,9 +1,7 @@
 use codegen_ir::hir;
-use codegen_llvm::LiveLink;
+use codegen_llvm::{Context, LiveLink, OptimizationLevel};
 use frontend::syntax::AstModule;
 use frontend::syntax::Dialect;
-use inkwell::context::Context;
-use inkwell::OptimizationLevel;
 use lang3::{AstBuilder, Environment};
 use notify::event::AccessKind;
 use notify::event::AccessMode;
@@ -37,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // path hardwired for now, eventually this will be configurable
     let dir = Path::new("./tmp");
 
-    let mut e = LiveLink::create(OptimizationLevel::None, 0)?;
+    let e = LiveLink::create(&context, OptimizationLevel::None, 0)?;
 
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -46,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
-            let code = e.compile(name, &hir, &context)?;
+            let code = e.compile(name, &hir)?;
             let ret = code.run::<u64>()?;
             println!("ret: {}", ret);
         }
@@ -57,8 +55,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     watcher.watch(dir, RecursiveMode::Recursive)?;
 
     for res in rx {
-        let mut has_changed = false;
-        let mut e = LiveLink::create(OptimizationLevel::None, 0)?;
         let mut changed_paths = vec![];
         match res {
             Ok(notify::Event {
@@ -73,7 +69,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 if ext.to_string_lossy() == "py" {
                                     println!("changed: {:?}", (path, kind));
                                     changed_paths.push(path);
-                                    has_changed = true;
                                 }
                             }
                             None => (),
@@ -88,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
-            let code = e.compile(name, &hir, &context)?;
+            let code = e.compile(name, &hir)?;
             let ret = code.run::<u64>()?;
             println!("ret: {}", ret);
         }
