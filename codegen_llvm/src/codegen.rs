@@ -644,6 +644,5 @@ mod tests {
     }
 
     #[test]
-    fn hotreload() {
-    }
+    fn hotreload() {}
 }

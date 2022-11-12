@@ -66,7 +66,7 @@ impl JitExecute for Ast {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codegen_ir::hir::{*};
+    use codegen_ir::hir::*;
     use codegen_ir::testing::*;
 
     #[test]

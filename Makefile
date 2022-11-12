@@ -1,6 +1,11 @@
-default:
-	cargo doc --all --no-deps
+default: build test doc
+
+build:
 	cargo build
+
+doc:
+	cargo doc --all --no-deps
+
 
 test:
 	cargo test -- --nocapture

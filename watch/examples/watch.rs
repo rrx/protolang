@@ -1,25 +1,19 @@
-use notify::{Watcher, RecommendedWatcher, RecursiveMode, Config};
-use std::path::Path;
-use inkwell::context::Context;
-use inkwell::module::{Module};
-use inkwell::passes::{PassManager, PassManagerBuilder};
-use inkwell::targets::{InitializationConfig, FileType, Target, TargetMachine};
-use inkwell::execution_engine::ExecutionEngine;
-use inkwell::OptimizationLevel;
-use std::collections::HashMap;
-use std::error::Error;
-use codegen_llvm::Executor;
-use std::fs;
 use codegen_ir::hir;
+use codegen_llvm::Executor;
 use frontend::syntax::AstModule;
 use frontend::syntax::Dialect;
+use inkwell::context::Context;
+use inkwell::OptimizationLevel;
 use lang3::{AstBuilder, Environment};
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs;
+use std::path::Path;
 
 fn compile<'a>(path: &Path) -> Result<hir::Ast, Box<dyn Error>> {
     let dialect = Dialect::Extended;
     let module = AstModule::parse_file(&path, &dialect)?;
-    //module.print();
-
     let mut builder = AstBuilder::default();
     let ast = module.lower(&mut builder)?;
     let env = Environment::default();
@@ -38,21 +32,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let dir = Path::new("./tmp");
 
-
-    let mut count = 0;
     let mut e = Executor::new(OptimizationLevel::None, 0);
 
     let mut h = HashMap::new();
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().unwrap().to_string_lossy() == "py" { 
+        if path.extension().unwrap().to_string_lossy() == "py" {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
             let module = e.compile(name, &hir, &context).unwrap();
             //let module = e.compile(&format!("m{}", count), &hir, &context).unwrap();
-            count += 1;
             //println!("{}", module.to_string());
             h.insert(path, module);
         }
@@ -64,42 +55,47 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ret = e.run::<i64>().unwrap();
         println!("ret: {}", ret);
         e.remove(&v).unwrap();
-
     }
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
     watcher.watch(dir, RecursiveMode::Recursive)?;
-    use notify::EventKind::*;
     use notify::event::AccessKind;
     use notify::event::AccessMode;
+    use notify::EventKind::*;
 
     for res in rx {
         let mut has_changed = false;
         let mut e = Executor::new(OptimizationLevel::None, 0);
         let mut changed_paths = vec![];
         match res {
-            Ok(notify::Event { ref paths, ref kind, .. }) => {
+            Ok(notify::Event {
+                ref paths,
+                ref kind,
+                ..
+            }) => {
                 if kind == &Access(AccessKind::Close(AccessMode::Write)) {
                     //e.remove(&module).unwrap();
                     for path in paths {
                         match path.extension() {
-                            Some(ext) => if ext.to_string_lossy() == "py" { 
-                                println!("changed: {:?}", (path, kind));
-                                changed_paths.push(path);
-                                //let hir = compile(&path)?;
-                                //let module = e.compile(&format!("m{}", count), &hir, &context).unwrap();
-                                //count += 1;
-                                has_changed = true;
-                                //if h.contains_key(path) {
+                            Some(ext) => {
+                                if ext.to_string_lossy() == "py" {
+                                    println!("changed: {:?}", (path, kind));
+                                    changed_paths.push(path);
+                                    //let hir = compile(&path)?;
+                                    //let module = e.compile(&format!("m{}", count), &hir, &context).unwrap();
+                                    //count += 1;
+                                    has_changed = true;
+                                    //if h.contains_key(path) {
                                     //e.remove(h.get(path).unwrap())?;
-                                //}
-                                //e.add(&module).unwrap();
-                                //h.insert(path.clone(), module);
-                                //let ret = e.run::<i64>().unwrap();
-                                //println!("ret: {}", ret)
+                                    //}
+                                    //e.add(&module).unwrap();
+                                    //h.insert(path.clone(), module);
+                                    //let ret = e.run::<i64>().unwrap();
+                                    //println!("ret: {}", ret)
+                                }
                             }
-                            None => ()
+                            None => (),
                         }
                     }
                 }
@@ -107,19 +103,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => println!("watch error: {:?}", e),
         };
 
-        //h.clear();
-
         for path in &changed_paths {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
             let module = e.compile(name, &hir, &context).unwrap();
-            count += 1;
             has_changed = true;
-            //if h.contains_key(path) {
-            //e.remove(h.get(path).unwrap())?;
-            //}
-            //e.add(&module).unwrap();
             h.insert(path.to_path_buf(), module);
         }
 
@@ -131,7 +120,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 e.remove(&v).unwrap();
             }
         }
-
     }
     Ok(())
 }
