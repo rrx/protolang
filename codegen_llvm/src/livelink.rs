@@ -453,7 +453,7 @@ impl<'a> LiveLink<'a> {
         Ok(())
     }
 
-    fn link(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn link(&mut self) -> Result<(), Box<dyn Error>> {
         let mut locations = HashMap::new();
         let mut symbols = HashSet::new();
         let mut relocs = HashSet::new();

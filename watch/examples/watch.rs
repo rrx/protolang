@@ -48,8 +48,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let hir = compile(&path)?;
                 let name = "test";
                 let _ = e.compile(name, &hir)?;
-                let ret: u64 = e.invoke("asdf", (10,))?;
-                println!("ret: {}", ret);
+                //let ret: u64 = e.invoke("asdf", (10,))?;
+                //println!("ret: {}", ret);
             }
             "o" => {
                 println!("loading object file {}", &path.to_string_lossy());
@@ -60,6 +60,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+
+    e.link()?;
+    let ret: u64 = e.invoke("asdf", (10,))?;
+    println!("ret: {}", ret);
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
@@ -82,12 +86,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         let hir = compile(&path)?;
                                         let name = "test";
                                         let _ = e.compile(name, &hir)?;
+                                        e.link()?;
                                         let ret: u64 = e.invoke("asdf", (10,))?;
                                         println!("ret: {}", ret);
                                     }
                                     "o" => {
                                         println!("loading object file {}", &path.to_string_lossy());
                                         let _ = e.load_object_file(&path)?;
+                                        e.link()?;
                                     }
                                     _ => {
                                         println!("skipping {}", &path.to_string_lossy());
