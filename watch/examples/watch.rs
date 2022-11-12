@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // path hardwired for now, eventually this will be configurable
     let dir = Path::new("./tmp");
 
-    let e = LiveLink::create(&context, OptimizationLevel::None, 0)?;
+    let mut e = LiveLink::create(&context, OptimizationLevel::None, 0)?;
 
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -44,8 +44,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
-            let code = e.compile(name, &hir)?;
-            let ret = code.run::<u64>()?;
+            let _ = e.compile(name, &hir)?;
+            let ret: u64 = e.invoke("asdf", (10,))?;
             println!("ret: {}", ret);
         }
     }
@@ -83,8 +83,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
-            let code = e.compile(name, &hir)?;
-            let ret = code.run::<u64>()?;
+            let _ = e.compile(name, &hir)?;
+            let ret: u64 = e.invoke("main", (100, 1))?;
             println!("ret: {}", ret);
         }
     }

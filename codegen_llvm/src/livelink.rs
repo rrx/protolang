@@ -11,20 +11,38 @@ use object::{
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
-
+use std::fmt;
 use codegen_ir::hir::*;
+use std::sync::Arc;
+
+#[derive(Debug)]
+pub enum LinkError {
+    NotFound
+}
+impl std::error::Error for LinkError {}
+impl fmt::Display for LinkError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "LinkError: {:?}", &self)
+    }
+}
 
 pub struct LiveLink<'a> {
     context: &'a Context,
     optimizer: PassManager<Module<'a>>,
-    link_optimizer: PassManager<Module<'a>>,
-    init_config: InitializationConfig,
     target_machine: TargetMachine,
+    names: HashMap<String, CodePointer>,
+}
+
+pub struct CodePointer {
+    // we need to hold a reference here so we don't deallocate the code page
+    #[allow(dead_code)]
+    code: Arc<CodePage>,
+    ptr: *const()
 }
 
 pub struct CodePage {
     m: memmap::Mmap,
-    names: HashMap<String, u64>,
+    names: HashMap<String, *const ()>,
     address: HashMap<u64, String>,
     code_size: usize,
 }
@@ -110,10 +128,16 @@ impl CodePage {
             // make a map of all of the symbol names, so we can perform a look up
             let mut names = HashMap::new();
             let mut address = HashMap::new();
-            for s in obj_file.symbol_table().unwrap().symbols() {
-                let name = s.name()?.to_string();
-                names.insert(name.clone(), s.address());
-                address.insert(s.address(), name);
+
+            unsafe {
+                let base = mmap.as_ptr();
+                for s in obj_file.symbol_table().unwrap().symbols() {
+                    let name = s.name()?.to_string();
+                    let offset = s.address() as isize;
+                    let ptr = base.offset(offset) as *const ();
+                    names.insert(name.clone(), ptr);
+                    address.insert(s.address(), name);
+                }
             }
 
             Ok(Self {
@@ -168,14 +192,13 @@ impl CodePage {
         }
     }
 
-    pub fn run<T>(&self) -> Result<T, Box<dyn Error>> {
+    pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
         // call the main function
         unsafe {
-            let base = self.m.as_ptr();
-            let offset = *self.names.get("main").unwrap() as isize;
-            let ptr = base.offset(offset) as *const ();
-            let v = std::mem::transmute::<*const (), fn() -> T>(ptr);
-            let ret = v();
+            let ptr = *self.names.get(name).unwrap() as isize;
+            type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
+            let v: MyFunc<P, T> = std::mem::transmute(ptr);
+            let ret = v(args);
             Ok(ret)
         }
     }
@@ -224,14 +247,13 @@ impl<'a> LiveLink<'a> {
 
         Ok(Self {
             context,
-            init_config: config,
             optimizer: pass_manager,
-            link_optimizer: link_time_optimizations,
             target_machine,
+            names: HashMap::new()
         })
     }
 
-    pub fn compile(&self, name: &str, ast: &Ast) -> Result<CodePage, Box<dyn Error>> {
+    pub fn compile(&mut self, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
         println!("AST: {}", &ast.to_ron());
         let mut defmap = crate::DefinitionMap::default();
         let context = &self.context;
@@ -253,8 +275,29 @@ impl<'a> LiveLink<'a> {
             .unwrap();
         println!("asm {}", std::str::from_utf8(asm_buf.as_slice()).unwrap());
         let code = CodePage::create(obj_buf.as_slice())?;
+        let names = code.names.clone();
+        let code = Arc::new(code);
+        for (name, ptr) in names.iter() {
+            let pointer = CodePointer {
+                code: code.clone(),
+                ptr: *ptr
+            };
+            self.names.insert(name.clone(), pointer);
+        }
+
         code.disassemble();
-        Ok(code)
+        Ok(())
+    }
+
+    pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
+        // call the main function
+        unsafe {
+            let ptr = self.names.get(name).ok_or(LinkError::NotFound)?.ptr as *const();
+            type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
+            let v: MyFunc<P, T> = std::mem::transmute(ptr);
+            let ret = v(args);
+            Ok(ret)
+        }
     }
 
     //pub fn link(&mut self, name: &str, buf: &[u8]) -> Result<CodePage, Box<dyn Error>> {
@@ -267,7 +310,6 @@ impl<'a> LiveLink<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use codegen_ir::hir::*;
     use codegen_ir::testing::*;
 
     #[test]
@@ -275,9 +317,9 @@ mod tests {
         let context = Context::create();
         let mut defs = Definitions::new();
         let ast = gen_fib(&mut defs);
-        let e = LiveLink::create(&context, OptimizationLevel::None, 0).unwrap();
-        let code = e.compile("test", &ast).unwrap();
-        let ret: u64 = code.run().unwrap();
+        let mut e = LiveLink::create(&context, OptimizationLevel::None, 0).unwrap();
+        let _ = e.compile("test", &ast).unwrap();
+        let ret: u64 = e.invoke("main", ()).unwrap();
         println!("ret1: {}", ret);
         assert_eq!(55, ret);
     }
