@@ -1,16 +1,20 @@
 use codegen_ir::hir;
-use codegen_llvm::Executor;
+use codegen_llvm::LiveLink;
 use frontend::syntax::AstModule;
 use frontend::syntax::Dialect;
 use inkwell::context::Context;
 use inkwell::OptimizationLevel;
 use lang3::{AstBuilder, Environment};
+use notify::event::AccessKind;
+use notify::event::AccessMode;
+use notify::EventKind::*;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
 
+// eventually we want to be able to handle multiple input types
+// for now we only handle input from frontend, lowering to hir
 fn compile<'a>(path: &Path) -> Result<hir::Ast, Box<dyn Error>> {
     let dialect = Dialect::Extended;
     let module = AstModule::parse_file(&path, &dialect)?;
@@ -30,11 +34,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let context = Context::create();
 
+    // path hardwired for now, eventually this will be configurable
     let dir = Path::new("./tmp");
 
-    let mut e = Executor::new(OptimizationLevel::None, 0);
+    let mut e = LiveLink::create(OptimizationLevel::None, 0)?;
 
-    let mut h = HashMap::new();
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -42,31 +46,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
-            let module = e.compile(name, &hir, &context).unwrap();
-            //let module = e.compile(&format!("m{}", count), &hir, &context).unwrap();
-            //println!("{}", module.to_string());
-            h.insert(path, module);
+            let code = e.compile(name, &hir, &context)?;
+            let ret = code.run::<u64>()?;
+            println!("ret: {}", ret);
         }
-    }
-
-    // first execution
-    for (k, v) in &h {
-        e.add(&v).unwrap();
-        let ret = e.run::<i64>().unwrap();
-        println!("ret: {}", ret);
-        e.remove(&v).unwrap();
     }
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
     watcher.watch(dir, RecursiveMode::Recursive)?;
-    use notify::event::AccessKind;
-    use notify::event::AccessMode;
-    use notify::EventKind::*;
 
     for res in rx {
         let mut has_changed = false;
-        let mut e = Executor::new(OptimizationLevel::None, 0);
+        let mut e = LiveLink::create(OptimizationLevel::None, 0)?;
         let mut changed_paths = vec![];
         match res {
             Ok(notify::Event {
@@ -75,24 +67,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ..
             }) => {
                 if kind == &Access(AccessKind::Close(AccessMode::Write)) {
-                    //e.remove(&module).unwrap();
                     for path in paths {
                         match path.extension() {
                             Some(ext) => {
                                 if ext.to_string_lossy() == "py" {
                                     println!("changed: {:?}", (path, kind));
                                     changed_paths.push(path);
-                                    //let hir = compile(&path)?;
-                                    //let module = e.compile(&format!("m{}", count), &hir, &context).unwrap();
-                                    //count += 1;
                                     has_changed = true;
-                                    //if h.contains_key(path) {
-                                    //e.remove(h.get(path).unwrap())?;
-                                    //}
-                                    //e.add(&module).unwrap();
-                                    //h.insert(path.clone(), module);
-                                    //let ret = e.run::<i64>().unwrap();
-                                    //println!("ret: {}", ret)
                                 }
                             }
                             None => (),
@@ -107,18 +88,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let hir = compile(&path)?;
             let name = "test";
             //let name  = format!("m{}", count),
-            let module = e.compile(name, &hir, &context).unwrap();
-            has_changed = true;
-            h.insert(path.to_path_buf(), module);
-        }
-
-        if has_changed {
-            for (k, v) in &h {
-                e.add(&v).unwrap();
-                let ret = e.run::<i64>().unwrap();
-                println!("ret: {}", ret);
-                e.remove(&v).unwrap();
-            }
+            let code = e.compile(name, &hir, &context)?;
+            let ret = code.run::<u64>()?;
+            println!("ret: {}", ret);
         }
     }
     Ok(())

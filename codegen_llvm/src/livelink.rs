@@ -181,7 +181,10 @@ impl CodePage {
 }
 
 impl<'a> LiveLink<'a> {
-    pub fn create(optimization_level: OptimizationLevel, size_level: u32) -> Result<Self, Box<dyn Error>> {
+    pub fn create(
+        optimization_level: OptimizationLevel,
+        size_level: u32,
+    ) -> Result<Self, Box<dyn Error>> {
         // Initialize for the host machine, we aren't doing any cross compiling here
         let config = InitializationConfig::default();
         Target::initialize_native(&config)?;
@@ -199,13 +202,11 @@ impl<'a> LiveLink<'a> {
                 OptimizationLevel::None,
                 RelocMode::PIC,
                 CodeModel::Default,
-            ).expect("Unable to create target machine");
+            )
+            .expect("Unable to create target machine");
 
         eprintln!("Default: {:?}", triple.as_str());
-        eprintln!(
-            "Host: {}",
-            TargetMachine::get_host_cpu_name().to_str()?
-        );
+        eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
 
         let pass_manager_builder = PassManagerBuilder::create();
 
