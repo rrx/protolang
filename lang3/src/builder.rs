@@ -716,7 +716,7 @@ mod tests {
         println!("HIR:{:?}", &hir);
 
         let context = LLVMBackendContext::new();
-        let mut b = context.backend();
+        let mut b = context.backend().unwrap();
         b.compile_module("main", &hir).unwrap();
         let ret = b.run().unwrap();
         assert_eq!(3, ret);
@@ -750,7 +750,7 @@ mod tests {
         println!("HIR:{:?}", &hir);
 
         let context = LLVMBackendContext::new();
-        let mut b = context.backend();
+        let mut b = context.backend().unwrap();
         b.compile_module("main", &hir).unwrap();
         let ret = b.run().unwrap();
         assert_eq!(3, ret);

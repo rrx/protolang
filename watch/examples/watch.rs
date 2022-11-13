@@ -1,5 +1,5 @@
 use codegen_ir::hir;
-use codegen_llvm::{Context, LiveLink, OptimizationLevel};
+use codegen_llvm::{Context, OptimizationLevel, Executor, TargetMachine, FileType};
 use frontend::syntax::AstModule;
 use frontend::syntax::Dialect;
 use lang3::{AstBuilder, Environment};
@@ -9,13 +9,92 @@ use notify::EventKind::*;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::error::Error;
 use std::fs;
-use std::path::Path;
-use std::io::{Write};
+use std::path::{Path, PathBuf};
+use link::LiveLink;
 
+pub struct Runner<'a> {
+    context: &'a Context,
+    linker: LiveLink,
+    execute: Executor<'a>,
+}
+impl<'a> Runner<'a> {
+    pub fn create(
+        context: &'a Context,
+        optimization_level: OptimizationLevel,
+        size_level: u32,
+    ) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
+            context,
+            linker: LiveLink::create()?,
+            execute: Executor::create(OptimizationLevel::None, 0)?,
+        })
+    }
+
+    pub fn compile_lang3(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
+        let ast = parse_lang3(path)?;
+        self.compile_ast(name, &ast)
+    }
+
+    pub fn compile_ast(&mut self, name: &str, ast: &hir::Ast) -> Result<(), Box<dyn Error>> {
+        let module = self.execute.compile(name, ast, self.context)?;
+        let asm_buf = self.execute
+            .target_machine
+            .write_to_memory_buffer(&module, FileType::Assembly)
+            .unwrap();
+        let obj_buf = self
+            .execute
+            .target_machine
+            .write_to_memory_buffer(&module, FileType::Object)
+            .unwrap();
+        self
+            .execute
+            .target_machine
+            .write_to_file(&module, FileType::Object, &Path::new("out.o"))
+            .unwrap();
+
+        println!("asm {}", std::str::from_utf8(asm_buf.as_slice()).unwrap());
+
+        self.linker.add_object_file(obj_buf.as_slice())
+    }
+
+    pub fn load_paths(&mut self, paths: &Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
+        for path in paths {
+            self.load_path(path)?;
+        }
+        Ok(())
+    }
+
+    pub fn load_path(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        let ext = path.extension().unwrap().to_string_lossy();
+        match ext.as_ref() {
+            "py" => {
+                let name = "test";
+                self.compile_lang3(name, &path)?;
+            }
+            "o" => {
+                println!("loading object file {}", &path.to_string_lossy());
+                let _ = self.linker.load_object_file(&path)?;
+            }
+            _ => {
+                println!("skipping {}", &path.to_string_lossy());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn link(&mut self) -> Result<(), Box<dyn Error>> {
+        self.linker.link()
+    }
+
+    pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
+        self.linker.invoke(name, args)
+    }
+
+}
 
 // eventually we want to be able to handle multiple input types
 // for now we only handle input from frontend, lowering to hir
-fn compile<'a>(path: &Path) -> Result<hir::Ast, Box<dyn Error>> {
+fn parse_lang3<'a>(path: &Path) -> Result<hir::Ast, Box<dyn Error>> {
     let dialect = Dialect::Extended;
     let module = AstModule::parse_file(&path, &dialect)?;
     let mut builder = AstBuilder::default();
@@ -37,31 +116,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     // path hardwired for now, eventually this will be configurable
     let dir = Path::new("./tmp");
 
-    let mut e = LiveLink::create(&context, OptimizationLevel::None, 0)?;
+    let mut e = Runner::create(&context, OptimizationLevel::None, 0)?;
 
+    let mut load_paths = vec![];
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        let ext = path.extension().unwrap().to_string_lossy();
-        match ext.as_ref() {
-            "py" => {
-                let hir = compile(&path)?;
-                let name = "test";
-                let _ = e.compile(name, &hir)?;
-                //let ret: u64 = e.invoke("asdf", (10,))?;
-                //println!("ret: {}", ret);
-            }
-            "o" => {
-                println!("loading object file {}", &path.to_string_lossy());
-                let _ = e.load_object_file(&path)?;
-            }
-            _ => {
-                println!("skipping {}", &path.to_string_lossy());
-            }
-        }
+        load_paths.push(path);
     }
-
+    e.load_paths(&load_paths)?;
     e.link()?;
+
     let ret: u64 = e.invoke("asdf", (10,))?;
     println!("ret: {}", ret);
 
@@ -70,7 +135,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     watcher.watch(dir, RecursiveMode::Recursive)?;
 
     for res in rx {
-        //let mut changed_paths = vec![];
         match res {
             Ok(notify::Event {
                 ref paths,
@@ -78,44 +142,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ..
             }) => {
                 if kind == &Access(AccessKind::Close(AccessMode::Write)) {
-                    for path in paths {
-                        match path.extension() {
-                            Some(ext) => {
-                                match ext.to_string_lossy().as_ref() {
-                                    "py" => {
-                                        let hir = compile(&path)?;
-                                        let name = "test";
-                                        let _ = e.compile(name, &hir)?;
-                                        e.link()?;
-                                        let ret: u64 = e.invoke("asdf", (10,))?;
-                                        println!("ret: {}", ret);
-                                    }
-                                    "o" => {
-                                        println!("loading object file {}", &path.to_string_lossy());
-                                        let _ = e.load_object_file(&path)?;
-                                        e.link()?;
-                                    }
-                                    _ => {
-                                        println!("skipping {}", &path.to_string_lossy());
-                                    }
-                                }
-                            }
-                            None => (),
-                        }
-                    }
+                    e.load_paths(&paths)?;
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
         };
-
-        //for path in &changed_paths {
-            //let hir = compile(&path)?;
-            //let name = "test";
-            //let name  = format!("m{}", count),
-            //let _ = e.compile(name, &hir)?;
-            //let ret: u64 = e.invoke("main", (100, 1))?;
-            //println!("ret: {}", ret);
-        //}
     }
     Ok(())
 }

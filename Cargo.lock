@@ -284,11 +284,8 @@ dependencies = [
 name = "codegen_llvm"
 version = "0.1.0"
 dependencies = [
- "capstone",
  "codegen_ir",
  "inkwell",
- "memmap",
- "object",
 ]
 
 [[package]]
@@ -2059,6 +2056,7 @@ dependencies = [
  "codegen_llvm",
  "frontend",
  "lang3",
+ "link",
  "notify",
 ]
 

@@ -11,4 +11,5 @@ codegen_llvm = { path = "../codegen_llvm" }
 codegen_ir = { path = "../codegen_ir" }
 frontend = { path = "../frontend" }
 lang3 = { path = "../lang3" }
+link = { path = "../link" }
 

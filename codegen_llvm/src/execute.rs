@@ -7,27 +7,40 @@ use inkwell::targets::{InitializationConfig, Target, TargetMachine};
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
 use std::error::Error;
+use inkwell::targets::{CodeModel, RelocMode};
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
 pub struct Executor<'a> {
     optimizer: PassManager<Module<'a>>,
     ee: Option<ExecutionEngine<'a>>,
+    pub target_machine: TargetMachine,
 }
 
 impl<'a> Executor<'a> {
-    pub fn new(optimization_level: OptimizationLevel, size_level: u32) -> Self {
+    pub fn create(optimization_level: OptimizationLevel, size_level: u32) -> Result<Self, Box<dyn Error>> {
         // Initialize for the host machine, we aren't doing any cross compiling here
         let config = InitializationConfig::default();
-        Target::initialize_native(&config).expect("Unable to initialize JIT");
+        Target::initialize_native(&config)?;
         //Target::initialize_all(&config);
         let triple = TargetMachine::get_default_triple();
+        let target = Target::from_triple(&triple)?;
+
+        let features = TargetMachine::get_host_cpu_features();
+
+        let target_machine = target
+            .create_target_machine(
+                &triple,
+                "",
+                features.to_str()?,
+                OptimizationLevel::None,
+                RelocMode::PIC,
+                CodeModel::Default,
+            )
+            .expect("Unable to create target machine");
 
         eprintln!("Default: {:?}", triple.as_str());
-        eprintln!(
-            "Host: {}",
-            TargetMachine::get_host_cpu_name().to_str().unwrap()
-        );
+        eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
 
         let pass_manager_builder = PassManagerBuilder::create();
 
@@ -41,10 +54,11 @@ impl<'a> Executor<'a> {
         let link_time_optimizations = PassManager::create(());
         pass_manager_builder.populate_lto_pass_manager(&link_time_optimizations, false, true);
 
-        Self {
+        Ok(Self {
             optimizer: pass_manager,
             ee: None,
-        }
+            target_machine,
+        })
     }
 
     pub fn remove(&mut self, module: &Module<'a>) -> Result<(), Box<dyn Error>> {
@@ -87,6 +101,8 @@ impl<'a> Executor<'a> {
         println!("AST: {}", &ast.to_ron());
         let mut defmap = crate::DefinitionMap::default();
         let module = crate::generate(&context, name, &ast, &mut defmap).unwrap();
+        self.optimizer.run_on(&module);
+        module.verify()?;
         Ok(module)
     }
 
@@ -119,7 +135,7 @@ mod tests {
         let mut defmap = crate::DefinitionMap::default();
         let module = crate::generate(&context, "test", &ast, &mut defmap).unwrap();
 
-        let mut e = Executor::new(OptimizationLevel::None, 0);
+        let mut e = Executor::create(OptimizationLevel::None, 0).unwrap();
         e.add(&module).unwrap();
         let ret = e.run::<i64>().unwrap();
         assert_eq!(ret, 55);

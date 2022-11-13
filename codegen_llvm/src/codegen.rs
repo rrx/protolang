@@ -607,7 +607,7 @@ mod tests {
 
         let module = generate(&context, "test", &ast, &mut defmap).unwrap();
 
-        let mut exec = Executor::new(OptimizationLevel::None, 0);
+        let mut exec = Executor::create(OptimizationLevel::None, 0).unwrap();
         exec.add(&module);
         let ret = exec.run::<i64>().unwrap();
         println!("ret: {:?}", ret);
@@ -632,7 +632,7 @@ mod tests {
         let x1_main = gen_x1_main(&mut defs);
 
         let context = Context::create();
-        let mut exec = Executor::new(OptimizationLevel::None, 0);
+        let mut exec = Executor::create(OptimizationLevel::None, 0).unwrap();
         let module = exec.compile("test", &x1_module, &context).unwrap();
         exec.add(&module).unwrap();
         let module = exec.compile("main", &x1_main, &context).unwrap();

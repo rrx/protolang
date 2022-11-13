@@ -372,7 +372,7 @@ impl LiveLink {
         self.add_object_file(buf.as_slice())
     }
 
-    fn add_object_file(&mut self, buf: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub fn add_object_file(&mut self, buf: &[u8]) -> Result<(), Box<dyn Error>> {
         let code = UnlinkedCode::create(buf)?;
         self.unlinked.push(code);
         Ok(())

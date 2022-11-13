@@ -17,25 +17,24 @@ impl LLVMBackendContext {
         Self { context }
     }
 
-    pub fn backend<'a>(&'a self) -> LLVMBackend<'a> {
+    pub fn backend<'a>(&'a self) -> Result<LLVMBackend<'a>, Box<dyn Error>> {
         LLVMBackend::new(self)
     }
 }
 
 pub struct LLVMBackend<'a> {
     context: &'a LLVMBackendContext,
-    //lower: Lower<'a>,
     exec: Executor<'a>,
     modules: Vec<Module<'a>>,
 }
 
 impl<'a> LLVMBackend<'a> {
-    pub fn new(context: &'a LLVMBackendContext) -> Self {
-        Self {
+    pub fn new(context: &'a LLVMBackendContext) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
             context,
-            exec: Executor::new(OptimizationLevel::None, 0),
+            exec: Executor::create(OptimizationLevel::None, 0)?,
             modules: vec![],
-        }
+        })
     }
 
     pub fn compile_module(&mut self, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
@@ -57,7 +56,7 @@ pub trait JitExecute {
 impl JitExecute for Ast {
     fn run_main(&self) -> Result<i64, Box<dyn Error>> {
         let context = LLVMBackendContext::new();
-        let mut b = context.backend();
+        let mut b = context.backend()?;
         b.compile_module("main", &self).unwrap();
         b.run()
     }
@@ -72,7 +71,7 @@ mod tests {
     #[test]
     fn codegen_fib() {
         let context = LLVMBackendContext::new();
-        let mut b = context.backend();
+        let mut b = context.backend().unwrap();
         let mut defs = Definitions::new();
 
         let ast = gen_fib(&mut defs);
@@ -105,7 +104,7 @@ mod tests {
         let x1_main = gen_x1_main(&mut defs);
 
         let context = LLVMBackendContext::new();
-        let mut b = context.backend();
+        let mut b = context.backend().unwrap();
         b.compile_module("test", &x1_module).unwrap();
         b.compile_module("main", &x1_main).unwrap();
         let ret = b.run().unwrap();
