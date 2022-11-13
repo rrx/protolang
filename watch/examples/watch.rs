@@ -10,11 +10,11 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
-use link::LiveLink;
+use link::*;
 
 pub struct Runner<'a> {
     context: &'a Context,
-    linker: LiveLink,
+    linker: LinkBuilder,
     execute: Executor<'a>,
 }
 impl<'a> Runner<'a> {
@@ -25,7 +25,7 @@ impl<'a> Runner<'a> {
     ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             context,
-            linker: LiveLink::create()?,
+            linker: LinkBuilder::new(),
             execute: Executor::create(optimization_level, size_level)?,
         })
     }
@@ -54,7 +54,7 @@ impl<'a> Runner<'a> {
 
         println!("asm {}", std::str::from_utf8(asm_buf.as_slice()).unwrap());
 
-        self.linker.add_object_file(obj_buf.as_slice())
+        self.linker.add_buf(name, obj_buf.as_slice())
     }
 
     pub fn load_paths(&mut self, paths: &Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
@@ -66,15 +66,15 @@ impl<'a> Runner<'a> {
 
     pub fn load_path(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         println!("load: {}", &path.to_string_lossy());
+        let stem = path.file_stem().unwrap().to_string_lossy();
         if let Some(ext) = path.extension() {
             match ext.to_string_lossy().as_ref() {
                 "py" => {
-                    let name = "test";
-                    self.compile_lang3(name, &path)?;
+                    self.compile_lang3(stem.as_ref(), &path)?;
                 }
                 "o" => {
                     println!("loading object file {}", &path.to_string_lossy());
-                    let _ = self.linker.load_object_file(&path)?;
+                    let _ = self.linker.add(stem.as_ref(), &path)?;
                 }
                 _ => {
                     println!("skipping {}", &path.to_string_lossy());
@@ -84,14 +84,9 @@ impl<'a> Runner<'a> {
         Ok(())
     }
 
-    pub fn link(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn link(&mut self) -> Result<LinkCollection, Box<dyn Error>> {
         self.linker.link()
     }
-
-    pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
-        self.linker.invoke(name, args)
-    }
-
 }
 
 // eventually we want to be able to handle multiple input types
@@ -127,10 +122,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         load_paths.push(path);
     }
     e.load_paths(&load_paths)?;
-    e.link()?;
 
-    let ret: u64 = e.invoke("asdf", (10,))?;
-    println!("ret: {}", ret);
+    match e.link() {
+        Ok(collection) => {
+            let ret: u64 = collection.invoke("asdf", (10,))?;
+            println!("ret: {}", ret);
+        }
+        Err(e) => {
+            println!("Error: {}", e);
+        }
+    }
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
@@ -145,10 +146,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             }) => {
                 if kind == &Access(AccessKind::Close(AccessMode::Write)) {
                     e.load_paths(&paths)?;
-                    e.link()?;
-
-                    let ret: u64 = e.invoke("asdf", (10,))?;
-                    println!("ret: {}", ret);
+                    match e.link() {
+                        Ok(collection) => {
+                            let ret: u64 = collection.invoke("asdf", (10,))?;
+                            println!("ret: {}", ret);
+                        }
+                        Err(e) => {
+                            println!("Error: {}", e);
+                        }
+                    }
                 }
             }
             Err(e) => println!("watch error: {:?}", e),
