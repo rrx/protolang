@@ -11,5 +11,6 @@ test:
 	cargo test -- --nocapture
 
 functions:
-	clang -c testfunction.c -o ./tmp/testfunction.o
-	clang -c simplefunction.c -o ./tmp/simplefunction.o
+	clang -c link/testfiles/testfunction.c -o ./tmp/testfunction.o
+	clang -c link/testfiles/simplefunction.c -o ./tmp/simplefunction.o
+	clang -c link/testfiles/asdf.c -o ./tmp/asdf.o

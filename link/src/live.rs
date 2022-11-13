@@ -26,7 +26,6 @@ impl fmt::Display for LinkError {
     }
 }
 
-
 fn page_align(n: usize) -> usize {
     // hardwired for now, but we can get this from the target we are running at at runtime
     let p = 4096;
@@ -78,11 +77,11 @@ impl LinkBuilder {
 
         // get all of the symbols and the name that provides it
         for (name, unlinked) in &self.pages {
-            println!("loading: {}", name);
+            println!("linking: {}", name);
             for symbol in &unlinked.symbols {
-                println!("Symbol: {}", &symbol);
+                println!("\tSymbol: {}", &symbol);
                 if symbols.contains_key(symbol) {
-                    println!("Duplicate symbol: {}", &symbol);
+                    println!("\tDuplicate symbol: {}", &symbol);
                     duplicates.insert(symbol);
                 } else {
                     symbols.insert(symbol.clone(), name);
@@ -94,13 +93,14 @@ impl LinkBuilder {
         let mut missing = HashSet::new();
         for (name, unlinked) in &self.pages {
             let mut children = HashSet::new();
+            println!("checking: {}", name);
             for symbol in &unlinked.relocations {
-                println!("Reloc: {}", &symbol);
+                println!("\tReloc: {}", &symbol);
                 if symbols.contains_key(symbol) {
                     children.insert(symbol.clone());
                     relocations.insert(symbol.clone());
                 } else {
-                    println!("Symbol {} missing", symbol);
+                    println!("\tSymbol {} missing", symbol);
                     missing.insert(symbol);
                 }
             }
@@ -566,18 +566,35 @@ mod tests {
     #[test]
     fn livelink() {
         let mut b = LinkBuilder::new();
-        b.add("test1", Path::new("/home/rrx/code/protolang/tmp/testfunction.o"));
+
+        // unable to link, missing symbol
+        b.add("test1", Path::new("/home/rrx/code/protolang/tmp/testfunction.o")).unwrap();
         assert_eq!(false, b.link().is_ok());
-        b.add("test2", Path::new("/home/rrx/code/protolang/tmp/simplefunction.o"));
-        assert_eq!(false, b.link().is_ok());
-        b.remove("test1");
+        
+        // provide missing symbol
+        b.add("asdf", Path::new("/home/rrx/code/protolang/tmp/asdf.o")).unwrap();
+        assert_eq!(true, b.link().is_ok());
+
+        // links fine
+        b.add("simple", Path::new("/home/rrx/code/protolang/tmp/simplefunction.o")).unwrap();
+        assert_eq!(true, b.link().is_ok());
+
         let collection = b.link().unwrap();
-        //assert_eq!(true, b.can_link());
-        //assert_eq!(true, b.can_link());
-        //b.link().unwrap();
         let ret: i64 = collection.invoke("func", ()).unwrap();
         println!("ret: {}", ret);
         assert_eq!(10001, ret);
+
+        let ret: i64 = collection.invoke("simple", ()).unwrap();
+        println!("ret: {}", ret);
+        assert_eq!(10012, ret);
+
+        let ret: i64 = collection.invoke("call_external", ()).unwrap();
+        println!("ret: {}", ret);
+        assert_eq!(4, ret);
+
+        let ret: i64 = collection.invoke("asdf", (2,)).unwrap();
+        println!("ret: {}", ret);
+        assert_eq!(3, ret);
 
     }
 }
