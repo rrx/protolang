@@ -1,5 +1,5 @@
 use codegen_ir::hir;
-use codegen_llvm::{Context, OptimizationLevel, Executor, TargetMachine, FileType};
+use codegen_llvm::{Context, OptimizationLevel, Executor, FileType};
 use frontend::syntax::AstModule;
 use frontend::syntax::Dialect;
 use lang3::{AstBuilder, Environment};
@@ -26,7 +26,7 @@ impl<'a> Runner<'a> {
         Ok(Self {
             context,
             linker: LiveLink::create()?,
-            execute: Executor::create(OptimizationLevel::None, 0)?,
+            execute: Executor::create(optimization_level, size_level)?,
         })
     }
 
@@ -65,18 +65,20 @@ impl<'a> Runner<'a> {
     }
 
     pub fn load_path(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        let ext = path.extension().unwrap().to_string_lossy();
-        match ext.as_ref() {
-            "py" => {
-                let name = "test";
-                self.compile_lang3(name, &path)?;
-            }
-            "o" => {
-                println!("loading object file {}", &path.to_string_lossy());
-                let _ = self.linker.load_object_file(&path)?;
-            }
-            _ => {
-                println!("skipping {}", &path.to_string_lossy());
+        println!("load: {}", &path.to_string_lossy());
+        if let Some(ext) = path.extension() {
+            match ext.to_string_lossy().as_ref() {
+                "py" => {
+                    let name = "test";
+                    self.compile_lang3(name, &path)?;
+                }
+                "o" => {
+                    println!("loading object file {}", &path.to_string_lossy());
+                    let _ = self.linker.load_object_file(&path)?;
+                }
+                _ => {
+                    println!("skipping {}", &path.to_string_lossy());
+                }
             }
         }
         Ok(())
@@ -143,6 +145,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             }) => {
                 if kind == &Access(AccessKind::Close(AccessMode::Write)) {
                     e.load_paths(&paths)?;
+                    e.link()?;
+
+                    let ret: u64 = e.invoke("asdf", (10,))?;
+                    println!("ret: {}", ret);
                 }
             }
             Err(e) => println!("watch error: {:?}", e),

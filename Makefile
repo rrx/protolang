@@ -12,3 +12,4 @@ test:
 
 functions:
 	clang -c testfunction.c -o ./tmp/testfunction.o
+	clang -c simplefunction.c -o ./tmp/simplefunction.o
