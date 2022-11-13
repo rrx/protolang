@@ -17,7 +17,8 @@ use std::fmt;
 #[derive(Debug)]
 pub enum LinkError {
     NotFound,
-    MissingSymbol
+    MissingSymbol,
+    SymbolNotFound
 }
 impl std::error::Error for LinkError {}
 impl fmt::Display for LinkError {
@@ -269,7 +270,7 @@ impl LinkCollection {
     pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
         // call the main function
         unsafe {
-            let ptr = self.symbols.get(name).unwrap().ptr as *const();
+            let ptr = self.symbols.get(name).ok_or(LinkError::SymbolNotFound)?.ptr as *const();
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
             let v: MyFunc<P, T> = std::mem::transmute(ptr);
             println!("invoking {} @ {:#08x}", name, ptr as usize);

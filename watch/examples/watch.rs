@@ -125,8 +125,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match e.link() {
         Ok(collection) => {
-            let ret: u64 = collection.invoke("asdf", (10,))?;
-            println!("ret: {}", ret);
+            let result: Result<i64, Box<_>> = collection.invoke("call_live", (10,));
+            match result {
+                Ok(ret) => {
+                    println!("ret: {}", ret);
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            }
         }
         Err(e) => {
             println!("Error: {}", e);
@@ -148,8 +155,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     e.load_paths(&paths)?;
                     match e.link() {
                         Ok(collection) => {
-                            let ret: u64 = collection.invoke("asdf", (10,))?;
-                            println!("ret: {}", ret);
+                            let result: Result<i64, Box<_>> = collection.invoke("call_live", (10,));
+                            match result {
+                                Ok(ret) => {
+                                    println!("ret: {}", ret);
+                                }
+                                Err(e) => {
+                                    println!("Error: {}", e);
+                                }
+                            }
                         }
                         Err(e) => {
                             println!("Error: {}", e);
