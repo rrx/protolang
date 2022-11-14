@@ -48,17 +48,32 @@ pub type UnpatchedSet = HashMap<String, UnpatchedCodePage>;
 pub struct LinkBuilder {
     collection: LinkCollection,
     pages: HashMap<String, UnlinkedCode>,
+    libraries: HashMap<String, libloading::Library>
 }
 
 impl LinkBuilder {
     pub fn new() -> Self {
         Self {
-            collection: LinkCollection::new(), pages: HashMap::new()
+            collection: LinkCollection::new(), pages: HashMap::new(),
+            libraries: HashMap::new()
         }
     }
 
     pub fn remove(&mut self, name: &str) {
         self.pages.remove(&name.to_string());
+    }
+
+
+    pub fn add_library(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
+        unsafe {
+            let lib = libloading::Library::new(path)?;
+            // we need to parse the header files to know what all of the symbols mean
+            // but we may as well just use bindgen?
+            let func: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(b"gzopen")?;
+            self.libraries.insert(name.to_string(), lib);
+            eprintln!("Loaded library: {}", &path.to_string_lossy());
+        }
+        Ok(())
     }
 
     pub fn add(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
@@ -364,10 +379,6 @@ impl LinkCollection {
         }
 
         unsafe {
-            let g1 = self.symbols.get("global_int2").ok_or(LinkError::SymbolNotFound)?.ptr as *const();
-            let g2 = self.code_pages.get("test_data").unwrap().as_ref().m.as_ptr();
-            let g3 = self.code_pages.get("test_code").unwrap().as_ref().m.as_ptr();
-
             let ptr = self.symbols.get(name).ok_or(LinkError::SymbolNotFound)?.ptr as *const();
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
             let v: MyFunc<P, T> = std::mem::transmute(ptr);
@@ -590,10 +601,10 @@ impl UnlinkedCodeInner {
 
         let size: usize = section_data.iter().fold(0, |acc, (_, _, size, _)| acc+size);
 
-        let page_aligned_size = page_align(size); // round up to page alignment
+        let page_aligned_size = page_align(size + 1); // round up to page alignment
 
         // allocate page aligned memory and copy the functions over
-        println!("allocating: {}", page_aligned_size);
+        println!("allocating {} bytes on {}", page_aligned_size, &code_page_name);
         let mut mmap = MmapMut::map_anon(page_aligned_size)?;
 
         // only copy the first part, the remainder is uninitialized

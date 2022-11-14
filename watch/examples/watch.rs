@@ -72,6 +72,10 @@ impl<'a> Runner<'a> {
                 "py" => {
                     self.compile_lang3(stem.as_ref(), &path)?;
                 }
+                "so" => {
+                    println!("loading object file {}", &path.to_string_lossy());
+                    let _ = self.linker.add_library(stem.as_ref(), &path)?;
+                }
                 "o" => {
                     println!("loading object file {}", &path.to_string_lossy());
                     let _ = self.linker.add(stem.as_ref(), &path)?;
