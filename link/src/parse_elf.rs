@@ -116,7 +116,7 @@ impl UnlinkedCodeInner {
                     if  s.scope() == SymbolScope::Dynamic && section_ids.contains(&section_index) {
                         let name = s.name()?.to_string();
                         println!("add: {:?}", (&name, s.address()));
-                        symbols.insert(name, (s.section_index().unwrap(), s.address()));
+                        symbols.insert(name, (s.section_index(), s.address()));
 
                         // space for 64bit pointer
                         got_size += 8;
@@ -124,7 +124,7 @@ impl UnlinkedCodeInner {
                 } else if s.kind() == SymbolKind::Unknown {
                     let name = s.name()?.to_string();
                     println!("add unknown: {:?}", (&name, s.address()));
-                    //symbols.insert(name, (s.section_index().unwrap(), s.address()));
+                    symbols.insert(name, (s.section_index(), s.address()));
                     // space for 64bit pointer
                     //got_size += 8;
                 }
@@ -158,8 +158,8 @@ impl UnlinkedCodeInner {
 
         let mut symbols_with_offsets = im::HashMap::new();
 
-        for (i, (name, (section_index, offset))) in symbols.iter().enumerate() {
-            let base = *section_base.get(&section_index).unwrap();
+        for (i, (name, (maybe_section_index, offset))) in symbols.iter().enumerate() {
+            let base = maybe_section_index.as_ref().map(|section_index| *section_base.get(section_index).unwrap()).unwrap_or(start_index);
             unsafe {
                 let page_base = mmap.as_ptr() as *const u8; 
                 let value_ptr = page_base.offset(base as isize + *offset as isize); 

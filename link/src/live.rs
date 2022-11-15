@@ -193,6 +193,17 @@ mod tests {
     }
 
     #[test]
+    fn link_shared() {
+        let mut b = LinkBuilder::new();
+        b.add_library("gz", Path::new("/home/rrx/code/protolang/tmp/libz.so")).unwrap();
+        b.add("test", Path::new("/home/rrx/code/protolang/tmp/link_shared.o")).unwrap();
+        let collection = b.link().unwrap();
+        let _: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
+        //println!("ret: {:#08x}", ret);
+        //assert_eq!(3, ret);
+    }
+
+    #[test]
     fn livelink() {
         let mut b = LinkBuilder::new();
 

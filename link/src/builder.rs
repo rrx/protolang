@@ -82,9 +82,10 @@ impl LinkBuilder {
         for (name, unlinked) in &self.pages {
             let mut children = HashSet::new();
             println!("checking: {}", name);
+            // ensure all relocations map somewhere
             for symbol in &unlinked.relocations {
                 println!("\tReloc: {}", &symbol);
-                if symbols.contains_key(symbol) || self.search_dynamic(symbol)? {
+                if symbols.contains_key(symbol) || self.search_dynamic(symbol)?.is_some() {
                     children.insert(symbol.clone());
                     relocations.insert(symbol.clone());
                 } else {
@@ -111,17 +112,17 @@ impl LinkBuilder {
 
 
     // search the dynamic libraries to see if the symbol exists
-    fn search_dynamic(&self, symbol: &str) -> Result<bool, Box<dyn Error>> {
+    fn search_dynamic(&self, symbol: &str) -> Result<Option<*const()>, Box<dyn Error>> {
         for (_name, lib) in &self.libraries {
             let cstr = CString::new(symbol)?;
             unsafe {
                 let result: Result<libloading::Symbol<unsafe fn ()>, libloading::Error> = lib.get(cstr.as_bytes());
-                if let Ok(_) = result {
-                    return Ok(true);
+                if let Ok(f) = result {
+                    return Ok(Some(f.into_raw().into_raw() as *const()));
                 }
             }
         }
-        Ok(false)
+        Ok(None)
     }
 
 
