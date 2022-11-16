@@ -158,20 +158,38 @@ impl UnlinkedCodeInner {
 
         let mut symbols_with_offsets = im::HashMap::new();
 
+        let mut got_byte_index = 0;
+        let page_base = mmap.as_ptr() as *const u8; 
         for (i, (name, (maybe_section_index, offset))) in symbols.iter().enumerate() {
-            let base = maybe_section_index.as_ref().map(|section_index| *section_base.get(section_index).unwrap()).unwrap_or(start_index);
             unsafe {
-                let page_base = mmap.as_ptr() as *const u8; 
-                let value_ptr = page_base.offset(base as isize + *offset as isize); 
-                // got pointer follows the data section
-                let got_ptr = page_base.offset((size+i*8) as isize) as *mut u64; 
 
-                // set the got_ptr to be the value ptr
-                *got_ptr = value_ptr as u64;
-                //(got_ptr as *mut u32).replace(value_ptr as u32);
+                match maybe_section_index.as_ref() {
+                    Some(section_index) => {
+                        // got pointer follows the data section
+                        let got_ptr = page_base.offset((size+got_byte_index) as isize) as *mut u64; 
+                        let base = *section_base.get(section_index).unwrap();
+                        let value_ptr = page_base.offset(base as isize + *offset as isize); 
+                        got_byte_index += 8;
+                        // set the got_ptr to be the value ptr
+                        *got_ptr = value_ptr as u64;
+                        println!("normal symbol: {:?}", (&name, offset, value_ptr, got_ptr));
+                        symbols_with_offsets.insert(name.clone(), got_ptr as *const ());
+                    }
+                    None => {
+                        let base = start_index;
+                        let value_ptr = page_base.offset(base as isize + *offset as isize); 
+                        let got_ptr = page_base.offset((size+got_byte_index) as isize) as *mut u8; 
+                        //  jmp + dword = E9 00 00 00 00
+                        *got_ptr = 0xe9;
+                        got_byte_index += 1;
+                        let got_ptr = page_base.offset((size+got_byte_index) as isize) as *mut u64; 
+                        *got_ptr = value_ptr as u64;
+                        got_byte_index += 4;
+                        println!("got symbol: {:?}", (&name, offset, value_ptr, got_ptr));
+                        symbols_with_offsets.insert(name.clone(), got_ptr as *const ());
+                    }
+                }
 
-                println!("symbol: {:?}", (&name, offset, value_ptr, got_ptr));
-                symbols_with_offsets.insert(name.clone(), got_ptr as *const ());
             }
         }
 
