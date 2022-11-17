@@ -154,7 +154,7 @@ pub fn gen_self_reference(defs: &mut Definitions) -> Ast {
 
 pub fn gen_extern(defs: &mut Definitions) -> Ast {
     let typ = FunctionType::export(vec![Type::i64()]);
-    
+
     let ext = hir::new_extern_function("testfunction", typ.clone());
 
     let b = defs.named_variable("main");
@@ -165,4 +165,3 @@ pub fn gen_extern(defs: &mut Definitions) -> Ast {
 
     hir::definition_from_variable(&b, f_main).into()
 }
-

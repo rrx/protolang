@@ -3,11 +3,11 @@ use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
 use inkwell::module::Module;
 use inkwell::passes::{PassManager, PassManagerBuilder};
+use inkwell::targets::{CodeModel, RelocMode};
 use inkwell::targets::{InitializationConfig, Target, TargetMachine};
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
 use std::error::Error;
-use inkwell::targets::{CodeModel, RelocMode};
 
 pub type ModuleMap<'a> = HashMap<String, Module<'a>>;
 
@@ -18,7 +18,10 @@ pub struct Executor<'a> {
 }
 
 impl<'a> Executor<'a> {
-    pub fn create(optimization_level: OptimizationLevel, size_level: u32) -> Result<Self, Box<dyn Error>> {
+    pub fn create(
+        optimization_level: OptimizationLevel,
+        size_level: u32,
+    ) -> Result<Self, Box<dyn Error>> {
         // Initialize for the host machine, we aren't doing any cross compiling here
         let config = InitializationConfig::default();
         Target::initialize_native(&config)?;

@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use std::error::Error;
-use std::path::Path;
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::ffi::CString;
+use std::path::Path;
+use std::sync::Arc;
 
 use std::fs;
 
@@ -11,21 +11,21 @@ use super::*;
 pub struct LinkBuilder {
     collection: LinkCollection,
     pages: HashMap<String, UnlinkedCode>,
-    libraries: HashMap<String, libloading::Library>
+    libraries: HashMap<String, libloading::Library>,
 }
 
 impl LinkBuilder {
     pub fn new() -> Self {
         Self {
-            collection: LinkCollection::new(), pages: HashMap::new(),
-            libraries: HashMap::new()
+            collection: LinkCollection::new(),
+            pages: HashMap::new(),
+            libraries: HashMap::new(),
         }
     }
 
     pub fn remove(&mut self, name: &str) {
         self.pages.remove(&name.to_string());
     }
-
 
     pub fn add_library(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
         unsafe {
@@ -100,24 +100,22 @@ impl LinkBuilder {
         } else {
             Err(LinkError::MissingSymbol.into())
         }
-
     }
 
-
     // search the dynamic libraries to see if the symbol exists
-    fn search_dynamic(&self, symbol: &str) -> Result<Option<*const()>, Box<dyn Error>> {
+    fn search_dynamic(&self, symbol: &str) -> Result<Option<*const ()>, Box<dyn Error>> {
         for (_name, lib) in &self.libraries {
             let cstr = CString::new(symbol)?;
             unsafe {
-                let result: Result<libloading::Symbol<unsafe fn ()>, libloading::Error> = lib.get(cstr.as_bytes());
+                let result: Result<libloading::Symbol<unsafe fn()>, libloading::Error> =
+                    lib.get(cstr.as_bytes());
                 if let Ok(f) = result {
-                    return Ok(Some(f.into_raw().into_raw() as *const()));
+                    return Ok(Some(f.into_raw().into_raw() as *const ()));
                 }
             }
         }
         Ok(None)
     }
-
 
     /*
     pub fn link2(&mut self) -> Result<(), Box<dyn Error>> {
@@ -129,7 +127,4 @@ impl LinkBuilder {
         Ok(())
     }
     */
-
 }
-
-

@@ -1,28 +1,25 @@
-use std::sync::Arc;
-use std::error::Error;
-use object::{
-    Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationTarget,
-    SymbolScope,
-    SymbolKind,
-    SymbolSection,
-    SectionKind,
-};
 use memmap::MmapMut;
+use object::{
+    Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationTarget, SectionKind,
+    SymbolKind, SymbolScope, SymbolSection,
+};
+use std::error::Error;
+use std::sync::Arc;
 
 use std::collections::{HashMap, HashSet};
 
 use super::*;
 
 pub struct CodeSymbol {
-    name: String
+    name: String,
 }
 
 pub type UnlinkedCode = Arc<UnlinkedCodeInner>;
 pub struct UnlinkedCodeInner {
     pub(crate) name: String,
     pub(crate) bytes: Vec<u8>,
-    pub(crate) symbols: im::HashSet<String>,// CodeSymbol>,
-    pub(crate) relocations: im::HashSet<String>
+    pub(crate) symbols: im::HashSet<String>, // CodeSymbol>,
+    pub(crate) relocations: im::HashSet<String>,
 }
 
 impl UnlinkedCodeInner {
@@ -34,7 +31,12 @@ impl UnlinkedCodeInner {
         if let Some(symbol_table) = obj_file.symbol_table() {
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
-                println!("Found section[{:?}, {}]: {:?}", section.index(), section_name, section);
+                println!(
+                    "Found section[{:?}, {}]: {:?}",
+                    section.index(),
+                    section_name,
+                    section
+                );
 
                 for (reloc_offset, r) in section.relocations() {
                     let symbol = if let RelocationTarget::Symbol(symbol_index) = r.target() {
@@ -62,22 +64,33 @@ impl UnlinkedCodeInner {
                     SymbolSection::Section(section_index) => {
                         Some(obj_file.section_by_index(s.section_index().unwrap())?)
                     }
-                    _ => None
+                    _ => None,
                 };
 
-                let section_name = maybe_section.map(|section| section.name().map_or("".to_string(), |n| n.to_string()).to_string());
-                println!("Found symbol[{:?}, {:20}]: {:#04x} {:?}, {:?}", s.index().0, name, s.address(), s, section_name);
+                let section_name = maybe_section.map(|section| {
+                    section
+                        .name()
+                        .map_or("".to_string(), |n| n.to_string())
+                        .to_string()
+                });
+                println!(
+                    "Found symbol[{:?}, {:20}]: {:#04x} {:?}, {:?}",
+                    s.index().0,
+                    name,
+                    s.address(),
+                    s,
+                    section_name
+                );
                 if s.scope() == SymbolScope::Dynamic {
                     symbols.insert(name);
                 }
             }
-
         }
         Ok(Self {
             name: name.to_string(),
             bytes: buf.to_vec(),
             symbols,
-            relocations
+            relocations,
         })
     }
 
@@ -97,7 +110,12 @@ impl UnlinkedCodeInner {
                 match section.kind() {
                     SectionKind::UninitializedData => {
                         println!("xx sec: {:?}", (&section, &data));
-                        section_data.push((section_name, section.index(), section.size() as usize, None));
+                        section_data.push((
+                            section_name,
+                            section.index(),
+                            section.size() as usize,
+                            None,
+                        ));
                         section_ids.insert(section.index());
                     }
                     SectionKind::Data => {
@@ -105,14 +123,14 @@ impl UnlinkedCodeInner {
                         section_data.push((section_name, section.index(), data.len(), Some(data)));
                         section_ids.insert(section.index());
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
 
             for s in symbol_table.symbols() {
                 if let Some(section_index) = s.section_index() {
                     // only track dynamic symbols for now
-                    if  s.scope() == SymbolScope::Dynamic && section_ids.contains(&section_index) {
+                    if s.scope() == SymbolScope::Dynamic && section_ids.contains(&section_index) {
                         let name = s.name()?.to_string();
                         println!("add: {:?}", (&name, s.address()));
                         symbols.insert(name, (s.section_index(), s.address()));
@@ -130,12 +148,17 @@ impl UnlinkedCodeInner {
             }
         }
 
-        let size: usize = section_data.iter().fold(0, |acc, (_, _, size, _)| acc+size);
+        let size: usize = section_data
+            .iter()
+            .fold(0, |acc, (_, _, size, _)| acc + size);
 
         let page_aligned_size = page_align(size + 1); // round up to page alignment
 
         // allocate page aligned memory and copy the functions over
-        println!("allocating {} bytes on {}", page_aligned_size, &code_page_name);
+        println!(
+            "allocating {} bytes on {}",
+            page_aligned_size, &code_page_name
+        );
         let mut mmap = MmapMut::map_anon(page_aligned_size)?;
 
         // only copy the first part, the remainder is uninitialized
@@ -145,7 +168,7 @@ impl UnlinkedCodeInner {
         let mut section_base = HashMap::new();
         let mut start_index = 0;
         for (name, section_index, size, data) in section_data {
-            section_base.insert(section_index, start_index); 
+            section_base.insert(section_index, start_index);
             let start_end = start_index + size;
             println!("copy: {:?}", (name, start_index, start_end, &data));
             if let Some(data) = data {
@@ -158,16 +181,16 @@ impl UnlinkedCodeInner {
         let mut symbols_with_offsets = im::HashMap::new();
 
         let mut got_byte_index = 0;
-        let page_base = mmap.as_ptr() as *const u8; 
+        let page_base = mmap.as_ptr() as *const u8;
         for (i, (name, (maybe_section_index, offset))) in symbols.iter().enumerate() {
             unsafe {
-
                 match maybe_section_index.as_ref() {
                     Some(section_index) => {
                         // got pointer follows the data section
-                        let got_ptr = page_base.offset((size+got_byte_index) as isize) as *mut u64; 
+                        let got_ptr =
+                            page_base.offset((size + got_byte_index) as isize) as *mut u64;
                         let base = *section_base.get(section_index).unwrap();
-                        let value_ptr = page_base.offset(base as isize + *offset as isize); 
+                        let value_ptr = page_base.offset(base as isize + *offset as isize);
                         got_byte_index += 8;
                         // set the got_ptr to be the value ptr
                         *got_ptr = value_ptr as u64;
@@ -176,19 +199,19 @@ impl UnlinkedCodeInner {
                     }
                     None => {
                         let base = start_index;
-                        let value_ptr = page_base.offset(base as isize + *offset as isize); 
-                        let got_ptr = page_base.offset((size+got_byte_index) as isize) as *mut u8; 
+                        let value_ptr = page_base.offset(base as isize + *offset as isize);
+                        let got_ptr = page_base.offset((size + got_byte_index) as isize) as *mut u8;
                         //  jmp + dword = E9 00 00 00 00
                         *got_ptr = 0xe9;
                         got_byte_index += 1;
-                        let got_ptr = page_base.offset((size+got_byte_index) as isize) as *mut u64; 
+                        let got_ptr =
+                            page_base.offset((size + got_byte_index) as isize) as *mut u64;
                         *got_ptr = value_ptr as u64;
                         got_byte_index += 4;
                         println!("got symbol: {:?}", (&name, offset, value_ptr, got_ptr));
                         symbols_with_offsets.insert(name.clone(), got_ptr as *const ());
                     }
                 }
-
             }
         }
 
@@ -199,12 +222,14 @@ impl UnlinkedCodeInner {
             relocations: im::HashMap::new(),
             m: mmap,
             code_size: size,
-            got_size
+            got_size,
         })
-
     }
 
-    pub fn create_unpatched(&self, code_page_name: &str) -> Result<UnpatchedCodePage, Box<dyn Error>> {
+    pub fn create_unpatched(
+        &self,
+        code_page_name: &str,
+    ) -> Result<UnpatchedCodePage, Box<dyn Error>> {
         let obj_file = object::File::parse(self.bytes.as_slice())?;
 
         println!("create unpatched: {}", self.name);
@@ -238,14 +263,16 @@ impl UnlinkedCodeInner {
                     };
                     match symbol.scope() {
                         SymbolScope::Dynamic | SymbolScope::Linkage | SymbolScope::Unknown => {
-                            relocations.insert(reloc_offset as isize, Reloc {
-                                symbol_name: symbol.name()?.to_string(),
-                                r: r.into()
-                            });
+                            relocations.insert(
+                                reloc_offset as isize,
+                                Reloc {
+                                    symbol_name: symbol.name()?.to_string(),
+                                    r: r.into(),
+                                },
+                            );
                         }
                         SymbolScope::Compilation => (),
                     }
-
                 }
             }
 
@@ -282,7 +309,7 @@ impl UnlinkedCodeInner {
 
         for (name, offset) in symbols {
             unsafe {
-                let ptr = mmap.as_ptr().offset(offset as isize) as *const (); 
+                let ptr = mmap.as_ptr().offset(offset as isize) as *const ();
                 println!("symbol: {:?}", (&name, offset, ptr));
                 symbols_with_offsets.insert(name, ptr);
             }
@@ -295,11 +322,7 @@ impl UnlinkedCodeInner {
             relocations,
             m: mmap,
             code_size: size,
-            got_size
+            got_size,
         })
-
     }
-
 }
-
-

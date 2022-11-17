@@ -4,7 +4,7 @@ use std::fmt;
 pub enum LinkError {
     NotFound,
     MissingSymbol,
-    SymbolNotFound
+    SymbolNotFound,
 }
 impl std::error::Error for LinkError {}
 impl fmt::Display for LinkError {
@@ -12,5 +12,3 @@ impl fmt::Display for LinkError {
         write!(f, "LinkError: {:?}", &self)
     }
 }
-
-

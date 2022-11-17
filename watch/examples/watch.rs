@@ -1,8 +1,9 @@
 use codegen_ir::hir;
-use codegen_llvm::{Context, OptimizationLevel, Executor, FileType};
+use codegen_llvm::{Context, Executor, FileType, OptimizationLevel};
 use frontend::syntax::AstModule;
 use frontend::syntax::Dialect;
 use lang3::{AstBuilder, Environment};
+use link::*;
 use notify::event::AccessKind;
 use notify::event::AccessMode;
 use notify::EventKind::*;
@@ -10,7 +11,6 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
-use link::*;
 
 pub struct Runner<'a> {
     context: &'a Context,
@@ -37,7 +37,8 @@ impl<'a> Runner<'a> {
 
     pub fn compile_ast(&mut self, name: &str, ast: &hir::Ast) -> Result<(), Box<dyn Error>> {
         let module = self.execute.compile(name, ast, self.context)?;
-        let asm_buf = self.execute
+        let asm_buf = self
+            .execute
             .target_machine
             .write_to_memory_buffer(&module, FileType::Assembly)
             .unwrap();
@@ -46,8 +47,7 @@ impl<'a> Runner<'a> {
             .target_machine
             .write_to_memory_buffer(&module, FileType::Object)
             .unwrap();
-        self
-            .execute
+        self.execute
             .target_machine
             .write_to_file(&module, FileType::Object, &Path::new("out.o"))
             .unwrap();

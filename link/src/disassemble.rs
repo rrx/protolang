@@ -1,5 +1,5 @@
-use capstone::prelude::*;
 use super::*;
+use capstone::prelude::*;
 
 impl CodePageInner {
     pub fn disassemble(&self) {
@@ -14,11 +14,9 @@ impl CodePageInner {
         println!("start: {:#08x}", &base);
         disassemble(self.kind, buf, pointers);
         match self.kind {
-            CodePageKind::Data => {
-            }
-            _ => ()
+            CodePageKind::Data => {}
+            _ => (),
         }
-
     }
 }
 
@@ -34,7 +32,6 @@ impl UnpatchedCodePage {
         disassemble(self.kind, buf, pointers);
     }
 }
-
 
 pub fn disassemble(kind: CodePageKind, buf: &[u8], pointers: im::HashMap<usize, String>) {
     match kind {
@@ -52,16 +49,13 @@ pub fn disassemble_data(buf: &[u8], pointers: im::HashMap<usize, String>) {
 }
 
 pub fn disassemble_code(buf: &[u8], pointers: im::HashMap<usize, String>) {
-
     // disassemble the code we are generating
     let cs = capstone::Capstone::new()
         .x86()
         .mode(arch::x86::ArchMode::Mode64)
         .build()
         .unwrap();
-    let insts = cs
-        .disasm_all(&buf, 0)
-        .expect("disassemble");
+    let insts = cs.disasm_all(&buf, 0).expect("disassemble");
     let mut last_name = None;
     for instr in insts.as_ref() {
         let addr = instr.address() as usize;
@@ -88,7 +82,6 @@ pub fn disassemble_code(buf: &[u8], pointers: im::HashMap<usize, String>) {
             &addr,
             instr.mnemonic().expect("no mnmemonic found"),
             instr.op_str().expect("no op_str found")
-            );
+        );
     }
 }
-

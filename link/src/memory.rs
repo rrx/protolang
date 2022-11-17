@@ -1,10 +1,10 @@
 use linked_list_allocator::*;
 use memmap::*;
-use std::error::Error;
-use std::sync::{Mutex, Arc};
 use std::alloc::Layout;
-use std::ptr::NonNull;
+use std::error::Error;
 use std::io;
+use std::ptr::NonNull;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct BlockFactory(Arc<Mutex<BlockFactoryInner>>);
@@ -16,7 +16,10 @@ pub struct BlockFactoryInner {
 }
 
 impl BlockFactory {
-    pub fn create(num_code_pages: usize, num_data_pages: usize) -> Result<BlockFactory, Box<dyn Error>> {
+    pub fn create(
+        num_code_pages: usize,
+        num_data_pages: usize,
+    ) -> Result<BlockFactory, Box<dyn Error>> {
         // the total amount of space allocated should not be more than 4GB,
         // because we are limited to 32bit relative addressing
         // we can address things outside this block, but we need 64 bit addressing
@@ -26,10 +29,11 @@ impl BlockFactory {
         let mut data_heap = Heap::empty();
         let mut code_heap = Heap::empty();
 
-
         unsafe {
             let data_ptr = m.as_ptr();
-            let code_ptr = m.as_ptr().offset(num_code_pages as isize * page_size() as isize);
+            let code_ptr = m
+                .as_ptr()
+                .offset(num_code_pages as isize * page_size() as isize);
             data_heap.init(data_ptr as *mut u8, ps * num_data_pages);
             code_heap.init(code_ptr as *mut u8, ps * num_code_pages);
         }
@@ -37,27 +41,41 @@ impl BlockFactory {
         Ok(Self(Arc::new(Mutex::new(BlockFactoryInner {
             code: code_heap,
             data: data_heap,
-            m
+            m,
         }))))
     }
 
     pub fn alloc_data(&self, size: usize) -> Option<DataBlock> {
         let layout = Layout::from_size_align(size, 16).unwrap();
-        let p = self.0.as_ref().lock().unwrap().data.allocate_first_fit(layout).unwrap();
+        let p = self
+            .0
+            .as_ref()
+            .lock()
+            .unwrap()
+            .data
+            .allocate_first_fit(layout)
+            .unwrap();
         Some(DataBlock(Block {
             layout,
             p: Some(p),
-            factory: self.clone()
+            factory: self.clone(),
         }))
     }
 
     pub fn alloc_code(&self, size: usize) -> Option<CodeBlock> {
         let layout = Layout::from_size_align(size, 16).unwrap();
-        let p = self.0.as_ref().lock().unwrap().code.allocate_first_fit(layout).unwrap();
+        let p = self
+            .0
+            .as_ref()
+            .lock()
+            .unwrap()
+            .code
+            .allocate_first_fit(layout)
+            .unwrap();
         Some(CodeBlock(Block {
             layout,
             p: Some(p),
-            factory: self.clone()
+            factory: self.clone(),
         }))
     }
 
@@ -65,7 +83,14 @@ impl BlockFactory {
         if let Some(ptr) = block.p {
             println!("Freeing Code at {:#08x}", ptr.as_ptr() as usize);
             unsafe {
-                block.factory.0.as_ref().lock().unwrap().code.deallocate(ptr, block.layout);
+                block
+                    .factory
+                    .0
+                    .as_ref()
+                    .lock()
+                    .unwrap()
+                    .code
+                    .deallocate(ptr, block.layout);
             }
         }
     }
@@ -74,7 +99,14 @@ impl BlockFactory {
         if let Some(ptr) = block.p {
             println!("Freeing Data at {:#08x}", ptr.as_ptr() as usize);
             unsafe {
-                block.factory.0.as_ref().lock().unwrap().data.deallocate(ptr, block.layout);
+                block
+                    .factory
+                    .0
+                    .as_ref()
+                    .lock()
+                    .unwrap()
+                    .data
+                    .deallocate(ptr, block.layout);
             }
         }
     }
@@ -82,7 +114,6 @@ impl BlockFactory {
     pub fn debug(&self) {
         self.0.as_ref().lock().unwrap().debug();
     }
-
 }
 
 impl BlockFactoryInner {
@@ -119,7 +150,7 @@ impl DataBlock {
         Ok(ReadonlyDataBlock(Block {
             layout: self.0.layout,
             p,
-            factory: self.0.factory.clone()
+            factory: self.0.factory.clone(),
         }))
     }
 }
@@ -136,7 +167,7 @@ impl WritableCodeBlock {
         Ok(CodeBlock(Block {
             layout: self.0.layout,
             p,
-            factory: self.0.factory.clone()
+            factory: self.0.factory.clone(),
         }))
     }
 }
@@ -144,14 +175,14 @@ impl WritableCodeBlock {
 pub struct CodeBlock(Block);
 impl CodeBlock {
     pub fn as_ptr(&self) -> *const u8 {
-        self.0.p.unwrap().as_ptr() as *const u8 
+        self.0.p.unwrap().as_ptr() as *const u8
     }
 }
 
 pub struct Block {
     layout: Layout,
     p: Option<NonNull<u8>>,
-    factory: BlockFactory
+    factory: BlockFactory,
 }
 
 impl Block {
@@ -227,4 +258,3 @@ mod tests {
         eprintln!("V Size: {:#08x}", v3.as_ptr() as usize);
     }
 }
-

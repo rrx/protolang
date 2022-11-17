@@ -1,17 +1,14 @@
-use std::sync::Arc;
-use std::error::Error;
-use object::{
-    RelocationKind, RelocationTarget,
-    Relocation, RelocationEncoding
-};
 use capstone::prelude::*;
-use std::path::Path;
+use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::ffi::CString;
+use std::path::Path;
+use std::sync::Arc;
 
 use memmap::{Mmap, MmapMut};
-use std::fs;
 use std::fmt;
+use std::fs;
 
 use super::*;
 
@@ -27,21 +24,33 @@ pub struct LinkRelocation {
 
 impl From<Relocation> for LinkRelocation {
     fn from(item: Relocation) -> Self {
-        Self { kind: item.kind(), encoding: item.encoding(), size: item.size(), target: item.target(), addend: item.addend(), implicit_addend: item.has_implicit_addend() }
+        Self {
+            kind: item.kind(),
+            encoding: item.encoding(),
+            size: item.size(),
+            target: item.target(),
+            addend: item.addend(),
+            implicit_addend: item.has_implicit_addend(),
+        }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Reloc {
     pub(crate) symbol_name: String,
-    pub(crate) r: LinkRelocation
+    pub(crate) r: LinkRelocation,
 }
 
-
 // given a map of pointers, patch the unpatched code page, and return a patched code page
-pub fn patch(mut code: UnpatchedCodePage, pointers: im::HashMap<String, *const ()>) -> Result<CodePage, Box<dyn Error>> {
-    println!("patching {} at base {:#08x}", &code.name, code.m.as_ptr() as usize);
+pub fn patch(
+    mut code: UnpatchedCodePage,
+    pointers: im::HashMap<String, *const ()>,
+) -> Result<CodePage, Box<dyn Error>> {
+    println!(
+        "patching {} at base {:#08x}",
+        &code.name,
+        code.m.as_ptr() as usize
+    );
     for (reloc_offset, rel) in &code.relocations {
         println!("r@{:#04x}: {:?}", &reloc_offset, &rel);
         match rel.r.kind {
@@ -75,9 +84,8 @@ pub fn patch(mut code: UnpatchedCodePage, pointers: im::HashMap<String, *const (
                         value as u32,
                         rel.r.addend,
                         addr as usize,
-                        );
+                    );
                 }
-
             }
 
             RelocationKind::Absolute => {
@@ -92,11 +100,10 @@ pub fn patch(mut code: UnpatchedCodePage, pointers: im::HashMap<String, *const (
                 unsafe {
                     let patch_base = code.m.as_mut_ptr() as *mut u8;
 
-
                     // address of remote
                     let addr = *pointers.get(name).unwrap();
                     let adjusted = addr as isize + rel.r.addend as isize;
-                    
+
                     let (before, patch) = match rel.r.size {
                         32 => {
                             // patch as 32 bit
@@ -112,7 +119,7 @@ pub fn patch(mut code: UnpatchedCodePage, pointers: im::HashMap<String, *const (
                             patch.replace(adjusted as u64);
                             (before as u64, patch as u64)
                         }
-                        _ => unimplemented!()
+                        _ => unimplemented!(),
                     };
 
                     println!(
@@ -143,8 +150,7 @@ pub fn patch(mut code: UnpatchedCodePage, pointers: im::HashMap<String, *const (
                     let patch_base = code.m.as_mut_ptr() as *mut u8;
                     let patch = patch_base.offset(*reloc_offset as isize);
 
-                    let symbol_address =
-                        symbol_addr as isize + addend as isize - patch as isize;
+                    let symbol_address = symbol_addr as isize + addend as isize - patch as isize;
 
                     // patch as 32 bit
                     let patch = patch as *mut u32;
@@ -172,8 +178,6 @@ pub fn patch(mut code: UnpatchedCodePage, pointers: im::HashMap<String, *const (
         got_size: code.got_size,
         symbols: code.symbols.clone(),
         relocations: code.relocations.clone(),
-        name: code.name.clone()
+        name: code.name.clone(),
     }))
 }
-
-
