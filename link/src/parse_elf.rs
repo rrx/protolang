@@ -1,16 +1,15 @@
 use std::sync::Arc;
 use std::error::Error;
 use object::{
-    Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationKind, RelocationTarget,
-    Relocation, RelocationEncoding, SymbolScope,
-    Symbol,
+    Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationTarget,
+    SymbolScope,
     SymbolKind,
     SymbolSection,
     SectionKind,
 };
-use std::collections::{HashMap, HashSet};
+use memmap::MmapMut;
 
-use memmap::{Mmap, MmapMut};
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 

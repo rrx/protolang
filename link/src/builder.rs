@@ -1,17 +1,10 @@
 use std::sync::Arc;
 use std::error::Error;
-use object::{
-    RelocationKind, RelocationTarget,
-    Relocation, RelocationEncoding
-};
-use capstone::prelude::*;
 use std::path::Path;
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 
-use memmap::{Mmap, MmapMut};
 use std::fs;
-use std::fmt;
 
 use super::*;
 
@@ -39,7 +32,7 @@ impl LinkBuilder {
             let lib = libloading::Library::new(path)?;
             // we need to parse the header files to know what all of the symbols mean
             // but we may as well just use bindgen?
-            let _: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(b"gzopen")?;
+            //let _: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(b"gzopen")?;
             self.libraries.insert(name.to_string(), lib);
             eprintln!("Loaded library: {}", &path.to_string_lossy());
         }
