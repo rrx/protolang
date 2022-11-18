@@ -14,12 +14,12 @@ use super::*;
 
 #[derive(Debug, Clone)]
 pub struct LinkRelocation {
-    kind: RelocationKind,
-    encoding: RelocationEncoding,
-    size: u8,
-    target: RelocationTarget,
-    addend: i64,
-    implicit_addend: bool,
+    pub(crate) kind: RelocationKind,
+    pub(crate) encoding: RelocationEncoding,
+    pub(crate) size: u8,
+    pub(crate) target: RelocationTarget,
+    pub(crate) addend: i64,
+    pub(crate) implicit_addend: bool,
 }
 
 impl From<Relocation> for LinkRelocation {

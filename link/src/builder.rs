@@ -59,13 +59,15 @@ impl LinkBuilder {
         // get all of the symbols and the name that provides it
         for (name, unlinked) in &self.pages {
             println!("linking: {}", name);
-            for symbol in &unlinked.symbols {
-                println!("\tSymbol: {}", &symbol);
-                if symbols.contains_key(symbol) {
-                    println!("\tDuplicate symbol: {}", &symbol);
-                    duplicates.insert(symbol);
-                } else {
-                    symbols.insert(symbol.clone(), name);
+            for (symbol_name, symbol) in &unlinked.symbols {
+                if symbol.def == CodeSymbolDefinition::Defined {
+                    println!("\tSymbol: {}", &symbol_name);
+                    if symbols.contains_key(symbol_name) {
+                        println!("\tDuplicate symbol: {}", &symbol_name);
+                        duplicates.insert(symbol_name);
+                    } else {
+                        symbols.insert(symbol_name.clone(), name);
+                    }
                 }
             }
         }
@@ -76,14 +78,14 @@ impl LinkBuilder {
             let mut children = HashSet::new();
             println!("checking: {}", name);
             // ensure all relocations map somewhere
-            for symbol in &unlinked.relocations {
-                println!("\tReloc: {}", &symbol);
-                if symbols.contains_key(symbol) || self.search_dynamic(symbol)?.is_some() {
-                    children.insert(symbol.clone());
-                    relocations.insert(symbol.clone());
+            for (symbol_name, r) in &unlinked.relocations {
+                println!("\tReloc: {}", &symbol_name);
+                if symbols.contains_key(symbol_name) || self.search_dynamic(symbol_name)?.is_some() {
+                    children.insert(symbol_name.clone());
+                    relocations.insert(symbol_name.clone());
                 } else {
-                    println!("\tSymbol {} missing", symbol);
-                    missing.insert(symbol);
+                    println!("\tSymbol {} missing", symbol_name);
+                    missing.insert(symbol_name);
                 }
             }
         }

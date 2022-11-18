@@ -45,7 +45,7 @@ impl BlockFactory {
         }))))
     }
 
-    pub fn alloc_data(&self, size: usize) -> Option<DataBlock> {
+    pub fn alloc_data(&self, size: usize) -> Option<WritableDataBlock> {
         let layout = Layout::from_size_align(size, 16).unwrap();
         let p = self
             .0
@@ -55,14 +55,14 @@ impl BlockFactory {
             .data
             .allocate_first_fit(layout)
             .unwrap();
-        Some(DataBlock(Block {
+        Some(WritableDataBlock(BlockInner {
             layout,
             p: Some(p),
             factory: self.clone(),
         }))
     }
 
-    pub fn alloc_code(&self, size: usize) -> Option<CodeBlock> {
+    pub fn alloc_code(&self, size: usize) -> Option<WritableCodeBlock> {
         let layout = Layout::from_size_align(size, 16).unwrap();
         let p = self
             .0
@@ -72,14 +72,14 @@ impl BlockFactory {
             .code
             .allocate_first_fit(layout)
             .unwrap();
-        Some(CodeBlock(Block {
+        Some(WritableCodeBlock(BlockInner {
             layout,
             p: Some(p),
             factory: self.clone(),
         }))
     }
 
-    fn deallocate_code(&self, block: &Block) {
+    fn deallocate_code(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
             println!("Freeing Code at {:#08x}", ptr.as_ptr() as usize);
             unsafe {
@@ -95,7 +95,7 @@ impl BlockFactory {
         }
     }
 
-    fn deallocate_data(&self, block: &Block) {
+    fn deallocate_data(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
             println!("Freeing Data at {:#08x}", ptr.as_ptr() as usize);
             unsafe {
@@ -108,6 +108,13 @@ impl BlockFactory {
                     .data
                     .deallocate(ptr, block.layout);
             }
+        }
+    }
+
+    fn deallocate(&self, block: &Block) {
+        match block {
+            Block::DataRW(WritableDataBlock(b)) | Block::DataRO(ReadonlyDataBlock(b)) => self.deallocate_data(b),
+            Block::CodeRW(WritableCodeBlock(b)) | Block::CodeRX(ExecutableCodeBlock(b)) => self.deallocate_data(b),
         }
     }
 
@@ -132,22 +139,34 @@ impl BlockFactoryInner {
     }
 }
 
-pub struct ReadonlyDataBlock(Block);
+pub enum Block {
+    DataRW(WritableDataBlock),
+    DataRO(ReadonlyDataBlock),
+    CodeRW(WritableCodeBlock),
+    CodeRX(ExecutableCodeBlock)
+}
+
+pub enum DataBlock {
+    RW(WritableDataBlock),
+    RO(ReadonlyDataBlock)
+}
+
+pub struct ReadonlyDataBlock(BlockInner);
 impl ReadonlyDataBlock {
     pub fn as_ptr(&self) -> *const u8 {
         self.0.p.unwrap().as_ptr() as *const u8
     }
 }
 
-pub struct DataBlock(Block);
-impl DataBlock {
+pub struct WritableDataBlock(BlockInner);
+impl WritableDataBlock {
     pub fn as_ptr(&self) -> *mut u8 {
         self.0.p.unwrap().as_ptr()
     }
     pub fn make_readonly_data(mut self) -> io::Result<ReadonlyDataBlock> {
         self.0.make_read_only()?;
         let p = self.0.p.take();
-        Ok(ReadonlyDataBlock(Block {
+        Ok(ReadonlyDataBlock(BlockInner {
             layout: self.0.layout,
             p,
             factory: self.0.factory.clone(),
@@ -155,16 +174,21 @@ impl DataBlock {
     }
 }
 
-pub struct WritableCodeBlock(Block);
+pub enum CodeBlock {
+    RW(WritableCodeBlock),
+    RX(ExecutableCodeBlock)
+}
+
+pub struct WritableCodeBlock(BlockInner);
 impl WritableCodeBlock {
     pub fn as_ptr(&self) -> *mut u8 {
         self.0.p.unwrap().as_ptr()
     }
 
-    pub fn make_exec(&mut self) -> io::Result<CodeBlock> {
+    pub fn make_exec(&mut self) -> io::Result<ExecutableCodeBlock> {
         self.0.make_exec()?;
         let p = self.0.p.take();
-        Ok(CodeBlock(Block {
+        Ok(ExecutableCodeBlock(BlockInner {
             layout: self.0.layout,
             p,
             factory: self.0.factory.clone(),
@@ -172,20 +196,20 @@ impl WritableCodeBlock {
     }
 }
 
-pub struct CodeBlock(Block);
-impl CodeBlock {
+pub struct ExecutableCodeBlock(BlockInner);
+impl ExecutableCodeBlock {
     pub fn as_ptr(&self) -> *const u8 {
         self.0.p.unwrap().as_ptr() as *const u8
     }
 }
 
-pub struct Block {
+pub struct BlockInner {
     layout: Layout,
     p: Option<NonNull<u8>>,
     factory: BlockFactory,
 }
 
-impl Block {
+impl BlockInner {
     fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
         unsafe {
             let alignment = self.p.unwrap().as_ptr() as usize % page_size();
@@ -218,7 +242,7 @@ impl Drop for ReadonlyDataBlock {
     }
 }
 
-impl Drop for DataBlock {
+impl Drop for WritableDataBlock {
     fn drop(&mut self) {
         self.0.factory.deallocate_data(&self.0);
     }
@@ -230,7 +254,7 @@ impl Drop for WritableCodeBlock {
     }
 }
 
-impl Drop for CodeBlock {
+impl Drop for ExecutableCodeBlock {
     fn drop(&mut self) {
         self.0.factory.deallocate_code(&self.0);
     }
