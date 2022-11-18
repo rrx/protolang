@@ -4,6 +4,7 @@ use object::{
     SymbolKind, SymbolScope, SymbolSection,
 };
 use std::error::Error;
+use std::fmt;
 use std::sync::Arc;
 
 use std::collections::{HashMap, HashSet};
@@ -24,18 +25,32 @@ pub enum CodeSymbolKind {
 
 #[derive(Clone, Debug)]
 pub struct CodeSymbol {
-    name: String,
-    size: u64,
-    address: u64,
-    kind: CodeSymbolKind,
+    pub(crate) name: String,
+    pub(crate) size: u64,
+    pub(crate) address: u64,
+    //pub(crate) ptr: *const (),
+    pub(crate) kind: CodeSymbolKind,
     pub(crate) def: CodeSymbolDefinition,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CodeRelocation {
-    name: String,
-    offset: u64,
-    r: LinkRelocation,
+    pub(crate) name: String,
+    pub(crate) offset: u64,
+    pub(crate) r: LinkRelocation,
+}
+
+impl fmt::Display for CodeRelocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Relocation[{}@{:#04x}, kind: {:?}, encoding: {:?}, size: {}, target: {:?}, addend: {}]",
+               self.name,
+               self.offset,
+               self.r.kind,
+               self.r.encoding,
+               self.r.size,
+               self.r.target,
+               self.r.addend)
+    }
 }
 
 pub type UnlinkedCode = Arc<UnlinkedCodeInner>;
@@ -55,7 +70,7 @@ impl UnlinkedCodeInner {
         if let Some(symbol_table) = obj_file.symbol_table() {
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
-                println!(
+                eprintln!(
                     "Section[{:?}, {}, address: {}, size: {}, align: {}, kind: {:?}]",
                     section.index().0,
                     section_name,
@@ -74,7 +89,8 @@ impl UnlinkedCodeInner {
                     let name = symbol.name()?.to_string();
 
                     match symbol.scope() {
-                        SymbolScope::Dynamic | SymbolScope::Linkage | SymbolScope::Unknown => {
+                        SymbolScope::Dynamic => {
+                            // | SymbolScope::Linkage | SymbolScope::Unknown => {
                             relocations.insert(
                                 name.clone(),
                                 CodeRelocation {
@@ -85,31 +101,19 @@ impl UnlinkedCodeInner {
                             );
                         }
                         SymbolScope::Compilation => (),
+                        _ => unimplemented!(),
                     }
                 }
             }
-            for (
-                relocation_name,
-                CodeRelocation {
-                    name: _,
-                    offset: reloc_offset,
-                    r,
-                },
-            ) in &relocations
-            {
-                println!("Relocation[{}@{:#04x}, kind: {:?}, encoding: {:?}, size: {}, target: {:?}, addend: {}]",
-                         relocation_name, reloc_offset,
-                         r.kind,
-                         r.encoding,
-                         r.size,
-                         r.target,
-                         r.addend);
+
+            for (_, r) in &relocations {
+                eprintln!("{}", r);
             }
 
             for s in symbol_table.symbols() {
                 // only track dynamic symbols for now
                 let name = s.name()?.to_string();
-                //println!("symbol: {:?}", &s);
+                //eprintln!("symbol: {:?}", &s);
                 let maybe_section = match s.section() {
                     SymbolSection::Section(section_index) => {
                         Some(obj_file.section_by_index(s.section_index().unwrap())?)
@@ -124,7 +128,7 @@ impl UnlinkedCodeInner {
                         .to_string()
                 });
 
-                println!(
+                eprintln!(
                     "Symbol[{}, {:20}, address: {:#04x}, size: {}, kind: {:?}, scope: {:?}, weak: {}, section: {:?}]",
                     s.index().0,
                     &name,
@@ -195,8 +199,8 @@ impl UnlinkedCodeInner {
             }
         }
 
-        for s in &symbols {
-            println!("{:?}", s);
+        for (symbol_name, code_symbol) in &symbols {
+            println!("Symbol[{}] = {:?}", symbol_name, code_symbol);
         }
 
         Ok(Self {
@@ -207,20 +211,6 @@ impl UnlinkedCodeInner {
         })
     }
 
-    /*
-    pub fn create_data(&self, code_page_name: &str) -> Result<UnpatchedCodePage, Box<dyn Error>> {
-        let mut got_size = 0;
-        Ok(UnpatchedCodePage {
-            kind: CodePageKind::Data,
-            name: code_page_name.to_string(),
-            symbols: symbols_with_offsets,
-            relocations: im::HashMap::new(),
-            m: mmap,
-            code_size: size,
-            got_size,
-        })
-    }
-    */
     pub fn create_data(&self, code_page_name: &str) -> Result<UnpatchedCodePage, Box<dyn Error>> {
         let obj_file = object::File::parse(self.bytes.as_slice())?;
         let mut size = 0;

@@ -2,6 +2,7 @@ use linked_list_allocator::*;
 use memmap::*;
 use std::alloc::Layout;
 use std::error::Error;
+use std::fmt;
 use std::io;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
@@ -46,6 +47,7 @@ impl BlockFactory {
     }
 
     pub fn alloc_data(&self, size: usize) -> Option<WritableDataBlock> {
+        assert!(size > 0);
         let layout = Layout::from_size_align(size, 16).unwrap();
         let p = self
             .0
@@ -55,6 +57,7 @@ impl BlockFactory {
             .data
             .allocate_first_fit(layout)
             .unwrap();
+        eprintln!("alloc data: {:#08x} - {}", p.as_ptr() as usize, size);
         Some(WritableDataBlock(BlockInner {
             layout,
             p: Some(p),
@@ -63,6 +66,7 @@ impl BlockFactory {
     }
 
     pub fn alloc_code(&self, size: usize) -> Option<WritableCodeBlock> {
+        assert!(size > 0);
         let layout = Layout::from_size_align(size, 16).unwrap();
         let p = self
             .0
@@ -72,6 +76,7 @@ impl BlockFactory {
             .code
             .allocate_first_fit(layout)
             .unwrap();
+        eprintln!("alloc code: {:#08x} - {}", p.as_ptr() as usize, size);
         Some(WritableCodeBlock(BlockInner {
             layout,
             p: Some(p),
@@ -81,7 +86,7 @@ impl BlockFactory {
 
     fn deallocate_code(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
-            println!("Freeing Code at {:#08x}", ptr.as_ptr() as usize);
+            eprintln!("Freeing Code at {:#08x}", ptr.as_ptr() as usize);
             unsafe {
                 block
                     .factory
@@ -97,7 +102,7 @@ impl BlockFactory {
 
     fn deallocate_data(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
-            println!("Freeing Data at {:#08x}", ptr.as_ptr() as usize);
+            eprintln!("Freeing Data at {:#08x}", ptr.as_ptr() as usize);
             unsafe {
                 block
                     .factory
@@ -155,14 +160,16 @@ pub enum DataBlock {
     RO(ReadonlyDataBlock),
 }
 
-pub struct ReadonlyDataBlock(BlockInner);
+#[derive(Debug)]
+pub struct ReadonlyDataBlock(pub(crate) BlockInner);
 impl ReadonlyDataBlock {
     pub fn as_ptr(&self) -> *const u8 {
         self.0.p.unwrap().as_ptr() as *const u8
     }
 }
 
-pub struct WritableDataBlock(BlockInner);
+#[derive(Debug)]
+pub struct WritableDataBlock(pub(crate) BlockInner);
 impl WritableDataBlock {
     pub fn as_ptr(&self) -> *mut u8 {
         self.0.p.unwrap().as_ptr()
@@ -183,7 +190,8 @@ pub enum CodeBlock {
     RX(ExecutableCodeBlock),
 }
 
-pub struct WritableCodeBlock(BlockInner);
+#[derive(Debug)]
+pub struct WritableCodeBlock(pub(crate) BlockInner);
 impl WritableCodeBlock {
     pub fn as_ptr(&self) -> *mut u8 {
         self.0.p.unwrap().as_ptr()
@@ -200,6 +208,7 @@ impl WritableCodeBlock {
     }
 }
 
+#[derive(Debug)]
 pub struct ExecutableCodeBlock(BlockInner);
 impl ExecutableCodeBlock {
     pub fn as_ptr(&self) -> *const u8 {
@@ -211,6 +220,12 @@ pub struct BlockInner {
     layout: Layout,
     p: Option<NonNull<u8>>,
     factory: BlockFactory,
+}
+
+impl fmt::Debug for BlockInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Block").field("p", &self.p).finish()
+    }
 }
 
 impl BlockInner {

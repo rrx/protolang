@@ -14,8 +14,8 @@ pub fn page_align(n: usize) -> usize {
 pub struct CodePointer {
     // we need to hold a reference here so we don't deallocate the code page
     #[allow(dead_code)]
-    code: CodePage,
-    ptr: *const (),
+    pub(crate) code: CodePage,
+    pub(crate) ptr: *const (),
 }
 
 pub type UnpatchedSet = HashMap<String, UnpatchedCodePage>;

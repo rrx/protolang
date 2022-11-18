@@ -12,6 +12,7 @@ pub struct LinkBuilder {
     collection: LinkCollection,
     pages: HashMap<String, UnlinkedCode>,
     libraries: HashMap<String, libloading::Library>,
+    mem: BlockFactory,
 }
 
 impl LinkBuilder {
@@ -20,6 +21,7 @@ impl LinkBuilder {
             collection: LinkCollection::new(),
             pages: HashMap::new(),
             libraries: HashMap::new(),
+            mem: BlockFactory::create(10, 10).unwrap(),
         }
     }
 
