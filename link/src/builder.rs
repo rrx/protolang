@@ -80,7 +80,8 @@ impl LinkBuilder {
             // ensure all relocations map somewhere
             for (symbol_name, r) in &unlinked.relocations {
                 println!("\tReloc: {}", &symbol_name);
-                if symbols.contains_key(symbol_name) || self.search_dynamic(symbol_name)?.is_some() {
+                if symbols.contains_key(symbol_name) || self.search_dynamic(symbol_name)?.is_some()
+                {
                     children.insert(symbol_name.clone());
                     relocations.insert(symbol_name.clone());
                 } else {

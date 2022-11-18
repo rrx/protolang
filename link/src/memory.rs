@@ -113,8 +113,12 @@ impl BlockFactory {
 
     fn deallocate(&self, block: &Block) {
         match block {
-            Block::DataRW(WritableDataBlock(b)) | Block::DataRO(ReadonlyDataBlock(b)) => self.deallocate_data(b),
-            Block::CodeRW(WritableCodeBlock(b)) | Block::CodeRX(ExecutableCodeBlock(b)) => self.deallocate_data(b),
+            Block::DataRW(WritableDataBlock(b)) | Block::DataRO(ReadonlyDataBlock(b)) => {
+                self.deallocate_data(b)
+            }
+            Block::CodeRW(WritableCodeBlock(b)) | Block::CodeRX(ExecutableCodeBlock(b)) => {
+                self.deallocate_data(b)
+            }
         }
     }
 
@@ -143,12 +147,12 @@ pub enum Block {
     DataRW(WritableDataBlock),
     DataRO(ReadonlyDataBlock),
     CodeRW(WritableCodeBlock),
-    CodeRX(ExecutableCodeBlock)
+    CodeRX(ExecutableCodeBlock),
 }
 
 pub enum DataBlock {
     RW(WritableDataBlock),
-    RO(ReadonlyDataBlock)
+    RO(ReadonlyDataBlock),
 }
 
 pub struct ReadonlyDataBlock(BlockInner);
@@ -176,7 +180,7 @@ impl WritableDataBlock {
 
 pub enum CodeBlock {
     RW(WritableCodeBlock),
-    RX(ExecutableCodeBlock)
+    RX(ExecutableCodeBlock),
 }
 
 pub struct WritableCodeBlock(BlockInner);

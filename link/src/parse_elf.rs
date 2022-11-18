@@ -13,7 +13,7 @@ use super::*;
 #[derive(Clone, Debug, PartialEq)]
 pub enum CodeSymbolDefinition {
     Extern,
-    Defined
+    Defined,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -35,7 +35,7 @@ pub struct CodeSymbol {
 pub struct CodeRelocation {
     name: String,
     offset: u64,
-    r: LinkRelocation
+    r: LinkRelocation,
 }
 
 pub type UnlinkedCode = Arc<UnlinkedCodeInner>;
@@ -75,13 +75,28 @@ impl UnlinkedCodeInner {
 
                     match symbol.scope() {
                         SymbolScope::Dynamic | SymbolScope::Linkage | SymbolScope::Unknown => {
-                            relocations.insert(name.clone(), CodeRelocation { name, offset: reloc_offset, r: r.into() });
+                            relocations.insert(
+                                name.clone(),
+                                CodeRelocation {
+                                    name,
+                                    offset: reloc_offset,
+                                    r: r.into(),
+                                },
+                            );
                         }
                         SymbolScope::Compilation => (),
                     }
                 }
             }
-            for (relocation_name, CodeRelocation { name: _, offset: reloc_offset, r}) in &relocations {
+            for (
+                relocation_name,
+                CodeRelocation {
+                    name: _,
+                    offset: reloc_offset,
+                    r,
+                },
+            ) in &relocations
+            {
                 println!("Relocation[{}@{:#04x}, kind: {:?}, encoding: {:?}, size: {}, target: {:?}, addend: {}]",
                          relocation_name, reloc_offset,
                          r.kind,
@@ -130,31 +145,27 @@ impl UnlinkedCodeInner {
                                     address: s.address(),
                                     size: s.size(),
                                     kind: CodeSymbolKind::Data,
-                                    def: CodeSymbolDefinition::Defined
+                                    def: CodeSymbolDefinition::Defined,
                                 })
                             }
-                            (SymbolScope::Dynamic, SectionKind::Data) => {
-                                Some(CodeSymbol {
-                                    name,
-                                    address: s.address(),
-                                    size: s.size(),
-                                    kind: CodeSymbolKind::Data,
-                                    def: CodeSymbolDefinition::Defined
-                                })
-                            }
-                            (SymbolScope::Dynamic, SectionKind::Text) => {
-                                Some(CodeSymbol {
-                                    name,
-                                    address: s.address(),
-                                    size: s.size(),
-                                    kind: CodeSymbolKind::Text,
-                                    def: CodeSymbolDefinition::Defined
-                                })
-                            }
+                            (SymbolScope::Dynamic, SectionKind::Data) => Some(CodeSymbol {
+                                name,
+                                address: s.address(),
+                                size: s.size(),
+                                kind: CodeSymbolKind::Data,
+                                def: CodeSymbolDefinition::Defined,
+                            }),
+                            (SymbolScope::Dynamic, SectionKind::Text) => Some(CodeSymbol {
+                                name,
+                                address: s.address(),
+                                size: s.size(),
+                                kind: CodeSymbolKind::Text,
+                                def: CodeSymbolDefinition::Defined,
+                            }),
 
                             // skip these
                             (SymbolScope::Compilation, _) => None,
-                            _ => unimplemented!()
+                            _ => unimplemented!(),
                         }
                     }
 
@@ -166,7 +177,7 @@ impl UnlinkedCodeInner {
                                 address: s.address(),
                                 size: s.size(),
                                 kind: CodeSymbolKind::Text,
-                                def: CodeSymbolDefinition::Extern
+                                def: CodeSymbolDefinition::Extern,
                             })
                         }
 
@@ -174,10 +185,9 @@ impl UnlinkedCodeInner {
                         SymbolKind::Null => None,
                         // we might want to capture the file info later
                         SymbolKind::File => None,
-                        _ => unimplemented!()
-                    }
+                        _ => unimplemented!(),
+                    },
                 };
-
 
                 if let Some(code_symbol) = maybe_code_symbol {
                     symbols.insert(code_symbol.name.clone(), code_symbol);
