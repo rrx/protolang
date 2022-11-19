@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 pub struct Runner<'a> {
     context: &'a Context,
-    linker: LinkBuilder,
+    linker: Link,
     execute: Executor<'a>,
 }
 impl<'a> Runner<'a> {
@@ -25,7 +25,7 @@ impl<'a> Runner<'a> {
     ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             context,
-            linker: LinkBuilder::new(),
+            linker: Link::new(),
             execute: Executor::create(optimization_level, size_level)?,
         })
     }
@@ -54,7 +54,7 @@ impl<'a> Runner<'a> {
 
         println!("asm {}", std::str::from_utf8(asm_buf.as_slice()).unwrap());
 
-        self.linker.add_buf(name, obj_buf.as_slice())
+        self.linker.add_obj_buf(name, obj_buf.as_slice())
     }
 
     pub fn load_paths(&mut self, paths: &Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
@@ -78,7 +78,7 @@ impl<'a> Runner<'a> {
                 }
                 "o" => {
                     println!("loading object file {}", &path.to_string_lossy());
-                    let _ = self.linker.add(stem.as_ref(), &path)?;
+                    let _ = self.linker.add_obj_file(stem.as_ref(), &path)?;
                 }
                 _ => {
                     println!("skipping {}", &path.to_string_lossy());
@@ -88,7 +88,7 @@ impl<'a> Runner<'a> {
         Ok(())
     }
 
-    pub fn link(&mut self) -> Result<LinkCollection, Box<dyn Error>> {
+    pub fn link(&mut self) -> Result<LinkVersion, Box<dyn Error>> {
         self.linker.link()
     }
 }
