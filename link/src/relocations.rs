@@ -30,4 +30,3 @@ pub struct Reloc {
     pub(crate) symbol_name: String,
     pub(crate) r: LinkRelocation,
 }
-
