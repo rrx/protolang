@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 pub struct BlockFactory(Arc<Mutex<BlockFactoryInner>>);
 
 pub struct BlockFactoryInner {
+    page_size: usize,
     m: MmapMut,
     code: Heap,
     data: Heap,
@@ -27,6 +28,9 @@ impl BlockFactory {
         let ps = page_size();
         let size_plus_metadata = ps * (num_code_pages + num_data_pages);
         let m = MmapMut::map_anon(size_plus_metadata)?;
+        //unsafe {
+            //libc::mprotect(m.as_ptr() as *mut libc::c_void, size_plus_metadata, 7);
+        //}
         let mut data_heap = Heap::empty();
         let mut code_heap = Heap::empty();
 
@@ -35,20 +39,25 @@ impl BlockFactory {
             let code_ptr = m
                 .as_ptr()
                 .offset(num_code_pages as isize * page_size() as isize);
-            data_heap.init(data_ptr as *mut u8, ps * num_data_pages);
+            eprintln!("Memory Block Created: Code: {:#08x}, Data: {:#08x}", code_ptr as usize, data_ptr as usize);
             code_heap.init(code_ptr as *mut u8, ps * num_code_pages);
+            assert_eq!(code_heap.bottom(), code_ptr as *mut u8);
+            data_heap.init(data_ptr as *mut u8, ps * num_data_pages);
+            assert_eq!(data_heap.bottom(), data_ptr as *mut u8);
         }
 
         Ok(Self(Arc::new(Mutex::new(BlockFactoryInner {
+            page_size: ps,
             code: code_heap,
             data: data_heap,
             m,
         }))))
     }
 
-    pub fn alloc_data(&self, size: usize) -> Option<WritableDataBlock> {
-        assert!(size > 0);
-        let layout = Layout::from_size_align(size, 16).unwrap();
+    pub fn alloc_data(&self, data_size: usize) -> Option<WritableDataBlock> {
+        assert!(data_size > 0);
+        let aligned_size = page_align(data_size, page_size());
+        let layout = Layout::from_size_align(aligned_size, 16).unwrap();
         let p = self
             .0
             .as_ref()
@@ -57,17 +66,21 @@ impl BlockFactory {
             .data
             .allocate_first_fit(layout)
             .unwrap();
-        eprintln!("alloc data: {:#08x} - {}", p.as_ptr() as usize, size);
+
+        eprintln!("alloc data: {:#08x}, {}, {}", p.as_ptr() as usize, data_size, aligned_size);
+        
         Some(WritableDataBlock(BlockInner {
             layout,
+            size: data_size,
             p: Some(p),
             factory: self.clone(),
         }))
     }
 
-    pub fn alloc_code(&self, size: usize) -> Option<WritableCodeBlock> {
-        assert!(size > 0);
-        let layout = Layout::from_size_align(size, 16).unwrap();
+    pub fn alloc_code(&self, data_size: usize) -> Option<WritableCodeBlock> {
+        assert!(data_size > 0);
+        let aligned_size = page_align(data_size, page_size());
+        let layout = Layout::from_size_align(aligned_size, 16).unwrap();
         let p = self
             .0
             .as_ref()
@@ -76,9 +89,10 @@ impl BlockFactory {
             .code
             .allocate_first_fit(layout)
             .unwrap();
-        eprintln!("alloc code: {:#08x} - {}", p.as_ptr() as usize, size);
+        eprintln!("alloc code: {:#08x}, {}, {}", p.as_ptr() as usize, data_size, aligned_size);
         Some(WritableCodeBlock(BlockInner {
             layout,
+            size: data_size,
             p: Some(p),
             factory: self.clone(),
         }))
@@ -86,7 +100,7 @@ impl BlockFactory {
 
     fn deallocate_code(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
-            eprintln!("Freeing Code at {:#08x}", ptr.as_ptr() as usize);
+            eprintln!("Freeing Code at {:#08x}+{:x}", ptr.as_ptr() as usize, block.layout.size());
             unsafe {
                 block
                     .factory
@@ -102,7 +116,7 @@ impl BlockFactory {
 
     fn deallocate_data(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
-            eprintln!("Freeing Data at {:#08x}", ptr.as_ptr() as usize);
+            eprintln!("Freeing Data at {:#08x}+{:x}", ptr.as_ptr() as usize, block.layout.size());
             unsafe {
                 block
                     .factory
@@ -122,7 +136,7 @@ impl BlockFactory {
                 self.deallocate_data(b)
             }
             Block::CodeRW(WritableCodeBlock(b)) | Block::CodeRX(ExecutableCodeBlock(b)) => {
-                self.deallocate_data(b)
+                self.deallocate_code(b)
             }
         }
     }
@@ -166,6 +180,9 @@ impl ReadonlyDataBlock {
     pub fn as_ptr(&self) -> *const u8 {
         self.0.p.unwrap().as_ptr() as *const u8
     }
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
 }
 
 #[derive(Debug)]
@@ -174,11 +191,21 @@ impl WritableDataBlock {
     pub fn as_ptr(&self) -> *mut u8 {
         self.0.p.unwrap().as_ptr()
     }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    pub fn as_mut_slice(&self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
+
     pub fn make_readonly_data(mut self) -> io::Result<ReadonlyDataBlock> {
         self.0.make_read_only()?;
         let p = self.0.p.take();
         Ok(ReadonlyDataBlock(BlockInner {
             layout: self.0.layout,
+            size: self.0.size,
             p,
             factory: self.0.factory.clone(),
         }))
@@ -197,11 +224,21 @@ impl WritableCodeBlock {
         self.0.p.unwrap().as_ptr()
     }
 
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    pub fn as_mut_slice(&self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
+
     pub fn make_exec(&mut self) -> io::Result<ExecutableCodeBlock> {
         self.0.make_exec()?;
         let p = self.0.p.take();
+        eprintln!("make exec: {:#08x}", p.unwrap().as_ptr() as usize);
         Ok(ExecutableCodeBlock(BlockInner {
             layout: self.0.layout,
+            size: self.0.size,
             p,
             factory: self.0.factory.clone(),
         }))
@@ -209,8 +246,12 @@ impl WritableCodeBlock {
 }
 
 #[derive(Debug)]
-pub struct ExecutableCodeBlock(BlockInner);
+pub struct ExecutableCodeBlock(pub BlockInner);
 impl ExecutableCodeBlock {
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
     pub fn as_ptr(&self) -> *const u8 {
         self.0.p.unwrap().as_ptr() as *const u8
     }
@@ -218,6 +259,7 @@ impl ExecutableCodeBlock {
 
 pub struct BlockInner {
     layout: Layout,
+    pub(crate) size: usize,
     p: Option<NonNull<u8>>,
     factory: BlockFactory,
 }
@@ -229,11 +271,28 @@ impl fmt::Debug for BlockInner {
 }
 
 impl BlockInner {
+    pub fn as_slice(&self) -> &[u8] {
+        let ptr = self.p.unwrap().as_ptr();
+        let size = self.layout.size();
+        unsafe {
+            std::slice::from_raw_parts(ptr, size)
+        }
+    }
+
+    pub fn as_mut_slice(&self) -> &mut [u8] {
+        let ptr = self.p.unwrap().as_ptr();
+        let size = self.layout.size();
+        unsafe {
+            std::slice::from_raw_parts_mut(ptr, size)
+        }
+    }
+
     fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
         unsafe {
             let alignment = self.p.unwrap().as_ptr() as usize % page_size();
             let ptr = self.p.unwrap().as_ptr().offset(-(alignment as isize));
             let len = self.layout.size() + alignment;
+            eprintln!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
             if libc::mprotect(ptr as *mut libc::c_void, len, prot) == 0 {
                 Ok(())
             } else {
@@ -257,26 +316,43 @@ impl BlockInner {
 
 impl Drop for ReadonlyDataBlock {
     fn drop(&mut self) {
+        // we need to make it mutable again before deallocating
+        // because the allocator needs to make some changes
+        if self.0.p.is_some() {
+            self.0.make_mut().unwrap();
+        }
         self.0.factory.deallocate_data(&self.0);
     }
 }
 
 impl Drop for WritableDataBlock {
     fn drop(&mut self) {
+        if self.0.p.is_some() {
+            self.0.make_mut().unwrap();
+        }
         self.0.factory.deallocate_data(&self.0);
     }
 }
 
 impl Drop for WritableCodeBlock {
     fn drop(&mut self) {
+        if self.0.p.is_some() {
+            self.0.make_mut().unwrap();
+        }
         self.0.factory.deallocate_code(&self.0);
     }
 }
 
 impl Drop for ExecutableCodeBlock {
     fn drop(&mut self) {
+        self.0.make_mut();
         self.0.factory.deallocate_code(&self.0);
     }
+}
+
+fn page_align(n: usize, ps:  usize) -> usize {
+    // hardwired for now, but we can get this from the target we are running at at runtime
+    return (n + (ps - 1)) & !(ps - 1);
 }
 
 fn page_size() -> usize {

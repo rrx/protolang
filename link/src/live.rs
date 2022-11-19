@@ -187,7 +187,7 @@ pub struct UnpatchedCodePage {
 mod tests {
     use super::*;
     use std::path::Path;
-
+/*
     #[test]
     fn global_long() {
         let mut b = LinkBuilder::new();
@@ -262,4 +262,5 @@ mod tests {
         println!("ret: {}", ret);
         assert_eq!(3, ret);
     }
+*/
 }

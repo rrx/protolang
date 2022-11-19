@@ -293,7 +293,7 @@ impl UnlinkedCodeInner {
             }
             start_index = start_end;
         }
-        println!("buf: {:?}", (&buf[0..size]));
+        //println!("buf: {:?}", (&buf[0..size]));
 
         let mut symbols_with_offsets = im::HashMap::new();
 

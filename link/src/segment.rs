@@ -1,13 +1,11 @@
-use memmap::MmapMut;
 use object::{
     Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationTarget, SectionKind,
     SymbolKind, SymbolScope, SymbolSection,
 };
 use std::error::Error;
-use std::fmt;
 use std::sync::Arc;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 use super::*;
 
@@ -17,6 +15,7 @@ pub struct UnlinkedCodeSegmentInner {
     pub(crate) name: String,
     pub(crate) bytes: Vec<u8>,
     pub(crate) symbols: im::HashMap<String, CodeSymbol>,
+    pub(crate) unknowns: im::HashSet<String>,
     pub(crate) relocations: im::HashMap<String, CodeRelocation>,
 }
 
@@ -25,6 +24,7 @@ impl UnlinkedCodeSegmentInner {
         let obj_file = object::File::parse(buf)?;
         let mut symbols = HashMap::new();
         let mut segments = vec![]; //im::HashMap::new(); //<SegmentId, Segment>;
+        let mut unknowns = im::HashSet::new();
 
         if let Some(symbol_table) = obj_file.symbol_table() {
             for s in symbol_table.symbols() {
@@ -93,6 +93,7 @@ impl UnlinkedCodeSegmentInner {
                     None => match s.kind() {
                         SymbolKind::Unknown => {
                             // external references
+                            unknowns.insert(name.clone());
                             Some(CodeSymbol {
                                 name,
                                 address: s.address(),
@@ -142,6 +143,7 @@ impl UnlinkedCodeSegmentInner {
                     }
                 }
 
+
                 for (reloc_offset, r) in section.relocations() {
                     let symbol = if let RelocationTarget::Symbol(symbol_index) = r.target() {
                         symbol_table.symbol_by_index(symbol_index)?
@@ -151,7 +153,7 @@ impl UnlinkedCodeSegmentInner {
                     let name = symbol.name()?.to_string();
 
                     match symbol.scope() {
-                        SymbolScope::Dynamic => {
+                        SymbolScope::Dynamic | SymbolScope::Unknown => {
                             // | SymbolScope::Linkage | SymbolScope::Unknown => {
                             relocations.insert(
                                 name.clone(),
@@ -163,9 +165,13 @@ impl UnlinkedCodeSegmentInner {
                             );
                         }
 
+                         //do nothing here
+                        //SymbolScope::Unknown => {
+                            //unknowns.insert(name);
+                        //}
                         SymbolScope::Compilation => (),
 
-                        _ => unimplemented!(),
+                        _ => unimplemented!("{:?}", symbol),
                     }
                     for (_, r) in &relocations {
                         eprintln!("{}", r);
@@ -174,9 +180,21 @@ impl UnlinkedCodeSegmentInner {
 
                 let name = format!("{}_{}", link_name, section_index);
                 let data = section.uncompressed_data()?;
+
+                // for bss, we have empty data, so we pass in a zero initialized buffer
+                // to be consistent
+                let bytes = if section.size() as usize > data.len() {
+                    let mut data = Vec::new();
+                    data.resize(section.size() as usize, 0);
+                    data
+                } else {
+                    data.to_vec()
+                };
+
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
-                    bytes: data.to_vec(),
+                    bytes,
+                    unknowns: unknowns.clone(),
                     symbols: section_symbols,
                     relocations,
                 });
@@ -191,42 +209,47 @@ impl UnlinkedCodeSegmentInner {
         code_page_name: &str,
         b: &mut BlockFactory,
     ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
-        let mut got_size = 0;
-        let mut size = 0;
-        let size = self.bytes.len();
+        // get a list of data symbols
+        let symbols = self.symbols.iter().filter(|(_, s)| {
+            s.kind == CodeSymbolKind::Data
+        }).collect::<Vec<_>>();
 
-        //for (name, code_symbol) in &self.symbols {
-        //if code_symbol.kind == CodeSymbolKind::Data {
-        //size += code_symbol.size as usize;
-        //}
-        //}
+        if symbols.len() > 0 {
+            eprintln!("create data: {}, {:?}", &code_page_name, (&symbols, self.bytes.len()));
 
-        if size > 0 {
+            // allocate enough space for the actual data, and a lookup table as well
+            let size = self.bytes.len() + symbols.len() * std::mem::size_of::<usize>();
             if let Some(block) = b.alloc_data(size) {
+                // to create the data section, we need to copy the data, but we also need
+                // to create pointers to the data
+
+                // copy the data over, and the symbols have the offsets
+                // append the got entries after the data
+                block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
                 let mut pointers = im::HashMap::new();
-                for (name, code_symbol) in &self.symbols {
-                    if code_symbol.kind == CodeSymbolKind::Data {
-                        unsafe {
-                            pointers.insert(
-                                name.clone(),
-                                block.as_ptr().offset(code_symbol.address as isize) as *const (),
-                            );
-                        }
-                        //size += code_symbol.size as usize;
+                unsafe {
+
+                    let mut entry_counter = 0;
+                    let got_base = block.as_ptr().offset(self.bytes.len() as isize) as *mut u64;
+                    for (name, s) in &symbols {
+                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                        let got_ptr = got_base.offset(entry_counter); 
+                        *got_ptr = value_ptr as u64;
+                        entry_counter += 1;
+                        pointers.insert(s.name.clone(), got_ptr as *const ());
+                        println!("got: {}, {:#08x}, {:#08x}", &name, value_ptr as usize, got_ptr as usize);
                     }
                 }
-                if pointers.len() > 0 {
-                    Ok(Some(PatchBlock::Data(PatchDataBlock {
-                        name: code_page_name.to_string(),
-                        block,
-                        symbols: pointers,
-                        relocations: self.relocations.clone(),
-                    })))
-                } else {
-                    Ok(None)
-                }
+
+                Ok(Some(PatchBlock::Data(PatchDataBlock {
+                    name: code_page_name.to_string(),
+                    block,
+                    symbols: pointers,
+                    relocations: self.relocations.clone(),
+                })))
             } else {
-                unreachable!()
+                // oom?
+                unimplemented!()
             }
         } else {
             Ok(None)
@@ -238,33 +261,33 @@ impl UnlinkedCodeSegmentInner {
         code_page_name: &str,
         b: &mut BlockFactory,
     ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
-        let mut got_size = 0;
-        let mut size = self.bytes.len();
-        if size > 0 {
+        // get a list of data symbols
+        let symbols = self.symbols.iter().filter(|(_, s)| {
+            s.kind == CodeSymbolKind::Text
+        }).collect::<Vec<_>>();
+
+        if symbols.len() > 0 {
+            let size = self.bytes.len();
             if let Some(block) = b.alloc_code(size) {
+                block.as_mut_slice()[0..size].copy_from_slice(&self.bytes);
                 let mut pointers = im::HashMap::new();
-                for (name, code_symbol) in &self.symbols {
-                    if code_symbol.kind == CodeSymbolKind::Text {
-                        unsafe {
-                            pointers.insert(
-                                name.clone(),
-                                block.as_ptr().offset(code_symbol.address as isize) as *const (),
-                            );
-                        }
+                for (_, s) in &symbols {
+                    unsafe {
+                        let ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                        pointers.insert(s.name.clone(), ptr);
                     }
                 }
-                if pointers.len() > 0 {
-                    Ok(Some(PatchBlock::Code(PatchCodeBlock {
-                        name: code_page_name.to_string(),
-                        block,
-                        symbols: pointers,
-                        relocations: self.relocations.clone(),
-                    })))
-                } else {
-                    Ok(None)
-                }
+
+                Ok(Some(PatchBlock::Code(PatchCodeBlock {
+                    name: code_page_name.to_string(),
+                    block,
+                    unknowns: self.unknowns.clone(),
+                    symbols: pointers,
+                    relocations: self.relocations.clone(),
+                })))
             } else {
-                unreachable!()
+                // oom?
+                unimplemented!()
             }
         } else {
             Ok(None)
