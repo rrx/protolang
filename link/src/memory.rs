@@ -13,46 +13,35 @@ pub struct BlockFactory(Arc<Mutex<BlockFactoryInner>>);
 pub struct BlockFactoryInner {
     page_size: usize,
     m: MmapMut,
-    code: Heap,
-    data: Heap,
+    heap: Heap,
 }
 
 impl BlockFactory {
-    pub fn create(
-        num_code_pages: usize,
-        num_data_pages: usize,
-    ) -> Result<BlockFactory, Box<dyn Error>> {
+    pub fn create(num_pages: usize, num_data_pages: usize) -> Result<BlockFactory, Box<dyn Error>> {
         // the total amount of space allocated should not be more than 4GB,
         // because we are limited to 32bit relative addressing
         // we can address things outside this block, but we need 64 bit addressing
         let ps = page_size();
-        let size_plus_metadata = ps * (num_code_pages + num_data_pages);
-        let m = MmapMut::map_anon(size_plus_metadata)?;
+        let size = ps * num_pages;
+        let m = MmapMut::map_anon(size)?;
         //unsafe {
         //libc::mprotect(m.as_ptr() as *mut libc::c_void, size_plus_metadata, 7);
         //}
-        let mut data_heap = Heap::empty();
-        let mut code_heap = Heap::empty();
+        let mut heap = Heap::empty();
 
         unsafe {
-            let data_ptr = m.as_ptr();
-            let code_ptr = m
-                .as_ptr()
-                .offset(num_code_pages as isize * page_size() as isize);
+            let ptr = m.as_ptr();
             eprintln!(
-                "Memory Block Created: Code: {:#08x}, Data: {:#08x}",
-                code_ptr as usize, data_ptr as usize
+                "Memory Block Created: Code: {:#08x}+{:x}",
+                ptr as usize, size
             );
-            code_heap.init(code_ptr as *mut u8, ps * num_code_pages);
-            assert_eq!(code_heap.bottom(), code_ptr as *mut u8);
-            data_heap.init(data_ptr as *mut u8, ps * num_data_pages);
-            assert_eq!(data_heap.bottom(), data_ptr as *mut u8);
+            heap.init(ptr as *mut u8, ps * num_pages);
+            assert_eq!(heap.bottom(), ptr as *mut u8);
         }
 
         Ok(Self(Arc::new(Mutex::new(BlockFactoryInner {
             page_size: ps,
-            code: code_heap,
-            data: data_heap,
+            heap,
             m,
         }))))
     }
@@ -66,7 +55,7 @@ impl BlockFactory {
             .as_ref()
             .lock()
             .unwrap()
-            .data
+            .heap
             .allocate_first_fit(layout)
             .unwrap();
 
@@ -99,7 +88,7 @@ impl BlockFactory {
                     .as_ref()
                     .lock()
                     .unwrap()
-                    .data
+                    .heap
                     .deallocate(ptr, block.layout);
             }
         }
@@ -113,15 +102,11 @@ impl BlockFactory {
 impl BlockFactoryInner {
     pub fn debug(&self) {
         let ps = page_size();
-        let code_size = self.code.size();
-        let data_size = self.data.size();
+        let size = self.heap.size();
         eprintln!("Start: {:#08x}", self.m.as_ptr() as usize);
-        eprintln!("Code Bottom: {:#08x}", self.code.bottom() as usize);
-        eprintln!("Code Top: {:#08x}", self.code.top() as usize);
-        eprintln!("Code Size: {:#08x} ({})", code_size, code_size);
-        eprintln!("Data Bottom: {:#08x}", self.data.bottom() as usize);
-        eprintln!("Data Top: {:#08x}", self.data.top() as usize);
-        eprintln!("Data Size: {:#08x} ({})", data_size, data_size);
+        eprintln!("Heap Bottom: {:#08x}", self.heap.bottom() as usize);
+        eprintln!("Heap Top: {:#08x}", self.heap.top() as usize);
+        eprintln!("Heap Size: {:#08x} ({})", size, size);
         eprintln!("Page Size: {:#08x} ({})", ps, ps);
     }
 }
@@ -160,24 +145,6 @@ impl Block {
         self.p.unwrap().as_ptr() as *mut u8
     }
 
-    fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
-        unsafe {
-            let alignment = self.p.unwrap().as_ptr() as usize % page_size();
-            let ptr = self.p.unwrap().as_ptr().offset(-(alignment as isize));
-            let len = self.layout.size() + alignment;
-            eprintln!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
-            if libc::mprotect(ptr as *mut libc::c_void, len, prot) == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
-        }
-    }
-
-    pub fn make_read_only(&mut self) -> io::Result<()> {
-        self.mprotect(libc::PROT_READ)
-    }
-
     pub fn make_readonly_block(mut self) -> io::Result<Self> {
         self.make_read_only()?;
         let p = self.p.take();
@@ -201,11 +168,29 @@ impl Block {
         })
     }
 
-    pub fn make_exec(&mut self) -> io::Result<()> {
+    fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
+        unsafe {
+            let alignment = self.p.unwrap().as_ptr() as usize % page_size();
+            let ptr = self.p.unwrap().as_ptr().offset(-(alignment as isize));
+            let len = self.layout.size() + alignment;
+            eprintln!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
+            if libc::mprotect(ptr as *mut libc::c_void, len, prot) == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+    }
+
+    fn make_read_only(&mut self) -> io::Result<()> {
+        self.mprotect(libc::PROT_READ)
+    }
+
+    fn make_exec(&mut self) -> io::Result<()> {
         self.mprotect(libc::PROT_READ | libc::PROT_EXEC)
     }
 
-    pub fn make_mut(&mut self) -> io::Result<()> {
+    fn make_mut(&mut self) -> io::Result<()> {
         self.mprotect(libc::PROT_READ | libc::PROT_WRITE)
     }
 }

@@ -51,7 +51,6 @@ impl UnlinkedCodeSegmentInner {
             for s in symbol_table.symbols() {
                 // only track dynamic symbols for now
                 let name = s.name()?.to_string();
-                //eprintln!("symbol: {:?}", &s);
                 let maybe_section = match s.section() {
                     SymbolSection::Section(section_index) => {
                         Some(obj_file.section_by_index(section_index)?)
