@@ -1,38 +1,6 @@
 use super::*;
 use capstone::prelude::*;
 
-impl CodePageInner {
-    pub fn disassemble(&self) {
-        println!("code: {}, {:?}", &self.name, &self);
-        let buf = &self.m.split_at(self.code_size).0;
-        //let buf = &self.m.as_ref()[0..self.code_size];
-        let mut pointers = im::HashMap::new();
-        let base = self.m.as_ptr() as usize;
-        for (name, ptr) in &self.symbols {
-            pointers.insert(*ptr as usize - base, name.clone());
-        }
-        println!("start: {:#08x}", &base);
-        disassemble(self.kind, buf, pointers);
-        match self.kind {
-            CodePageKind::Data => {}
-            _ => (),
-        }
-    }
-}
-
-impl UnpatchedCodePage {
-    pub fn disassemble(&self) {
-        println!("code: {}, {:?}", &self.name, &self);
-        let buf = &self.m.as_ref()[0..self.code_size];
-        let mut pointers = im::HashMap::new();
-        let base = self.m.as_ptr() as usize;
-        for (name, ptr) in &self.symbols {
-            pointers.insert(*ptr as usize - base, name.clone());
-        }
-        disassemble(self.kind, buf, pointers);
-    }
-}
-
 impl PatchDataBlock {
     pub fn disassemble(&self) {
         println!("data: {}, {:?}", &self.name, &self);
@@ -93,13 +61,6 @@ impl WritableDataBlock {
         println!("data_rw@{:#08x}", base);
         let _pointers = im::HashMap::new();
         disassemble_data(&self.as_slice()[0..self.0.size], _pointers);
-    }
-}
-
-pub fn disassemble(kind: CodePageKind, buf: &[u8], pointers: im::HashMap<usize, String>) {
-    match kind {
-        CodePageKind::Data => disassemble_data(buf, pointers),
-        CodePageKind::Code => disassemble_code(buf, pointers),
     }
 }
 
