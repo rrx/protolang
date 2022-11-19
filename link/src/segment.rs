@@ -9,6 +9,27 @@ use std::collections::HashMap;
 
 use super::*;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum CodeSymbolDefinition {
+    Extern,
+    Defined,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CodeSymbolKind {
+    Text,
+    Data,
+}
+
+#[derive(Clone, Debug)]
+pub struct CodeSymbol {
+    name: String,
+    size: u64,
+    pub(crate) address: u64,
+    kind: CodeSymbolKind,
+    pub(crate) def: CodeSymbolDefinition,
+}
+
 pub type UnlinkedCodeSegment = Arc<UnlinkedCodeSegmentInner>;
 
 pub struct UnlinkedCodeSegmentInner {
