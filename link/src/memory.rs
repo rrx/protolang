@@ -57,7 +57,7 @@ impl BlockFactory {
         }))))
     }
 
-    pub fn alloc_data(&self, data_size: usize) -> Option<WritableDataBlock> {
+    pub fn alloc_block(&self, data_size: usize) -> Option<Block> {
         assert!(data_size > 0);
         let aligned_size = page_align(data_size, page_size());
         let layout = Layout::from_size_align(aligned_size, 16).unwrap();
@@ -77,64 +77,18 @@ impl BlockFactory {
             aligned_size
         );
 
-        Some(WritableDataBlock(BlockInner {
+        Some(Block {
             layout,
             size: data_size,
             p: Some(p),
             factory: self.clone(),
-        }))
+        })
     }
 
-    pub fn alloc_code(&self, data_size: usize) -> Option<WritableCodeBlock> {
-        assert!(data_size > 0);
-        let aligned_size = page_align(data_size, page_size());
-        let layout = Layout::from_size_align(aligned_size, 16).unwrap();
-        let p = self
-            .0
-            .as_ref()
-            .lock()
-            .unwrap()
-            .code
-            .allocate_first_fit(layout)
-            .unwrap();
-        eprintln!(
-            "alloc code: {:#08x}, {}, {}",
-            p.as_ptr() as usize,
-            data_size,
-            aligned_size
-        );
-        Some(WritableCodeBlock(BlockInner {
-            layout,
-            size: data_size,
-            p: Some(p),
-            factory: self.clone(),
-        }))
-    }
-
-    fn deallocate_code(&self, block: &BlockInner) {
+    fn deallocate_block(&self, block: &Block) {
         if let Some(ptr) = block.p {
             eprintln!(
-                "Freeing Code at {:#08x}+{:x}",
-                ptr.as_ptr() as usize,
-                block.layout.size()
-            );
-            unsafe {
-                block
-                    .factory
-                    .0
-                    .as_ref()
-                    .lock()
-                    .unwrap()
-                    .code
-                    .deallocate(ptr, block.layout);
-            }
-        }
-    }
-
-    fn deallocate_data(&self, block: &BlockInner) {
-        if let Some(ptr) = block.p {
-            eprintln!(
-                "Freeing Data at {:#08x}+{:x}",
+                "Freeing Block at {:#08x}+{:x}",
                 ptr.as_ptr() as usize,
                 block.layout.size()
             );
@@ -147,17 +101,6 @@ impl BlockFactory {
                     .unwrap()
                     .data
                     .deallocate(ptr, block.layout);
-            }
-        }
-    }
-
-    fn deallocate(&self, block: &Block) {
-        match block {
-            Block::DataRW(WritableDataBlock(b)) | Block::DataRO(ReadonlyDataBlock(b)) => {
-                self.deallocate_data(b)
-            }
-            Block::CodeRW(WritableCodeBlock(b)) | Block::CodeRX(ExecutableCodeBlock(b)) => {
-                self.deallocate_code(b)
             }
         }
     }
@@ -183,115 +126,20 @@ impl BlockFactoryInner {
     }
 }
 
-pub enum Block {
-    DataRW(WritableDataBlock),
-    DataRO(ReadonlyDataBlock),
-    CodeRW(WritableCodeBlock),
-    CodeRX(ExecutableCodeBlock),
-}
-
-pub enum DataBlock {
-    RW(WritableDataBlock),
-    RO(ReadonlyDataBlock),
-}
-
-#[derive(Debug)]
-pub struct ReadonlyDataBlock(pub(crate) BlockInner);
-impl ReadonlyDataBlock {
-    pub fn as_ptr(&self) -> *const u8 {
-        self.0.p.unwrap().as_ptr() as *const u8
-    }
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
-
-#[derive(Debug)]
-pub struct WritableDataBlock(pub(crate) BlockInner);
-impl WritableDataBlock {
-    pub fn as_ptr(&self) -> *mut u8 {
-        self.0.p.unwrap().as_ptr()
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    pub fn as_mut_slice(&self) -> &mut [u8] {
-        self.0.as_mut_slice()
-    }
-
-    pub fn make_readonly_data(mut self) -> io::Result<ReadonlyDataBlock> {
-        self.0.make_read_only()?;
-        let p = self.0.p.take();
-        Ok(ReadonlyDataBlock(BlockInner {
-            layout: self.0.layout,
-            size: self.0.size,
-            p,
-            factory: self.0.factory.clone(),
-        }))
-    }
-}
-
-pub enum CodeBlock {
-    RW(WritableCodeBlock),
-    RX(ExecutableCodeBlock),
-}
-
-#[derive(Debug)]
-pub struct WritableCodeBlock(pub(crate) BlockInner);
-impl WritableCodeBlock {
-    pub fn as_ptr(&self) -> *mut u8 {
-        self.0.p.unwrap().as_ptr()
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    pub fn as_mut_slice(&self) -> &mut [u8] {
-        self.0.as_mut_slice()
-    }
-
-    pub fn make_exec(&mut self) -> io::Result<ExecutableCodeBlock> {
-        self.0.make_exec()?;
-        let p = self.0.p.take();
-        eprintln!("make exec: {:#08x}", p.unwrap().as_ptr() as usize);
-        Ok(ExecutableCodeBlock(BlockInner {
-            layout: self.0.layout,
-            size: self.0.size,
-            p,
-            factory: self.0.factory.clone(),
-        }))
-    }
-}
-
-#[derive(Debug)]
-pub struct ExecutableCodeBlock(pub BlockInner);
-impl ExecutableCodeBlock {
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    pub fn as_ptr(&self) -> *const u8 {
-        self.0.p.unwrap().as_ptr() as *const u8
-    }
-}
-
-pub struct BlockInner {
+pub struct Block {
     layout: Layout,
     pub(crate) size: usize,
     p: Option<NonNull<u8>>,
     factory: BlockFactory,
 }
 
-impl fmt::Debug for BlockInner {
+impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Block").field("p", &self.p).finish()
     }
 }
 
-impl BlockInner {
+impl Block {
     pub fn as_slice(&self) -> &[u8] {
         let ptr = self.p.unwrap().as_ptr();
         let size = self.layout.size();
@@ -302,6 +150,14 @@ impl BlockInner {
         let ptr = self.p.unwrap().as_ptr();
         let size = self.layout.size();
         unsafe { std::slice::from_raw_parts_mut(ptr, size) }
+    }
+
+    pub fn as_ptr(&self) -> *const u8 {
+        self.p.unwrap().as_ptr() as *const u8
+    }
+
+    pub fn as_mut_ptr(&self) -> *mut u8 {
+        self.p.unwrap().as_ptr() as *mut u8
     }
 
     fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
@@ -318,52 +174,50 @@ impl BlockInner {
         }
     }
 
-    fn make_read_only(&mut self) -> io::Result<()> {
+    pub fn make_read_only(&mut self) -> io::Result<()> {
         self.mprotect(libc::PROT_READ)
     }
 
-    fn make_exec(&mut self) -> io::Result<()> {
+    pub fn make_readonly_block(mut self) -> io::Result<Self> {
+        self.make_read_only()?;
+        let p = self.p.take();
+        Ok(Block {
+            layout: self.layout,
+            size: self.size,
+            p,
+            factory: self.factory.clone(),
+        })
+    }
+
+    pub fn make_exec_block(mut self) -> io::Result<Self> {
+        self.make_exec()?;
+        let p = self.p.take();
+        eprintln!("make exec: {:#08x}", p.unwrap().as_ptr() as usize);
+        Ok(Block {
+            layout: self.layout,
+            size: self.size,
+            p,
+            factory: self.factory.clone(),
+        })
+    }
+
+    pub fn make_exec(&mut self) -> io::Result<()> {
         self.mprotect(libc::PROT_READ | libc::PROT_EXEC)
     }
 
-    fn make_mut(&mut self) -> io::Result<()> {
+    pub fn make_mut(&mut self) -> io::Result<()> {
         self.mprotect(libc::PROT_READ | libc::PROT_WRITE)
     }
 }
 
-impl Drop for ReadonlyDataBlock {
+impl Drop for Block {
     fn drop(&mut self) {
         // we need to make it mutable again before deallocating
         // because the allocator needs to make some changes
-        if self.0.p.is_some() {
-            self.0.make_mut().unwrap();
+        if self.p.is_some() {
+            self.make_mut().unwrap();
         }
-        self.0.factory.deallocate_data(&self.0);
-    }
-}
-
-impl Drop for WritableDataBlock {
-    fn drop(&mut self) {
-        if self.0.p.is_some() {
-            self.0.make_mut().unwrap();
-        }
-        self.0.factory.deallocate_data(&self.0);
-    }
-}
-
-impl Drop for WritableCodeBlock {
-    fn drop(&mut self) {
-        if self.0.p.is_some() {
-            self.0.make_mut().unwrap();
-        }
-        self.0.factory.deallocate_code(&self.0);
-    }
-}
-
-impl Drop for ExecutableCodeBlock {
-    fn drop(&mut self) {
-        self.0.make_mut();
-        self.0.factory.deallocate_code(&self.0);
+        self.factory.deallocate_block(&self);
     }
 }
 
@@ -383,14 +237,14 @@ mod tests {
     #[test]
     fn allocate() {
         let b = BlockFactory::create(2, 2).unwrap();
-        let v1 = b.alloc_code(10).unwrap();
-        let v2 = b.alloc_code(10).unwrap();
+        let v1 = b.alloc_block(10).unwrap();
+        let v2 = b.alloc_block(10).unwrap();
         b.debug();
         eprintln!("V Size: {:#08x}", v1.as_ptr() as usize);
         eprintln!("V Size: {:#08x}", v2.as_ptr() as usize);
         drop(v1);
         drop(v2);
-        let v3 = b.alloc_code(10).unwrap();
+        let v3 = b.alloc_block(10).unwrap();
         eprintln!("V Size: {:#08x}", v3.as_ptr() as usize);
     }
 }

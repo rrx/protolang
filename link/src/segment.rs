@@ -245,7 +245,7 @@ impl UnlinkedCodeSegmentInner {
 
             // allocate enough space for the actual data, and a lookup table as well
             let size = self.bytes.len() + symbols.len() * std::mem::size_of::<usize>();
-            if let Some(block) = b.alloc_data(size) {
+            if let Some(block) = b.alloc_block(size) {
                 // to create the data section, we need to copy the data, but we also need
                 // to create pointers to the data
 
@@ -271,7 +271,7 @@ impl UnlinkedCodeSegmentInner {
 
                 Ok(Some(PatchBlock::Data(PatchDataBlock {
                     name: code_page_name.to_string(),
-                    block,
+                    block: WritableDataBlock::new(block),
                     symbols: pointers,
                     relocations: self.relocations.clone(),
                 })))
@@ -298,7 +298,7 @@ impl UnlinkedCodeSegmentInner {
 
         if symbols.len() > 0 {
             let size = self.bytes.len();
-            if let Some(block) = b.alloc_code(size) {
+            if let Some(block) = b.alloc_block(size) {
                 block.as_mut_slice()[0..size].copy_from_slice(&self.bytes);
                 let mut pointers = im::HashMap::new();
                 for (_, s) in &symbols {
@@ -310,7 +310,7 @@ impl UnlinkedCodeSegmentInner {
 
                 Ok(Some(PatchBlock::Code(PatchCodeBlock {
                     name: code_page_name.to_string(),
-                    block,
+                    block: WritableCodeBlock::new(block),
                     unknowns: self.unknowns.clone(),
                     symbols: pointers,
                     relocations: self.relocations.clone(),

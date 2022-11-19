@@ -163,7 +163,7 @@ pub fn patch_block(
 }
 
 pub fn patch_code(
-    mut block: PatchCodeBlock,
+    block: PatchCodeBlock,
     pointers: &PatchSymbolPointers,
 ) -> (LinkedBlock, LinkedSymbolPointers) {
     println!(
@@ -177,7 +177,7 @@ pub fn patch_code(
     }
     (
         LinkedBlock(Arc::new(LinkedBlockInner::Code(
-            block.block.make_exec().unwrap(),
+            block.block.make_exec_block().unwrap(),
         ))),
         block.symbols,
     )

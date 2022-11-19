@@ -1,6 +1,17 @@
 use super::*;
 use crate::memory::*;
+use std::io;
 use std::sync::Arc;
+
+pub enum DataBlock {
+    RW(WritableDataBlock),
+    RO(ReadonlyDataBlock),
+}
+
+pub enum CodeBlock {
+    RW(WritableCodeBlock),
+    RX(ExecutableCodeBlock),
+}
 
 pub type PatchSymbolPointers = im::HashMap<String, *const ()>;
 pub type LinkedSymbolPointers = im::HashMap<String, *const ()>;
@@ -60,4 +71,75 @@ pub struct PatchCodeBlock {
     pub(crate) symbols: im::HashMap<String, *const ()>,
     pub(crate) unknowns: im::HashSet<String>,
     pub(crate) relocations: im::HashMap<String, CodeRelocation>,
+}
+
+#[derive(Debug)]
+pub struct WritableDataBlock(pub(crate) Block);
+impl WritableDataBlock {
+    pub fn new(block: Block) -> Self {
+        Self(block)
+    }
+
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.0.as_mut_ptr()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    pub fn as_mut_slice(&self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
+
+    pub fn make_readonly_block(mut self) -> io::Result<ReadonlyDataBlock> {
+        Ok(ReadonlyDataBlock(self.0.make_readonly_block()?))
+    }
+}
+
+#[derive(Debug)]
+pub struct WritableCodeBlock(pub(crate) Block);
+impl WritableCodeBlock {
+    pub fn new(block: Block) -> Self {
+        Self(block)
+    }
+
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.0.as_mut_ptr()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    pub fn as_mut_slice(&self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
+
+    pub fn make_exec_block(mut self) -> io::Result<ExecutableCodeBlock> {
+        Ok(ExecutableCodeBlock(self.0.make_exec_block()?))
+    }
+}
+
+#[derive(Debug)]
+pub struct ReadonlyDataBlock(pub(crate) Block);
+impl ReadonlyDataBlock {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.0.as_ptr() as *const u8
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
+#[derive(Debug)]
+pub struct ExecutableCodeBlock(pub Block);
+impl ExecutableCodeBlock {
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    pub fn as_ptr(&self) -> *const u8 {
+        self.0.as_ptr()
+    }
 }

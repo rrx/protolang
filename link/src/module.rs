@@ -21,8 +21,7 @@ pub struct LinkModule {
 
     /// Global Object Table, optional
     got: Option<DataBlock>,
-
-    blocks: im::HashMap<String, Block>,
+    //blocks: im::HashMap<String, Block>,
 }
 
 impl LinkModule {
