@@ -3,7 +3,6 @@ use object::{
     SymbolKind, SymbolScope, SymbolSection,
 };
 use std::error::Error;
-use std::fmt;
 use std::sync::Arc;
 
 use super::*;
@@ -28,26 +27,6 @@ pub struct CodeSymbol {
     //pub(crate) ptr: *const (),
     pub(crate) kind: CodeSymbolKind,
     pub(crate) def: CodeSymbolDefinition,
-}
-
-#[derive(Clone, Debug)]
-pub struct CodeRelocation {
-    pub(crate) name: String,
-    pub(crate) offset: u64,
-    pub(crate) r: LinkRelocation,
-}
-
-impl fmt::Display for CodeRelocation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Relocation[{}@{:#04x}, kind: {:?}, encoding: {:?}, size: {}, target: {:?}, addend: {}]",
-               self.name,
-               self.offset,
-               self.r.kind,
-               self.r.encoding,
-               self.r.size,
-               self.r.target,
-               self.r.addend)
-    }
 }
 
 pub type UnlinkedCode = Arc<UnlinkedCodeInner>;

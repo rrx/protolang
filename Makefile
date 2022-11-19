@@ -1,4 +1,4 @@
-default: build test doc
+default: build functions test doc
 
 build:
 	cargo build
