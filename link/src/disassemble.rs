@@ -40,7 +40,12 @@ impl PatchDataBlock {
         let base = self.block.as_ptr() as usize;
         for (name, ptr) in &self.symbols {
             pointers.insert(*ptr as usize - base, name.clone());
-            eprintln!("pointer: {:#08x} {:08x} {}", *ptr as usize, *ptr as usize - base, &name)
+            eprintln!(
+                "pointer: {:#08x} {:08x} {}",
+                *ptr as usize,
+                *ptr as usize - base,
+                &name
+            )
         }
         let size = self.block.0.size;
         disassemble_data(&self.block.as_slice()[0..size], pointers);
@@ -146,7 +151,7 @@ pub fn disassemble_code(buf: &[u8], pointers: im::HashMap<usize, String>) {
                 &addr,
                 instr.mnemonic().expect("no mnmemonic found"),
                 instr.op_str().expect("no op_str found")
-                );
+            );
         }
     }
 }

@@ -15,9 +15,9 @@ impl LinkedBlock {
         //let pointers = im::HashMap::new();
         let inner = &self.0.as_ref();
         match inner {
-            LinkedBlockInner::Code(block) => block.disassemble(),//disassemble_code(block.as_slice(), pointers),
-            LinkedBlockInner::DataRO(block) => block.disassemble(),//disassemble_data(block.as_slice(), pointers),
-            LinkedBlockInner::DataRW(block) => block.disassemble()//disassemble_data(block.as_slice(), pointers),
+            LinkedBlockInner::Code(block) => block.disassemble(), //disassemble_code(block.as_slice(), pointers),
+            LinkedBlockInner::DataRO(block) => block.disassemble(), //disassemble_data(block.as_slice(), pointers),
+            LinkedBlockInner::DataRW(block) => block.disassemble(), //disassemble_data(block.as_slice(), pointers),
         }
     }
 }
@@ -27,7 +27,6 @@ pub enum LinkedBlockInner {
     DataRO(ReadonlyDataBlock),
     DataRW(WritableDataBlock),
 }
-
 
 pub type PatchSymbolPointers = im::HashMap<String, *const ()>;
 pub type LinkedSymbolPointers = im::HashMap<String, *const ()>;
@@ -145,7 +144,7 @@ pub fn patch_block(
                 //let patch_base = block.block.as_ptr() as *mut u8;
                 let patch = patch_base.offset(r.offset as isize);
 
-                eprintln!("look up: {}",  name);
+                eprintln!("look up: {}", name);
                 let symbol_addr = *pointers.get(name).unwrap() as *const u8;
                 let symbol_address = symbol_addr as isize + addend as isize - patch as isize;
 
@@ -233,14 +232,20 @@ impl LinkVersion {
         // call the main function
 
         // make sure we dereference the pointer!
-        let ptr = *self.pointers.get(name).ok_or(LinkError::SymbolNotFound)? as *const();
+        let ptr = *self.pointers.get(name).ok_or(LinkError::SymbolNotFound)? as *const ();
         unsafe {
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
             println!("invoking {} @ {:#08x}", name, ptr as usize);
             let f: MyFunc<P, T> = std::mem::transmute(ptr);
 
             for map in proc_maps::get_process_maps(std::process::id() as proc_maps::Pid).unwrap() {
-                println!("Map: {:#08x}+{:x}, {}, {:?}", map.start(), map.size(), map.flags, map.filename());
+                println!(
+                    "Map: {:#08x}+{:x}, {}, {:?}",
+                    map.start(),
+                    map.size(),
+                    map.flags,
+                    map.filename()
+                );
             }
 
             let ret = f(args);
@@ -266,12 +271,14 @@ pub struct PatchCodeBlock {
     pub(crate) relocations: im::HashMap<String, CodeRelocation>,
 }
 
-pub fn build_version(mut blocks: Vec<(String, PatchBlock)>, link: &Link) -> Result<LinkVersion, Box<dyn Error>> {
+pub fn build_version(
+    mut blocks: Vec<(String, PatchBlock)>,
+    link: &Link,
+) -> Result<LinkVersion, Box<dyn Error>> {
     // generate a list of symbols and their pointers
     let mut all_pointers = im::HashMap::new();
 
     for (block_name, block) in &blocks {
-
         // look up all of the unknowns in the shared libraries, if they exist
         if let PatchBlock::Code(PatchCodeBlock { unknowns, .. }) = block {
             for symbol in unknowns {
@@ -442,7 +449,7 @@ mod tests {
         b.add_obj_file("test", Path::new("/home/rrx/code/protolang/tmp/live.o"))
             .unwrap();
         let collection = b.link().unwrap();
-        
+
         let ret: i64 = collection.invoke("call_live", (2,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(13, ret);
@@ -454,7 +461,6 @@ mod tests {
         let ret: i64 = collection.invoke("func2", (2,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(3, ret);
-
     }
 
     #[test]
@@ -472,7 +478,6 @@ mod tests {
         //println!("ret: {:#08x}", ret);
         //assert_eq!(3, ret);
     }
-
 
     #[test]
     fn linker_livelink() {

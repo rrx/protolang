@@ -29,7 +29,7 @@ impl BlockFactory {
         let size_plus_metadata = ps * (num_code_pages + num_data_pages);
         let m = MmapMut::map_anon(size_plus_metadata)?;
         //unsafe {
-            //libc::mprotect(m.as_ptr() as *mut libc::c_void, size_plus_metadata, 7);
+        //libc::mprotect(m.as_ptr() as *mut libc::c_void, size_plus_metadata, 7);
         //}
         let mut data_heap = Heap::empty();
         let mut code_heap = Heap::empty();
@@ -39,7 +39,10 @@ impl BlockFactory {
             let code_ptr = m
                 .as_ptr()
                 .offset(num_code_pages as isize * page_size() as isize);
-            eprintln!("Memory Block Created: Code: {:#08x}, Data: {:#08x}", code_ptr as usize, data_ptr as usize);
+            eprintln!(
+                "Memory Block Created: Code: {:#08x}, Data: {:#08x}",
+                code_ptr as usize, data_ptr as usize
+            );
             code_heap.init(code_ptr as *mut u8, ps * num_code_pages);
             assert_eq!(code_heap.bottom(), code_ptr as *mut u8);
             data_heap.init(data_ptr as *mut u8, ps * num_data_pages);
@@ -67,8 +70,13 @@ impl BlockFactory {
             .allocate_first_fit(layout)
             .unwrap();
 
-        eprintln!("alloc data: {:#08x}, {}, {}", p.as_ptr() as usize, data_size, aligned_size);
-        
+        eprintln!(
+            "alloc data: {:#08x}, {}, {}",
+            p.as_ptr() as usize,
+            data_size,
+            aligned_size
+        );
+
         Some(WritableDataBlock(BlockInner {
             layout,
             size: data_size,
@@ -89,7 +97,12 @@ impl BlockFactory {
             .code
             .allocate_first_fit(layout)
             .unwrap();
-        eprintln!("alloc code: {:#08x}, {}, {}", p.as_ptr() as usize, data_size, aligned_size);
+        eprintln!(
+            "alloc code: {:#08x}, {}, {}",
+            p.as_ptr() as usize,
+            data_size,
+            aligned_size
+        );
         Some(WritableCodeBlock(BlockInner {
             layout,
             size: data_size,
@@ -100,7 +113,11 @@ impl BlockFactory {
 
     fn deallocate_code(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
-            eprintln!("Freeing Code at {:#08x}+{:x}", ptr.as_ptr() as usize, block.layout.size());
+            eprintln!(
+                "Freeing Code at {:#08x}+{:x}",
+                ptr.as_ptr() as usize,
+                block.layout.size()
+            );
             unsafe {
                 block
                     .factory
@@ -116,7 +133,11 @@ impl BlockFactory {
 
     fn deallocate_data(&self, block: &BlockInner) {
         if let Some(ptr) = block.p {
-            eprintln!("Freeing Data at {:#08x}+{:x}", ptr.as_ptr() as usize, block.layout.size());
+            eprintln!(
+                "Freeing Data at {:#08x}+{:x}",
+                ptr.as_ptr() as usize,
+                block.layout.size()
+            );
             unsafe {
                 block
                     .factory
@@ -274,17 +295,13 @@ impl BlockInner {
     pub fn as_slice(&self) -> &[u8] {
         let ptr = self.p.unwrap().as_ptr();
         let size = self.layout.size();
-        unsafe {
-            std::slice::from_raw_parts(ptr, size)
-        }
+        unsafe { std::slice::from_raw_parts(ptr, size) }
     }
 
     pub fn as_mut_slice(&self) -> &mut [u8] {
         let ptr = self.p.unwrap().as_ptr();
         let size = self.layout.size();
-        unsafe {
-            std::slice::from_raw_parts_mut(ptr, size)
-        }
+        unsafe { std::slice::from_raw_parts_mut(ptr, size) }
     }
 
     fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
@@ -350,7 +367,7 @@ impl Drop for ExecutableCodeBlock {
     }
 }
 
-fn page_align(n: usize, ps:  usize) -> usize {
+fn page_align(n: usize, ps: usize) -> usize {
     // hardwired for now, but we can get this from the target we are running at at runtime
     return (n + (ps - 1)) & !(ps - 1);
 }

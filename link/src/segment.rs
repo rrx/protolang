@@ -5,7 +5,7 @@ use object::{
 use std::error::Error;
 use std::sync::Arc;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use super::*;
 
@@ -143,7 +143,6 @@ impl UnlinkedCodeSegmentInner {
                     }
                 }
 
-
                 for (reloc_offset, r) in section.relocations() {
                     let symbol = if let RelocationTarget::Symbol(symbol_index) = r.target() {
                         symbol_table.symbol_by_index(symbol_index)?
@@ -165,9 +164,9 @@ impl UnlinkedCodeSegmentInner {
                             );
                         }
 
-                         //do nothing here
+                        //do nothing here
                         //SymbolScope::Unknown => {
-                            //unknowns.insert(name);
+                        //unknowns.insert(name);
                         //}
                         SymbolScope::Compilation => (),
 
@@ -210,12 +209,18 @@ impl UnlinkedCodeSegmentInner {
         b: &mut BlockFactory,
     ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
         // get a list of data symbols
-        let symbols = self.symbols.iter().filter(|(_, s)| {
-            s.kind == CodeSymbolKind::Data
-        }).collect::<Vec<_>>();
+        let symbols = self
+            .symbols
+            .iter()
+            .filter(|(_, s)| s.kind == CodeSymbolKind::Data)
+            .collect::<Vec<_>>();
 
         if symbols.len() > 0 {
-            eprintln!("create data: {}, {:?}", &code_page_name, (&symbols, self.bytes.len()));
+            eprintln!(
+                "create data: {}, {:?}",
+                &code_page_name,
+                (&symbols, self.bytes.len())
+            );
 
             // allocate enough space for the actual data, and a lookup table as well
             let size = self.bytes.len() + symbols.len() * std::mem::size_of::<usize>();
@@ -228,16 +233,18 @@ impl UnlinkedCodeSegmentInner {
                 block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
                 let mut pointers = im::HashMap::new();
                 unsafe {
-
                     let mut entry_counter = 0;
                     let got_base = block.as_ptr().offset(self.bytes.len() as isize) as *mut u64;
                     for (name, s) in &symbols {
                         let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                        let got_ptr = got_base.offset(entry_counter); 
+                        let got_ptr = got_base.offset(entry_counter);
                         *got_ptr = value_ptr as u64;
                         entry_counter += 1;
                         pointers.insert(s.name.clone(), got_ptr as *const ());
-                        println!("got: {}, {:#08x}, {:#08x}", &name, value_ptr as usize, got_ptr as usize);
+                        println!(
+                            "got: {}, {:#08x}, {:#08x}",
+                            &name, value_ptr as usize, got_ptr as usize
+                        );
                     }
                 }
 
@@ -262,9 +269,11 @@ impl UnlinkedCodeSegmentInner {
         b: &mut BlockFactory,
     ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
         // get a list of data symbols
-        let symbols = self.symbols.iter().filter(|(_, s)| {
-            s.kind == CodeSymbolKind::Text
-        }).collect::<Vec<_>>();
+        let symbols = self
+            .symbols
+            .iter()
+            .filter(|(_, s)| s.kind == CodeSymbolKind::Text)
+            .collect::<Vec<_>>();
 
         if symbols.len() > 0 {
             let size = self.bytes.len();

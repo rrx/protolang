@@ -187,80 +187,80 @@ pub struct UnpatchedCodePage {
 mod tests {
     use super::*;
     use std::path::Path;
-/*
-    #[test]
-    fn global_long() {
-        let mut b = LinkBuilder::new();
-        //b.add_library("gz", Path::new("/home/rrx/code/protolang/tmp/libz.so")).unwrap();
-        b.add("test", Path::new("/home/rrx/code/protolang/tmp/live.o"))
+    /*
+        #[test]
+        fn global_long() {
+            let mut b = LinkBuilder::new();
+            //b.add_library("gz", Path::new("/home/rrx/code/protolang/tmp/libz.so")).unwrap();
+            b.add("test", Path::new("/home/rrx/code/protolang/tmp/live.o"))
+                .unwrap();
+            let collection = b.link().unwrap();
+            let ret: i64 = collection.invoke("func2", (2,)).unwrap();
+            println!("ret: {:#08x}", ret);
+            assert_eq!(3, ret);
+
+            let ret: i64 = collection.invoke("call_live", (2,)).unwrap();
+            println!("ret: {:#08x}", ret);
+            assert_eq!(10, ret);
+        }
+
+        #[test]
+        fn link_shared() {
+            let mut b = LinkBuilder::new();
+            b.add_library("gz", Path::new("/home/rrx/code/protolang/tmp/libz.so"))
+                .unwrap();
+            b.add(
+                "test",
+                Path::new("/home/rrx/code/protolang/tmp/link_shared.o"),
+            )
             .unwrap();
-        let collection = b.link().unwrap();
-        let ret: i64 = collection.invoke("func2", (2,)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(3, ret);
+            let collection = b.link().unwrap();
+            //let _: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
+            //println!("ret: {:#08x}", ret);
+            //assert_eq!(3, ret);
+        }
 
-        let ret: i64 = collection.invoke("call_live", (2,)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(10, ret);
-    }
+        #[test]
+        fn livelink() {
+            let mut b = LinkBuilder::new();
 
-    #[test]
-    fn link_shared() {
-        let mut b = LinkBuilder::new();
-        b.add_library("gz", Path::new("/home/rrx/code/protolang/tmp/libz.so"))
+            // unable to link, missing symbol
+            b.add(
+                "test1",
+                Path::new("/home/rrx/code/protolang/tmp/testfunction.o"),
+            )
             .unwrap();
-        b.add(
-            "test",
-            Path::new("/home/rrx/code/protolang/tmp/link_shared.o"),
-        )
-        .unwrap();
-        let collection = b.link().unwrap();
-        //let _: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
-        //println!("ret: {:#08x}", ret);
-        //assert_eq!(3, ret);
-    }
+            assert_eq!(false, b.link().is_ok());
 
-    #[test]
-    fn livelink() {
-        let mut b = LinkBuilder::new();
+            // provide missing symbol
+            b.add("asdf", Path::new("/home/rrx/code/protolang/tmp/asdf.o"))
+                .unwrap();
+            assert_eq!(true, b.link().is_ok());
 
-        // unable to link, missing symbol
-        b.add(
-            "test1",
-            Path::new("/home/rrx/code/protolang/tmp/testfunction.o"),
-        )
-        .unwrap();
-        assert_eq!(false, b.link().is_ok());
-
-        // provide missing symbol
-        b.add("asdf", Path::new("/home/rrx/code/protolang/tmp/asdf.o"))
+            // links fine
+            b.add(
+                "simple",
+                Path::new("/home/rrx/code/protolang/tmp/simplefunction.o"),
+            )
             .unwrap();
-        assert_eq!(true, b.link().is_ok());
+            assert_eq!(true, b.link().is_ok());
 
-        // links fine
-        b.add(
-            "simple",
-            Path::new("/home/rrx/code/protolang/tmp/simplefunction.o"),
-        )
-        .unwrap();
-        assert_eq!(true, b.link().is_ok());
+            let collection = b.link().unwrap();
+            let ret: i64 = collection.invoke("func", ()).unwrap();
+            println!("ret: {}", ret);
+            assert_eq!(10001, ret);
 
-        let collection = b.link().unwrap();
-        let ret: i64 = collection.invoke("func", ()).unwrap();
-        println!("ret: {}", ret);
-        assert_eq!(10001, ret);
+            let ret: i64 = collection.invoke("simple", ()).unwrap();
+            println!("ret: {}", ret);
+            assert_eq!(10012, ret);
 
-        let ret: i64 = collection.invoke("simple", ()).unwrap();
-        println!("ret: {}", ret);
-        assert_eq!(10012, ret);
+            let ret: i64 = collection.invoke("call_external", ()).unwrap();
+            println!("ret: {}", ret);
+            assert_eq!(4, ret);
 
-        let ret: i64 = collection.invoke("call_external", ()).unwrap();
-        println!("ret: {}", ret);
-        assert_eq!(4, ret);
-
-        let ret: i64 = collection.invoke("asdf", (2,)).unwrap();
-        println!("ret: {}", ret);
-        assert_eq!(3, ret);
-    }
-*/
+            let ret: i64 = collection.invoke("asdf", (2,)).unwrap();
+            println!("ret: {}", ret);
+            assert_eq!(3, ret);
+        }
+    */
 }
