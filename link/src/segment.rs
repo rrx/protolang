@@ -5,7 +5,7 @@ use object::{
 use std::error::Error;
 use std::sync::Arc;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 
@@ -36,16 +36,16 @@ pub struct UnlinkedCodeSegmentInner {
     pub(crate) name: String,
     pub(crate) bytes: Vec<u8>,
     pub(crate) symbols: im::HashMap<String, CodeSymbol>,
-    pub(crate) unknowns: im::HashSet<String>,
-    pub(crate) relocations: im::HashMap<String, CodeRelocation>,
+    pub(crate) unknowns: HashSet<String>,
+    pub(crate) relocations: HashMap<String, CodeRelocation>,
 }
 
 impl UnlinkedCodeSegmentInner {
     pub fn create_segments(link_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
         let obj_file = object::File::parse(buf)?;
         let mut symbols = HashMap::new();
-        let mut segments = vec![]; //im::HashMap::new(); //<SegmentId, Segment>;
-        let mut unknowns = im::HashSet::new();
+        let mut segments = vec![];
+        let mut unknowns = HashSet::new();
 
         if let Some(symbol_table) = obj_file.symbol_table() {
             for s in symbol_table.symbols() {
@@ -148,7 +148,7 @@ impl UnlinkedCodeSegmentInner {
                     section.align(),
                     section.kind()
                 );
-                let mut relocations = im::HashMap::new();
+                let mut relocations = HashMap::new();
                 let mut section_symbols = im::HashMap::new();
 
                 for (symbol_name, (maybe_section, code_symbol)) in &symbols {
@@ -251,7 +251,7 @@ impl UnlinkedCodeSegmentInner {
                 // copy the data over, and the symbols have the offsets
                 // append the got entries after the data
                 block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
-                let mut pointers = im::HashMap::new();
+                let mut pointers = HashMap::new();
                 unsafe {
                     let mut entry_counter = 0;
                     let got_base = block.as_ptr().offset(self.bytes.len() as isize) as *mut u64;
@@ -299,7 +299,7 @@ impl UnlinkedCodeSegmentInner {
             let size = self.bytes.len();
             if let Some(block) = b.alloc_block(size) {
                 block.as_mut_slice()[0..size].copy_from_slice(&self.bytes);
-                let mut pointers = im::HashMap::new();
+                let mut pointers = HashMap::new();
                 for (_, s) in &symbols {
                     unsafe {
                         let ptr = block.as_ptr().offset(s.address as isize) as *const ();

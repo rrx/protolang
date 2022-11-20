@@ -1,5 +1,6 @@
 use super::*;
 use crate::memory::*;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::Arc;
 
@@ -60,17 +61,17 @@ impl PatchBlock {
 pub struct PatchDataBlock {
     pub(crate) name: String,
     pub(crate) block: WritableDataBlock,
-    pub(crate) symbols: im::HashMap<String, *const ()>,
-    pub(crate) relocations: im::HashMap<String, CodeRelocation>,
+    pub(crate) symbols: HashMap<String, *const ()>,
+    pub(crate) relocations: HashMap<String, CodeRelocation>,
 }
 
 #[derive(Debug)]
 pub struct PatchCodeBlock {
     pub(crate) name: String,
     pub(crate) block: WritableCodeBlock,
-    pub(crate) symbols: im::HashMap<String, *const ()>,
-    pub(crate) unknowns: im::HashSet<String>,
-    pub(crate) relocations: im::HashMap<String, CodeRelocation>,
+    pub(crate) symbols: HashMap<String, *const ()>,
+    pub(crate) unknowns: HashSet<String>,
+    pub(crate) relocations: HashMap<String, CodeRelocation>,
 }
 
 #[derive(Debug)]
