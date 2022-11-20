@@ -1,5 +1,4 @@
 use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
-use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
@@ -97,21 +96,22 @@ impl CodeRelocation {
                 // This doesn't work, and produces an illegal address for some reason
                 let name = &self.name;
                 unsafe {
-                    let adjusted = addr as isize + self.r.addend as isize;
+                    let adjusted = addr.offset(self.r.addend as isize) as u64;
 
                     let (before, patch) = match self.r.size {
                         32 => {
                             // patch as 32 bit
-                            let patch = patch_base.offset(self.offset as isize) as *mut u32;
+                            let patch = patch_base.offset(self.offset as isize) as *mut i32;
                             let before = std::ptr::read(patch);
-                            patch.replace(adjusted as u32);
+                            *patch = adjusted as i32;
+                            unimplemented!("32 bit absolute relocation does not work");
                             (before as u64, patch as u64)
                         }
                         64 => {
                             // patch as 64 bit
                             let patch = patch_base.offset(self.offset as isize) as *mut u64;
                             let before = std::ptr::read(patch);
-                            patch.replace(adjusted as u64);
+                            *patch = adjusted as u64;
                             (before as u64, patch as u64)
                         }
                         _ => unimplemented!(),
@@ -119,7 +119,7 @@ impl CodeRelocation {
 
                     println!(
                         "rel absolute {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
-                        name, patch, before, adjusted as u32, self.r.addend, addr as u32,
+                        name, patch, before, adjusted as usize, self.r.addend, addr as u64
                     );
                 }
             }

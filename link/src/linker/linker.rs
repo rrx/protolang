@@ -24,6 +24,10 @@ impl Link {
         }
     }
 
+    pub fn get_mem_ptr(&self) -> (*const u8, usize) {
+        self.mem.get_mem_ptr()
+    }
+
     pub fn remove(&mut self, name: &str) {
         self.pages.remove(&name.to_string());
     }
@@ -138,6 +142,19 @@ mod tests {
     use std::path::Path;
 
     #[test]
+    fn linker_segfault() {
+        let mut b = Link::new();
+        b.add_library("test", Path::new("libsigsegv.so"));
+        b.add_obj_file("test", Path::new("../tmp/segfault.o"))
+            .unwrap();
+        let version = b.link().unwrap();
+        //let ret: i64 = version.invoke("handlers_init", ()).unwrap();
+        //let ret: i64 = version.invoke("segfault_me", ()).unwrap();
+        //println!("ret: {:#08x}", ret);
+        //assert_eq!(13, ret);
+    }
+
+    #[test]
     fn linker_global_long() {
         let mut b = Link::new();
         b.add_obj_file("test", Path::new("/home/rrx/code/protolang/tmp/live.o"))
@@ -168,7 +185,7 @@ mod tests {
         )
         .unwrap();
         let collection = b.link().unwrap();
-        let ret: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
+        let _ret: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
         //println!("ret: {:#08x}", ret);
         //assert_eq!(3, ret);
     }

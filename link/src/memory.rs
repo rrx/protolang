@@ -16,7 +16,36 @@ pub struct BlockFactoryInner {
     heap: Heap,
 }
 
+impl BlockFactoryInner {
+    pub fn force_rw(&mut self) {
+        self.mprotect(libc::PROT_READ | libc::PROT_WRITE);
+    }
+
+    fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
+        unsafe {
+            let alignment = self.m.as_ptr() as usize % page_size();
+            let ptr = self.m.as_ptr().offset(-(alignment as isize));
+            let len = self.m.len() + alignment;
+            eprintln!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
+            if libc::mprotect(ptr as *mut libc::c_void, len, prot) == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+    }
+}
+
 impl BlockFactory {
+    pub fn get_mem_ptr(&self) -> (*const u8, usize) {
+        let m = &self.0.lock().unwrap().m;
+        (m.as_ptr(), m.len())
+    }
+
+    pub fn force_rw(&mut self) {
+        self.0.lock().unwrap().force_rw();
+    }
+
     pub fn create(num_pages: usize) -> Result<BlockFactory, Box<dyn Error>> {
         // the total amount of space allocated should not be more than 4GB,
         // because we are limited to 32bit relative addressing

@@ -120,6 +120,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut e = Runner::create(&context, OptimizationLevel::None, 0)?;
 
     let mut load_paths = vec![];
+
+    let linker_path = "./target/debug/liblink.so";
+    load_paths.push(Path::new(linker_path).into());
+    load_paths.push(Path::new("libsigsegv.so").into());
+
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -131,7 +136,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match e.link() {
         Ok(version) => {
-            let result: Result<i64, Box<_>> = version.invoke("call_live", (10,));
+            let result: Result<i64, Box<_>> = version.invoke("handlers_init", ());
             match result {
                 Ok(ret) => {
                     println!("ret: {}", ret);
@@ -162,7 +167,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     e.load_paths(&paths)?;
                     match e.link() {
                         Ok(version) => {
-                            let result: Result<i64, Box<_>> = version.invoke("call_live", (10,));
+                            let result: Result<i64, Box<_>> = version.invoke("segfault_me", ());
                             match result {
                                 Ok(ret) => {
                                     println!("ret: {}", ret);

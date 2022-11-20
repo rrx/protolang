@@ -10,11 +10,13 @@ doc:
 test:
 	cargo test -- --nocapture
 
+CFLAGS=-fPIC -fno-direct-access-external-data
 functions:
-	clang -fPIC -c link/testfiles/testfunction.c -o ./tmp/testfunction.o
-	clang -c link/testfiles/simplefunction.c -o ./tmp/simplefunction.o
-	clang -c link/testfiles/asdf.c -o ./tmp/asdf.o
-	clang -c link/testfiles/link_shared.c -o ./tmp/link_shared.o
-	clang -fPIC -fno-direct-access-external-data -c link/testfiles/live.c -o ./tmp/live.o
+	clang ${CFLAGS} -c link/testfiles/testfunction.c -o ./tmp/testfunction.o
+	clang ${CFLAGS} -c link/testfiles/simplefunction.c -o ./tmp/simplefunction.o
+	clang ${CFLAGS} -c link/testfiles/asdf.c -o ./tmp/asdf.o
+	clang ${CFLAGS} -c link/testfiles/segfault.c -o ./tmp/segfault.o
+	clang ${CFLAGS} -c link/testfiles/link_shared.c -o ./tmp/link_shared.o
+	clang ${CFLAGS} -c link/testfiles/live.c -o ./tmp/live.o
 	#clang -c link/testfiles/live.c -o ./tmp/live.o
-	clang -shared -fPIC link/testfiles/live.c -o ./tmp/live.so
+	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
