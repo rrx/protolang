@@ -17,7 +17,7 @@ pub struct BlockFactoryInner {
 }
 
 impl BlockFactory {
-    pub fn create(num_pages: usize, num_data_pages: usize) -> Result<BlockFactory, Box<dyn Error>> {
+    pub fn create(num_pages: usize) -> Result<BlockFactory, Box<dyn Error>> {
         // the total amount of space allocated should not be more than 4GB,
         // because we are limited to 32bit relative addressing
         // we can address things outside this block, but we need 64 bit addressing
@@ -111,6 +111,78 @@ impl BlockFactoryInner {
     }
 }
 
+pub struct SmartPointer {
+    layout: Layout,
+    p: NonNull<u8>,
+    block: HeapBlock,
+}
+
+impl SmartPointer {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.p.as_ptr() as *const u8
+    }
+}
+
+impl Drop for SmartPointer {
+    fn drop(&mut self) {
+        self.block.clone().free(self); //0.lock().unwrap().free(self);
+    }
+}
+
+pub struct HeapBlockInner {
+    block: Block,
+    heap: Heap,
+}
+
+#[derive(Clone)]
+pub struct HeapBlock(Arc<Mutex<HeapBlockInner>>);
+
+impl HeapBlock {
+    pub fn new(block: Block) -> Self {
+        unsafe {
+            let mut heap = Heap::empty();
+            heap.init(block.as_mut_ptr(), block.layout.size());
+            assert_eq!(heap.bottom(), block.as_mut_ptr());
+            Self(Arc::new(Mutex::new(HeapBlockInner { block, heap })))
+        }
+    }
+
+    pub fn alloc(&mut self, size: usize) -> Option<SmartPointer> {
+        assert!(size > 0);
+        let layout = Layout::from_size_align(size, 1).unwrap();
+        let p = self
+            .0
+            .lock()
+            .unwrap()
+            .heap
+            .allocate_first_fit(layout)
+            .unwrap();
+
+        eprintln!("alloc: {:#08x}, {}", p.as_ptr() as usize, size,);
+
+        Some(SmartPointer {
+            layout,
+            p,
+            block: self.clone(),
+        })
+    }
+
+    fn free(&mut self, pointer: &SmartPointer) {
+        eprintln!(
+            "Freeing Pointer at {:#08x}+{:x}",
+            pointer.as_ptr() as usize,
+            pointer.layout.size()
+        );
+        unsafe {
+            self.0
+                .lock()
+                .unwrap()
+                .heap
+                .deallocate(pointer.p, pointer.layout);
+        }
+    }
+}
+
 pub struct Block {
     layout: Layout,
     pub(crate) size: usize,
@@ -168,6 +240,10 @@ impl Block {
         })
     }
 
+    pub fn make_heap_block(self) -> HeapBlock {
+        HeapBlock::new(self)
+    }
+
     fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
         unsafe {
             let alignment = self.p.unwrap().as_ptr() as usize % page_size();
@@ -221,7 +297,7 @@ mod tests {
 
     #[test]
     fn allocate() {
-        let b = BlockFactory::create(2, 2).unwrap();
+        let b = BlockFactory::create(2).unwrap();
         let v1 = b.alloc_block(10).unwrap();
         let v2 = b.alloc_block(10).unwrap();
         b.debug();
@@ -231,5 +307,20 @@ mod tests {
         drop(v2);
         let v3 = b.alloc_block(10).unwrap();
         eprintln!("V Size: {:#08x}", v3.as_ptr() as usize);
+    }
+
+    #[test]
+    fn heapblock() {
+        let b = BlockFactory::create(2).unwrap();
+        let mut h = b.alloc_block(1).unwrap().make_heap_block();
+        let v1 = h.alloc(10).unwrap();
+        let v2 = h.alloc(10).unwrap();
+        eprintln!("V Size: {:#08x}", v1.as_ptr() as usize);
+        eprintln!("V Size: {:#08x}", v2.as_ptr() as usize);
+        drop(v1);
+        drop(v2);
+        let v3 = h.alloc(10).unwrap();
+        eprintln!("V Size: {:#08x}", v3.as_ptr() as usize);
+        b.debug();
     }
 }

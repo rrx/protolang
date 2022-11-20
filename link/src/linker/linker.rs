@@ -20,7 +20,7 @@ impl Link {
         Self {
             pages: HashMap::new(),
             libraries: HashMap::new(),
-            mem: BlockFactory::create(10, 10).unwrap(),
+            mem: BlockFactory::create(20).unwrap(),
         }
     }
 
