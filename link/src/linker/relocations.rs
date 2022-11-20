@@ -96,7 +96,6 @@ impl CodeRelocation {
                 // We get this if we don't compile with -fPIC
                 // This doesn't work, and produces an illegal address for some reason
                 let name = &self.name;
-                println!("look up: {}", name);
                 unsafe {
                     let adjusted = addr as isize + self.r.addend as isize;
 
@@ -131,7 +130,6 @@ impl CodeRelocation {
                 // P = address of the place of the relocation
 
                 let name = &self.name;
-                println!("look up: {}", name);
                 let addend = self.r.addend;
 
                 // complicated pointer arithmetic to update the relocations
@@ -139,7 +137,6 @@ impl CodeRelocation {
                 unsafe {
                     let patch = patch_base.offset(self.offset as isize);
 
-                    eprintln!("look up: {}", name);
                     let symbol_address = addr as isize + addend as isize - patch as isize;
 
                     // patch as 32 bit

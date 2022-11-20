@@ -1,7 +1,7 @@
 long global_int = 0;
 long global_int2 = 1;
 
-long simple() {
+long simple_function() {
 	return 1;
 }
 

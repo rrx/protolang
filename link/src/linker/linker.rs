@@ -148,7 +148,7 @@ mod tests {
         println!("ret: {:#08x}", ret);
         assert_eq!(13, ret);
 
-        let ret: i64 = collection.invoke("simple", ()).unwrap();
+        let ret: i64 = collection.invoke("simple_function", ()).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(1, ret);
 

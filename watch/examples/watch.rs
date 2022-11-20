@@ -127,9 +127,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     e.load_paths(&load_paths)?;
 
+    let mut maybe_version = None;
+
     match e.link() {
-        Ok(collection) => {
-            let result: Result<i64, Box<_>> = collection.invoke("call_live", (10,));
+        Ok(version) => {
+            let result: Result<i64, Box<_>> = version.invoke("call_live", (10,));
             match result {
                 Ok(ret) => {
                     println!("ret: {}", ret);
@@ -138,6 +140,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("Error: {}", e);
                 }
             }
+            maybe_version = Some(version);
         }
         Err(e) => {
             println!("Error: {}", e);
@@ -158,8 +161,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if kind == &Access(AccessKind::Close(AccessMode::Write)) {
                     e.load_paths(&paths)?;
                     match e.link() {
-                        Ok(collection) => {
-                            let result: Result<i64, Box<_>> = collection.invoke("call_live", (10,));
+                        Ok(version) => {
+                            let result: Result<i64, Box<_>> = version.invoke("call_live", (10,));
                             match result {
                                 Ok(ret) => {
                                     println!("ret: {}", ret);
@@ -168,6 +171,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     println!("Error: {}", e);
                                 }
                             }
+                            maybe_version = Some(version);
                         }
                         Err(e) => {
                             println!("Error: {}", e);
