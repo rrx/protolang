@@ -12,7 +12,7 @@ long func2(long x) {
 }
 
 long call_live(long x) {
-	/*global_int3 = 3;*/
+	global_int3 = 3;
 	//return (long)&global_int;// + func2(x+2);
 	return global_int2+global_int3+10+x;
 	/*return 1;*/

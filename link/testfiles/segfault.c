@@ -15,8 +15,8 @@ int handler(void *fault_address, int serious) {
 }
 
 void segfault_me() {
-	void (*ptr)() = 0;
-	ptr();
+  void (*ptr)() = 0;
+  ptr();
 }
 
 void handlers_init(void *ptr, int size) {
@@ -25,7 +25,7 @@ void handlers_init(void *ptr, int size) {
   /* Install the global SIGSEGV handler.  */
   sigsegv_install_handler (&handler);
   /*printf("install: %x, %d\n", g_ptr, g_size);*/
-  fflush(stdout);
+  /*fflush(stdout);*/
   /*segfault_me();*/
 }
 

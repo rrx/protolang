@@ -60,10 +60,7 @@ impl BlockFactory {
 
         unsafe {
             let ptr = m.as_ptr();
-            eprintln!(
-                "Memory Block Created: Code: {:#08x}+{:x}",
-                ptr as usize, size
-            );
+            eprintln!("Memory Block Created: {:#08x}+{:x}", ptr as usize, size);
             heap.init(ptr as *mut u8, ps * num_pages);
             assert_eq!(heap.bottom(), ptr as *mut u8);
         }
@@ -75,9 +72,9 @@ impl BlockFactory {
         }))))
     }
 
-    pub fn alloc_block(&self, data_size: usize) -> Option<Block> {
-        assert!(data_size > 0);
-        let aligned_size = page_align(data_size, page_size());
+    pub fn alloc_block(&self, size: usize) -> Option<Block> {
+        assert!(size > 0);
+        let aligned_size = page_align(size, page_size());
         let layout = Layout::from_size_align(aligned_size, 16).unwrap();
         let p = self
             .0
@@ -89,15 +86,15 @@ impl BlockFactory {
             .unwrap();
 
         eprintln!(
-            "alloc data: {:#08x}, {}, {}",
+            "Block Allocate: Addr: {:#08x}, size: {}, aligned_size: {}",
             p.as_ptr() as usize,
-            data_size,
+            size,
             aligned_size
         );
 
         Some(Block {
             layout,
-            size: data_size,
+            size,
             p: Some(p),
             factory: self.clone(),
         })

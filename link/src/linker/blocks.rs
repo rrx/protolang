@@ -62,7 +62,7 @@ pub struct PatchDataBlock {
     pub(crate) name: String,
     pub(crate) block: WritableDataBlock,
     pub(crate) symbols: HashMap<String, *const ()>,
-    pub(crate) relocations: HashMap<String, CodeRelocation>,
+    pub(crate) relocations: Vec<CodeRelocation>,
 }
 
 #[derive(Debug)]
@@ -71,7 +71,7 @@ pub struct PatchCodeBlock {
     pub(crate) block: WritableCodeBlock,
     pub(crate) symbols: HashMap<String, *const ()>,
     pub(crate) unknowns: HashSet<String>,
-    pub(crate) relocations: HashMap<String, CodeRelocation>,
+    pub(crate) relocations: Vec<CodeRelocation>,
 }
 
 #[derive(Debug)]

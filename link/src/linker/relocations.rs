@@ -169,7 +169,7 @@ pub fn patch_code(
         block.block.as_ptr() as usize
     );
 
-    for (_name, r) in &block.relocations {
+    for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = *pointers.get(&r.name).unwrap() as *const u8;
         r.patch(patch_base, addr);
@@ -198,7 +198,7 @@ pub fn patch_data(
         block.block.as_ptr() as usize
     );
 
-    for (_name, r) in &block.relocations {
+    for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = *pointers.get(&r.name).unwrap() as *const u8;
         r.patch(patch_base, addr);

@@ -10,16 +10,16 @@ use super::*;
 use crate::*;
 
 pub struct Link {
-    pages: HashMap<String, UnlinkedCodeSegment>,
-    libraries: HashMap<String, libloading::Library>,
+    unlinked: HashMap<String, UnlinkedCodeSegment>,
+    pub(crate) libraries: SharedLibraryRepo,
     mem: BlockFactory,
 }
 
 impl Link {
     pub fn new() -> Self {
         Self {
-            pages: HashMap::new(),
-            libraries: HashMap::new(),
+            unlinked: HashMap::new(),
+            libraries: SharedLibraryRepo::default(),
             mem: BlockFactory::create(20).unwrap(),
         }
     }
@@ -29,7 +29,7 @@ impl Link {
     }
 
     pub fn remove(&mut self, name: &str) {
-        self.pages.remove(&name.to_string());
+        self.unlinked.remove(&name.to_string());
     }
 
     pub fn add_library(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
@@ -38,15 +38,15 @@ impl Link {
             // we need to parse the header files to know what all of the symbols mean
             // but we may as well just use bindgen?
             //let _: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(b"gzopen")?;
-            self.libraries.insert(name.to_string(), lib);
+            self.libraries.add(name, lib);
             eprintln!("Loaded library: {}", &path.to_string_lossy());
         }
         Ok(())
     }
 
-    fn add_segements(&mut self, segments: Vec<UnlinkedCodeSegmentInner>) {
+    fn add_segments(&mut self, segments: Vec<UnlinkedCodeSegmentInner>) {
         for s in segments {
-            self.pages.insert(s.name.clone(), Arc::new(s));
+            self.unlinked.insert(s.name.clone(), Arc::new(s));
         }
     }
 
@@ -57,7 +57,7 @@ impl Link {
 
     pub fn add_obj_buf(&mut self, name: &str, buf: &[u8]) -> Result<(), Box<dyn Error>> {
         let segments = UnlinkedCodeSegmentInner::create_segments(name, buf)?;
-        self.add_segements(segments);
+        self.add_segments(segments);
         Ok(())
     }
 
@@ -66,8 +66,8 @@ impl Link {
         let mut duplicates = HashSet::new();
 
         // get all of the symbols and the name that provides it
-        for (_name, unlinked) in &self.pages {
-            //println!("linking: {}", name);
+        for (link_name, unlinked) in &self.unlinked {
+            println!("Linking: {}", link_name);
             for (symbol_name, code_symbol) in &unlinked.symbols {
                 if code_symbol.def == CodeSymbolDefinition::Defined {
                     //println!("\tSymbol: {}", &symbol_name);
@@ -83,33 +83,34 @@ impl Link {
 
         let mut relocations = HashSet::new();
         let mut missing = HashSet::new();
-        for (_name, unlinked) in &self.pages {
+        for (_name, unlinked) in &self.unlinked {
             let mut children = HashSet::new();
             //println!("checking: {}", name);
             // ensure all relocations map somewhere
-            for (symbol_name, _r) in &unlinked.relocations {
+            for r in &unlinked.relocations {
                 //println!("\tReloc: {}", &symbol_name);
-                if pointers.contains_key(symbol_name) || self.search_dynamic(symbol_name)?.is_some()
+                if pointers.contains_key(&r.name)
+                    || self.libraries.search_dynamic(&r.name).is_some()
                 {
-                    children.insert(symbol_name.clone());
-                    relocations.insert(symbol_name.clone());
+                    children.insert(r.name.clone());
+                    relocations.insert(r.name.clone());
                 } else {
-                    println!("\tSymbol {} missing", symbol_name);
-                    missing.insert(symbol_name);
+                    println!("\tSymbol {} missing", &r.name);
+                    missing.insert(r.name.clone());
                 }
             }
         }
 
         if missing.len() == 0 && duplicates.len() == 0 {
             let mut blocks = vec![];
-            for (_name, unlinked) in &self.pages {
-                let name = format!("{}_data", &unlinked.name);
-                if let Some(block) = unlinked.create_data_mem(&name, &mut self.mem)? {
+            for (_name, unlinked) in &self.unlinked {
+                let name = format!("{}.data", &unlinked.name);
+                if let Some(block) = unlinked.create_data(&name, &mut self.mem)? {
                     block.disassemble();
                     blocks.push((name, block));
                 }
-                let name = format!("{}_code", &unlinked.name);
-                if let Some(block) = unlinked.create_code_mem(&name, &mut self.mem)? {
+                let name = format!("{}.code", &unlinked.name);
+                if let Some(block) = unlinked.create_code(&name, &mut self.mem)? {
                     block.disassemble();
                     blocks.push((name, block));
                 }
@@ -118,21 +119,6 @@ impl Link {
         } else {
             Err(LinkError::MissingSymbol.into())
         }
-    }
-
-    // search the dynamic libraries to see if the symbol exists
-    pub fn search_dynamic(&self, symbol: &str) -> Result<Option<*const ()>, Box<dyn Error>> {
-        for (_name, lib) in &self.libraries {
-            let cstr = CString::new(symbol)?;
-            unsafe {
-                let result: Result<libloading::Symbol<unsafe fn()>, libloading::Error> =
-                    lib.get(cstr.as_bytes());
-                if let Ok(f) = result {
-                    return Ok(Some(f.into_raw().into_raw() as *const ()));
-                }
-            }
-        }
-        Ok(None)
     }
 }
 
@@ -157,13 +143,12 @@ mod tests {
     #[test]
     fn linker_global_long() {
         let mut b = Link::new();
-        b.add_obj_file("test", Path::new("/home/rrx/code/protolang/tmp/live.o"))
-            .unwrap();
+        b.add_obj_file("test", Path::new("../tmp/live.o")).unwrap();
         let collection = b.link().unwrap();
 
-        let ret: i64 = collection.invoke("call_live", (2,)).unwrap();
+        let ret: i64 = collection.invoke("call_live", (3,)).unwrap();
         println!("ret: {:#08x}", ret);
-        assert_eq!(13, ret);
+        assert_eq!(17, ret);
 
         let ret: i64 = collection.invoke("simple_function", ()).unwrap();
         println!("ret: {:#08x}", ret);
@@ -177,13 +162,9 @@ mod tests {
     #[test]
     fn linker_shared() {
         let mut b = Link::new();
-        b.add_library("gz", Path::new("/home/rrx/code/protolang/tmp/libz.so"))
+        b.add_library("gz", Path::new("../tmp/libz.so")).unwrap();
+        b.add_obj_file("test", Path::new("../tmp/link_shared.o"))
             .unwrap();
-        b.add_obj_file(
-            "test",
-            Path::new("/home/rrx/code/protolang/tmp/link_shared.o"),
-        )
-        .unwrap();
         let collection = b.link().unwrap();
         let _ret: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
         //println!("ret: {:#08x}", ret);
@@ -195,24 +176,17 @@ mod tests {
         let mut b = Link::new();
 
         // unable to link, missing symbol
-        b.add_obj_file(
-            "test1",
-            Path::new("/home/rrx/code/protolang/tmp/testfunction.o"),
-        )
-        .unwrap();
+        b.add_obj_file("test1", Path::new("../tmp/testfunction.o"))
+            .unwrap();
         assert_eq!(false, b.link().is_ok());
 
         // provide missing symbol
-        b.add_obj_file("asdf", Path::new("/home/rrx/code/protolang/tmp/asdf.o"))
-            .unwrap();
+        b.add_obj_file("asdf", Path::new("../tmp/asdf.o")).unwrap();
         assert_eq!(true, b.link().is_ok());
 
         // links fine
-        b.add_obj_file(
-            "simple",
-            Path::new("/home/rrx/code/protolang/tmp/simplefunction.o"),
-        )
-        .unwrap();
+        b.add_obj_file("simple", Path::new("../tmp/simplefunction.o"))
+            .unwrap();
         assert_eq!(true, b.link().is_ok());
 
         let collection = b.link().unwrap();

@@ -1,10 +1,13 @@
 use crate::*;
 use std::error::Error;
+use std::ffi::CString;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct LinkVersion {
     linked: im::HashMap<String, LinkedBlock>,
     pointers: LinkedSymbolPointers,
+    libraries: SharedLibraryRepo,
 }
 
 impl LinkVersion {
@@ -12,6 +15,7 @@ impl LinkVersion {
         Self {
             linked: im::HashMap::new(),
             pointers: im::HashMap::new(),
+            libraries: SharedLibraryRepo::default(),
         }
     }
 
@@ -29,7 +33,14 @@ impl LinkVersion {
                 map.size(),
                 map.flags,
                 map.filename()
-                );
+            );
+        }
+    }
+
+    pub fn lookup(&self, symbol: &str) -> Option<*const ()> {
+        match self.pointers.get(symbol) {
+            Some(ptr) => Some(*ptr),
+            None => self.libraries.search_dynamic(symbol),
         }
     }
 
@@ -37,7 +48,7 @@ impl LinkVersion {
         // call the main function
 
         // make sure we dereference the pointer!
-        let ptr = *self.pointers.get(name).ok_or(LinkError::SymbolNotFound)? as *const ();
+        let ptr = self.lookup(name).ok_or(LinkError::SymbolNotFound)? as *const ();
         unsafe {
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
             println!("invoking {} @ {:#08x}", name, ptr as usize);
@@ -59,7 +70,7 @@ pub fn build_version(
         // look up all of the unknowns in the shared libraries, if they exist
         if let PatchBlock::Code(PatchCodeBlock { unknowns, .. }) = block {
             for symbol in unknowns {
-                if let Ok(Some(ptr)) = link.search_dynamic(symbol) {
+                if let Some(ptr) = link.libraries.search_dynamic(symbol) {
                     all_pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
@@ -87,5 +98,6 @@ pub fn build_version(
     Ok(LinkVersion {
         linked,
         pointers: all_linked_pointers,
+        libraries: link.libraries.clone(),
     })
 }
