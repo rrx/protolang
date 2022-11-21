@@ -52,6 +52,27 @@ pub struct UnlinkedCodeSegmentInner {
 }
 
 impl UnlinkedCodeSegmentInner {
+    pub fn read_archive(archive_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
+        eprintln!("Archive: {}", archive_name);
+        let archive = object::read::archive::ArchiveFile::parse(buf)?;
+        eprintln!(
+            "Archive: {}, size: {}, kind: {:?}",
+            archive_name,
+            buf.len(),
+            archive.kind()
+        );
+        let mut segments = vec![];
+        for result in archive.members() {
+            let m = result?;
+            let name = std::str::from_utf8(&m.name())?;
+            let (offset, size) = m.file_range();
+            let obj_buf = &buf[offset as usize..(offset + size) as usize];
+            eprintln!("Member: {}, {:?}", &name, &m);
+            segments.extend(Self::create_segments(name, obj_buf)?);
+        }
+        Ok(segments)
+    }
+
     pub fn create_segments(link_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
         eprintln!("Segment: {}, size: {}", link_name, buf.len());
         let obj_file = object::File::parse(buf)?;
@@ -91,39 +112,119 @@ impl UnlinkedCodeSegmentInner {
 
                 let maybe_code_symbol = match &maybe_section {
                     Some(section) => {
-                        match (s.scope(), section.kind()) {
-                            (SymbolScope::Dynamic, SectionKind::UninitializedData) => {
+                        match (s.scope(), s.kind()) {
+                            (SymbolScope::Dynamic | SymbolScope::Linkage, SymbolKind::Text) => {
                                 Some(CodeSymbol {
                                     name,
                                     address: s.address(),
                                     size: s.size(),
-                                    kind: CodeSymbolKind::Data,
+                                    kind: CodeSymbolKind::Text,
                                     def: CodeSymbolDefinition::Defined,
                                 })
                             }
-                            (SymbolScope::Dynamic, SectionKind::Data) => Some(CodeSymbol {
+
+                            (
+                                SymbolScope::Dynamic | SymbolScope::Linkage,
+                                SymbolKind::Data | SymbolKind::Unknown | SymbolKind::Tls,
+                            ) => Some(CodeSymbol {
                                 name,
                                 address: s.address(),
                                 size: s.size(),
                                 kind: CodeSymbolKind::Data,
                                 def: CodeSymbolDefinition::Defined,
                             }),
-                            (SymbolScope::Dynamic, SectionKind::Text) => Some(CodeSymbol {
-                                name,
-                                address: s.address(),
-                                size: s.size(),
-                                kind: CodeSymbolKind::Text,
-                                def: CodeSymbolDefinition::Defined,
-                            }),
 
                             // skip these
                             (SymbolScope::Compilation, _) => None,
-                            _ => unimplemented!(),
+                            _ => unimplemented!(
+                                "Symbol Scope: {:?}, Kind: {:?}",
+                                s.scope(),
+                                s.kind()
+                            ),
                         }
+
+                        /*
+                                match (s.scope(), section.kind()) {
+                                    (SymbolScope::Dynamic, SectionKind::UninitializedData) => {
+                                        Some(CodeSymbol {
+                                            name,
+                                            address: s.address(),
+                                            size: s.size(),
+                                            kind: CodeSymbolKind::Data,
+                                            def: CodeSymbolDefinition::Defined,
+                                        })
+                                    }
+                                    (SymbolScope::Dynamic, SectionKind::UninitializedTls) => {
+                                        Some(CodeSymbol {
+                                            name,
+                                            address: s.address(),
+                                            size: s.size(),
+                                            kind: CodeSymbolKind::Data,
+                                            def: CodeSymbolDefinition::Defined,
+                                        })
+                                    }
+                                    (SymbolScope::Dynamic, SectionKind::Data) => Some(CodeSymbol {
+                                        name,
+                                        address: s.address(),
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Data,
+                                        def: CodeSymbolDefinition::Defined,
+                                    }),
+                                    (SymbolScope::Dynamic, SectionKind::Tls) => Some(CodeSymbol {
+                                        name,
+                                        address: s.address(),
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Data,
+                                        def: CodeSymbolDefinition::Defined,
+                                    }),
+                                    (SymbolScope::Dynamic, SectionKind::ReadOnlyString) => Some(CodeSymbol {
+                                        name,
+                                        address: s.address(),
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Data,
+                                        def: CodeSymbolDefinition::Defined,
+                                    }),
+                                    (SymbolScope::Dynamic, SectionKind::ReadOnlyData) => Some(CodeSymbol {
+                                        name,
+                                        address: s.address(),
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Data,
+                                        def: CodeSymbolDefinition::Defined,
+                                    }),
+                                    (SymbolScope::Dynamic, SectionKind::Text) => Some(CodeSymbol {
+                                        name,
+                                        address: s.address(),
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Text,
+                                        def: CodeSymbolDefinition::Defined,
+                                    }),
+
+                                    (SymbolScope::Linkage, SectionKind::Text) => Some(CodeSymbol {
+                                        name,
+                                        address: s.address(),
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Text,
+                                        def: CodeSymbolDefinition::Defined,
+                                    }),
+
+                                    (SymbolScope::Linkage, SectionKind::Data) => Some(CodeSymbol {
+                                        name,
+                                        address: s.address(),
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Data,
+                                        def: CodeSymbolDefinition::Defined,
+                                    }),
+
+                                    // skip these
+                                    (SymbolScope::Compilation, _) => None,
+                                    //(SymbolScope::Linkage, _) => None,
+                                    _ => unimplemented!("Symbol Scope: {:?}, Section Kind: {:?}", s.scope(), section.kind() ),
+                                }
+                        */
                     }
 
                     None => match s.kind() {
-                        SymbolKind::Unknown => {
+                        SymbolKind::Unknown | SymbolKind::Tls => {
                             // external references
                             unknowns.insert(name.clone());
                             Some(CodeSymbol {
@@ -166,7 +267,7 @@ impl UnlinkedCodeSegmentInner {
                     match maybe_section {
                         Some(symbol_section) => {
                             if symbol_section.index() == section.index() {
-                                println!(" Symbol[{}] = {:?}", &symbol_name, &code_symbol);
+                                eprintln!(" Symbol[{}] = {:?}", &symbol_name, &code_symbol);
                                 section_symbols.insert(symbol_name.clone(), code_symbol.clone());
                             }
                         }
@@ -184,7 +285,7 @@ impl UnlinkedCodeSegmentInner {
                     let name = symbol.name()?.to_string();
 
                     match symbol.scope() {
-                        SymbolScope::Dynamic | SymbolScope::Unknown => {
+                        SymbolScope::Dynamic | SymbolScope::Unknown | SymbolScope::Linkage => {
                             // | SymbolScope::Linkage | SymbolScope::Unknown => {
                             relocations.push(CodeRelocation {
                                 name,
@@ -273,7 +374,7 @@ impl UnlinkedCodeSegmentInner {
                         *got_ptr = value_ptr as u64;
                         entry_counter += 1;
                         pointers.insert(s.name.clone(), got_ptr as *const ());
-                        println!(
+                        eprintln!(
                             " GOT: {}, Value: {:#08x}, Entry: {:#08x}",
                             &name, value_ptr as usize, got_ptr as usize
                         );

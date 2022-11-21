@@ -4,6 +4,9 @@ use std::sync::Arc;
 
 use super::*;
 
+const R_X86_64_GOTPCREL: u32 = 41;
+const R_X86_64_REX_GOTP: u32 = 42;
+
 #[derive(Debug, Clone)]
 pub struct LinkRelocation {
     kind: RelocationKind,
@@ -57,7 +60,32 @@ impl CodeRelocation {
     ) {
         println!("{}", self);
         match self.r.kind {
-            RelocationKind::Elf(42) => {
+            RelocationKind::Elf(R_X86_64_GOTPCREL) => {
+                unsafe {
+                    let patch = patch_base.offset(self.offset as isize);
+
+                    // this works
+                    let value = addr as isize + self.r.addend as isize - patch as isize;
+
+                    let before = std::ptr::read(patch);
+                    (patch as *mut u32).replace(value as u32);
+                    println!("patch_base: {:#08x}", patch_base as usize);
+                    println!("patch: {:#08x}", patch as usize);
+                    println!("value: {:#04x}", value as u32);
+
+                    println!(
+                        "rel got {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
+                        &self.name,
+                        patch as usize,
+                        before,
+                        value as u32,
+                        self.r.addend,
+                        addr as usize,
+                    );
+                }
+            }
+
+            RelocationKind::Elf(R_X86_64_REX_GOTP) => {
                 // got entry + addend - reloc_offset(patch)
                 // we are computing the offset from the current instruction pointer
                 unsafe {
