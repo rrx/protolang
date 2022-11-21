@@ -123,9 +123,25 @@ impl UnlinkedCodeSegmentInner {
                                 })
                             }
 
+                            (SymbolScope::Dynamic, SymbolKind::Unknown) => {
+                                let kind = match section.kind() {
+                                    SectionKind::Text => CodeSymbolKind::Text,
+                                    SectionKind::Data => CodeSymbolKind::Data,
+                                    _ => unimplemented!()
+                                };
+
+                                Some(CodeSymbol {
+                                    name,
+                                    address: s.address(),
+                                    size: s.size(),
+                                    kind,
+                                    def: CodeSymbolDefinition::Defined,
+                                })
+                            }
+
                             (
                                 SymbolScope::Dynamic | SymbolScope::Linkage,
-                                SymbolKind::Data | SymbolKind::Unknown | SymbolKind::Tls,
+                                SymbolKind::Data | SymbolKind::Tls,
                             ) => Some(CodeSymbol {
                                 name,
                                 address: s.address(),

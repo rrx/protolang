@@ -151,6 +151,28 @@ impl CodeRelocation {
                     );
                 }
             }
+
+            RelocationKind::Relative => {
+                unsafe {
+                    let patch = patch_base.offset(self.offset as isize);
+                    let symbol_address = addr as isize + self.r.addend as isize - patch as isize;
+
+                    // patch as 32 bit
+                    let patch = patch as *mut u32;
+                    *patch = symbol_address as u32;
+
+                    println!(
+                            "rel relative {}: patch:{:#08x} patchv:{:#08x} addend:{:#08x} addr:{:#08x} symbol:{:#08x}",
+                            &self.name,
+                            patch as usize,
+                            std::ptr::read(patch),
+                            self.r.addend,
+                            addr as isize,
+                            symbol_address as isize,
+                            );
+                }
+            }
+
             RelocationKind::PltRelative => {
                 // L + A - P, 32 bit output
                 // L = address of the symbols entry within the procedure linkage table

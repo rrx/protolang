@@ -97,6 +97,8 @@ pub fn disassemble_code(buf: &[u8], pointers: im::HashMap<usize, String>) {
     let cs = capstone::Capstone::new()
         .x86()
         .mode(arch::x86::ArchMode::Mode64)
+        .syntax(arch::x86::ArchSyntax::Att)
+        .detail(true)
         .build()
         .unwrap();
     let insts = cs.disasm_all(&buf, 0).expect("disassemble");
