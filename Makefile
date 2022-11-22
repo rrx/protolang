@@ -19,6 +19,8 @@ functions:
 	clang ${CFLAGS} -c link/testfiles/link_shared.c -o ./tmp/link_shared.o
 	clang ${CFLAGS} -c link/testfiles/live.c -o ./tmp/live.o
 	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
+	clang ${CFLAGS} -c link/testfiles/uvtest.c -o ./tmp/uvtest.o
+	clang ${CFLAGS} link/testfiles/segfault_handle.c -o ./tmp/segfault_handle
 	#clang -c link/testfiles/live.c -o ./tmp/live.o
 	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
 	#gcc -nostdlib -m32 link/testfiles/start.c -o ./tmp/start.o
