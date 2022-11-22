@@ -11,19 +11,13 @@ int initialize(void *d, void *main, void *init) {
 
 	/*exit(1);*/
 	asm(
-			"mov %0,%%rdi;" 
-			"xor %%rsi,%%rsi;"
-			"push %%rsi;"
-			"push %%rsi;"
-			"push %%rsi;"
-			"push %%rsi;"
-			"push %%rsi;"
-			"push %%rsi;"
-			"push %%rsi;"
-			"mov %1,%%rdx;"
-			"mov %2,%%rcx;"
-			"xor %%r8,%%r8;"
-			"xor %%r9,%%r9;"
+			"mov %0,%%rdi;"    // main
+			/*"xor %%rdi,%%rdi;"    // main*/
+			"mov %2,%%rcx;"    // _init
+			"xor %%rsi,%%rsi;" // argc = 0
+			"mov %1,%%rdx;"    // argv
+			"xor %%r8,%%r8;"   // _fini = 0
+			"xor %%r9,%%r9;"   // atexit fn = 0
 			"call __libc_start_main;"
 			:
 			:"r" (main), "r" (argv), "r" (init)

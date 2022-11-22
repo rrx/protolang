@@ -21,3 +21,8 @@ functions:
 	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
 	#clang -c link/testfiles/live.c -o ./tmp/live.o
 	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
+	#gcc -nostdlib -m32 link/testfiles/start.c -o ./tmp/start.o
+	clang -nostdlib link/testfiles/start.c -o ./tmp/start
+	clang ${CFLAGS} -nostdlib link/testfiles/start.c -o ./tmp/start.o
+	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
+

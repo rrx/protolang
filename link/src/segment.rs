@@ -112,11 +112,13 @@ impl UnlinkedCodeSegmentInner {
 
                 let maybe_code_symbol = match &maybe_section {
                     Some(section) => {
+                        let section_start = section.address();
+                        let address = s.address() - section_start;
                         match (s.scope(), s.kind()) {
                             (SymbolScope::Dynamic | SymbolScope::Linkage, SymbolKind::Text) => {
                                 Some(CodeSymbol {
                                     name,
-                                    address: s.address(),
+                                    address,
                                     size: s.size(),
                                     kind: CodeSymbolKind::Text,
                                     def: CodeSymbolDefinition::Defined,
@@ -127,12 +129,12 @@ impl UnlinkedCodeSegmentInner {
                                 let kind = match section.kind() {
                                     SectionKind::Text => CodeSymbolKind::Text,
                                     SectionKind::Data => CodeSymbolKind::Data,
-                                    _ => unimplemented!()
+                                    _ => continue
                                 };
 
                                 Some(CodeSymbol {
                                     name,
-                                    address: s.address(),
+                                    address,
                                     size: s.size(),
                                     kind,
                                     def: CodeSymbolDefinition::Defined,
@@ -144,7 +146,7 @@ impl UnlinkedCodeSegmentInner {
                                 SymbolKind::Data | SymbolKind::Tls,
                             ) => Some(CodeSymbol {
                                 name,
-                                address: s.address(),
+                                address,
                                 size: s.size(),
                                 kind: CodeSymbolKind::Data,
                                 def: CodeSymbolDefinition::Defined,
