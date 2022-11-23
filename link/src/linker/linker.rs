@@ -181,6 +181,7 @@ mod tests {
     #[test]
     fn linker_livelink() {
         let mut b = Link::new();
+        b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so")).unwrap();
 
         // unable to link, missing symbol
         b.add_obj_file("test1", Path::new("../tmp/testfunction.o"))

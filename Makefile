@@ -20,7 +20,8 @@ functions:
 	clang ${CFLAGS} -c link/testfiles/live.c -o ./tmp/live.o
 	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
 	clang ${CFLAGS} -c link/testfiles/uvtest.c -o ./tmp/uvtest.o
-	clang ${CFLAGS} link/testfiles/segfault_handle.c -o ./tmp/segfault_handle
+	clang ${CFLAGS} -g link/testfiles/segfault_handle.c -o ./tmp/segfault_handle
+	clang ${CFLAGS} -g link/testfiles/segfault_handle2.c -o ./tmp/segfault_handle2
 	#clang -c link/testfiles/live.c -o ./tmp/live.o
 	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
 	#gcc -nostdlib -m32 link/testfiles/start.c -o ./tmp/start.o

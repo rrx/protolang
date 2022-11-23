@@ -45,8 +45,9 @@ void seghandle(int sig, void* si, void* unused) {
 
 void setup_segfault_handler() {
   struct sigaction sa;
-  sa.sa_flags = SA_SIGINFO;
+
   sigemptyset (&sa.sa_mask);
+  sa.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
   sa.sa_sigaction = &seghandle;
   if (sigaction(SIGSEGV, &sa, 0x0) == -1) {
     fprintf(stderr, "failed to setup SIGSEGV handler\n");
