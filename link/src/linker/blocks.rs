@@ -43,10 +43,20 @@ pub enum PatchBlock {
     Data(PatchDataBlock),
 }
 impl PatchBlock {
-    pub fn patch(mut self, pointers: PatchSymbolPointers) -> (LinkedBlock, LinkedSymbolPointers) {
+    pub fn patch(
+        mut self,
+        pointers: PatchSymbolPointers,
+        got: TableVersion,
+        plt: TableVersion,
+    ) -> (
+        LinkedBlock,
+        LinkedSymbolPointers,
+        TableVersion,
+        TableVersion,
+    ) {
         match self {
-            Self::Code(block) => patch_code(block, &pointers),
-            Self::Data(block) => patch_data(block, &pointers),
+            Self::Code(block) => patch_code(block, pointers, got, plt),
+            Self::Data(block) => patch_data(block, pointers, got, plt),
         }
     }
     pub fn disassemble(&self) {

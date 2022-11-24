@@ -41,6 +41,10 @@ impl fmt::Display for CodeSymbol {
     }
 }
 
+pub struct GotEntry {}
+
+pub struct PltEntry {}
+
 pub type UnlinkedCodeSegment = Arc<UnlinkedCodeSegmentInner>;
 
 pub struct UnlinkedCodeSegmentInner {
@@ -49,6 +53,8 @@ pub struct UnlinkedCodeSegmentInner {
     pub(crate) symbols: im::HashMap<String, CodeSymbol>,
     pub(crate) unknowns: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
+    pub(crate) got_entries: Vec<GotEntry>,
+    pub(crate) plt_entries: Vec<PltEntry>,
 }
 
 impl UnlinkedCodeSegmentInner {
@@ -129,7 +135,7 @@ impl UnlinkedCodeSegmentInner {
                                 let kind = match section.kind() {
                                     SectionKind::Text => CodeSymbolKind::Text,
                                     SectionKind::Data => CodeSymbolKind::Data,
-                                    _ => continue
+                                    _ => continue,
                                 };
 
                                 Some(CodeSymbol {
@@ -160,85 +166,6 @@ impl UnlinkedCodeSegmentInner {
                                 s.kind()
                             ),
                         }
-
-                        /*
-                                match (s.scope(), section.kind()) {
-                                    (SymbolScope::Dynamic, SectionKind::UninitializedData) => {
-                                        Some(CodeSymbol {
-                                            name,
-                                            address: s.address(),
-                                            size: s.size(),
-                                            kind: CodeSymbolKind::Data,
-                                            def: CodeSymbolDefinition::Defined,
-                                        })
-                                    }
-                                    (SymbolScope::Dynamic, SectionKind::UninitializedTls) => {
-                                        Some(CodeSymbol {
-                                            name,
-                                            address: s.address(),
-                                            size: s.size(),
-                                            kind: CodeSymbolKind::Data,
-                                            def: CodeSymbolDefinition::Defined,
-                                        })
-                                    }
-                                    (SymbolScope::Dynamic, SectionKind::Data) => Some(CodeSymbol {
-                                        name,
-                                        address: s.address(),
-                                        size: s.size(),
-                                        kind: CodeSymbolKind::Data,
-                                        def: CodeSymbolDefinition::Defined,
-                                    }),
-                                    (SymbolScope::Dynamic, SectionKind::Tls) => Some(CodeSymbol {
-                                        name,
-                                        address: s.address(),
-                                        size: s.size(),
-                                        kind: CodeSymbolKind::Data,
-                                        def: CodeSymbolDefinition::Defined,
-                                    }),
-                                    (SymbolScope::Dynamic, SectionKind::ReadOnlyString) => Some(CodeSymbol {
-                                        name,
-                                        address: s.address(),
-                                        size: s.size(),
-                                        kind: CodeSymbolKind::Data,
-                                        def: CodeSymbolDefinition::Defined,
-                                    }),
-                                    (SymbolScope::Dynamic, SectionKind::ReadOnlyData) => Some(CodeSymbol {
-                                        name,
-                                        address: s.address(),
-                                        size: s.size(),
-                                        kind: CodeSymbolKind::Data,
-                                        def: CodeSymbolDefinition::Defined,
-                                    }),
-                                    (SymbolScope::Dynamic, SectionKind::Text) => Some(CodeSymbol {
-                                        name,
-                                        address: s.address(),
-                                        size: s.size(),
-                                        kind: CodeSymbolKind::Text,
-                                        def: CodeSymbolDefinition::Defined,
-                                    }),
-
-                                    (SymbolScope::Linkage, SectionKind::Text) => Some(CodeSymbol {
-                                        name,
-                                        address: s.address(),
-                                        size: s.size(),
-                                        kind: CodeSymbolKind::Text,
-                                        def: CodeSymbolDefinition::Defined,
-                                    }),
-
-                                    (SymbolScope::Linkage, SectionKind::Data) => Some(CodeSymbol {
-                                        name,
-                                        address: s.address(),
-                                        size: s.size(),
-                                        kind: CodeSymbolKind::Data,
-                                        def: CodeSymbolDefinition::Defined,
-                                    }),
-
-                                    // skip these
-                                    (SymbolScope::Compilation, _) => None,
-                                    //(SymbolScope::Linkage, _) => None,
-                                    _ => unimplemented!("Symbol Scope: {:?}, Section Kind: {:?}", s.scope(), section.kind() ),
-                                }
-                        */
                     }
 
                     None => match s.kind() {
@@ -339,12 +266,17 @@ impl UnlinkedCodeSegmentInner {
                     data.to_vec()
                 };
 
+                let got_entries = vec![];
+                let plt_entries = vec![];
+
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
                     bytes,
                     unknowns: unknowns.clone(),
                     symbols: section_symbols,
                     relocations,
+                    got_entries,
+                    plt_entries,
                 });
             }
         }
@@ -374,7 +306,7 @@ impl UnlinkedCodeSegmentInner {
                     self.bytes.len()
                 );
                 for (_symbol_name, symbol) in &symbols {
-                    eprintln!(" Symbol: {}", symbol);
+                    eprintln!(" Data Symbol: {}", symbol);
                 }
                 // to create the data section, we need to copy the data, but we also need
                 // to create pointers to the data
@@ -383,10 +315,12 @@ impl UnlinkedCodeSegmentInner {
                 // append the got entries after the data
                 block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
                 let mut pointers = HashMap::new();
+
+                // append got data entries
                 unsafe {
                     let mut entry_counter = 0;
                     let got_base = block.as_ptr().offset(self.bytes.len() as isize) as *mut u64;
-                    for (name, s) in &symbols {
+                    for (name, s) in symbols {
                         let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
                         let got_ptr = got_base.offset(entry_counter);
                         *got_ptr = value_ptr as u64;
@@ -435,14 +369,17 @@ impl UnlinkedCodeSegmentInner {
                     self.bytes.len()
                 );
                 for (_symbol_name, symbol) in &symbols {
-                    eprintln!(" Symbol: {}", symbol);
+                    eprintln!(" Code Symbol: {}", symbol);
                 }
 
                 for r in &self.relocations {
-                    eprintln!(" Relocation: {}", r);
+                    eprintln!(" Code Relocation: {}", r);
                 }
 
+                // copy code into the block
                 block.as_mut_slice()[0..size].copy_from_slice(&self.bytes);
+
+                // for each symbol, add a reference to it's full address
                 let mut pointers = HashMap::new();
                 for (_, s) in &symbols {
                     unsafe {

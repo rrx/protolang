@@ -147,6 +147,14 @@ impl SmartPointer {
     pub fn as_ptr(&self) -> *const u8 {
         self.p.as_ptr() as *const u8
     }
+    pub fn copy(&mut self, buf: &[u8]) {
+        // copy data into the area
+        assert!(buf.len() <= self.layout.size());
+        let size = std::cmp::min(buf.len(), self.layout.size());
+        unsafe {
+            std::ptr::copy(buf.as_ptr(), self.p.as_ptr(), size);
+        }
+    }
 }
 
 impl Drop for SmartPointer {
@@ -170,6 +178,20 @@ impl HeapBlock {
             heap.init(block.as_mut_ptr(), block.layout.size());
             assert_eq!(heap.bottom(), block.as_mut_ptr());
             Self(Arc::new(Mutex::new(HeapBlockInner { block, heap })))
+        }
+    }
+
+    pub fn base(&self) -> *const () {
+        self.0.as_ref().lock().unwrap().block.as_ptr() as *const ()
+    }
+
+    pub fn add_buf(&mut self, buf: &[u8]) -> Option<SmartPointer> {
+        match self.alloc(buf.len()) {
+            Some(mut p) => {
+                p.copy(buf);
+                Some(p)
+            }
+            None => None,
         }
     }
 

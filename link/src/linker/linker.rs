@@ -13,14 +13,31 @@ pub struct Link {
     unlinked: HashMap<String, UnlinkedCodeSegment>,
     pub(crate) libraries: SharedLibraryRepo,
     mem: BlockFactory,
+    plt_block: SmartBlock,
+    got_block: SmartBlock,
+    pub(crate) got: TableVersion,
+    pub(crate) plt: TableVersion,
 }
 
 impl Link {
     pub fn new() -> Self {
+        let mem = BlockFactory::create(2000).unwrap();
+        let got_mem = mem.alloc_block(1024 * 1024).unwrap().make_heap_block();
+        let plt_mem = mem.alloc_block(1024 * 1024).unwrap().make_heap_block();
+        let got_block = SmartBlock::new(got_mem);
+        let plt_block = SmartBlock::new(plt_mem);
+
+        let got = TableVersion::new(got_block.clone());
+        let plt = TableVersion::new(plt_block.clone());
+
         Self {
             unlinked: HashMap::new(),
             libraries: SharedLibraryRepo::default(),
-            mem: BlockFactory::create(2000).unwrap(),
+            mem,
+            got_block,
+            plt_block,
+            got,
+            plt,
         }
     }
 
@@ -88,7 +105,7 @@ impl Link {
             }
         }
 
-        let mut relocations = HashSet::new();
+        // check for missing symbols
         let mut missing = HashSet::new();
         for (_name, unlinked) in &self.unlinked {
             let mut children = HashSet::new();
@@ -96,11 +113,11 @@ impl Link {
             // ensure all relocations map somewhere
             for r in &unlinked.relocations {
                 //eprintln!("\tReloc: {}", &symbol_name);
-                if pointers.contains_key(&r.name)
-                    || self.libraries.search_dynamic(&r.name).is_some()
-                {
+                if pointers.contains_key(&r.name) {
                     children.insert(r.name.clone());
-                    relocations.insert(r.name.clone());
+                } else if self.libraries.search_dynamic(&r.name).is_some() {
+                    children.insert(r.name.clone());
+                    eprintln!(" Symbol {} found in shared library", &r.name);
                 } else {
                     eprintln!(" Symbol {} missing", &r.name);
                     missing.insert(r.name.clone());
@@ -181,7 +198,9 @@ mod tests {
     #[test]
     fn linker_livelink() {
         let mut b = Link::new();
-        b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so")).unwrap();
+        b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
+            .unwrap();
+        b.add_library("libc", Path::new("../tmp/live.so")).unwrap();
 
         // unable to link, missing symbol
         b.add_obj_file("test1", Path::new("../tmp/testfunction.o"))

@@ -1,4 +1,5 @@
 use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -6,6 +7,12 @@ use super::*;
 
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;
+
+pub enum PatchEffect {
+    AddToGot,
+    AddToPlt,
+    DoNothing,
+}
 
 #[derive(Debug, Clone)]
 pub struct LinkRelocation {
@@ -57,7 +64,9 @@ impl CodeRelocation {
         patch_base: *mut u8,
         // pointer to address
         addr: *const u8,
-    ) {
+    ) -> PatchEffect {
+        use PatchEffect::*;
+
         println!("{}", self);
         match self.r.kind {
             RelocationKind::Elf(R_X86_64_GOTPCREL) => {
@@ -72,6 +81,7 @@ impl CodeRelocation {
                     println!("patch_base: {:#08x}", patch_base as usize);
                     println!("patch: {:#08x}", patch as usize);
                     println!("value: {:#04x}", value as u32);
+                    println!("addr:  {:#08x}", addr as usize);
 
                     println!(
                         "rel got {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
@@ -83,6 +93,7 @@ impl CodeRelocation {
                         addr as usize,
                     );
                 }
+                AddToGot
             }
 
             RelocationKind::Elf(R_X86_64_REX_GOTP) => {
@@ -102,6 +113,7 @@ impl CodeRelocation {
                     println!("patch_base: {:#08x}", patch_base as usize);
                     println!("patch: {:#08x}", patch as usize);
                     println!("value: {:#04x}", value as u32);
+                    println!("addr:  {:#08x}", addr as usize);
 
                     println!(
                         "rel got {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
@@ -113,6 +125,7 @@ impl CodeRelocation {
                         addr as usize,
                     );
                 }
+                AddToGot
             }
 
             RelocationKind::Absolute => {
@@ -150,6 +163,7 @@ impl CodeRelocation {
                         name, patch, before, adjusted as usize, self.r.addend, addr as u64
                     );
                 }
+                DoNothing
             }
 
             RelocationKind::Relative => {
@@ -171,6 +185,7 @@ impl CodeRelocation {
                             symbol_address as isize,
                             );
                 }
+                DoNothing
             }
 
             RelocationKind::PltRelative => {
@@ -179,30 +194,29 @@ impl CodeRelocation {
                 // A = value of the Addend
                 // P = address of the place of the relocation
 
-                let name = &self.name;
-                let addend = self.r.addend;
+                // address should point to the PLT
 
                 // complicated pointer arithmetic to update the relocations
-                //
                 unsafe {
                     let patch = patch_base.offset(self.offset as isize);
 
-                    let symbol_address = addr as isize + addend as isize - patch as isize;
+                    let symbol_address = addr as isize + self.r.addend as isize - patch as isize;
 
                     // patch as 32 bit
                     let patch = patch as *mut u32;
-                    *patch = symbol_address as u32; //patch.replace(symbol_address as u32);
+                    *patch = symbol_address as u32;
 
                     println!(
                             "rel {}: patch:{:#08x} patchv:{:#08x} addend:{:#08x} addr:{:#08x} symbol:{:#08x}",
-                            name,
+                            &self.name,
                             patch as usize,
                             std::ptr::read(patch),
-                            addend,
+                            self.r.addend,
                             addr as isize,
                             symbol_address as isize,
                             );
                 }
+                AddToPlt
             }
             _ => unimplemented!(),
         }
@@ -211,23 +225,62 @@ impl CodeRelocation {
 
 pub fn patch_code(
     block: PatchCodeBlock,
-    pointers: &PatchSymbolPointers,
-) -> (LinkedBlock, LinkedSymbolPointers) {
+    pointers: PatchSymbolPointers,
+    mut got: TableVersion,
+    mut plt: TableVersion,
+) -> (
+    LinkedBlock,
+    LinkedSymbolPointers,
+    TableVersion,
+    TableVersion,
+) {
     println!(
         "patching code {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
     );
 
+    let mut add_to_got = HashMap::new();
+    let mut add_to_plt = HashMap::new();
+
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = *pointers.get(&r.name).unwrap() as *const u8;
-        r.patch(patch_base, addr);
+        match r.patch(patch_base, addr) {
+            PatchEffect::AddToPlt => {
+                add_to_plt.insert(&r.name, addr);
+            }
+            PatchEffect::AddToGot => {
+                add_to_got.insert(&r.name, addr);
+            }
+            _ => (),
+        }
     }
 
     let mut symbols = im::HashMap::new();
     for (name, s) in block.symbols {
         symbols.insert(name, s);
+    }
+
+    let mut symbols = im::HashMap::new();
+    for (name, ptr) in add_to_got {
+        unsafe {
+            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
+            let mut p = got.create_buffer(buf.len());
+            p.copy(buf);
+            //symbols.insert(name.clone(), p.as_ptr() as *const ());
+            got = got.update(name.clone(), p);
+        }
+    }
+
+    for (name, ptr) in add_to_plt {
+        unsafe {
+            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
+            let mut p = plt.create_buffer(buf.len());
+            p.copy(buf);
+            //symbols.insert(name.clone(), p.as_ptr() as *const ());
+            plt = plt.update(name.clone(), p);
+        }
     }
 
     (
@@ -235,23 +288,43 @@ pub fn patch_code(
             block.block.make_exec_block().unwrap(),
         ))),
         symbols,
+        got,
+        plt,
     )
 }
 
 pub fn patch_data(
     block: PatchDataBlock,
-    pointers: &PatchSymbolPointers,
-) -> (LinkedBlock, LinkedSymbolPointers) {
+    pointers: PatchSymbolPointers,
+    mut got: TableVersion,
+    mut plt: TableVersion,
+) -> (
+    LinkedBlock,
+    LinkedSymbolPointers,
+    TableVersion,
+    TableVersion,
+) {
     println!(
         "patching data {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
     );
 
+    let mut add_to_got = HashMap::new();
+    let mut add_to_plt = HashMap::new();
+
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = *pointers.get(&r.name).unwrap() as *const u8;
-        r.patch(patch_base, addr);
+        match r.patch(patch_base, addr) {
+            PatchEffect::AddToPlt => {
+                add_to_plt.insert(&r.name, addr);
+            }
+            PatchEffect::AddToGot => {
+                add_to_got.insert(&r.name, addr);
+            }
+            _ => (),
+        }
     }
 
     let mut symbols = im::HashMap::new();
@@ -259,8 +332,30 @@ pub fn patch_data(
         symbols.insert(name, s);
     }
 
+    for (name, ptr) in add_to_got {
+        unsafe {
+            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
+            let mut p = got.create_buffer(buf.len());
+            p.copy(buf);
+            //symbols.insert(name.clone(), p.as_ptr() as *const ());
+            got = got.update(name.clone(), p);
+        }
+    }
+
+    for (name, ptr) in add_to_plt {
+        unsafe {
+            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
+            let mut p = plt.create_buffer(buf.len());
+            p.copy(buf);
+            //symbols.insert(name.clone(), p.as_ptr() as *const ());
+            plt = plt.update(name.clone(), p);
+        }
+    }
+
     (
         LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block.block))),
         symbols,
+        got,
+        plt,
     )
 }

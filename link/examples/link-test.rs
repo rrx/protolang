@@ -18,6 +18,16 @@ fn test_live_shared() {
     assert_eq!(0x11, ret);
 }
 
+fn test_load_from_shared() {
+    let mut b = Link::new();
+    b.add_library("live", Path::new("tmp/live.so")).unwrap();
+    b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
+        .unwrap();
+    let version = b.link().unwrap();
+    let ret: i64 = version.invoke("load_from_extern", ()).unwrap();
+    println!("ret: {:#08x}", ret);
+}
+
 fn test_live_static() {
     let mut b = Link::new();
     b.add_obj_file("t1", Path::new("tmp/live.o")).unwrap();
@@ -31,7 +41,8 @@ fn test_empty_main() {
     let mut b = Link::new();
     b.add_obj_file("main", Path::new("tmp/empty_main.o"))
         .unwrap();
-    b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so")).unwrap();
+    b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
+        .unwrap();
     let version = b.link().unwrap();
 
     // just call the mepty main
@@ -47,7 +58,9 @@ fn test_empty_main() {
     let init_ptr = 0;
 
     let (base, size) = b.get_mem_ptr();
-    let ret: i64 = version.invoke("initialize", (base, main_ptr, init_ptr)).unwrap();
+    let ret: i64 = version
+        .invoke("initialize", (base, main_ptr, init_ptr))
+        .unwrap();
     assert_eq!(0, ret);
 }
 
@@ -61,7 +74,8 @@ fn test_segfault() {
 
 fn test_libuv() {
     let mut b = Link::new();
-    b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6")).unwrap();
+    b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6"))
+        .unwrap();
     //b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so")).unwrap();
     b.add_library("libuv", Path::new("libuv.so")).unwrap();
     b.add_obj_file("test", Path::new("tmp/uvtest.o")).unwrap();
@@ -70,12 +84,11 @@ fn test_libuv() {
     println!("ret: {:#08x}", ret);
     assert_eq!(0x0, ret);
 
-
     // flush
     unsafe {
         let stdout = *(version.lookup("stdout").unwrap() as *const usize);
         println!("stdout: {:#08x}", stdout);
-        let ret: i64 = version.invoke("fflush", (stdout, )).unwrap();
+        let ret: i64 = version.invoke("fflush", (stdout,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x0, ret);
     }
@@ -83,8 +96,10 @@ fn test_libuv() {
 
 fn test_libc() {
     let mut b = Link::new();
-    b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6")).unwrap();
-    b.add_obj_file("test", Path::new("tmp/simplefunction.o")).unwrap();
+    b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6"))
+        .unwrap();
+    b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
+        .unwrap();
     let version = b.link().unwrap();
     unsafe {
         let stdout = *(version.lookup("stdout").unwrap() as *const usize);
@@ -92,21 +107,32 @@ fn test_libc() {
         let ret: i64 = version.invoke("putc", (0x31u32, stdout)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x31, ret);
-        let ret: i64 = version.invoke("fflush", (stdout, )).unwrap();
+        let ret: i64 = version.invoke("fflush", (stdout,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x0, ret);
 
         let ret: i64 = version.invoke("print_stuff", ()).unwrap();
         println!("ret: {:#08x}", ret);
-
     }
 }
 
 fn test_libc_musl() {
     let mut b = Link::new();
-    b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so")).unwrap();
-    b.add_obj_file("test", Path::new("tmp/simplefunction.o")).unwrap();
+    b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
+        .unwrap();
+    b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
+        .unwrap();
+    b.add_library("test", Path::new("tmp/live.so")).unwrap();
     let version = b.link().unwrap();
+
+    unsafe {
+        let ptr_stdout = version.lookup("stdout").unwrap() as *const usize;
+        let stdout = *ptr_stdout;
+        println!(
+            "stdout: ptr: {:#08x}, value: {:#08x}",
+            ptr_stdout as usize, stdout
+        );
+    }
 
     let ret: i64 = version.invoke("print_stuff", ()).unwrap();
     println!("ret: {:#08x}", ret);
@@ -119,7 +145,6 @@ fn test_libc_musl() {
         )
         .unwrap();
     assert_eq!(4, ret);
-
 
     unsafe {
         let stdout = *(version.lookup("stdout").unwrap() as *const usize);
@@ -145,14 +170,16 @@ fn test_libc_musl() {
     }
 }
 
-
 fn main() {
     //test_start();
+    test_load_from_shared();
+    //test_libc_musl();
+    /*
     test_live_shared();
     test_live_static();
     test_libc();
-    test_libc_musl();
     test_libuv();
+    */
     //test_segfault();
     //test_empty_main();
     //let mut b = Link::new();
@@ -162,7 +189,7 @@ fn main() {
     //b.add_obj_file("t3", Path::new("tmp/segfault.o")).unwrap();
     //b.add_obj_file("t4", Path::new("tmp/live.o")).unwrap();
     //b.add_obj_file("main", Path::new("tmp/empty_main.o"))
-        //.unwrap();
+    //.unwrap();
     //b.add_obj_file("crt", Path::new("/usr/lib/x86_64-linux-gnu/crt1.o")).unwrap();
     //b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6")).unwrap();
     //b.add_archive_file("libc", Path::new("/lib/x86_64-linux-gnu/libc.a")).unwrap();
@@ -175,8 +202,8 @@ fn main() {
 
     // embedded artistry
     //b.add_archive_file(
-        //"libc",
-        //Path::new("/home/rrx/src/libc/buildresults/src/libc.a"),
+    //"libc",
+    //Path::new("/home/rrx/src/libc/buildresults/src/libc.a"),
     //)
     //.unwrap();
 
@@ -188,7 +215,6 @@ fn main() {
     //
     //let ret: i64 = version.invoke("main", ()).unwrap();
     //assert_eq!(0, ret);
-
 
     /*
     let ptr = version.lookup("_start").unwrap();
