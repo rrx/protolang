@@ -30,8 +30,20 @@ impl LinkVersion {
         }
     }
 
+    pub fn compare(&self, symbol: &str) {
+        let v1 = self.pointers.get(symbol);
+        let v2 = self.libraries.search_dynamic(symbol);
+        let v3 = self.lookup(symbol);
+        eprintln!("1:{}: {:?}", symbol, v1);
+        eprintln!("2:{}: {:?}", symbol, v2);
+        eprintln!("3:{}: {:?}", symbol, v3);
+    }
+
     pub fn lookup(&self, symbol: &str) -> Option<*const ()> {
         match self.pointers.get(symbol) {
+            Some(RelocationPointer::Got(ptr)) => unsafe {
+                Some(*(*ptr as *const usize) as *const ())
+            },
             Some(ptr) => Some(ptr.as_ptr()),
             None => self.libraries.search_dynamic(symbol),
         }
@@ -73,7 +85,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     }
 
     // generate a list of symbols and their pointers
-    let mut all_pointers = im::HashMap::new();
+    let mut patch_pointers = im::HashMap::new();
 
     let mut add_to_got = HashMap::new();
     let mut add_to_plt = HashMap::new();
@@ -86,19 +98,30 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 for symbol in externs {
                     if let Some(ptr) = link.libraries.search_dynamic(symbol) {
                         // data pointers should already have a got in the shared library
-                        eprintln!("Searching Shared {:#08x}: {}", ptr as usize, symbol);
-                        all_pointers.insert(symbol.clone(), RelocationPointer::Direct(ptr.clone()));
+                        unsafe {
+                            let ptr = ptr as *const usize;
+                            let v = *ptr as *const usize;
+                            eprintln!(
+                                "Searching Shared {:#08x}:{:#08x}:{}",
+                                ptr as usize, v as usize, symbol
+                            );
+                            //patch_pointers.insert(symbol.clone(), RelocationPointer::Direct(v as *const ()));
+                            patch_pointers.insert(
+                                symbol.clone(),
+                                RelocationPointer::Direct(ptr as *const ()),
+                            );
+                        }
                     }
                 }
                 for (symbol, ptr) in symbols {
                     let p = RelocationPointer::Direct(ptr.clone());
-                    all_pointers.insert(symbol.clone(), p);
+                    patch_pointers.insert(symbol.clone(), p);
                 }
             }
             PatchBlock::Data(PatchDataBlock { symbols, .. }) => {
                 for (symbol, ptr) in symbols {
                     let p = RelocationPointer::Direct(ptr.clone());
-                    all_pointers.insert(symbol.clone(), p);
+                    patch_pointers.insert(symbol.clone(), p);
                     add_to_got.insert(symbol.clone(), p);
                 }
             }
@@ -115,7 +138,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 for r in relocations {
                     match r.effect() {
                         AddToGot => {
-                            let direct = all_pointers.get(&r.name).unwrap();
+                            let direct = patch_pointers.get(&r.name).unwrap();
                             add_to_got.insert(r.name.clone(), *direct);
                             /*
                             unsafe {
@@ -128,7 +151,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                             */
                         }
                         AddToPlt => {
-                            let direct = all_pointers.get(&r.name).unwrap();
+                            let direct = patch_pointers.get(&r.name).unwrap();
                             add_to_plt.insert(r.name.clone(), *direct);
                             //add_to_plt.insert(r.name.clone());
                             /*
@@ -149,6 +172,8 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         }
     }
 
+    let mut all_pointers = patch_pointers.clone();
+
     for (name, direct) in add_to_got {
         // cast pointer to usize
         let v = direct.as_ptr() as usize;
@@ -159,7 +184,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         p.copy(buf.as_slice());
         all_pointers.insert(
             name.clone(),
-            RelocationPointer::Got(p.as_ptr() as *const ()),
+            RelocationPointer::Got(p.as_ptr() as *const ()), //direct
         );
         got = got.update(name, p);
     }
@@ -250,10 +275,19 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     //let mut all_linked_pointers = im::HashMap::new();
     //all_linked_pointers = all_linked_pointers.union(all_pointers.clone());
 
-    for (k, v) in &all_pointers {
-        //let ptr = v.as_ptr() as *const usize;
+    eprintln!("all pointers");
+    for (k, p) in &all_pointers {
         unsafe {
-            eprintln!("p: {}:{:#08x}:{}", v, v.as_ptr() as usize, k);
+            let v = p.as_ptr() as *const usize;
+            eprintln!("p: {}:{:#08x}:{}", p, v as usize, k);
+        }
+    }
+
+    eprintln!("patch pointers");
+    for (k, p) in &patch_pointers {
+        unsafe {
+            let v = p.as_ptr() as *const usize;
+            eprintln!("p: {}:{:#08x}:{}", p, v as usize, k);
         }
     }
 
@@ -261,9 +295,9 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     let mut linked = im::HashMap::new();
     for (block_name, block) in blocks {
         let patched_block = //, linked_pointers) = //, new_got, new_plt) =
-            block.patch(all_pointers.clone()); //, got.clone(), plt.clone());
-                                               //got = new_got;
-                                               //plt = new_plt;
+            block.patch(all_pointers.clone(), got.clone(), plt.clone()); //, got.clone(), plt.clone());
+                                                                         //got = new_got;
+                                                                         //plt = new_plt;
         patched_block.disassemble();
         linked.insert(block_name.clone(), patched_block);
         //all_linked_pointers = all_linked_pointers.union(linked_pointers);

@@ -34,3 +34,5 @@ functions:
 	clang ${CFLAGS} -nostdlib link/testfiles/start.c -o ./tmp/start.o
 	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
 
+	clang ${CFLAGS} -g link/testfiles/invoke_print.c -o ./tmp/invoke_print
+

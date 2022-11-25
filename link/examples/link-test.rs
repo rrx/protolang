@@ -113,18 +113,30 @@ fn test_libc() {
     b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
         .unwrap();
     let version = b.link().unwrap();
+    version.compare("stdout");
 
     unsafe {
-        let stdout = *(version.lookup("stdout").unwrap() as *const usize);
-        println!("stdout: {:#08x}", stdout);
-        /*
-        let ret: i64 = version.invoke("putc", (0x31u32, stdout)).unwrap();
+        let stdout_ptr = version.lookup("stdout").unwrap() as *const usize;
+        println!(
+            "p0: stdout: {:#08x}: {:#08x}",
+            stdout_ptr as usize, *stdout_ptr
+        );
+        let p1 = *stdout_ptr as *const usize;
+        println!("p1: *stdout: {:#08x}", p1 as usize);
+        let p2 = *p1 as *const usize;
+        println!("p2: **stdout: {:#08x}", p2 as usize);
+        //let p3 = *p2 as *const usize;
+        //println!("p3: ***stdout: {:#08x}", p3 as usize);
+        let s = std::slice::from_raw_parts(p1, 0x20);
+        println!("***stdout: {:#08x?}", s);
+        let works = p1;
+
+        let ret: i64 = version.invoke("putc", (0x31u32, works)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x31, ret);
-        let ret: i64 = version.invoke("fflush", (stdout,)).unwrap();
+        let ret: i64 = version.invoke("fflush", (works,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x0, ret);
-        */
         let ret: i64 = version.invoke("print_stuff", ()).unwrap();
         println!("ret: {:#08x}", ret);
     }
@@ -136,17 +148,12 @@ fn test_libc_musl() {
         .unwrap();
     b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
         .unwrap();
-    b.add_library("test", Path::new("tmp/live.so")).unwrap();
-    let version = b.link().unwrap();
 
-    unsafe {
-        let ptr_stdout = version.lookup("stdout").unwrap() as *const usize;
-        let stdout = *ptr_stdout;
-        println!(
-            "stdout: ptr: {:#08x}, value: {:#08x}",
-            ptr_stdout as usize, stdout
-        );
-    }
+    // if we link with live.so, it will try to load the system libc, which conflicts with musl
+    // it's random which one loads when we dlsym.
+    //b.add_library("test", Path::new("tmp/live.so")).unwrap();
+
+    let version = b.link().unwrap();
 
     let ret: i64 = version.invoke("print_stuff", ()).unwrap();
     println!("ret: {:#08x}", ret);
@@ -160,81 +167,54 @@ fn test_libc_musl() {
         .unwrap();
     assert_eq!(4, ret);
 
+    version.compare("stdout");
     unsafe {
-        let stdout = *(version.lookup("stdout").unwrap() as *const usize);
-        println!("stdout: {:#08x}", stdout as usize);
+        let stdout_ptr = version.lookup("stdout").unwrap() as *const usize;
+        println!(
+            "p0: stdout: {:#08x}: {:#08x}",
+            stdout_ptr as usize, *stdout_ptr
+        );
+        let p1 = *stdout_ptr as *const usize;
+        println!("p1: *stdout: {:#08x}", p1 as usize);
+        let p2 = *p1 as *const usize;
+        println!("p2: **stdout: {:#08x}", p2 as usize);
+        //let p3 = *p2 as *const usize;
+        //println!("p3: ***stdout: {:#08x}", p3 as usize);
+        let s = std::slice::from_raw_parts(p1, 0x20);
+        println!("***stdout: {:#08x?}", s);
+        let works = p1;
 
-        //let ret: i64 = version.invoke("fputc", (0x30u32, stdout)).unwrap();
-        //println!("ret: {:#08x}", ret);
-        //assert_eq!(0x30, ret);
+        let ret: i64 = version.invoke("fputc", (0x30u32, works)).unwrap();
+        println!("ret: {:#08x}", ret);
+        assert_eq!(0x30, ret);
 
-        //let ret: i64 = version.invoke("putc", (0x31u32, stdout)).unwrap();
-        //println!("ret: {:#08x}", ret);
-        //assert_eq!(0x31, ret);
+        let ret: i64 = version.invoke("putc", (0x31u32, works)).unwrap();
+        println!("ret: {:#08x}", ret);
+        assert_eq!(0x31, ret);
 
         let c_str = std::ffi::CString::new("asdf\n").unwrap();
         let c_str_ptr = c_str.as_ptr();
-        //let ret: i64 = version.invoke("fputs", (c_str_ptr, stdout)).unwrap();
-        //println!("ret: {:#08x}", ret);
-        //assert_eq!(0x0, ret);
 
-        //let ret: i64 = version.invoke("fflush", (stdout)).unwrap();
-        //println!("ret: {:#08x}", ret);
-        //assert_eq!(0x30, ret);
+        let ret: i64 = version.invoke("fputs", (c_str_ptr, works)).unwrap();
+        println!("ret: {:#08x}", ret);
+        assert_eq!(0x0, ret);
+
+        let ret: i64 = version.invoke("fflush", (works,)).unwrap();
+        println!("ret: {:#08x}", ret);
+        assert_eq!(0x0, ret);
     }
 }
 
 fn main() {
-    //test_start();
     test_load_from_shared();
-    test_libc_musl();
     test_live_shared();
     test_live_static();
-    test_libc();
     test_libuv();
+    test_libc();
+    test_libc_musl();
     /*
      */
+    //test_start();
     //test_segfault();
     //test_empty_main();
-    //let mut b = Link::new();
-    //b.add_library("t1", Path::new("tmp/live.so"));
-    //b.add_library("t2", Path::new("libsigsegv.so")).unwrap();
-    //b.add_library("dl", Path::new("libdl.so.2")).unwrap();
-    //b.add_obj_file("t3", Path::new("tmp/segfault.o")).unwrap();
-    //b.add_obj_file("t4", Path::new("tmp/live.o")).unwrap();
-    //b.add_obj_file("main", Path::new("tmp/empty_main.o"))
-    //.unwrap();
-    //b.add_obj_file("crt", Path::new("/usr/lib/x86_64-linux-gnu/crt1.o")).unwrap();
-    //b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6")).unwrap();
-    //b.add_archive_file("libc", Path::new("/lib/x86_64-linux-gnu/libc.a")).unwrap();
-    //
-    //musl
-    //b.add_obj_file("crt1", Path::new("/usr/lib/x86_64-linux-musl/crt1.o")).unwrap();
-    //b.add_obj_file("crti", Path::new("/usr/lib/x86_64-linux-musl/crti.o")).unwrap();
-    //b.add_obj_file("crtn", Path::new("/usr/lib/x86_64-linux-musl/crtn.o")).unwrap();
-    //b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so")).unwrap();
-
-    // embedded artistry
-    //b.add_archive_file(
-    //"libc",
-    //Path::new("/home/rrx/src/libc/buildresults/src/libc.a"),
-    //)
-    //.unwrap();
-
-    //let version = b.link().unwrap();
-    //version.debug();
-
-    //let ret: i64 = version.invoke("handlers_init", ()).unwrap();
-    //let ret: i64 = version.invoke("segfault_me", ()).unwrap();
-    //
-    //let ret: i64 = version.invoke("main", ()).unwrap();
-    //assert_eq!(0, ret);
-
-    /*
-    let ptr = version.lookup("_start").unwrap();
-    println!("ptr: {:#08x}", ptr as usize);
-
-    */
-    //let ret: i64 = version.invoke("_start", (main_ptr,0,0,0,0)).unwrap();
-    //assert_eq!(0, ret);
 }

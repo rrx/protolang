@@ -8,7 +8,7 @@ use super::*;
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum RelocationPointer {
     Got(*const ()),
     Plt(*const ()),
@@ -254,8 +254,8 @@ impl CodeRelocation {
 pub fn patch_code(
     block: PatchCodeBlock,
     pointers: PatchSymbolPointers,
-    //mut got: TableVersion,
-    //mut plt: TableVersion,
+    got: TableVersion,
+    plt: TableVersion,
 ) -> LinkedBlock {
     //LinkedSymbolPointers,
     //TableVersion,
@@ -317,8 +317,8 @@ pub fn patch_code(
 pub fn patch_data(
     block: PatchDataBlock,
     pointers: PatchSymbolPointers,
-    //mut got: TableVersion,
-    //mut plt: TableVersion,
+    got: TableVersion,
+    plt: TableVersion,
 ) -> LinkedBlock {
     //LinkedSymbolPointers,
     //TableVersion,
@@ -335,7 +335,13 @@ pub fn patch_data(
 
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
-        let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
+        use PatchEffect::*;
+        let addr = match r.effect() {
+            AddToGot => got.get(&r.name).unwrap().as_ptr(),
+            _ => pointers.get(&r.name).unwrap().as_ptr() as *const u8,
+        };
+
+        //let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
         r.patch(patch_base, addr);
     }
 

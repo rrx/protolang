@@ -18,6 +18,9 @@ impl SyncPointer {
     pub fn new(p: SmartPointer) -> Self {
         Self(Arc::new(p))
     }
+    pub fn as_ptr(&self) -> *const u8 {
+        self.0.as_ref().as_ptr()
+    }
 }
 
 #[derive(Clone)]
