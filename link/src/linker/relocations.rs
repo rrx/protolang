@@ -8,6 +8,29 @@ use super::*;
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;
 
+#[derive(Copy, Clone)]
+pub enum RelocationPointer {
+    Got(*const ()),
+    Plt(*const ()),
+    Direct(*const ()),
+}
+impl RelocationPointer {
+    pub fn as_ptr(&self) -> *const () {
+        match self {
+            Self::Got(p) | Self::Plt(p) | Self::Direct(p) => *p,
+        }
+    }
+}
+impl fmt::Display for RelocationPointer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Got(p) => write!(f, "G({:#08x})", *p as usize),
+            Self::Plt(p) => write!(f, "P({:#08x})", *p as usize),
+            Self::Direct(p) => write!(f, "D({:#08x})", *p as usize),
+        }
+    }
+}
+
 pub enum PatchEffect {
     AddToGot,
     AddToPlt,
@@ -58,15 +81,25 @@ impl fmt::Display for CodeRelocation {
 }
 
 impl CodeRelocation {
+    pub fn effect(&self) -> PatchEffect {
+        use PatchEffect::*;
+        match self.r.kind {
+            RelocationKind::Elf(R_X86_64_GOTPCREL) => AddToGot,
+            RelocationKind::Elf(R_X86_64_REX_GOTP) => AddToGot,
+            RelocationKind::Absolute => DoNothing,
+            RelocationKind::Relative => DoNothing,
+            RelocationKind::PltRelative => AddToPlt,
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn patch(
         &self,
         // pointer to the base of the relocation slice
         patch_base: *mut u8,
         // pointer to address
         addr: *const u8,
-    ) -> PatchEffect {
-        use PatchEffect::*;
-
+    ) {
         println!("{}", self);
         match self.r.kind {
             RelocationKind::Elf(R_X86_64_GOTPCREL) => {
@@ -93,7 +126,6 @@ impl CodeRelocation {
                         addr as usize,
                     );
                 }
-                AddToGot
             }
 
             RelocationKind::Elf(R_X86_64_REX_GOTP) => {
@@ -125,7 +157,6 @@ impl CodeRelocation {
                         addr as usize,
                     );
                 }
-                AddToGot
             }
 
             RelocationKind::Absolute => {
@@ -163,7 +194,6 @@ impl CodeRelocation {
                         name, patch, before, adjusted as usize, self.r.addend, addr as u64
                     );
                 }
-                DoNothing
             }
 
             RelocationKind::Relative => {
@@ -185,7 +215,6 @@ impl CodeRelocation {
                             symbol_address as isize,
                             );
                 }
-                DoNothing
             }
 
             RelocationKind::PltRelative => {
@@ -216,7 +245,6 @@ impl CodeRelocation {
                             symbol_address as isize,
                             );
                 }
-                AddToPlt
             }
             _ => unimplemented!(),
         }
@@ -226,42 +254,34 @@ impl CodeRelocation {
 pub fn patch_code(
     block: PatchCodeBlock,
     pointers: PatchSymbolPointers,
-    mut got: TableVersion,
-    mut plt: TableVersion,
-) -> (
-    LinkedBlock,
-    LinkedSymbolPointers,
-    TableVersion,
-    TableVersion,
-) {
+    //mut got: TableVersion,
+    //mut plt: TableVersion,
+) -> LinkedBlock {
+    //LinkedSymbolPointers,
+    //TableVersion,
+    //TableVersion,
+    //) {
     println!(
         "patching code {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
     );
 
-    let mut add_to_got = HashMap::new();
-    let mut add_to_plt = HashMap::new();
+    //let mut add_to_got = HashMap::new();
+    //let mut add_to_plt = HashMap::new();
 
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
-        let addr = *pointers.get(&r.name).unwrap() as *const u8;
-        match r.patch(patch_base, addr) {
-            PatchEffect::AddToPlt => {
-                add_to_plt.insert(&r.name, addr);
-            }
-            PatchEffect::AddToGot => {
-                add_to_got.insert(&r.name, addr);
-            }
-            _ => (),
-        }
+        let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
+        r.patch(patch_base, addr);
     }
 
-    let mut symbols = im::HashMap::new();
-    for (name, s) in block.symbols {
-        symbols.insert(name, s);
-    }
+    //let mut symbols = im::HashMap::new();
+    //for (name, s) in block.symbols {
+    //symbols.insert(name, s);
+    //}
 
+    /*
     let mut symbols = im::HashMap::new();
     for (name, ptr) in add_to_got {
         unsafe {
@@ -282,55 +302,48 @@ pub fn patch_code(
             plt = plt.update(name.clone(), p);
         }
     }
+    */
 
-    (
-        LinkedBlock(Arc::new(LinkedBlockInner::Code(
-            block.block.make_exec_block().unwrap(),
-        ))),
-        symbols,
-        got,
-        plt,
-    )
+    //(
+    LinkedBlock(Arc::new(LinkedBlockInner::Code(
+        block.block.make_exec_block().unwrap(),
+    )))
+    //symbols,
+    //got,
+    //plt,
+    //)
 }
 
 pub fn patch_data(
     block: PatchDataBlock,
     pointers: PatchSymbolPointers,
-    mut got: TableVersion,
-    mut plt: TableVersion,
-) -> (
-    LinkedBlock,
-    LinkedSymbolPointers,
-    TableVersion,
-    TableVersion,
-) {
+    //mut got: TableVersion,
+    //mut plt: TableVersion,
+) -> LinkedBlock {
+    //LinkedSymbolPointers,
+    //TableVersion,
+    //TableVersion,
+    //) {
     println!(
         "patching data {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
     );
 
-    let mut add_to_got = HashMap::new();
-    let mut add_to_plt = HashMap::new();
+    //let mut add_to_got = HashMap::new();
+    //let mut add_to_plt = HashMap::new();
 
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
-        let addr = *pointers.get(&r.name).unwrap() as *const u8;
-        match r.patch(patch_base, addr) {
-            PatchEffect::AddToPlt => {
-                add_to_plt.insert(&r.name, addr);
-            }
-            PatchEffect::AddToGot => {
-                add_to_got.insert(&r.name, addr);
-            }
-            _ => (),
-        }
+        let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
+        r.patch(patch_base, addr);
     }
 
-    let mut symbols = im::HashMap::new();
-    for (name, s) in block.symbols {
-        symbols.insert(name, s);
-    }
+    //let mut symbols = im::HashMap::new();
+    //for (name, s) in block.symbols {
+    //symbols.insert(name, s);
+    //}
+    /*
 
     for (name, ptr) in add_to_got {
         unsafe {
@@ -351,11 +364,12 @@ pub fn patch_data(
             plt = plt.update(name.clone(), p);
         }
     }
+    */
 
-    (
-        LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block.block))),
-        symbols,
-        got,
-        plt,
-    )
+    //(
+    LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block.block)))
+    //symbols,
+    //got,
+    //plt,
+    //)
 }

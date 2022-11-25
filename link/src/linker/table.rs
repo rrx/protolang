@@ -44,6 +44,10 @@ impl TableVersion {
         self
     }
 
+    pub fn get(&self, name: &str) -> Option<SyncPointer> {
+        self.entries.get(name).cloned()
+    }
+
     pub fn debug(&self) {
         eprintln!("Table@{:#08x}", self.block.heap.base() as usize);
         for (k, v) in &self.entries {

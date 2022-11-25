@@ -21,9 +21,21 @@ fn test_live_shared() {
 fn test_load_from_shared() {
     let mut b = Link::new();
     b.add_library("live", Path::new("tmp/live.so")).unwrap();
-    b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
+    b.add_obj_file("globals", Path::new("tmp/globals.o"))
+        .unwrap();
+    b.add_obj_file("call", Path::new("tmp/call_extern.o"))
         .unwrap();
     let version = b.link().unwrap();
+
+    let x = version.lookup("x").unwrap();
+    println!("{:#08x}: x", x as usize);
+    let ptr = version.lookup("ptr").unwrap();
+    println!("{:#08x}: ptr", ptr as usize);
+    let g2 = version.lookup("g2").unwrap();
+    println!("{:#08x}: g2", g2 as usize);
+    let global_ptr = version.lookup("global_int2").unwrap();
+    println!("{:#08x}: global_int2", global_ptr as usize);
+
     let ret: i64 = version.invoke("load_from_extern", ()).unwrap();
     println!("ret: {:#08x}", ret);
 }
@@ -88,9 +100,9 @@ fn test_libuv() {
     unsafe {
         let stdout = *(version.lookup("stdout").unwrap() as *const usize);
         println!("stdout: {:#08x}", stdout);
-        let ret: i64 = version.invoke("fflush", (stdout,)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(0x0, ret);
+        //let ret: i64 = version.invoke("fflush", (stdout,)).unwrap();
+        //println!("ret: {:#08x}", ret);
+        //assert_eq!(0x0, ret);
     }
 }
 
@@ -101,16 +113,18 @@ fn test_libc() {
     b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
         .unwrap();
     let version = b.link().unwrap();
+
     unsafe {
         let stdout = *(version.lookup("stdout").unwrap() as *const usize);
         println!("stdout: {:#08x}", stdout);
+        /*
         let ret: i64 = version.invoke("putc", (0x31u32, stdout)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x31, ret);
         let ret: i64 = version.invoke("fflush", (stdout,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x0, ret);
-
+        */
         let ret: i64 = version.invoke("print_stuff", ()).unwrap();
         println!("ret: {:#08x}", ret);
     }
@@ -148,24 +162,24 @@ fn test_libc_musl() {
 
     unsafe {
         let stdout = *(version.lookup("stdout").unwrap() as *const usize);
-        println!("stdout: {:#08x}", stdout);
+        println!("stdout: {:#08x}", stdout as usize);
 
-        let ret: i64 = version.invoke("fputc", (0x30u32, stdout)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(0x30, ret);
+        //let ret: i64 = version.invoke("fputc", (0x30u32, stdout)).unwrap();
+        //println!("ret: {:#08x}", ret);
+        //assert_eq!(0x30, ret);
 
-        let ret: i64 = version.invoke("putc", (0x31u32, stdout)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(0x31, ret);
+        //let ret: i64 = version.invoke("putc", (0x31u32, stdout)).unwrap();
+        //println!("ret: {:#08x}", ret);
+        //assert_eq!(0x31, ret);
 
         let c_str = std::ffi::CString::new("asdf\n").unwrap();
         let c_str_ptr = c_str.as_ptr();
-        let ret: i64 = version.invoke("fputs", (c_str_ptr, stdout)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(0x0, ret);
+        //let ret: i64 = version.invoke("fputs", (c_str_ptr, stdout)).unwrap();
+        //println!("ret: {:#08x}", ret);
+        //assert_eq!(0x0, ret);
 
-        let ret: i64 = version.invoke("fflush", (stdout)).unwrap();
-        println!("ret: {:#08x}", ret);
+        //let ret: i64 = version.invoke("fflush", (stdout)).unwrap();
+        //println!("ret: {:#08x}", ret);
         //assert_eq!(0x30, ret);
     }
 }
@@ -173,13 +187,13 @@ fn test_libc_musl() {
 fn main() {
     //test_start();
     test_load_from_shared();
-    //test_libc_musl();
-    /*
+    test_libc_musl();
     test_live_shared();
     test_live_static();
     test_libc();
     test_libuv();
-    */
+    /*
+     */
     //test_segfault();
     //test_empty_main();
     //let mut b = Link::new();

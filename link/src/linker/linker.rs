@@ -10,9 +10,9 @@ use super::*;
 use crate::*;
 
 pub struct Link {
-    unlinked: HashMap<String, UnlinkedCodeSegment>,
+    pub(crate) unlinked: HashMap<String, UnlinkedCodeSegment>,
     pub(crate) libraries: SharedLibraryRepo,
-    mem: BlockFactory,
+    pub(crate) mem: BlockFactory,
     plt_block: SmartBlock,
     got_block: SmartBlock,
     pub(crate) got: TableVersion,
@@ -26,7 +26,6 @@ impl Link {
         let plt_mem = mem.alloc_block(1024 * 1024).unwrap().make_heap_block();
         let got_block = SmartBlock::new(got_mem);
         let plt_block = SmartBlock::new(plt_mem);
-
         let got = TableVersion::new(got_block.clone());
         let plt = TableVersion::new(plt_block.clone());
 
@@ -92,7 +91,7 @@ impl Link {
         // get all of the symbols and the name that provides it
         for (link_name, unlinked) in &self.unlinked {
             eprintln!("Linking: {}", link_name);
-            for (symbol_name, code_symbol) in &unlinked.symbols {
+            for (symbol_name, code_symbol) in &unlinked.defined {
                 if code_symbol.def == CodeSymbolDefinition::Defined {
                     //eprintln!("\tSymbol: {}", &symbol_name);
                     if pointers.contains_key(symbol_name) {
@@ -101,11 +100,13 @@ impl Link {
                     } else {
                         pointers.insert(symbol_name.clone(), code_symbol.address);
                     }
+                } else {
+                    unreachable!()
                 }
             }
         }
 
-        // check for missing symbols
+        // check for missing symbols, and try shared libraries to fill in the details
         let mut missing = HashSet::new();
         for (_name, unlinked) in &self.unlinked {
             let mut children = HashSet::new();
@@ -126,20 +127,7 @@ impl Link {
         }
 
         if missing.len() == 0 && duplicates.len() == 0 {
-            let mut blocks = vec![];
-            for (_name, unlinked) in &self.unlinked {
-                let name = format!("{}.data", &unlinked.name);
-                if let Some(block) = unlinked.create_data(&name, &mut self.mem)? {
-                    block.disassemble();
-                    blocks.push((name, block));
-                }
-                let name = format!("{}.code", &unlinked.name);
-                if let Some(block) = unlinked.create_code(&name, &mut self.mem)? {
-                    block.disassemble();
-                    blocks.push((name, block));
-                }
-            }
-            build_version(blocks, &self)
+            build_version(self)
         } else {
             Err(LinkError::MissingSymbol.into())
         }

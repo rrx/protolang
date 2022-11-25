@@ -14,8 +14,8 @@ pub enum CodeBlock {
     RX(ExecutableCodeBlock),
 }
 
-pub type PatchSymbolPointers = im::HashMap<String, *const ()>;
-pub type LinkedSymbolPointers = im::HashMap<String, *const ()>;
+pub type PatchSymbolPointers = im::HashMap<String, RelocationPointer>;
+pub type LinkedSymbolPointers = im::HashMap<String, RelocationPointer>;
 
 #[derive(Clone, Debug)]
 pub struct LinkedBlock(pub Arc<LinkedBlockInner>);
@@ -46,17 +46,16 @@ impl PatchBlock {
     pub fn patch(
         mut self,
         pointers: PatchSymbolPointers,
-        got: TableVersion,
-        plt: TableVersion,
-    ) -> (
-        LinkedBlock,
-        LinkedSymbolPointers,
-        TableVersion,
-        TableVersion,
-    ) {
+        //got: TableVersion,
+        //plt: TableVersion,
+    ) -> LinkedBlock {
+        //LinkedSymbolPointers,
+        //TableVersion,
+        //TableVersion,
+        //) {
         match self {
-            Self::Code(block) => patch_code(block, pointers, got, plt),
-            Self::Data(block) => patch_data(block, pointers, got, plt),
+            Self::Code(block) => patch_code(block, pointers),
+            Self::Data(block) => patch_data(block, pointers),
         }
     }
     pub fn disassemble(&self) {
@@ -80,7 +79,7 @@ pub struct PatchCodeBlock {
     pub(crate) name: String,
     pub(crate) block: WritableCodeBlock,
     pub(crate) symbols: HashMap<String, *const ()>,
-    pub(crate) unknowns: HashSet<String>,
+    pub(crate) externs: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }
 

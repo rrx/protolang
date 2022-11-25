@@ -50,8 +50,8 @@ pub type UnlinkedCodeSegment = Arc<UnlinkedCodeSegmentInner>;
 pub struct UnlinkedCodeSegmentInner {
     pub(crate) name: String,
     pub(crate) bytes: Vec<u8>,
-    pub(crate) symbols: im::HashMap<String, CodeSymbol>,
-    pub(crate) unknowns: HashSet<String>,
+    pub(crate) defined: im::HashMap<String, CodeSymbol>,
+    pub(crate) externs: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
     pub(crate) got_entries: Vec<GotEntry>,
     pub(crate) plt_entries: Vec<PltEntry>,
@@ -84,7 +84,7 @@ impl UnlinkedCodeSegmentInner {
         let obj_file = object::File::parse(buf)?;
         let mut symbols = HashMap::new();
         let mut segments = vec![];
-        let mut unknowns = HashSet::new();
+        let mut externs = HashSet::new();
 
         if let Some(symbol_table) = obj_file.symbol_table() {
             for s in symbol_table.symbols() {
@@ -171,7 +171,7 @@ impl UnlinkedCodeSegmentInner {
                     None => match s.kind() {
                         SymbolKind::Unknown | SymbolKind::Tls => {
                             // external references
-                            unknowns.insert(name.clone());
+                            externs.insert(name.clone());
                             Some(CodeSymbol {
                                 name,
                                 address: s.address(),
@@ -272,8 +272,8 @@ impl UnlinkedCodeSegmentInner {
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
                     bytes,
-                    unknowns: unknowns.clone(),
-                    symbols: section_symbols,
+                    externs: externs.clone(),
+                    defined: section_symbols,
                     relocations,
                     got_entries,
                     plt_entries,
@@ -291,7 +291,7 @@ impl UnlinkedCodeSegmentInner {
     ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
         // get a list of data symbols
         let symbols = self
-            .symbols
+            .defined
             .iter()
             .filter(|(_, s)| s.kind == CodeSymbolKind::Data)
             .collect::<Vec<_>>();
@@ -316,20 +316,32 @@ impl UnlinkedCodeSegmentInner {
                 block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
                 let mut pointers = HashMap::new();
 
+                if true {
+                    unsafe {
+                        for (_name, s) in &symbols {
+                            let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                            pointers.insert(s.name.clone(), value_ptr as *const ());
+                        }
+                    }
+                }
+
+                // add the got in a separate page
                 // append got data entries
-                unsafe {
-                    let mut entry_counter = 0;
-                    let got_base = block.as_ptr().offset(self.bytes.len() as isize) as *mut u64;
-                    for (name, s) in symbols {
-                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                        let got_ptr = got_base.offset(entry_counter);
-                        *got_ptr = value_ptr as u64;
-                        entry_counter += 1;
-                        pointers.insert(s.name.clone(), got_ptr as *const ());
-                        eprintln!(
-                            " GOT: {}, Value: {:#08x}, Entry: {:#08x}",
-                            &name, value_ptr as usize, got_ptr as usize
-                        );
+                if false {
+                    unsafe {
+                        let mut entry_counter = 0;
+                        let got_base = block.as_ptr().offset(self.bytes.len() as isize) as *mut u64;
+                        for (name, s) in symbols {
+                            let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                            let got_ptr = got_base.offset(entry_counter);
+                            *got_ptr = value_ptr as u64;
+                            entry_counter += 1;
+                            pointers.insert(s.name.clone(), got_ptr as *const ());
+                            eprintln!(
+                                " GOT: {}, Value: {:#08x}, Entry: {:#08x}",
+                                &name, value_ptr as usize, got_ptr as usize
+                            );
+                        }
                     }
                 }
 
@@ -348,6 +360,20 @@ impl UnlinkedCodeSegmentInner {
         }
     }
 
+    /*
+    pub fn asdf () {
+        match self {
+            PatchEffect::AddToPlt => {
+                add_to_plt.insert(&r.name, addr);
+            }
+            PatchEffect::AddToGot => {
+                add_to_got.insert(&r.name, addr);
+            }
+            _ => (),
+        }
+    }
+    */
+
     pub fn create_code(
         &self,
         code_page_name: &str,
@@ -355,7 +381,7 @@ impl UnlinkedCodeSegmentInner {
     ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
         // get a list of data symbols
         let symbols = self
-            .symbols
+            .defined
             .iter()
             .filter(|(_, s)| s.kind == CodeSymbolKind::Text)
             .collect::<Vec<_>>();
@@ -391,7 +417,7 @@ impl UnlinkedCodeSegmentInner {
                 Ok(Some(PatchBlock::Code(PatchCodeBlock {
                     name: code_page_name.to_string(),
                     block: WritableCodeBlock::new(block),
-                    unknowns: self.unknowns.clone(),
+                    externs: self.externs.clone(),
                     symbols: pointers,
                     relocations: self.relocations.clone(),
                 })))
