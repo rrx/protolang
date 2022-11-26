@@ -17,17 +17,7 @@ impl LinkVersion {
         for (k, v) in &self.linked {
             eprintln!("link: {:?}", (&k, &v));
         }
-
-        eprintln!("Process Maps:");
-        for map in proc_maps::get_process_maps(std::process::id() as proc_maps::Pid).unwrap() {
-            eprintln!(
-                "Map: {:#08x}+{:x}, {}, {:?}",
-                map.start(),
-                map.size(),
-                map.flags,
-                map.filename()
-            );
-        }
+        eprint_process_maps();
     }
 
     pub fn compare(&self, symbol: &str) {

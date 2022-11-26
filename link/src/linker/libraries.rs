@@ -1,28 +1,118 @@
 use std::ffi::CString;
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use std::sync::Arc;
 
-pub type SharedLibrary = Arc<libloading::Library>;
+pub type SharedLibrary = Arc<Library>;
+
+pub enum Library {
+    Raw(RawLibrary),
+    Loading(libloading::Library),
+}
+
+impl Library {
+    pub fn lookup(&self, name: &str) -> Option<*const ()> {
+        let cstr = CString::new(name).unwrap();
+        unsafe {
+            match self {
+                Self::Loading(lib) => {
+                    let result: Result<libloading::Symbol<unsafe fn()>, libloading::Error> =
+                        lib.get(cstr.as_bytes());
+                    if let Ok(f) = result {
+                        Some(f.into_raw().into_raw() as *const ())
+                    } else {
+                        None
+                    }
+                }
+                Self::Raw(lib) => {
+                    let symbol = libc::dlsym(lib.handle as *mut libc::c_void, cstr.as_ptr());
+                    if symbol.is_null() {
+                        None
+                    } else {
+                        Some(symbol as *const ())
+                    }
+                }
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct SharedLibraryRepo {
-    map: im::HashMap<String, Arc<libloading::Library>>,
+    map: im::HashMap<String, SharedLibrary>,
+}
+
+#[derive(Clone)]
+pub struct RawLibrary {
+    namespace: Namespace,
+    handle: *const (),
+}
+
+impl Drop for RawLibrary {
+    fn drop(&mut self) {
+        unsafe {
+            libc::dlclose(self.handle as *mut libc::c_void);
+            eprintln!("Dropping library");
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Namespace {
+    lm_id: i64,
 }
 
 impl SharedLibraryRepo {
     pub fn add(&mut self, name: &str, lib: libloading::Library) {
-        self.map.insert(name.to_string(), Arc::new(lib));
+        self.map
+            .insert(name.to_string(), Arc::new(Library::Loading(lib)));
+    }
+
+    pub fn add_to_new_namespace(&mut self, name: &str, path: &Path) -> Option<Namespace> {
+        unsafe {
+            let c_str = CString::new(path.as_os_str().as_bytes()).unwrap();
+            let handle = libc::dlmopen(libc::LM_ID_NEWLM, c_str.as_ptr(), libc::RTLD_LAZY);
+            if handle.is_null() {
+                None
+            } else {
+                let mut lm_id = 0;
+                let ptr = &mut lm_id as *mut i64;
+                libc::dlinfo(handle, libc::RTLD_DI_LMID, ptr as *mut libc::c_void);
+                let namespace = Namespace { lm_id };
+                let lib = RawLibrary {
+                    handle: handle as *const (),
+                    namespace,
+                };
+                self.map
+                    .insert(name.to_string(), Arc::new(Library::Raw(lib)));
+                Some(namespace)
+            }
+        }
+    }
+
+    pub fn add_to_namespace(&mut self, name: &str, path: &Path, namespace: Namespace) -> Option<()> {
+        unsafe {
+            let c_str = CString::new(path.as_os_str().as_bytes()).unwrap();
+            let handle = libc::dlmopen(namespace.lm_id, c_str.as_ptr(), libc::RTLD_LAZY);
+            if handle.is_null() {
+                None
+            } else {
+                let lib = RawLibrary {
+                    handle: handle as *const (),
+                    namespace,
+                };
+                self.map
+                    .insert(name.to_string(), Arc::new(Library::Raw(lib)));
+                Some(())
+            }
+        }
     }
 
     // search the dynamic libraries to see if the symbol exists
     pub fn search_dynamic(&self, symbol: &str) -> Option<*const ()> {
         for (_name, lib) in &self.map {
-            let cstr = CString::new(symbol).unwrap();
-            unsafe {
-                let result: Result<libloading::Symbol<unsafe fn()>, libloading::Error> =
-                    lib.get(cstr.as_bytes());
-                if let Ok(f) = result {
-                    return Some(f.into_raw().into_raw() as *const ());
-                }
+            if let Some(p) = lib.lookup(symbol) {
+                return Some(p);
             }
         }
         None
@@ -36,3 +126,30 @@ impl Default for SharedLibraryRepo {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn lib_namespace() {
+        let mut libs = SharedLibraryRepo::default();
+
+        // these should resolve, but we dont' implement that yet
+        assert!(libs.add_to_new_namespace("libc1", Path::new("c")).is_none());
+        assert!(libs.add_to_new_namespace("libc2", Path::new("libc.so")).is_none());
+
+        let libc_path = Path::new("/lib/x86_64-linux-gnu/libc.so.6");
+        let musl_path = Path::new("/usr/lib/x86_64-linux-musl/libc.so");
+        let musl_n = libs.add_to_new_namespace("musl", musl_path).unwrap();
+        let libc_n = libs.add_to_new_namespace("libc3", libc_path).unwrap();
+        eprintln!("{:?}", (musl_n, libc_n));
+
+        // adding them a second time, should do nothing
+        libs.add_to_namespace("musl2", musl_path, musl_n).unwrap();
+        libs.add_to_namespace("libc4", libc_path, musl_n).unwrap();
+        crate::eprint_process_maps();
+    }
+}
+
