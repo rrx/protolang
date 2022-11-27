@@ -1,32 +1,31 @@
-use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::Arc;
-
 use super::*;
+use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
+use std::fmt;
+use std::ptr::NonNull;
+use std::sync::Arc;
 
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;
 
 #[derive(Copy, Clone, Debug)]
 pub enum RelocationPointer {
-    Got(*const ()),
-    Plt(*const ()),
-    Direct(*const ()),
+    Got(NonNull<u8>),
+    Plt(NonNull<u8>),
+    Direct(NonNull<u8>),
 }
 impl RelocationPointer {
     pub fn as_ptr(&self) -> *const () {
         match self {
-            Self::Got(p) | Self::Plt(p) | Self::Direct(p) => *p,
+            Self::Got(p) | Self::Plt(p) | Self::Direct(p) => p.as_ptr() as *const (),
         }
     }
 }
 impl fmt::Display for RelocationPointer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Got(p) => write!(f, "G({:#08x})", *p as usize),
-            Self::Plt(p) => write!(f, "P({:#08x})", *p as usize),
-            Self::Direct(p) => write!(f, "D({:#08x})", *p as usize),
+            Self::Got(p) => write!(f, "G({:#08x})", p.as_ptr() as usize),
+            Self::Plt(p) => write!(f, "P({:#08x})", p.as_ptr() as usize),
+            Self::Direct(p) => write!(f, "D({:#08x})", p.as_ptr() as usize),
         }
     }
 }
@@ -264,7 +263,10 @@ pub fn patch_code(
 
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
-        let addr = pointers.get(&r.name).expect(&format!("missing symbol: {}", &r.name)).as_ptr() as *const u8;
+        let addr = pointers
+            .get(&r.name)
+            .expect(&format!("missing symbol: {}", &r.name))
+            .as_ptr() as *const u8;
         log::debug!(
             "r ptr: {:#08x}:{:#08x}: {}",
             patch_base as usize,

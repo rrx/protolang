@@ -206,8 +206,6 @@ fn test_print_stuff(version: LinkVersion) {
 }
 
 fn test_lib_print(version: LinkVersion) {
-    version.compare("stdout");
-
     unsafe {
         let stdout_ptr = version.lookup("stdout").unwrap() as *const usize;
         //log::debug!(
