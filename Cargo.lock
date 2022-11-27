@@ -1005,7 +1005,7 @@ dependencies = [
  "rustyline",
  "strum",
  "strum_macros",
- "test-log",
+ "test-log 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
 ]
 
@@ -1024,7 +1024,7 @@ dependencies = [
  "ron",
  "rpds 0.11.0",
  "serde",
- "test-log",
+ "test-log 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
 ]
 
@@ -1072,13 +1072,16 @@ name = "link"
 version = "0.1.0"
 dependencies = [
  "capstone",
+ "env_logger",
  "im",
  "libc",
  "libloading",
  "linked_list_allocator",
+ "log",
  "memmap",
  "object",
  "proc-maps",
+ "test-log 0.2.11",
 ]
 
 [[package]]
@@ -1137,7 +1140,7 @@ dependencies = [
  "env_logger",
  "log",
  "rpds 0.12.0",
- "test-log",
+ "test-log 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1994,6 +1997,15 @@ checksum = "633c1a546cee861a1a6d0dc69ebeca693bf4296661ba7852b9d21d159e0506df"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "test-log"
+version = "0.2.11"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

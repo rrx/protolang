@@ -101,7 +101,7 @@ impl CodeRelocation {
         // pointer to address
         addr: *const u8,
     ) {
-        println!("{}", self);
+        log::debug!("{}", self);
         match self.r.kind {
             RelocationKind::Elf(R_X86_64_GOTPCREL) => {
                 unsafe {
@@ -112,12 +112,12 @@ impl CodeRelocation {
 
                     let before = std::ptr::read(patch);
                     (patch as *mut u32).replace(value as u32);
-                    println!("patch_base: {:#08x}", patch_base as usize);
-                    println!("patch: {:#08x}", patch as usize);
-                    println!("value: {:#04x}", value as u32);
-                    println!("addr:  {:#08x}", addr as usize);
+                    log::debug!("patch_base: {:#08x}", patch_base as usize);
+                    log::debug!("patch: {:#08x}", patch as usize);
+                    log::debug!("value: {:#04x}", value as u32);
+                    log::debug!("addr:  {:#08x}", addr as usize);
 
-                    println!(
+                    log::debug!(
                         "rel got {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
                         &self.name,
                         patch as usize,
@@ -143,12 +143,12 @@ impl CodeRelocation {
 
                     let before = std::ptr::read(patch);
                     (patch as *mut u32).replace(value as u32);
-                    println!("patch_base: {:#08x}", patch_base as usize);
-                    println!("patch: {:#08x}", patch as usize);
-                    println!("value: {:#04x}", value as u32);
-                    println!("addr:  {:#08x}", addr as usize);
+                    log::debug!("patch_base: {:#08x}", patch_base as usize);
+                    log::debug!("patch: {:#08x}", patch as usize);
+                    log::debug!("value: {:#04x}", value as u32);
+                    log::debug!("addr:  {:#08x}", addr as usize);
 
-                    println!(
+                    log::debug!(
                         "rel got {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
                         &self.name,
                         patch as usize,
@@ -190,7 +190,7 @@ impl CodeRelocation {
                         _ => unimplemented!(),
                     };
 
-                    println!(
+                    log::debug!(
                         "rel absolute {}: patch {:#16x}:{:#16x}=>{:#16x} addend:{:#08x} addr:{:#08x}, vaddr:{:#08x}",
                         name, patch, before, adjusted as usize, self.r.addend, addr as u64, vaddr as usize
                     );
@@ -209,7 +209,7 @@ impl CodeRelocation {
                     let patch = patch as *mut u32;
                     *patch = relative_address as u32;
 
-                    println!(
+                    log::debug!(
                         "rel relative {}: patch {:#16x}:{:#16x}=>{:#16x} addend:{:#08x} addr:{:#08x}, vaddr:{:#08x}",
                         &self.name, patch as usize, before, relative_address as usize, self.r.addend, addr as u64, vaddr as usize
                     );
@@ -234,7 +234,7 @@ impl CodeRelocation {
                     let patch = patch as *mut u32;
                     *patch = symbol_address as u32;
 
-                    println!(
+                    log::debug!(
                             "rel {}: patch:{:#08x} patchv:{:#08x} addend:{:#08x} addr:{:#08x} symbol:{:#08x}",
                             &self.name,
                             patch as usize,
@@ -256,7 +256,7 @@ pub fn patch_code(
     got: TableVersion,
     plt: TableVersion,
 ) -> LinkedBlock {
-    println!(
+    log::debug!(
         "patching code {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
@@ -265,9 +265,11 @@ pub fn patch_code(
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
-        eprintln!(
+        log::debug!(
             "r ptr: {:#08x}:{:#08x}: {}",
-            patch_base as usize, addr as usize, &r.name
+            patch_base as usize,
+            addr as usize,
+            &r.name
         );
 
         r.patch(patch_base, addr);
@@ -284,13 +286,13 @@ pub fn patch_data(
     got: TableVersion,
     plt: TableVersion,
 ) -> LinkedBlock {
-    println!(
+    log::debug!(
         "patching data {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
     );
 
-    block.disassemble();
+    //block.disassemble();
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = match r.effect() {
@@ -306,7 +308,7 @@ pub fn patch_data(
             }
         };
 
-        eprintln!(
+        log::debug!(
             "r ptr: {:#08x}:{:#08x}:{:?}:{}",
             patch_base as usize,
             addr as usize,
@@ -316,7 +318,7 @@ pub fn patch_data(
 
         r.patch(patch_base, addr);
     }
-    block.disassemble();
+    //block.disassemble();
 
     LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block.block)))
 }

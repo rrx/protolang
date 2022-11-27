@@ -55,7 +55,7 @@ impl Link {
             // but we may as well just use bindgen?
             //let _: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(b"gzopen")?;
             self.libraries.add(name, lib);
-            eprintln!("Loaded library: {}", &path.to_string_lossy());
+            log::debug!("Loaded library: {}", &path.to_string_lossy());
         }
         Ok(())
     }
@@ -90,12 +90,12 @@ impl Link {
 
         // get all of the symbols and the name that provides it
         for (link_name, unlinked) in &self.unlinked {
-            eprintln!("Linking: {}", link_name);
+            log::debug!("Linking: {}", link_name);
             for (symbol_name, code_symbol) in &unlinked.defined {
                 if code_symbol.def == CodeSymbolDefinition::Defined {
-                    //eprintln!("\tSymbol: {}", &symbol_name);
+                    //log::debug!("\tSymbol: {}", &symbol_name);
                     if pointers.contains_key(symbol_name) {
-                        eprintln!(" Duplicate symbol: {}", &symbol_name);
+                        log::error!(" Duplicate symbol: {}", &symbol_name);
                         duplicates.insert(symbol_name);
                     } else {
                         pointers.insert(symbol_name.clone(), code_symbol.address);
@@ -110,30 +110,30 @@ impl Link {
         let mut missing = HashSet::new();
         for (_name, unlinked) in &self.unlinked {
             let mut children = HashSet::new();
-            //eprintln!("checking: {}", name);
+            //log::debug!("checking: {}", name);
             // ensure all relocations map somewhere
             for extern_symbol in &unlinked.externs {
                 if pointers.contains_key(extern_symbol) {
                 } else if self.libraries.search_dynamic(&extern_symbol).is_some() {
-                    eprintln!(" Symbol {} found in shared library", &extern_symbol);
+                    log::debug!(" Symbol {} found in shared library", &extern_symbol);
                 } else {
-                    eprintln!(" Symbol {} missing", &extern_symbol);
+                    log::error!(" Symbol {} missing", &extern_symbol);
                     missing.insert(extern_symbol.clone());
                 }
             }
 
             for r in &unlinked.relocations {
-                //eprintln!("\tReloc: {}", &symbol_name);
+                //log::debug!("\tReloc: {}", &symbol_name);
                 if pointers.contains_key(&r.name) {
                     children.insert(r.name.clone());
                 } else if unlinked.internal.contains_key(&r.name) {
                     //children.insert(r.name.clone());
                 } else if self.libraries.search_dynamic(&r.name).is_some() {
                     children.insert(r.name.clone());
-                    eprintln!(" Symbol {} found in shared library", &r.name);
+                    log::debug!(" Symbol {} found in shared library", &r.name);
                 } else {
-                    eprintln!("{:?}", &unlinked.internal);
-                    eprintln!(" Symbol {} missing", &r.name);
+                    log::debug!("{:?}", &unlinked.internal);
+                    log::error!(" Symbol {} missing", &r.name);
                     missing.insert(r.name.clone());
                 }
             }
@@ -151,6 +151,7 @@ impl Link {
 mod tests {
     use super::*;
     use std::path::Path;
+    use test_log::test;
 
     #[test]
     fn linker_segfault() {
@@ -161,7 +162,7 @@ mod tests {
         let version = b.link().unwrap();
         //let ret: i64 = version.invoke("handlers_init", ()).unwrap();
         //let ret: i64 = version.invoke("segfault_me", ()).unwrap();
-        //eprintln!("ret: {:#08x}", ret);
+        //log::debug!("ret: {:#08x}", ret);
         //assert_eq!(13, ret);
     }
 
@@ -172,15 +173,15 @@ mod tests {
         let collection = b.link().unwrap();
 
         let ret: i64 = collection.invoke("call_live", (3,)).unwrap();
-        eprintln!("ret: {:#08x}", ret);
+        log::debug!("ret: {:#08x}", ret);
         assert_eq!(17, ret);
 
         let ret: i64 = collection.invoke("simple_function", ()).unwrap();
-        eprintln!("ret: {:#08x}", ret);
+        log::debug!("ret: {:#08x}", ret);
         assert_eq!(1, ret);
 
         let ret: i64 = collection.invoke("func2", (2,)).unwrap();
-        eprintln!("ret: {:#08x}", ret);
+        log::debug!("ret: {:#08x}", ret);
         assert_eq!(3, ret);
     }
 
@@ -192,7 +193,7 @@ mod tests {
             .unwrap();
         let collection = b.link().unwrap();
         let _ret: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
-        //eprintln!("ret: {:#08x}", ret);
+        //log::debug!("ret: {:#08x}", ret);
         //assert_eq!(3, ret);
     }
 
@@ -219,19 +220,19 @@ mod tests {
 
         let collection = b.link().unwrap();
         let ret: i64 = collection.invoke("func", ()).unwrap();
-        eprintln!("ret: {}", ret);
+        log::debug!("ret: {}", ret);
         assert_eq!(10001, ret);
 
         let ret: i64 = collection.invoke("simple", ()).unwrap();
-        eprintln!("ret: {}", ret);
+        log::debug!("ret: {}", ret);
         assert_eq!(10012, ret);
 
         let ret: i64 = collection.invoke("call_external", ()).unwrap();
-        eprintln!("ret: {}", ret);
+        log::debug!("ret: {}", ret);
         assert_eq!(4, ret);
 
         let ret: i64 = collection.invoke("asdf", (2,)).unwrap();
-        eprintln!("ret: {}", ret);
+        log::debug!("ret: {}", ret);
         assert_eq!(3, ret);
     }
 }

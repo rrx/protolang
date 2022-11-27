@@ -9,7 +9,7 @@ int print_stuff1() {
 }
 
 int print_stuff2(char *str, int val) {
-	return g_v+1;
+	return g_v+1+val;
 }
 
 int print_stuff3(int val) {

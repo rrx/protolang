@@ -16,17 +16,33 @@ pub struct BlockFactoryInner {
     heap: Heap,
 }
 
+pub struct BlockInner {
+    layout: Layout,
+    size: usize,
+    p: NonNull<u8>,
+}
+
 impl BlockFactoryInner {
     pub fn force_rw(&mut self) {
-        self.mprotect(libc::PROT_READ | libc::PROT_WRITE);
+        self.mprotect(libc::PROT_READ | libc::PROT_WRITE).unwrap();
+    }
+
+    fn alloc_block(&mut self, size: usize) -> Option<BlockInner> {
+        assert!(size > 0);
+        let aligned_size = page_align(size, self.page_size);
+        let layout = Layout::from_size_align(aligned_size, 16).unwrap();
+        match self.heap.allocate_first_fit(layout) {
+            Ok(p) => Some(BlockInner { layout, size, p }),
+            Err(e) => None,
+        }
     }
 
     fn mprotect(&mut self, prot: libc::c_int) -> io::Result<()> {
         unsafe {
-            let alignment = self.m.as_ptr() as usize % page_size();
+            let alignment = self.m.as_ptr() as usize % self.page_size;
             let ptr = self.m.as_ptr().offset(-(alignment as isize));
             let len = self.m.len() + alignment;
-            eprintln!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
+            log::debug!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
             if libc::mprotect(ptr as *mut libc::c_void, len, prot) == 0 {
                 Ok(())
             } else {
@@ -60,7 +76,7 @@ impl BlockFactory {
 
         unsafe {
             let ptr = m.as_ptr();
-            eprintln!("Memory Block Created: {:#08x}+{:x}", ptr as usize, size);
+            log::debug!("Memory Block Created: {:#08x}+{:x}", ptr as usize, size);
             heap.init(ptr as *mut u8, ps * num_pages);
             assert_eq!(heap.bottom(), ptr as *mut u8);
         }
@@ -74,35 +90,29 @@ impl BlockFactory {
 
     pub fn alloc_block(&self, size: usize) -> Option<Block> {
         assert!(size > 0);
-        let aligned_size = page_align(size, page_size());
-        let layout = Layout::from_size_align(aligned_size, 16).unwrap();
-        let p = self
-            .0
-            .as_ref()
-            .lock()
-            .unwrap()
-            .heap
-            .allocate_first_fit(layout)
-            .unwrap();
+        match self.0.as_ref().lock().unwrap().alloc_block(size) {
+            Some(b) => {
+                log::debug!(
+                    "Block Allocate: Addr: {:#08x}, size: {}, align: {}",
+                    b.p.as_ptr() as usize,
+                    size,
+                    b.layout.align(),
+                );
 
-        eprintln!(
-            "Block Allocate: Addr: {:#08x}, size: {}, aligned_size: {}",
-            p.as_ptr() as usize,
-            size,
-            aligned_size
-        );
-
-        Some(Block {
-            layout,
-            size,
-            p: Some(p),
-            factory: self.clone(),
-        })
+                Some(Block {
+                    layout: b.layout,
+                    size: b.size,
+                    p: Some(b.p),
+                    factory: self.clone(),
+                })
+            }
+            None => None,
+        }
     }
 
     fn deallocate_block(&self, block: &Block) {
         if let Some(ptr) = block.p {
-            eprintln!(
+            log::debug!(
                 "Freeing Block at {:#08x}+{:x}",
                 ptr.as_ptr() as usize,
                 block.layout.size()
@@ -129,11 +139,11 @@ impl BlockFactoryInner {
     pub fn debug(&self) {
         let ps = page_size();
         let size = self.heap.size();
-        eprintln!("Start: {:#08x}", self.m.as_ptr() as usize);
-        eprintln!("Heap Bottom: {:#08x}", self.heap.bottom() as usize);
-        eprintln!("Heap Top: {:#08x}", self.heap.top() as usize);
-        eprintln!("Heap Size: {:#08x} ({})", size, size);
-        eprintln!("Page Size: {:#08x} ({})", ps, ps);
+        log::debug!("Start: {:#08x}", self.m.as_ptr() as usize);
+        log::debug!("Heap Bottom: {:#08x}", self.heap.bottom() as usize);
+        log::debug!("Heap Top: {:#08x}", self.heap.top() as usize);
+        log::debug!("Heap Size: {:#08x} ({})", size, size);
+        log::debug!("Page Size: {:#08x} ({})", ps, ps);
     }
 }
 
@@ -159,7 +169,7 @@ impl SmartPointer {
 
 impl Drop for SmartPointer {
     fn drop(&mut self) {
-        self.block.clone().free(self); //0.lock().unwrap().free(self);
+        self.block.clone().free(self);
     }
 }
 
@@ -206,7 +216,7 @@ impl HeapBlock {
             .allocate_first_fit(layout)
             .unwrap();
 
-        eprintln!("alloc: {:#08x}, {}", p.as_ptr() as usize, size,);
+        log::debug!("alloc: {:#08x}, {}", p.as_ptr() as usize, size,);
 
         Some(SmartPointer {
             layout,
@@ -216,7 +226,7 @@ impl HeapBlock {
     }
 
     fn free(&mut self, pointer: &SmartPointer) {
-        eprintln!(
+        log::debug!(
             "Freeing Pointer at {:#08x}+{:x}",
             pointer.as_ptr() as usize,
             pointer.layout.size()
@@ -279,7 +289,7 @@ impl Block {
     pub fn make_exec_block(mut self) -> io::Result<Self> {
         self.make_exec()?;
         let p = self.p.take();
-        eprintln!("make exec: {:#08x}", p.unwrap().as_ptr() as usize);
+        log::debug!("make exec: {:#08x}", p.unwrap().as_ptr() as usize);
         Ok(Block {
             layout: self.layout,
             size: self.size,
@@ -297,7 +307,7 @@ impl Block {
             let alignment = self.p.unwrap().as_ptr() as usize % page_size();
             let ptr = self.p.unwrap().as_ptr().offset(-(alignment as isize));
             let len = self.layout.size() + alignment;
-            eprintln!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
+            log::debug!("mprotect: {:#08x}+{:x}: {:x}", ptr as usize, len, prot);
             if libc::mprotect(ptr as *mut libc::c_void, len, prot) == 0 {
                 Ok(())
             } else {
@@ -342,6 +352,7 @@ fn page_size() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_log::test;
 
     #[test]
     fn allocate() {
@@ -349,12 +360,12 @@ mod tests {
         let v1 = b.alloc_block(10).unwrap();
         let v2 = b.alloc_block(10).unwrap();
         b.debug();
-        eprintln!("V Size: {:#08x}", v1.as_ptr() as usize);
-        eprintln!("V Size: {:#08x}", v2.as_ptr() as usize);
+        log::debug!("V Size: {:#08x}", v1.as_ptr() as usize);
+        log::debug!("V Size: {:#08x}", v2.as_ptr() as usize);
         drop(v1);
         drop(v2);
         let v3 = b.alloc_block(10).unwrap();
-        eprintln!("V Size: {:#08x}", v3.as_ptr() as usize);
+        log::debug!("V Size: {:#08x}", v3.as_ptr() as usize);
     }
 
     #[test]
@@ -363,12 +374,12 @@ mod tests {
         let mut h = b.alloc_block(1).unwrap().make_heap_block();
         let v1 = h.alloc(10).unwrap();
         let v2 = h.alloc(10).unwrap();
-        eprintln!("V Size: {:#08x}", v1.as_ptr() as usize);
-        eprintln!("V Size: {:#08x}", v2.as_ptr() as usize);
+        log::debug!("V Size: {:#08x}", v1.as_ptr() as usize);
+        log::debug!("V Size: {:#08x}", v2.as_ptr() as usize);
         drop(v1);
         drop(v2);
         let v3 = h.alloc(10).unwrap();
-        eprintln!("V Size: {:#08x}", v3.as_ptr() as usize);
+        log::debug!("V Size: {:#08x}", v3.as_ptr() as usize);
         b.debug();
     }
 }

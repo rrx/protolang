@@ -13,9 +13,9 @@ pub struct LinkVersion {
 
 impl LinkVersion {
     pub fn debug(&self) {
-        eprintln!("Debug:");
+        log::debug!("Debug:");
         for (k, v) in &self.linked {
-            eprintln!("link: {:?}", (&k, &v));
+            log::debug!("link: {:?}", (&k, &v));
         }
         eprint_process_maps();
     }
@@ -24,9 +24,9 @@ impl LinkVersion {
         let v1 = self.pointers.get(symbol);
         let v2 = self.libraries.search_dynamic(symbol);
         let v3 = self.lookup(symbol);
-        eprintln!("1:{}: {:?}", symbol, v1);
-        eprintln!("2:{}: {:?}", symbol, v2);
-        eprintln!("3:{}: {:?}", symbol, v3);
+        log::debug!("1:{}: {:?}", symbol, v1);
+        log::debug!("2:{}: {:?}", symbol, v2);
+        log::debug!("3:{}: {:?}", symbol, v3);
     }
 
     pub fn lookup(&self, symbol: &str) -> Option<*const ()> {
@@ -46,7 +46,7 @@ impl LinkVersion {
         let ptr = self.lookup(name).ok_or(LinkError::SymbolNotFound)? as *const ();
         unsafe {
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
-            println!("invoking {} @ {:#08x}", name, ptr as usize);
+            log::debug!("invoking {} @ {:#08x}", name, ptr as usize);
             let f: MyFunc<P, T> = std::mem::transmute(ptr);
             let ret = f(args);
             Ok(ret)
@@ -64,12 +64,12 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     for (_name, unlinked) in &link.unlinked {
         let name = format!("{}.data", &unlinked.name);
         if let Some(block) = unlinked.create_data(&name, &mut link.mem)? {
-            block.disassemble();
+            //block.disassemble();
             blocks.push((name, block));
         }
         let name = format!("{}.code", &unlinked.name);
         if let Some(block) = unlinked.create_code(&name, &mut link.mem)? {
-            block.disassemble();
+            //block.disassemble();
             blocks.push((name, block));
         }
     }
@@ -91,9 +91,11 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                         unsafe {
                             let ptr = ptr as *const usize;
                             let v = *ptr as *const usize;
-                            eprintln!(
+                            log::debug!(
                                 "Searching Shared {:#08x}:{:#08x}:{}",
-                                ptr as usize, v as usize, symbol
+                                ptr as usize,
+                                v as usize,
+                                symbol
                             );
 
                             // dereferencing the pointer doesn't work
@@ -184,19 +186,19 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         p.copy(buf.as_slice());
     }
 
-    eprintln!("patch source");
+    log::debug!("patch source");
     for (k, p) in &patch_source {
         unsafe {
             let v = p.as_ptr() as *const usize;
-            eprintln!("p: {}:{:#08x}:{}", p, v as usize, k);
+            log::debug!("p: {}:{:#08x}:{}", p, v as usize, k);
         }
     }
 
-    eprintln!("patch pointers");
+    log::debug!("patch pointers");
     for (k, p) in &patch_pointers {
         unsafe {
             let v = p.as_ptr() as *const usize;
-            eprintln!("p: {}:{:#08x}:{}", p, v as usize, k);
+            log::debug!("p: {}:{:#08x}:{}", p, v as usize, k);
         }
     }
 
@@ -204,16 +206,16 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     let mut linked = im::HashMap::new();
     for (block_name, block) in blocks {
         let patched_block = block.patch(patch_source.clone(), got.clone(), plt.clone());
-        patched_block.disassemble();
+        //patched_block.disassemble();
         linked.insert(block_name.clone(), patched_block);
     }
 
     got.debug();
     plt.debug();
-    eprintln!("Symbols");
+    log::debug!("Symbols");
     for (k, v) in &patch_source {
         unsafe {
-            eprintln!(
+            log::debug!(
                 "p: {}:{:#08x}:{}",
                 v,
                 *(v.as_ptr() as *const usize) as usize,

@@ -51,7 +51,7 @@ impl Library {
         let ptr = self.lookup(name).ok_or(crate::LinkError::SymbolNotFound)? as *const ();
         unsafe {
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
-            println!("invoking {} @ {:#08x}", name, ptr as usize);
+            log::debug!("invoking {} @ {:#08x}", name, ptr as usize);
             let f: MyFunc<P, T> = std::mem::transmute(ptr);
             let ret = f(args);
             Ok(ret)
@@ -74,7 +74,7 @@ impl Drop for RawLibrary {
     fn drop(&mut self) {
         unsafe {
             libc::dlclose(self.handle as *mut libc::c_void);
-            eprintln!("Dropping library");
+            log::debug!("Dropping library");
         }
     }
 }
@@ -177,7 +177,7 @@ mod tests {
         let musl_path = Path::new("/usr/lib/x86_64-linux-musl/libc.so");
         let musl_n = libs.add_to_new_namespace("musl", musl_path).unwrap();
         let libc_n = libs.add_to_new_namespace("libc3", libc_path).unwrap();
-        eprintln!("{:?}", (musl_n, libc_n));
+        log::debug!("{:?}", (musl_n, libc_n));
 
         // adding them a second time, should do nothing
         libs.add_to_namespace("musl2", musl_path, musl_n).unwrap();

@@ -52,11 +52,11 @@ impl TableVersion {
     }
 
     pub fn debug(&self) {
-        eprintln!("Table@{:#08x}", self.block.heap.base() as usize);
+        log::debug!("Table@{:#08x}", self.block.heap.base() as usize);
         for (k, v) in &self.entries {
             unsafe {
                 let ptr = v.0.as_ptr() as *const usize;
-                eprintln!(" {:#08x}:*{:#08x}:{}", ptr as usize, *ptr, k);
+                log::debug!(" {:#08x}:*{:#08x}:{}", ptr as usize, *ptr, k);
             }
         }
     }

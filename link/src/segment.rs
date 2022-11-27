@@ -24,13 +24,6 @@ pub enum CodeSymbolKind {
 }
 
 #[derive(Clone, Debug)]
-pub struct DataSection {
-    name: String,
-    size: u64,
-    symbols: Vec<CodeSymbol>,
-}
-
-#[derive(Clone, Debug)]
 pub struct CodeSymbol {
     name: String,
     size: u64,
@@ -63,16 +56,13 @@ pub struct UnlinkedCodeSegmentInner {
     pub(crate) internal: im::HashMap<String, CodeSymbol>,
     pub(crate) externs: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
-    //pub(crate) got_entries: Vec<GotEntry>,
-    //pub(crate) plt_entries: Vec<PltEntry>,
-    pub(crate) data_section: Option<DataSection>,
 }
 
 impl UnlinkedCodeSegmentInner {
     pub fn read_archive(archive_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
-        eprintln!("Archive: {}", archive_name);
+        log::debug!("Archive: {}", archive_name);
         let archive = object::read::archive::ArchiveFile::parse(buf)?;
-        eprintln!(
+        log::debug!(
             "Archive: {}, size: {}, kind: {:?}",
             archive_name,
             buf.len(),
@@ -84,14 +74,14 @@ impl UnlinkedCodeSegmentInner {
             let name = std::str::from_utf8(&m.name())?;
             let (offset, size) = m.file_range();
             let obj_buf = &buf[offset as usize..(offset + size) as usize];
-            eprintln!("Member: {}, {:?}", &name, &m);
+            log::debug!("Member: {}, {:?}", &name, &m);
             segments.extend(Self::create_segments(name, obj_buf)?);
         }
         Ok(segments)
     }
 
     pub fn create_segments(link_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
-        eprintln!("Segment: {}, size: {}", link_name, buf.len());
+        log::debug!("Segment: {}, size: {}", link_name, buf.len());
         let obj_file = object::File::parse(buf)?;
         let mut symbols = HashMap::new();
         let mut symbols_by_id = HashMap::new();
@@ -117,7 +107,7 @@ impl UnlinkedCodeSegmentInner {
                         .to_string()
                 });
 
-                eprintln!(
+                log::debug!(
                     " Symbol[{}, {:20}, address: {:#04x}, size: {}, kind: {:?}, scope: {:?}, weak: {}, section: {:?}]",
                     s.index().0,
                     &name,
@@ -248,7 +238,7 @@ impl UnlinkedCodeSegmentInner {
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
                 let section_index = section.index().0;
-                eprintln!(
+                log::debug!(
                     " Section[{:?}, {}, address: {}, size: {}, align: {}, kind: {:?}, relocs: {}]",
                     section_index,
                     section_name,
@@ -268,12 +258,13 @@ impl UnlinkedCodeSegmentInner {
                             if symbol_section.index() == section.index() {
                                 section_symbols.push(code_symbol.clone());
                                 if code_symbol.kind == CodeSymbolKind::Section {
-                                    //eprintln!("  Internal Symbol[{}] = {:?}", &symbol_name, &code_symbol);
+                                    //log::debug!("  Internal Symbol[{}] = {:?}", &symbol_name, &code_symbol);
                                     //internal.insert(symbol_name.clone(), code_symbol.clone());
                                 } else {
-                                    eprintln!(
+                                    log::debug!(
                                         "  Defined  Symbol[{}] = {:?}",
-                                        &symbol_name, &code_symbol
+                                        &symbol_name,
+                                        &code_symbol
                                     );
                                     defined.insert(symbol_name.clone(), code_symbol.clone());
                                 }
@@ -283,18 +274,9 @@ impl UnlinkedCodeSegmentInner {
                     }
                 }
 
-                let data_section = match section.kind() {
-                    SectionKind::Data | SectionKind::ReadOnlyData => Some(DataSection {
-                        name: section_name.clone(),
-                        size: section.size(),
-                        symbols: section_symbols,
-                    }),
-                    _ => None,
-                };
-
                 let mut relocations = vec![];
                 for (reloc_offset, r) in section.relocations() {
-                    //eprintln!(" R:{:?}", (&reloc_offset,&r));
+                    //log::debug!(" R:{:?}", (&reloc_offset,&r));
                     let symbol = if let RelocationTarget::Symbol(symbol_index) = r.target() {
                         symbol_table.symbol_by_index(symbol_index)?
                     } else {
@@ -340,12 +322,12 @@ impl UnlinkedCodeSegmentInner {
                     }
                 }
                 for r in &relocations {
-                    eprintln!("  {}", r);
+                    log::debug!("  {}", r);
                 }
 
                 let name = format!("{}{}", link_name, section_name);
                 let data = section.uncompressed_data()?;
-                //eprintln!(" data: {}, size: {}", name, data.len());
+                //log::debug!(" data: {}, size: {}", name, data.len());
 
                 // for bss, we have empty data, so we pass in a zero initialized buffer
                 // to be consistent
@@ -368,9 +350,6 @@ impl UnlinkedCodeSegmentInner {
                     defined,
                     internal: internal.clone(),
                     relocations,
-                    //got_entries,
-                    //plt_entries,
-                    data_section,
                 });
             }
         }
@@ -390,44 +369,18 @@ impl UnlinkedCodeSegmentInner {
             .filter(|(_, s)| s.kind == CodeSymbolKind::Data || s.kind == CodeSymbolKind::Section)
             .collect::<Vec<_>>();
 
-        /*
-        if let Some(data_section) = &self.data_section {
-            let size = data_section.size as usize;
-            let block = b.alloc_block(size).unwrap();
-            eprintln!(
-                "XData Block: {}, size: {}",
-                &code_page_name,
-                self.bytes.len()
-                );
-            block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
-            let mut pointers = HashMap::new();
-            unsafe {
-                for s in &data_section.symbols {
-                    let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                    eprintln!(" Data Symbol: {}:{}:{:#08x}", s.name, s.address, value_ptr as usize);
-                    pointers.insert(s.name.clone(), value_ptr as *const ());
-                }
-            }
-            Ok(Some(PatchBlock::Data(PatchDataBlock {
-                name: code_page_name.to_string(),
-                block: WritableDataBlock::new(block),
-                symbols: pointers,
-                relocations: self.relocations.clone(),
-            })))
-        } else
-            */
         if symbols.len() > 0 {
             // allocate enough space for the actual data, and a lookup table as well
             let size = self.bytes.len() + symbols.len() * std::mem::size_of::<usize>();
 
             if let Some(block) = b.alloc_block(size) {
-                eprintln!(
+                log::debug!(
                     "Data Block: {}, size: {}",
                     &code_page_name,
                     self.bytes.len()
                 );
                 for (_symbol_name, symbol) in &symbols {
-                    eprintln!(" Data Symbol: {}", symbol);
+                    log::debug!(" Data Symbol: {}", symbol);
                 }
                 // to create the data section, we need to copy the data, but we also need
                 // to create pointers to the data
@@ -465,7 +418,7 @@ impl UnlinkedCodeSegmentInner {
                 unimplemented!()
             }
         } else {
-            eprintln!(
+            log::debug!(
                 "no symbols in {}, size:{}, {:?}",
                 code_page_name,
                 self.bytes.len(),
@@ -490,17 +443,17 @@ impl UnlinkedCodeSegmentInner {
         if symbols.len() > 0 {
             let size = self.bytes.len();
             if let Some(block) = b.alloc_block(size) {
-                eprintln!(
+                log::debug!(
                     "Code Block: {}, size: {}",
                     &code_page_name,
                     self.bytes.len()
                 );
                 for (_symbol_name, symbol) in &symbols {
-                    eprintln!(" Code Symbol: {}", symbol);
+                    log::debug!(" Code Symbol: {}", symbol);
                 }
 
                 for r in &self.relocations {
-                    eprintln!(" Code Relocation: {}", r);
+                    log::debug!(" Code Relocation: {}", r);
                 }
 
                 // copy code into the block
