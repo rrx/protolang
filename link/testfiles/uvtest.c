@@ -11,7 +11,7 @@ int uvtest() {
 
     uv_loop_close(loop);
     free(loop);
-    printf("s2: %x", &stdout);
+    printf("s2: %p, %p\n", stdout, *((long *)stdout));
     fflush(0);
     return 0;
 }

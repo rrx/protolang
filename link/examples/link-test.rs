@@ -256,12 +256,12 @@ fn main() {
         test_load_from_shared();
         test_live_shared();
         test_live_static();
-        test_libuv();
 
         test_libc();
         test_libc_musl();
     }
     test_string();
+        test_libuv();
     /*
      */
     //test_start();
