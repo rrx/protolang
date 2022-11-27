@@ -75,10 +75,8 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     }
 
     // generate a list of symbols and their pointers
-    let mut patch_pointers = im::HashMap::new();
+    let mut pointers = im::HashMap::new();
 
-    let mut add_to_got = HashMap::new();
-    let mut add_to_plt = HashMap::new();
 
     for (_block_name, block) in &blocks {
         match block {
@@ -100,7 +98,11 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
 
                             // dereferencing the pointer doesn't work
                             //patch_pointers.insert(symbol.clone(), RelocationPointer::Direct(v as *const ()));
-                            patch_pointers.insert(
+                            //patch_source.insert(
+                                //symbol.clone(),
+                                //RelocationPointer::Direct(ptr as *const ()),
+                            //);
+                            pointers.insert(
                                 symbol.clone(),
                                 RelocationPointer::Direct(ptr as *const ()),
                             );
@@ -110,58 +112,78 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
 
                 for (symbol, ptr) in symbols {
                     let p = RelocationPointer::Direct(ptr.clone());
-                    patch_pointers.insert(symbol.clone(), p);
+                    //patch_source.insert(symbol.clone(), p);
+                    pointers.insert(symbol.clone(), p);
                 }
             }
-
             PatchBlock::Data(PatchDataBlock {
                 symbols, internal, ..
             }) => {
                 for (symbol, ptr) in internal {
                     let p = RelocationPointer::Direct(ptr.clone());
-                    patch_pointers.insert(symbol.clone(), p);
+                    //patch_source.insert(symbol.clone(), p);
+                    pointers.insert(symbol.clone(), p);
                 }
 
                 for (symbol, ptr) in symbols {
                     let p = RelocationPointer::Direct(ptr.clone());
-                    patch_pointers.insert(symbol.clone(), p);
-                    add_to_got.insert(symbol.clone(), p);
+                    //patch_source.insert(symbol.clone(), p);
+                    pointers.insert(symbol.clone(), p);
+                    //add_to_got.insert(symbol.clone(), p);
                 }
             }
         }
     }
 
+    let mut add_to_got = HashMap::new();
+    let mut add_to_plt = HashMap::new();
+    let mut add_direct = HashMap::new();
+
+    // generate a list of GOT/PLT entries to create from the relocation list
     for (_block_name, block) in &blocks {
-        // for each relocation, create an associated got/plt entry and update pointers
-        //
         use PatchEffect::*;
         match block {
-            PatchBlock::Code(PatchCodeBlock { relocations, .. })
-            | PatchBlock::Data(PatchDataBlock { relocations, .. }) => {
+            PatchBlock::Code(PatchCodeBlock { relocations, .. }) => {
                 for r in relocations {
+                    let direct = pointers
+                        .get(&r.name)
+                        .expect(&format!("symbol missing {}", &r.name));
                     match r.effect() {
-                        AddToGot => {
-                            let direct = patch_pointers
-                                .get(&r.name)
-                                .expect(&format!("symbol missing {}", &r.name));
-                            add_to_got.insert(r.name.clone(), *direct);
-                        }
-                        AddToPlt => {
-                            let direct = patch_pointers
-                                .get(&r.name)
-                                .expect(&format!("symbol missing {}", &r.name));
-                            add_to_plt.insert(r.name.clone(), *direct);
-                        }
-                        DoNothing => (),
-                    }
+                        AddToGot => add_to_got.insert(r.name.clone(), *direct),
+                        AddToPlt => add_to_plt.insert(r.name.clone(), *direct),
+                        DoNothing => add_direct.insert(r.name.clone(), *direct),
+                    };
+                }
+            }
+            PatchBlock::Data(PatchDataBlock { symbols, relocations, .. }) => {
+                for (symbol, ptr) in symbols {
+                    let p = RelocationPointer::Direct(ptr.clone());
+                    add_to_got.insert(symbol.clone(), p);
+                }
+
+                // add all data objects to the GOT
+                for r in relocations {
+                    let direct = pointers
+                        .get(&r.name)
+                        .expect(&format!("symbol missing {}", &r.name));
+                    add_to_got.insert(r.name.clone(), *direct);
                 }
             }
         }
     }
-
+    
     // patch source is used for relocations
-    let mut patch_source = patch_pointers.clone();
+    let mut patch_source = im::HashMap::new();
 
+    // create a GOT entry, and add it to the mapping for patch
+    for (name, direct) in add_direct {
+        patch_source.insert(
+            name.clone(),
+            RelocationPointer::Direct(direct.as_ptr())
+        );
+    }
+
+    // create a GOT entry, and add it to the mapping for patch
     for (name, direct) in add_to_got {
         // cast pointer to usize
         let v = direct.as_ptr() as usize;
@@ -176,6 +198,8 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         got = got.update(name, p);
     }
 
+    // create a PLT entry
+    // TODO, this is not complete
     for (name, direct) in add_to_plt {
         // cast pointer to usize
         let v = direct.as_ptr() as usize;
@@ -184,19 +208,23 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         buf[0] = 0xe9;
         let mut p = got.create_buffer(buf.len());
         p.copy(buf.as_slice());
+
+        // save as direct for now
+        patch_source.insert(
+            name.clone(),
+            RelocationPointer::Direct(direct.as_ptr())
+        );
     }
 
-    log::debug!("patch source");
-    for (k, p) in &patch_source {
-        unsafe {
+    if log::log_enabled!(log::Level::Debug) {
+        log::debug!("patch source");
+        for (k, p) in &patch_source {
             let v = p.as_ptr() as *const usize;
             log::debug!("p: {}:{:#08x}:{}", p, v as usize, k);
         }
-    }
 
-    log::debug!("patch pointers");
-    for (k, p) in &patch_pointers {
-        unsafe {
+        log::debug!("patch pointers");
+        for (k, p) in &pointers {
             let v = p.as_ptr() as *const usize;
             log::debug!("p: {}:{:#08x}:{}", p, v as usize, k);
         }
@@ -226,7 +254,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
 
     Ok(LinkVersion {
         linked,
-        pointers: patch_source,
+        pointers: pointers,
         libraries: link.libraries.clone(),
         got,
         plt,

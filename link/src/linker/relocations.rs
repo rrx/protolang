@@ -264,7 +264,7 @@ pub fn patch_code(
 
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
-        let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
+        let addr = pointers.get(&r.name).expect(&format!("missing symbol: {}", &r.name)).as_ptr() as *const u8;
         log::debug!(
             "r ptr: {:#08x}:{:#08x}: {}",
             patch_base as usize,
