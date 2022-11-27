@@ -31,6 +31,7 @@ impl fmt::Display for RelocationPointer {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum PatchEffect {
     AddToGot,
     AddToPlt,
@@ -164,56 +165,54 @@ impl CodeRelocation {
                 // S = Address of the symbol
                 // A = value of the Addend
                 //
-                // We get this if we don't compile with -fPIC
-                // This doesn't work, and produces an illegal address for some reason
                 let name = &self.name;
                 unsafe {
-                    let adjusted = addr.offset(self.r.addend as isize) as u64;
+                    // we need to dereference here, because the pointer is coming from the GOT
+                    let vaddr = *(addr as *const usize) as usize;
+                    let adjusted = vaddr + self.r.addend as usize;
+                    let patch = patch_base.offset(self.offset as isize);
+                    let before = std::ptr::read(patch);
 
-                    let (before, patch) = match self.r.size {
+                    let patch = match self.r.size {
                         32 => {
                             // patch as 32 bit
-                            let patch = patch_base.offset(self.offset as isize) as *mut i32;
-                            let before = std::ptr::read(patch);
-                            *patch = adjusted as i32;
+                            let adjusted = addr.offset(self.r.addend as isize) as u64;
+                            *(patch as *mut i32) = adjusted as i32;
                             unimplemented!("32 bit absolute relocation does not work");
-                            (before as u64, patch as u64)
+                            patch as u64
                         }
                         64 => {
                             // patch as 64 bit
                             let patch = patch_base.offset(self.offset as isize) as *mut u64;
-                            let before = std::ptr::read(patch);
-                            *patch = adjusted as u64;
-                            (before as u64, patch as u64)
+                            *(patch as *mut u64) = adjusted as u64;
+                            patch as u64
                         }
                         _ => unimplemented!(),
                     };
 
                     println!(
-                        "rel absolute {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
-                        name, patch, before, adjusted as usize, self.r.addend, addr as u64
+                        "rel absolute {}: patch {:#16x}:{:#16x}=>{:#16x} addend:{:#08x} addr:{:#08x}, vaddr:{:#08x}",
+                        name, patch, before, adjusted as usize, self.r.addend, addr as u64, vaddr as usize
                     );
                 }
             }
 
             RelocationKind::Relative => {
                 unsafe {
+                    // we need to dereference here, because the pointer is coming from the GOT
+                    let vaddr = *(addr as *const usize) as usize;
                     let patch = patch_base.offset(self.offset as isize);
-                    let symbol_address = addr as isize + self.r.addend as isize - patch as isize;
+                    let before = std::ptr::read(patch as *const usize);
+                    let relative_address = vaddr as isize + self.r.addend as isize - patch as isize;
 
                     // patch as 32 bit
                     let patch = patch as *mut u32;
-                    *patch = symbol_address as u32;
+                    *patch = relative_address as u32;
 
                     println!(
-                            "rel relative {}: patch:{:#08x} patchv:{:#08x} addend:{:#08x} addr:{:#08x} symbol:{:#08x}",
-                            &self.name,
-                            patch as usize,
-                            std::ptr::read(patch),
-                            self.r.addend,
-                            addr as isize,
-                            symbol_address as isize,
-                            );
+                        "rel relative {}: patch {:#16x}:{:#16x}=>{:#16x} addend:{:#08x} addr:{:#08x}, vaddr:{:#08x}",
+                        &self.name, patch as usize, before, relative_address as usize, self.r.addend, addr as u64, vaddr as usize
+                    );
                 }
             }
 
@@ -266,6 +265,11 @@ pub fn patch_code(
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
+        eprintln!(
+            "r ptr: {:#08x}:{:#08x}: {}",
+            patch_base as usize, addr as usize, &r.name
+        );
+
         r.patch(patch_base, addr);
     }
 
@@ -286,11 +290,11 @@ pub fn patch_data(
         block.block.as_ptr() as usize
     );
 
+    block.disassemble();
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
-        use PatchEffect::*;
         let addr = match r.effect() {
-            AddToGot => got.get(&r.name).unwrap().as_ptr(),
+            PatchEffect::AddToGot => got.get(&r.name).unwrap().as_ptr(),
             _ => {
                 if let Some(p) = pointers.get(&r.name) {
                     p.as_ptr() as *const u8
@@ -302,8 +306,17 @@ pub fn patch_data(
             }
         };
 
+        eprintln!(
+            "r ptr: {:#08x}:{:#08x}:{:?}:{}",
+            patch_base as usize,
+            addr as usize,
+            r.effect(),
+            &r.name
+        );
+
         r.patch(patch_base, addr);
     }
+    block.disassemble();
 
     LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block.block)))
 }

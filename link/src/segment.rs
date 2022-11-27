@@ -57,6 +57,7 @@ pub type UnlinkedCodeSegment = Arc<UnlinkedCodeSegmentInner>;
 
 pub struct UnlinkedCodeSegmentInner {
     pub(crate) name: String,
+    pub(crate) section_name: String,
     pub(crate) bytes: Vec<u8>,
     pub(crate) defined: im::HashMap<String, CodeSymbol>,
     pub(crate) internal: im::HashMap<String, CodeSymbol>,
@@ -231,6 +232,19 @@ impl UnlinkedCodeSegmentInner {
                 symbols_by_id.insert(s.index().clone(), s);
             }
 
+            /*
+            for section in obj_file.sections() {
+                let section_name = section.name()?.to_string();
+                internal.insert(section_name.clone(), CodeSymbol {
+                    name: section_name.clone(),
+                    size: section.size(),
+                    address: section.address(),
+                    kind: CodeSymbolKind::Section,
+                    def: CodeSymbolDefinition::Defined
+                });
+            }
+            */
+
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
                 let section_index = section.index().0;
@@ -348,6 +362,7 @@ impl UnlinkedCodeSegmentInner {
 
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
+                    section_name,
                     bytes,
                     externs: externs.clone(),
                     defined,
@@ -423,6 +438,9 @@ impl UnlinkedCodeSegmentInner {
                 let mut pointers = HashMap::new();
                 let mut internal = HashMap::new();
 
+                internal.insert(self.section_name.clone(), block.as_ptr() as *const ());
+                pointers.insert(self.section_name.clone(), block.as_ptr() as *const ());
+
                 unsafe {
                     for (_name, s) in &symbols {
                         let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
@@ -451,7 +469,7 @@ impl UnlinkedCodeSegmentInner {
                 "no symbols in {}, size:{}, {:?}",
                 code_page_name,
                 self.bytes.len(),
-                &self.relocations
+                &self.relocations.len()
             );
             Ok(None)
         }
@@ -490,13 +508,19 @@ impl UnlinkedCodeSegmentInner {
 
                 // for each symbol, add a reference to it's full address
                 let mut pointers = HashMap::new();
-                for (_, s) in &symbols {
-                    unsafe {
+                let mut internal = HashMap::new();
+
+                unsafe {
+                    for (_, s) in &symbols {
                         let ptr = block.as_ptr().offset(s.address as isize) as *const ();
                         pointers.insert(s.name.clone(), ptr);
                     }
+
+                    for (_name, s) in &self.internal {
+                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                        internal.insert(s.name.clone(), value_ptr as *const ());
+                    }
                 }
-                let mut internal = HashMap::new();
 
                 Ok(Some(PatchBlock::Code(PatchCodeBlock {
                     name: code_page_name.to_string(),

@@ -106,10 +106,44 @@ fn test_libuv() {
     }
 }
 
+fn test_print_string(version: LinkVersion) {
+    let ret: *const () = version.invoke("print_string", ()).unwrap();
+    println!("ret: {:#08x}", ret as usize);
+}
+
 fn test_print_stuff(version: LinkVersion) {
     let c_str = std::ffi::CString::new("asdf1: %d\n").unwrap();
     let c_str_ptr = c_str.as_ptr();
-    let ret: i64 = version.invoke("print_stuff", (c_str_ptr, 6)).unwrap();
+
+    let v_ptr: *const usize = version.lookup("g_v").unwrap() as *const usize;
+
+    let g_ptr: *const usize = version.lookup("g_str2").unwrap() as *const usize;
+    unsafe {
+        let g = *g_ptr as *const usize;
+        let g_ret: *const usize = version.invoke("get_str2", ()).unwrap();
+        println!(
+            "g: {:#08x}:{:#08x}:{:#08x}",
+            g_ptr as usize, g as usize, g_ret as usize
+        );
+
+        let v = *v_ptr as *const usize;
+        let v_ret: *const usize = version.invoke("get_v", ()).unwrap();
+        println!(
+            "v: {:#08x}:{:#08x}:{:#08x}",
+            v_ptr as usize, v as usize, v_ret as usize
+        );
+
+        assert_eq!(v_ptr, v_ret);
+        assert_eq!(g_ptr, g_ret);
+    }
+
+    let ret: i32 = version.invoke("print_stuff1", ()).unwrap();
+    println!("ret: {:#08x}", ret);
+    let ret: i32 = version.invoke("print_stuff2", (c_str_ptr, 7i32)).unwrap();
+    println!("ret: {:#08x}", ret);
+    let ret: i32 = version.invoke("print_stuff3", (8i32,)).unwrap();
+    println!("ret: {:#08x}", ret);
+    let ret: i32 = version.invoke("print_stuff4", (c_str_ptr, 9i32)).unwrap();
     println!("ret: {:#08x}", ret);
 }
 
@@ -118,18 +152,18 @@ fn test_lib_print(version: LinkVersion) {
 
     unsafe {
         let stdout_ptr = version.lookup("stdout").unwrap() as *const usize;
-        println!(
-            "p0: stdout: {:#08x}: {:#08x}",
-            stdout_ptr as usize, *stdout_ptr
-        );
+        //println!(
+        //"p0: stdout: {:#08x}: {:#08x}",
+        //stdout_ptr as usize, *stdout_ptr
+        //);
         let p1 = *stdout_ptr as *const usize;
-        println!("p1: *stdout: {:#08x}", p1 as usize);
+        //println!("p1: *stdout: {:#08x}", p1 as usize);
         let p2 = *p1 as *const usize;
-        println!("p2: **stdout: {:#08x}", p2 as usize);
+        //println!("p2: **stdout: {:#08x}", p2 as usize);
         //let p3 = *p2 as *const usize;
         //println!("p3: ***stdout: {:#08x}", p3 as usize);
         let s = std::slice::from_raw_parts(p1, 0x20);
-        println!("***stdout: {:#08x?}", s);
+        //println!("***stdout: {:#08x?}", s);
         let works = p1;
 
         // call strlen
@@ -172,9 +206,6 @@ fn test_lib_print(version: LinkVersion) {
         let ret: i64 = version.invoke("fflush", (works,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x0, ret);
-
-        let ret: i64 = version.invoke("print_stuff", (c_str_ptr, 6)).unwrap();
-        println!("ret: {:#08x}", ret);
     }
 }
 
@@ -182,17 +213,22 @@ fn test_libc() {
     let mut b = Link::new();
     b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
-    b.add_obj_file("test", Path::new("tmp/print_stuff.o"))
+    b.add_obj_file("stuff", Path::new("tmp/print_stuff.o"))
+        .unwrap();
+    b.add_obj_file("string", Path::new("tmp/print_string.o"))
         .unwrap();
     let version = b.link().unwrap();
-    test_lib_print(version);
+    test_lib_print(version.clone());
+    test_print_stuff(version);
 }
 
 fn test_libc_musl() {
     let mut b = Link::new();
     b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
         .unwrap();
-    b.add_obj_file("test", Path::new("tmp/print_stuff.o"))
+    b.add_obj_file("stuff", Path::new("tmp/print_stuff.o"))
+        .unwrap();
+    b.add_obj_file("string", Path::new("tmp/print_string.o"))
         .unwrap();
 
     // if we link with live.so, it will try to load the system libc, which conflicts with musl
@@ -204,6 +240,17 @@ fn test_libc_musl() {
     test_print_stuff(version);
 }
 
+fn test_string() {
+    let mut b = Link::new();
+    b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
+        .unwrap();
+    b.add_obj_file("string", Path::new("tmp/print_string.o"))
+        .unwrap();
+
+    let version = b.link().unwrap();
+    test_print_string(version.clone());
+}
+
 fn main() {
     if true {
         test_load_from_shared();
@@ -212,8 +259,9 @@ fn main() {
         test_libuv();
 
         test_libc();
+        test_libc_musl();
     }
-    test_libc_musl();
+    test_string();
     /*
      */
     //test_start();

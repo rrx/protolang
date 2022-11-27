@@ -112,7 +112,14 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 }
             }
 
-            PatchBlock::Data(PatchDataBlock { symbols, .. }) => {
+            PatchBlock::Data(PatchDataBlock {
+                symbols, internal, ..
+            }) => {
+                for (symbol, ptr) in internal {
+                    let p = RelocationPointer::Direct(ptr.clone());
+                    patch_pointers.insert(symbol.clone(), p);
+                }
+
                 for (symbol, ptr) in symbols {
                     let p = RelocationPointer::Direct(ptr.clone());
                     patch_pointers.insert(symbol.clone(), p);
@@ -177,7 +184,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         p.copy(buf.as_slice());
     }
 
-    eprintln!("all pointers");
+    eprintln!("patch source");
     for (k, p) in &patch_source {
         unsafe {
             let v = p.as_ptr() as *const usize;
