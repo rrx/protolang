@@ -391,18 +391,25 @@ impl UnlinkedCodeSegmentInner {
                 let mut pointers = HashMap::new();
                 let mut internal = HashMap::new();
 
-                internal.insert(self.section_name.clone(), block.as_ptr() as *const ());
-                pointers.insert(self.section_name.clone(), block.as_ptr() as *const ());
+                let block_ptr = RelocationPointer::direct(block.as_ptr() as *const ()).unwrap();
+                internal.insert(self.section_name.clone(), block_ptr);
+                pointers.insert(self.section_name.clone(), block_ptr);
 
                 unsafe {
                     for (_name, s) in &symbols {
-                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                        pointers.insert(s.name.clone(), value_ptr as *const ());
+                        let value_ptr = RelocationPointer::direct(
+                            block.as_ptr().offset(s.address as isize) as *const (),
+                        )
+                        .unwrap();
+                        pointers.insert(s.name.clone(), value_ptr);
                     }
 
                     for (_name, s) in &self.internal {
-                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                        internal.insert(s.name.clone(), value_ptr as *const ());
+                        let value_ptr = RelocationPointer::direct(
+                            block.as_ptr().offset(s.address as isize) as *const (),
+                        )
+                        .unwrap();
+                        internal.insert(s.name.clone(), value_ptr);
                     }
                 }
 
@@ -465,13 +472,19 @@ impl UnlinkedCodeSegmentInner {
 
                 unsafe {
                     for (_, s) in &symbols {
-                        let ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                        let ptr = RelocationPointer::direct(
+                            block.as_ptr().offset(s.address as isize) as *const (),
+                        )
+                        .unwrap();
                         pointers.insert(s.name.clone(), ptr);
                     }
 
                     for (_name, s) in &self.internal {
-                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                        internal.insert(s.name.clone(), value_ptr as *const ());
+                        let value_ptr = RelocationPointer::direct(
+                            block.as_ptr().offset(s.address as isize) as *const (),
+                        )
+                        .unwrap();
+                        internal.insert(s.name.clone(), value_ptr);
                     }
                 }
 

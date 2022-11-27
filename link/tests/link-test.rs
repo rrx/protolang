@@ -30,13 +30,13 @@ fn test_load_from_shared() {
     b.add_obj_file("call", &temp_path("call_extern.o")).unwrap();
     let version = b.link().unwrap();
 
-    let x = version.lookup("x").unwrap();
+    let x = version.lookup("x").unwrap().as_ptr();
     log::debug!("{:#08x}: x", x as usize);
-    let ptr = version.lookup("ptr").unwrap();
+    let ptr = version.lookup("ptr").unwrap().as_ptr();
     log::debug!("{:#08x}: ptr", ptr as usize);
-    let g2 = version.lookup("g2").unwrap();
+    let g2 = version.lookup("g2").unwrap().as_ptr();
     log::debug!("{:#08x}: g2", g2 as usize);
-    let global_ptr = version.lookup("global_int2").unwrap();
+    let global_ptr = version.lookup("global_int2").unwrap().as_ptr();
     log::debug!("{:#08x}: global_int2", global_ptr as usize);
 
     let ret: i64 = version.invoke("load_from_extern", ()).unwrap();
@@ -66,11 +66,11 @@ fn test_empty_main() {
     let ret: i64 = version.invoke("main", ()).unwrap();
     assert_eq!(0, ret);
 
-    let main_ptr = version.lookup("main").unwrap();
+    let main_ptr = version.lookup("main").unwrap().as_ptr();
     log::debug!("ptr: {:#08x}", main_ptr as usize);
     let main_ptr = 0;
 
-    let init_ptr = version.lookup("_init").unwrap();
+    let init_ptr = version.lookup("_init").unwrap().as_ptr();
     log::debug!("init_ptr: {:#08x}", init_ptr as usize);
     let init_ptr = 0;
 
@@ -106,7 +106,7 @@ fn test_libuv() {
 
     // flush
     unsafe {
-        let stdout = *(version.lookup("stdout").unwrap() as *const usize);
+        let stdout = *(version.lookup("stdout").unwrap().as_ptr() as *const usize);
         log::debug!("stdout: {:#08x}", stdout);
         //let ret: i64 = version.invoke("fflush", (stdout,)).unwrap();
         //log::debug!("ret: {:#08x}", ret);
@@ -168,9 +168,9 @@ fn test_print_stuff(version: LinkVersion) {
     let c_str = std::ffi::CString::new("asdf1: %d\n").unwrap();
     let c_str_ptr = c_str.as_ptr();
 
-    let v_ptr: *const usize = version.lookup("g_v").unwrap() as *const usize;
+    let v_ptr: *const usize = version.lookup("g_v").unwrap().as_ptr() as *const usize;
 
-    let g_ptr: *const usize = version.lookup("g_str2").unwrap() as *const usize;
+    let g_ptr: *const usize = version.lookup("g_str2").unwrap().as_ptr() as *const usize;
     unsafe {
         let g = *g_ptr as *const usize;
         let g_ret: *const usize = version.invoke("get_str2", ()).unwrap();
@@ -207,7 +207,7 @@ fn test_print_stuff(version: LinkVersion) {
 
 fn test_lib_print(version: LinkVersion) {
     unsafe {
-        let stdout_ptr = version.lookup("stdout").unwrap() as *const usize;
+        let stdout_ptr = version.lookup("stdout").unwrap().as_ptr() as *const usize;
         //log::debug!(
         //"p0: stdout: {:#08x}: {:#08x}",
         //stdout_ptr as usize, *stdout_ptr

@@ -1,6 +1,5 @@
 use super::*;
 use crate::memory::*;
-use crate::segment::CodeSymbol;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::Arc;
@@ -67,8 +66,8 @@ impl PatchBlock {
 pub struct PatchDataBlock {
     pub(crate) name: String,
     pub(crate) block: WritableDataBlock,
-    pub(crate) symbols: HashMap<String, *const ()>,
-    pub(crate) internal: HashMap<String, *const ()>,
+    pub(crate) symbols: HashMap<String, RelocationPointer>,
+    pub(crate) internal: HashMap<String, RelocationPointer>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }
 
@@ -76,8 +75,8 @@ pub struct PatchDataBlock {
 pub struct PatchCodeBlock {
     pub(crate) name: String,
     pub(crate) block: WritableCodeBlock,
-    pub(crate) symbols: HashMap<String, *const ()>,
-    pub(crate) internal: HashMap<String, *const ()>,
+    pub(crate) symbols: HashMap<String, RelocationPointer>,
+    pub(crate) internal: HashMap<String, RelocationPointer>,
     pub(crate) externs: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }

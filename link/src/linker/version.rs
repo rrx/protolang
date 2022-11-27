@@ -21,12 +21,12 @@ impl LinkVersion {
         eprint_process_maps();
     }
 
-    pub fn lookup(&self, symbol: &str) -> Option<*const ()> {
+    pub fn lookup(&self, symbol: &str) -> Option<RelocationPointer> {
         match self.pointers.get(symbol) {
             //Some(RelocationPointer::Got(ptr)) => unsafe {
             //Some(*(*ptr as *const usize) as *const ())
             //},
-            Some(ptr) => Some(ptr.as_ptr()),
+            Some(ptr) => Some(ptr.clone()),
             None => self.libraries.search_dynamic(symbol),
         }
     }
@@ -35,11 +35,11 @@ impl LinkVersion {
         // call the main function
 
         // make sure we dereference the pointer!
-        let ptr = self.lookup(name).ok_or(LinkError::SymbolNotFound)? as *const ();
+        let ptr = self.lookup(name).ok_or(LinkError::SymbolNotFound)?;
         unsafe {
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
-            log::debug!("invoking {} @ {:#08x}", name, ptr as usize);
-            let f: MyFunc<P, T> = std::mem::transmute(ptr);
+            log::debug!("invoking {} @ {:#08x}", name, ptr.as_ptr() as usize);
+            let f: MyFunc<P, T> = std::mem::transmute(ptr.as_ptr());
             let ret = f(args);
             Ok(ret)
         }
@@ -73,44 +73,39 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                     if let Some(ptr) = link.libraries.search_dynamic(symbol) {
                         // data pointers should already have a got in the shared library
                         unsafe {
-                            let ptr = ptr as *const usize;
-                            let v = *ptr as *const usize;
+                            let p = ptr.as_ptr() as *const usize;
+                            let v = *p as *const usize;
                             log::debug!(
                                 "Searching Shared {:#08x}:{:#08x}:{}",
-                                ptr as usize,
+                                p as usize,
                                 v as usize,
                                 symbol
                             );
 
-                            let p = RelocationPointer::Direct(
-                                NonNull::new(ptr.clone() as *mut u8).unwrap(),
-                            );
-                            pointers.insert(symbol.clone(), p);
+                            pointers.insert(symbol.clone(), ptr);
                         }
                     }
                 }
 
                 for (symbol, ptr) in symbols {
-                    let p =
-                        RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    //let p = RelocationPointer::Direct(ptr.clone());
-                    pointers.insert(symbol.clone(), p);
+                    //let p =
+                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
+                    pointers.insert(symbol.clone(), *ptr);
                 }
             }
             PatchBlock::Data(PatchDataBlock {
                 symbols, internal, ..
             }) => {
                 for (symbol, ptr) in internal {
-                    let p =
-                        RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    //let p = RelocationPointer::Direct(ptr.clone());
-                    pointers.insert(symbol.clone(), p);
+                    //let p =
+                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
+                    pointers.insert(symbol.clone(), *ptr);
                 }
 
                 for (symbol, ptr) in symbols {
-                    let p =
-                        RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    pointers.insert(symbol.clone(), p);
+                    //let p =
+                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
+                    pointers.insert(symbol.clone(), *ptr);
                 }
             }
         }
@@ -143,9 +138,9 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
             }) => {
                 for (symbol, ptr) in symbols {
                     //let p = RelocationPointer::Direct(ptr.clone());
-                    let p =
-                        RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    add_to_got.insert(symbol.clone(), p);
+                    //let p =
+                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
+                    add_to_got.insert(symbol.clone(), *ptr);
                 }
 
                 // add all data objects to the GOT

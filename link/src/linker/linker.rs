@@ -192,9 +192,9 @@ mod tests {
         b.add_obj_file("test", Path::new("../tmp/link_shared.o"))
             .unwrap();
         let collection = b.link().unwrap();
-        let _ret: std::ffi::c_void = collection.invoke("call_z", ()).unwrap();
-        //log::debug!("ret: {:#08x}", ret);
-        //assert_eq!(3, ret);
+        let ret: *const () = collection.invoke("call_z", ()).unwrap();
+        log::debug!("ret: {:#08x}", ret as usize);
+        assert!(ret.is_null());
     }
 
     #[test]

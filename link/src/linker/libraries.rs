@@ -1,9 +1,10 @@
+use super::*;
 use std::error::Error;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+use std::ptr::NonNull;
 use std::sync::Arc;
-
 pub type SharedLibrary = Arc<Library>;
 
 pub enum Library {
@@ -140,10 +141,12 @@ impl SharedLibraryRepo {
     }
 
     // search the dynamic libraries to see if the symbol exists
-    pub fn search_dynamic(&self, symbol: &str) -> Option<*const ()> {
+    pub fn search_dynamic(&self, symbol: &str) -> Option<RelocationPointer> {
         for (_name, lib) in &self.map {
             if let Some(p) = lib.lookup(symbol) {
-                return Some(p);
+                return Some(RelocationPointer::Shared(
+                    NonNull::new(p as *mut u8).unwrap(),
+                ));
             }
         }
         None

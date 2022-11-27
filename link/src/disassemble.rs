@@ -10,7 +10,7 @@ impl PatchDataBlock {
             base, &self.name
         );
         for (name, ptr_ref) in &self.symbols {
-            let ptr = *ptr_ref;
+            let ptr = ptr_ref.as_ptr();
             pointers.insert(ptr as usize - base, name.clone());
             unsafe {
                 let value = std::ptr::read(ptr as *const u64);
@@ -39,8 +39,8 @@ impl PatchCodeBlock {
         );
         let mut pointers = im::HashMap::new();
         for (name, ptr) in &self.symbols {
-            eprintln!(" {:#08x}: {}", *ptr as usize, name);
-            pointers.insert(*ptr as usize - base, name.clone());
+            eprintln!(" {:#08x}: {}", ptr.as_ptr() as usize, name);
+            pointers.insert(ptr.as_ptr() as usize - base, name.clone());
         }
         for r in &self.relocations {
             eprintln!(" {}", &r);
