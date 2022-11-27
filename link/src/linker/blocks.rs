@@ -1,5 +1,6 @@
 use super::*;
 use crate::memory::*;
+use crate::segment::CodeSymbol;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::Arc;
@@ -49,10 +50,6 @@ impl PatchBlock {
         got: TableVersion,
         plt: TableVersion,
     ) -> LinkedBlock {
-        //LinkedSymbolPointers,
-        //TableVersion,
-        //TableVersion,
-        //) {
         match self {
             Self::Code(block) => patch_code(block, pointers, got, plt),
             Self::Data(block) => patch_data(block, pointers, got, plt),
@@ -71,6 +68,7 @@ pub struct PatchDataBlock {
     pub(crate) name: String,
     pub(crate) block: WritableDataBlock,
     pub(crate) symbols: HashMap<String, *const ()>,
+    pub(crate) internal: HashMap<String, *const ()>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }
 
@@ -79,6 +77,7 @@ pub struct PatchCodeBlock {
     pub(crate) name: String,
     pub(crate) block: WritableCodeBlock,
     pub(crate) symbols: HashMap<String, *const ()>,
+    pub(crate) internal: HashMap<String, *const ()>,
     pub(crate) externs: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }
@@ -88,6 +87,10 @@ pub struct WritableDataBlock(pub(crate) Block);
 impl WritableDataBlock {
     pub fn new(block: Block) -> Self {
         Self(block)
+    }
+
+    pub fn size(&self) -> usize {
+        self.0.size
     }
 
     pub fn as_ptr(&self) -> *mut u8 {
@@ -114,6 +117,10 @@ impl WritableCodeBlock {
         Self(block)
     }
 
+    pub fn size(&self) -> usize {
+        self.0.size
+    }
+
     pub fn as_ptr(&self) -> *mut u8 {
         self.0.as_mut_ptr()
     }
@@ -134,6 +141,9 @@ impl WritableCodeBlock {
 #[derive(Debug)]
 pub struct ReadonlyDataBlock(pub(crate) Block);
 impl ReadonlyDataBlock {
+    pub fn size(&self) -> usize {
+        self.0.size
+    }
     pub fn as_ptr(&self) -> *const u8 {
         self.0.as_ptr() as *const u8
     }

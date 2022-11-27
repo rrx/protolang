@@ -106,68 +106,16 @@ fn test_libuv() {
     }
 }
 
-fn test_libc() {
-    let mut b = Link::new();
-    b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6"))
-        .unwrap();
-    b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
-        .unwrap();
-    let version = b.link().unwrap();
-    version.compare("stdout");
-
-    unsafe {
-        let stdout_ptr = version.lookup("stdout").unwrap() as *const usize;
-        println!(
-            "p0: stdout: {:#08x}: {:#08x}",
-            stdout_ptr as usize, *stdout_ptr
-        );
-        let p1 = *stdout_ptr as *const usize;
-        println!("p1: *stdout: {:#08x}", p1 as usize);
-        let p2 = *p1 as *const usize;
-        println!("p2: **stdout: {:#08x}", p2 as usize);
-        //let p3 = *p2 as *const usize;
-        //println!("p3: ***stdout: {:#08x}", p3 as usize);
-        let s = std::slice::from_raw_parts(p1, 0x20);
-        println!("***stdout: {:#08x?}", s);
-        let works = p1;
-
-        let ret: i64 = version.invoke("putc", (0x31u32, works)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(0x31, ret);
-        let ret: i64 = version.invoke("fflush", (works,)).unwrap();
-        println!("ret: {:#08x}", ret);
-        assert_eq!(0x0, ret);
-        let ret: i64 = version.invoke("print_stuff", ()).unwrap();
-        println!("ret: {:#08x}", ret);
-    }
+fn test_print_stuff(version: LinkVersion) {
+    let c_str = std::ffi::CString::new("asdf1: %d\n").unwrap();
+    let c_str_ptr = c_str.as_ptr();
+    let ret: i64 = version.invoke("print_stuff", (c_str_ptr, 6)).unwrap();
+    println!("ret: {:#08x}", ret);
 }
 
-fn test_libc_musl() {
-    let mut b = Link::new();
-    b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
-        .unwrap();
-    b.add_obj_file("test", Path::new("tmp/simplefunction.o"))
-        .unwrap();
-
-    // if we link with live.so, it will try to load the system libc, which conflicts with musl
-    // it's random which one loads when we dlsym.
-    //b.add_library("test", Path::new("tmp/live.so")).unwrap();
-
-    let version = b.link().unwrap();
-
-    let ret: i64 = version.invoke("print_stuff", ()).unwrap();
-    println!("ret: {:#08x}", ret);
-
-    // call strlen
-    let ret: i64 = version
-        .invoke(
-            "strlen",
-            (std::ffi::CString::new("asdf").unwrap().as_ptr(),),
-        )
-        .unwrap();
-    assert_eq!(4, ret);
-
+fn test_lib_print(version: LinkVersion) {
     version.compare("stdout");
+
     unsafe {
         let stdout_ptr = version.lookup("stdout").unwrap() as *const usize;
         println!(
@@ -183,6 +131,15 @@ fn test_libc_musl() {
         let s = std::slice::from_raw_parts(p1, 0x20);
         println!("***stdout: {:#08x?}", s);
         let works = p1;
+
+        // call strlen
+        let ret: i64 = version
+            .invoke(
+                "strlen",
+                (std::ffi::CString::new("asdf").unwrap().as_ptr(),),
+            )
+            .unwrap();
+        assert_eq!(4, ret);
 
         let ret: i64 = version.invoke("fputc", (0x30u32, works)).unwrap();
         println!("ret: {:#08x}", ret);
@@ -191,26 +148,71 @@ fn test_libc_musl() {
         let ret: i64 = version.invoke("putc", (0x31u32, works)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x31, ret);
-
-        let c_str = std::ffi::CString::new("asdf\n").unwrap();
-        let c_str_ptr = c_str.as_ptr();
-
-        let ret: i64 = version.invoke("fputs", (c_str_ptr, works)).unwrap();
+        let ret: i64 = version.invoke("fflush", (works,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x0, ret);
+
+        let c_str = std::ffi::CString::new("asdf1: %d\n").unwrap();
+        let c_str_ptr = c_str.as_ptr();
+        let ret: i32 = version.invoke("fputs", (c_str_ptr, works)).unwrap();
+        println!("ret: {:#08x}", ret);
+        assert!(ret >= 0);
+
+        let ret: i32 = version.invoke("printf", (c_str_ptr, 4)).unwrap();
+        println!("ret: {:#08x}", ret);
+        if ret < 0 {
+            eprintln!("{:?}", std::io::Error::last_os_error());
+        }
+        assert!(ret >= 0);
+
+        let ret: i32 = version.invoke("fputs", (c_str_ptr, works)).unwrap();
+        println!("ret: {:#08x}", ret);
+        assert!(ret >= 0);
 
         let ret: i64 = version.invoke("fflush", (works,)).unwrap();
         println!("ret: {:#08x}", ret);
         assert_eq!(0x0, ret);
+
+        let ret: i64 = version.invoke("print_stuff", (c_str_ptr, 6)).unwrap();
+        println!("ret: {:#08x}", ret);
     }
 }
 
+fn test_libc() {
+    let mut b = Link::new();
+    b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6"))
+        .unwrap();
+    b.add_obj_file("test", Path::new("tmp/print_stuff.o"))
+        .unwrap();
+    let version = b.link().unwrap();
+    test_lib_print(version);
+}
+
+fn test_libc_musl() {
+    let mut b = Link::new();
+    b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
+        .unwrap();
+    b.add_obj_file("test", Path::new("tmp/print_stuff.o"))
+        .unwrap();
+
+    // if we link with live.so, it will try to load the system libc, which conflicts with musl
+    // it's random which one loads when we dlsym.
+    //b.add_library("test", Path::new("tmp/live.so")).unwrap();
+
+    let version = b.link().unwrap();
+    test_lib_print(version.clone());
+    test_print_stuff(version);
+}
+
 fn main() {
-    test_load_from_shared();
-    test_live_shared();
-    test_live_static();
-    test_libuv();
-    test_libc();
+    if true {
+        test_load_from_shared();
+        test_live_shared();
+        test_live_static();
+        test_libuv();
+
+        test_libc();
+    }
     test_libc_musl();
     /*
      */

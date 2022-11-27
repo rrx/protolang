@@ -22,6 +22,7 @@ functions:
 	clang ${CFLAGS} -c link/testfiles/uvtest.c -o ./tmp/uvtest.o
 	clang ${CFLAGS} -c link/testfiles/globals.c -o ./tmp/globals.o
 	clang ${CFLAGS} -c link/testfiles/call_extern.c -o ./tmp/call_extern.o
+	clang ${CFLAGS} -c link/testfiles/print_stuff.c -o ./tmp/print_stuff.o
 	clang ${CFLAGS} -g link/testfiles/segfault_handle.c -o ./tmp/segfault_handle
 	clang ${CFLAGS} -g link/testfiles/segfault_handle2.c -o ./tmp/segfault_handle2
 	ar -rv tmp/liblive.a ./tmp/live.o ./tmp/globals.o

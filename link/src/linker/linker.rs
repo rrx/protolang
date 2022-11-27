@@ -112,14 +112,27 @@ impl Link {
             let mut children = HashSet::new();
             //eprintln!("checking: {}", name);
             // ensure all relocations map somewhere
+            for extern_symbol in &unlinked.externs {
+                if pointers.contains_key(extern_symbol) {
+                } else if self.libraries.search_dynamic(&extern_symbol).is_some() {
+                    eprintln!(" Symbol {} found in shared library", &extern_symbol);
+                } else {
+                    eprintln!(" Symbol {} missing", &extern_symbol);
+                    missing.insert(extern_symbol.clone());
+                }
+            }
+
             for r in &unlinked.relocations {
                 //eprintln!("\tReloc: {}", &symbol_name);
                 if pointers.contains_key(&r.name) {
                     children.insert(r.name.clone());
+                } else if unlinked.internal.contains_key(&r.name) {
+                    //children.insert(r.name.clone());
                 } else if self.libraries.search_dynamic(&r.name).is_some() {
                     children.insert(r.name.clone());
                     eprintln!(" Symbol {} found in shared library", &r.name);
                 } else {
+                    eprintln!("{:?}", &unlinked.internal);
                     eprintln!(" Symbol {} missing", &r.name);
                     missing.insert(r.name.clone());
                 }

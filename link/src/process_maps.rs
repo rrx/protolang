@@ -7,8 +7,6 @@ pub fn eprint_process_maps() {
             map.size(),
             map.flags,
             map.filename()
-            );
+        );
     }
 }
-
-

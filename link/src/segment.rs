@@ -20,6 +20,14 @@ pub enum CodeSymbolDefinition {
 pub enum CodeSymbolKind {
     Text,
     Data,
+    Section,
+}
+
+#[derive(Clone, Debug)]
+pub struct DataSection {
+    name: String,
+    size: u64,
+    symbols: Vec<CodeSymbol>,
 }
 
 #[derive(Clone, Debug)]
@@ -51,10 +59,12 @@ pub struct UnlinkedCodeSegmentInner {
     pub(crate) name: String,
     pub(crate) bytes: Vec<u8>,
     pub(crate) defined: im::HashMap<String, CodeSymbol>,
+    pub(crate) internal: im::HashMap<String, CodeSymbol>,
     pub(crate) externs: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
-    pub(crate) got_entries: Vec<GotEntry>,
-    pub(crate) plt_entries: Vec<PltEntry>,
+    //pub(crate) got_entries: Vec<GotEntry>,
+    //pub(crate) plt_entries: Vec<PltEntry>,
+    pub(crate) data_section: Option<DataSection>,
 }
 
 impl UnlinkedCodeSegmentInner {
@@ -83,8 +93,10 @@ impl UnlinkedCodeSegmentInner {
         eprintln!("Segment: {}, size: {}", link_name, buf.len());
         let obj_file = object::File::parse(buf)?;
         let mut symbols = HashMap::new();
+        let mut symbols_by_id = HashMap::new();
         let mut segments = vec![];
         let mut externs = HashSet::new();
+        let mut internal = im::HashMap::new();
 
         if let Some(symbol_table) = obj_file.symbol_table() {
             for s in symbol_table.symbols() {
@@ -135,6 +147,8 @@ impl UnlinkedCodeSegmentInner {
                                 let kind = match section.kind() {
                                     SectionKind::Text => CodeSymbolKind::Text,
                                     SectionKind::Data => CodeSymbolKind::Data,
+                                    SectionKind::ReadOnlyData => CodeSymbolKind::Data,
+                                    // XXX:
                                     _ => continue,
                                 };
 
@@ -158,8 +172,27 @@ impl UnlinkedCodeSegmentInner {
                                 def: CodeSymbolDefinition::Defined,
                             }),
 
-                            // skip these
-                            (SymbolScope::Compilation, _) => None,
+                            (SymbolScope::Compilation, SymbolKind::Data) => Some(CodeSymbol {
+                                name,
+                                address,
+                                size: s.size(),
+                                kind: CodeSymbolKind::Data,
+                                def: CodeSymbolDefinition::Defined,
+                            }),
+
+                            (SymbolScope::Compilation, SymbolKind::Section) => {
+                                let name = section.name()?.to_string();
+                                let code_symbol = CodeSymbol {
+                                    name: name.clone(),
+                                    address,
+                                    size: s.size(),
+                                    kind: CodeSymbolKind::Section,
+                                    def: CodeSymbolDefinition::Defined,
+                                };
+                                internal.insert(name, code_symbol.clone());
+                                Some(code_symbol)
+                            }
+
                             _ => unimplemented!(
                                 "Symbol Scope: {:?}, Kind: {:?}",
                                 s.scope(),
@@ -172,6 +205,8 @@ impl UnlinkedCodeSegmentInner {
                         SymbolKind::Unknown | SymbolKind::Tls => {
                             // external references
                             externs.insert(name.clone());
+                            None
+                            /*
                             Some(CodeSymbol {
                                 name,
                                 address: s.address(),
@@ -179,6 +214,7 @@ impl UnlinkedCodeSegmentInner {
                                 kind: CodeSymbolKind::Text,
                                 def: CodeSymbolDefinition::Extern,
                             })
+                            */
                         }
 
                         // skip these
@@ -192,45 +228,69 @@ impl UnlinkedCodeSegmentInner {
                 if let Some(code_symbol) = maybe_code_symbol {
                     symbols.insert(code_symbol.name.clone(), (maybe_section, code_symbol));
                 }
+                symbols_by_id.insert(s.index().clone(), s);
             }
 
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
                 let section_index = section.index().0;
                 eprintln!(
-                    " Section[{:?}, {}, address: {}, size: {}, align: {}, kind: {:?}]",
+                    " Section[{:?}, {}, address: {}, size: {}, align: {}, kind: {:?}, relocs: {}]",
                     section_index,
                     section_name,
                     section.address(),
                     section.size(),
                     section.align(),
-                    section.kind()
+                    section.kind(),
+                    section.relocations().count()
                 );
-                let mut section_symbols = im::HashMap::new();
+                let mut defined = im::HashMap::new();
+
+                let mut section_symbols = vec![];
 
                 for (symbol_name, (maybe_section, code_symbol)) in &symbols {
                     match maybe_section {
                         Some(symbol_section) => {
                             if symbol_section.index() == section.index() {
-                                eprintln!(" Symbol[{}] = {:?}", &symbol_name, &code_symbol);
-                                section_symbols.insert(symbol_name.clone(), code_symbol.clone());
+                                section_symbols.push(code_symbol.clone());
+                                if code_symbol.kind == CodeSymbolKind::Section {
+                                    //eprintln!("  Internal Symbol[{}] = {:?}", &symbol_name, &code_symbol);
+                                    //internal.insert(symbol_name.clone(), code_symbol.clone());
+                                } else {
+                                    eprintln!(
+                                        "  Defined  Symbol[{}] = {:?}",
+                                        &symbol_name, &code_symbol
+                                    );
+                                    defined.insert(symbol_name.clone(), code_symbol.clone());
+                                }
                             }
                         }
                         None => (),
                     }
                 }
 
+                let data_section = match section.kind() {
+                    SectionKind::Data | SectionKind::ReadOnlyData => Some(DataSection {
+                        name: section_name.clone(),
+                        size: section.size(),
+                        symbols: section_symbols,
+                    }),
+                    _ => None,
+                };
+
                 let mut relocations = vec![];
                 for (reloc_offset, r) in section.relocations() {
+                    //eprintln!(" R:{:?}", (&reloc_offset,&r));
                     let symbol = if let RelocationTarget::Symbol(symbol_index) = r.target() {
                         symbol_table.symbol_by_index(symbol_index)?
                     } else {
+                        // relocation must be associated with a symbol
                         unimplemented!()
                     };
                     let name = symbol.name()?.to_string();
 
-                    match symbol.scope() {
-                        SymbolScope::Dynamic | SymbolScope::Unknown | SymbolScope::Linkage => {
+                    match (symbol.kind(), symbol.scope()) {
+                        (_, SymbolScope::Dynamic | SymbolScope::Unknown | SymbolScope::Linkage) => {
                             // | SymbolScope::Linkage | SymbolScope::Unknown => {
                             relocations.push(CodeRelocation {
                                 name,
@@ -243,18 +303,35 @@ impl UnlinkedCodeSegmentInner {
                         //SymbolScope::Unknown => {
                         //unknowns.insert(name);
                         //}
-                        SymbolScope::Compilation => (),
-
+                        (SymbolKind::Data, SymbolScope::Compilation) => {
+                            relocations.push(CodeRelocation {
+                                name,
+                                offset: reloc_offset,
+                                r: r.into(),
+                            });
+                        }
+                        (SymbolKind::Section, SymbolScope::Compilation) => {
+                            // if the relocation references a section, then look up the section
+                            // name
+                            let section_index = symbol.section().index().unwrap();
+                            let section = obj_file.section_by_index(section_index)?;
+                            let name = section.name()?.to_string();
+                            relocations.push(CodeRelocation {
+                                name,
+                                offset: reloc_offset,
+                                r: r.into(),
+                            });
+                        }
                         _ => unimplemented!("{:?}", symbol),
                     }
-
-                    for r in &relocations {
-                        eprintln!(" {}", r);
-                    }
+                }
+                for r in &relocations {
+                    eprintln!("  {}", r);
                 }
 
                 let name = format!("{}{}", link_name, section_name);
                 let data = section.uncompressed_data()?;
+                //eprintln!(" data: {}, size: {}", name, data.len());
 
                 // for bss, we have empty data, so we pass in a zero initialized buffer
                 // to be consistent
@@ -266,17 +343,19 @@ impl UnlinkedCodeSegmentInner {
                     data.to_vec()
                 };
 
-                let got_entries = vec![];
-                let plt_entries = vec![];
+                //let got_entries = vec![];
+                //let plt_entries = vec![];
 
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
                     bytes,
                     externs: externs.clone(),
-                    defined: section_symbols,
+                    defined,
+                    internal: internal.clone(),
                     relocations,
-                    got_entries,
-                    plt_entries,
+                    //got_entries,
+                    //plt_entries,
+                    data_section,
                 });
             }
         }
@@ -293,12 +372,39 @@ impl UnlinkedCodeSegmentInner {
         let symbols = self
             .defined
             .iter()
-            .filter(|(_, s)| s.kind == CodeSymbolKind::Data)
+            .filter(|(_, s)| s.kind == CodeSymbolKind::Data || s.kind == CodeSymbolKind::Section)
             .collect::<Vec<_>>();
 
+        /*
+        if let Some(data_section) = &self.data_section {
+            let size = data_section.size as usize;
+            let block = b.alloc_block(size).unwrap();
+            eprintln!(
+                "XData Block: {}, size: {}",
+                &code_page_name,
+                self.bytes.len()
+                );
+            block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
+            let mut pointers = HashMap::new();
+            unsafe {
+                for s in &data_section.symbols {
+                    let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                    eprintln!(" Data Symbol: {}:{}:{:#08x}", s.name, s.address, value_ptr as usize);
+                    pointers.insert(s.name.clone(), value_ptr as *const ());
+                }
+            }
+            Ok(Some(PatchBlock::Data(PatchDataBlock {
+                name: code_page_name.to_string(),
+                block: WritableDataBlock::new(block),
+                symbols: pointers,
+                relocations: self.relocations.clone(),
+            })))
+        } else
+            */
         if symbols.len() > 0 {
             // allocate enough space for the actual data, and a lookup table as well
             let size = self.bytes.len() + symbols.len() * std::mem::size_of::<usize>();
+
             if let Some(block) = b.alloc_block(size) {
                 eprintln!(
                     "Data Block: {}, size: {}",
@@ -315,33 +421,17 @@ impl UnlinkedCodeSegmentInner {
                 // append the got entries after the data
                 block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
                 let mut pointers = HashMap::new();
+                let mut internal = HashMap::new();
 
-                if true {
-                    unsafe {
-                        for (_name, s) in &symbols {
-                            let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                            pointers.insert(s.name.clone(), value_ptr as *const ());
-                        }
+                unsafe {
+                    for (_name, s) in &symbols {
+                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                        pointers.insert(s.name.clone(), value_ptr as *const ());
                     }
-                }
 
-                // add the got in a separate page
-                // append got data entries
-                if false {
-                    unsafe {
-                        let mut entry_counter = 0;
-                        let got_base = block.as_ptr().offset(self.bytes.len() as isize) as *mut u64;
-                        for (name, s) in symbols {
-                            let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
-                            let got_ptr = got_base.offset(entry_counter);
-                            *got_ptr = value_ptr as u64;
-                            entry_counter += 1;
-                            pointers.insert(s.name.clone(), got_ptr as *const ());
-                            eprintln!(
-                                " GOT: {}, Value: {:#08x}, Entry: {:#08x}",
-                                &name, value_ptr as usize, got_ptr as usize
-                            );
-                        }
+                    for (_name, s) in &self.internal {
+                        let value_ptr = block.as_ptr().offset(s.address as isize) as *const ();
+                        internal.insert(s.name.clone(), value_ptr as *const ());
                     }
                 }
 
@@ -349,6 +439,7 @@ impl UnlinkedCodeSegmentInner {
                     name: code_page_name.to_string(),
                     block: WritableDataBlock::new(block),
                     symbols: pointers,
+                    internal,
                     relocations: self.relocations.clone(),
                 })))
             } else {
@@ -356,23 +447,15 @@ impl UnlinkedCodeSegmentInner {
                 unimplemented!()
             }
         } else {
+            eprintln!(
+                "no symbols in {}, size:{}, {:?}",
+                code_page_name,
+                self.bytes.len(),
+                &self.relocations
+            );
             Ok(None)
         }
     }
-
-    /*
-    pub fn asdf () {
-        match self {
-            PatchEffect::AddToPlt => {
-                add_to_plt.insert(&r.name, addr);
-            }
-            PatchEffect::AddToGot => {
-                add_to_got.insert(&r.name, addr);
-            }
-            _ => (),
-        }
-    }
-    */
 
     pub fn create_code(
         &self,
@@ -413,12 +496,14 @@ impl UnlinkedCodeSegmentInner {
                         pointers.insert(s.name.clone(), ptr);
                     }
                 }
+                let mut internal = HashMap::new();
 
                 Ok(Some(PatchBlock::Code(PatchCodeBlock {
                     name: code_page_name.to_string(),
                     block: WritableCodeBlock::new(block),
                     externs: self.externs.clone(),
                     symbols: pointers,
+                    internal,
                     relocations: self.relocations.clone(),
                 })))
             } else {

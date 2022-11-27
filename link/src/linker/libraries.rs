@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -35,6 +36,27 @@ impl Library {
             }
         }
     }
+
+    pub fn namespace(&self) -> Namespace {
+        match self {
+            Self::Loading(_) => Namespace { lm_id: 0 },
+            Self::Raw(lib) => lib.namespace,
+        }
+    }
+
+    pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
+        // call the main function
+
+        // make sure we dereference the pointer!
+        let ptr = self.lookup(name).ok_or(crate::LinkError::SymbolNotFound)? as *const ();
+        unsafe {
+            type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
+            println!("invoking {} @ {:#08x}", name, ptr as usize);
+            let f: MyFunc<P, T> = std::mem::transmute(ptr);
+            let ret = f(args);
+            Ok(ret)
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -63,6 +85,10 @@ pub struct Namespace {
 }
 
 impl SharedLibraryRepo {
+    pub fn get(&self, name: &str) -> Option<SharedLibrary> {
+        self.map.get(name).cloned()
+    }
+
     pub fn add(&mut self, name: &str, lib: libloading::Library) {
         self.map
             .insert(name.to_string(), Arc::new(Library::Loading(lib)));
@@ -90,7 +116,12 @@ impl SharedLibraryRepo {
         }
     }
 
-    pub fn add_to_namespace(&mut self, name: &str, path: &Path, namespace: Namespace) -> Option<()> {
+    pub fn add_to_namespace(
+        &mut self,
+        name: &str,
+        path: &Path,
+        namespace: Namespace,
+    ) -> Option<()> {
         unsafe {
             let c_str = CString::new(path.as_os_str().as_bytes()).unwrap();
             let handle = libc::dlmopen(namespace.lm_id, c_str.as_ptr(), libc::RTLD_LAZY);
@@ -138,7 +169,9 @@ mod tests {
 
         // these should resolve, but we dont' implement that yet
         assert!(libs.add_to_new_namespace("libc1", Path::new("c")).is_none());
-        assert!(libs.add_to_new_namespace("libc2", Path::new("libc.so")).is_none());
+        assert!(libs
+            .add_to_new_namespace("libc2", Path::new("libc.so"))
+            .is_none());
 
         let libc_path = Path::new("/lib/x86_64-linux-gnu/libc.so.6");
         let musl_path = Path::new("/usr/lib/x86_64-linux-musl/libc.so");
@@ -152,4 +185,3 @@ mod tests {
         crate::eprint_process_maps();
     }
 }
-

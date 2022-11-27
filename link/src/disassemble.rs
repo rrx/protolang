@@ -64,15 +64,27 @@ impl ReadonlyDataBlock {
     pub fn disassemble(&self) {
         let base = self.as_ptr() as usize;
         println!("data_ro@{:#08x}+{:#x}", base, self.0.size);
+        eprint_bytes(&self.as_slice()[0..self.size()]);
         //let _pointers = im::HashMap::new();
         //disassemble_data(&self.as_slice()[0..self.0.size], _pointers);
     }
 }
 
+fn eprint_bytes(buf: &[u8]) {
+    let x = String::from_utf8(
+        buf.iter()
+            .flat_map(|b| std::ascii::escape_default(*b))
+            .collect::<Vec<u8>>(),
+    )
+    .unwrap();
+    eprintln!("{}", x);
+}
+
 impl WritableDataBlock {
     pub fn disassemble(&self) {
         let base = self.as_ptr() as usize;
-        println!("data_rw@{:#08x}+{:#x}", base, self.0.size);
+        eprintln!("data_rw@{:#08x}+{:#x}", base, self.0.size);
+        eprint_bytes(&self.as_slice()[0..self.size()]);
         //let _pointers = im::HashMap::new();
         //disassemble_data(&self.as_slice()[0..self.0.size], _pointers);
     }

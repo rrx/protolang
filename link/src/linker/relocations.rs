@@ -257,18 +257,11 @@ pub fn patch_code(
     got: TableVersion,
     plt: TableVersion,
 ) -> LinkedBlock {
-    //LinkedSymbolPointers,
-    //TableVersion,
-    //TableVersion,
-    //) {
     println!(
         "patching code {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
     );
-
-    //let mut add_to_got = HashMap::new();
-    //let mut add_to_plt = HashMap::new();
 
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
@@ -276,42 +269,9 @@ pub fn patch_code(
         r.patch(patch_base, addr);
     }
 
-    //let mut symbols = im::HashMap::new();
-    //for (name, s) in block.symbols {
-    //symbols.insert(name, s);
-    //}
-
-    /*
-    let mut symbols = im::HashMap::new();
-    for (name, ptr) in add_to_got {
-        unsafe {
-            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
-            let mut p = got.create_buffer(buf.len());
-            p.copy(buf);
-            //symbols.insert(name.clone(), p.as_ptr() as *const ());
-            got = got.update(name.clone(), p);
-        }
-    }
-
-    for (name, ptr) in add_to_plt {
-        unsafe {
-            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
-            let mut p = plt.create_buffer(buf.len());
-            p.copy(buf);
-            //symbols.insert(name.clone(), p.as_ptr() as *const ());
-            plt = plt.update(name.clone(), p);
-        }
-    }
-    */
-
-    //(
     LinkedBlock(Arc::new(LinkedBlockInner::Code(
         block.block.make_exec_block().unwrap(),
     )))
-    //symbols,
-    //got,
-    //plt,
-    //)
 }
 
 pub fn patch_data(
@@ -320,62 +280,30 @@ pub fn patch_data(
     got: TableVersion,
     plt: TableVersion,
 ) -> LinkedBlock {
-    //LinkedSymbolPointers,
-    //TableVersion,
-    //TableVersion,
-    //) {
     println!(
         "patching data {} at base {:#08x}",
         &block.name,
         block.block.as_ptr() as usize
     );
 
-    //let mut add_to_got = HashMap::new();
-    //let mut add_to_plt = HashMap::new();
-
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         use PatchEffect::*;
         let addr = match r.effect() {
             AddToGot => got.get(&r.name).unwrap().as_ptr(),
-            _ => pointers.get(&r.name).unwrap().as_ptr() as *const u8,
+            _ => {
+                if let Some(p) = pointers.get(&r.name) {
+                    p.as_ptr() as *const u8
+                } else if let Some(p) = block.internal.get(&r.name) {
+                    *p as *const u8
+                } else {
+                    unreachable!("symbol not found:{}", &r.name)
+                }
+            }
         };
 
-        //let addr = pointers.get(&r.name).unwrap().as_ptr() as *const u8;
         r.patch(patch_base, addr);
     }
 
-    //let mut symbols = im::HashMap::new();
-    //for (name, s) in block.symbols {
-    //symbols.insert(name, s);
-    //}
-    /*
-
-    for (name, ptr) in add_to_got {
-        unsafe {
-            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
-            let mut p = got.create_buffer(buf.len());
-            p.copy(buf);
-            //symbols.insert(name.clone(), p.as_ptr() as *const ());
-            got = got.update(name.clone(), p);
-        }
-    }
-
-    for (name, ptr) in add_to_plt {
-        unsafe {
-            let buf = std::slice::from_raw_parts(ptr, std::mem::size_of::<*const u8>());
-            let mut p = plt.create_buffer(buf.len());
-            p.copy(buf);
-            //symbols.insert(name.clone(), p.as_ptr() as *const ());
-            plt = plt.update(name.clone(), p);
-        }
-    }
-    */
-
-    //(
     LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block.block)))
-    //symbols,
-    //got,
-    //plt,
-    //)
 }
