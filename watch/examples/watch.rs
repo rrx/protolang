@@ -11,6 +11,8 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::{thread, time};
 
 pub struct Runner<'a> {
     context: &'a Context,
@@ -106,24 +108,62 @@ fn parse_lang3<'a>(path: &Path) -> Result<hir::Ast, Box<dyn Error>> {
     Ok(hir)
 }
 
+fn invoke(version: &LinkVersionSync) {
+    let result: Result<i64, Box<_>> = version.0.as_ref().lock().unwrap().invoke("main", ());
+    match result {
+        Ok(ret) => {
+            println!("ret: {}", ret);
+        }
+        Err(e) => {
+            println!("Error: {}", e);
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
+    let (tx, rx) = mpsc::channel::<LinkVersionSync>();
+
+    // path hardwired for now, eventually this will be configurable
+    let dir = Path::new("watch/examples");
+
+    thread::scope(|s| {
+        s.spawn(move || {
+            let mut maybe_version = None;
+            loop {
+                let result = rx.try_recv();
+                if let Ok(version) = result {
+                    maybe_version = Some(version.clone());
+                    invoke(&version);
+                } else {
+                    thread::sleep(time::Duration::from_secs(1));
+                    if let Some(version) = &maybe_version {
+                        invoke(version)
+                    } else {
+                        eprintln!("waiting for code");
+                    }
+                    //unimplemented!();
+                }
+            }
+        });
+        s.spawn(move || {
+            run(&dir, tx).unwrap();
+        });
+    });
+    Ok(())
+}
+
+fn run(dir: &Path, version_tx: mpsc::Sender<LinkVersionSync>) -> Result<(), Box<dyn Error>> {
+    let context = Context::create();
+    let mut e = Runner::create(&context, OptimizationLevel::None, 0)?;
     let (tx, rx) = std::sync::mpsc::channel();
     // Automatically select the best implementation for your platform.
     // You can also access each implementation directly e.g. INotifyWatcher.
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
-
-    let context = Context::create();
-
-    // path hardwired for now, eventually this will be configurable
-    let dir = Path::new("./tmp");
-
-    let mut e = Runner::create(&context, OptimizationLevel::None, 0)?;
-
     let mut load_paths = vec![];
 
     let linker_path = "./target/debug/liblink.so";
     load_paths.push(Path::new(linker_path).into());
-    load_paths.push(Path::new("libsigsegv.so").into());
+    //load_paths.push(Path::new("libsigsegv.so").into());
 
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -132,20 +172,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     e.load_paths(&load_paths)?;
 
-    let mut maybe_version = None;
-
     match e.link() {
         Ok(version) => {
-            let result: Result<i64, Box<_>> = version.invoke("handlers_init", ());
-            match result {
-                Ok(ret) => {
-                    println!("ret: {}", ret);
-                }
-                Err(e) => {
-                    println!("Error: {}", e);
-                }
-            }
-            maybe_version = Some(version);
+            version_tx.send(LinkVersionSync::new(version)).unwrap();
         }
         Err(e) => {
             println!("Error: {}", e);
@@ -167,16 +196,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     e.load_paths(&paths)?;
                     match e.link() {
                         Ok(version) => {
-                            let result: Result<i64, Box<_>> = version.invoke("segfault_me", ());
-                            match result {
-                                Ok(ret) => {
-                                    println!("ret: {}", ret);
-                                }
-                                Err(e) => {
-                                    println!("Error: {}", e);
-                                }
-                            }
-                            maybe_version = Some(version);
+                            version_tx.send(LinkVersionSync::new(version)).unwrap();
                         }
                         Err(e) => {
                             println!("Error: {}", e);

@@ -13,8 +13,6 @@ pub struct Link {
     pub(crate) unlinked: HashMap<String, UnlinkedCodeSegment>,
     pub(crate) libraries: SharedLibraryRepo,
     pub(crate) mem: BlockFactory,
-    //plt_block: SmartBlock,
-    //got_block: SmartBlock,
     pub(crate) got: Option<TableVersion>,
     pub(crate) plt: Option<TableVersion>,
 }
@@ -46,8 +44,6 @@ impl Link {
             unlinked: HashMap::new(),
             libraries: SharedLibraryRepo::default(),
             mem,
-            //got_block,
-            //plt_block,
             got: Some(got),
             plt: Some(plt),
         }
@@ -65,12 +61,14 @@ impl Link {
         self.unlinked.remove(&name.to_string());
     }
 
+    pub fn add_library_repo(&mut self, repo: SharedLibraryRepo) -> Result<(), Box<dyn Error>> {
+        self.libraries.update(repo);
+        Ok(())
+    }
+
     pub fn add_library(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
         unsafe {
             let lib = libloading::Library::new(path)?;
-            // we need to parse the header files to know what all of the symbols mean
-            // but we may as well just use bindgen?
-            //let _: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(b"gzopen")?;
             self.libraries.add(name, lib);
             log::debug!("Loaded library: {}", &path.to_string_lossy());
         }
@@ -177,6 +175,7 @@ mod tests {
         b.add_obj_file("test", Path::new("../tmp/segfault.o"))
             .unwrap();
         let version = b.link().unwrap();
+        // XXX: This isn't working yet
         //let ret: i64 = version.invoke("handlers_init", ()).unwrap();
         //let ret: i64 = version.invoke("segfault_me", ()).unwrap();
         //log::debug!("ret: {:#08x}", ret);

@@ -190,11 +190,9 @@ impl SmartPointer {
 
 impl Drop for SmartPointer {
     fn drop(&mut self) {
-        eprintln!("dropping: {:?}", self);
+        // nothing to do, it get's handled when we drop the ref?
         match &self.block_ref {
-            BlockReference::Heap(b) => {
-                //b.clone().free(self);
-            }
+            BlockReference::Heap(_) => {}
             BlockReference::Block(_) => (),
         }
     }

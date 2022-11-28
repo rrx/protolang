@@ -125,7 +125,8 @@ fn test_libc() {
         .unwrap();
     let version = b.link().unwrap();
     test_lib_print(version.clone());
-    test_print_stuff(version);
+    test_print_stuff(version.clone());
+    test_print_string(version);
 }
 
 #[test]
@@ -144,7 +145,26 @@ fn test_libc_musl() {
 
     let version = b.link().unwrap();
     test_lib_print(version.clone());
-    test_print_stuff(version);
+    test_print_stuff(version.clone());
+    test_print_string(version);
+}
+
+#[test]
+fn test_multi_libc() {
+    let mut b = Link::new();
+    b.add_library("libc", &temp_path("/lib/x86_64-linux-gnu/libc.so.6"))
+        .unwrap();
+    b.add_library("musl", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))
+        .unwrap();
+    b.add_obj_file("stuff", &temp_path("print_stuff.o"))
+        .unwrap();
+    b.add_obj_file("string", &temp_path("print_string.o"))
+        .unwrap();
+
+    let version = b.link().unwrap();
+    test_lib_print(version.clone());
+    test_print_stuff(version.clone());
+    test_print_string(version);
 }
 
 #[test]

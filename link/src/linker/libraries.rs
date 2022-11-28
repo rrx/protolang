@@ -68,6 +68,9 @@ impl SharedLibraryRepo {
     pub fn clear(&mut self) {
         self.map.clear();
     }
+    pub fn update(&mut self, repo: SharedLibraryRepo) {
+        self.map = self.map.clone().union(repo.map.clone());
+    }
 }
 
 #[derive(Clone)]

@@ -2,6 +2,16 @@ use crate::*;
 use std::collections::HashMap;
 use std::error::Error;
 use std::ptr::NonNull;
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone)]
+pub struct LinkVersionSync(pub Arc<Mutex<LinkVersion>>);
+unsafe impl Send for LinkVersionSync {}
+impl LinkVersionSync {
+    pub fn new(version: LinkVersion) -> Self {
+        Self(Arc::new(Mutex::new(version)))
+    }
+}
 
 #[derive(Clone)]
 pub struct LinkVersion {
@@ -180,10 +190,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         let buf = v.to_ne_bytes();
         let mut p = got.create_buffer(buf.len());
         p.copy(buf.as_slice());
-        patch_source.insert(
-            name.clone(),
-            RelocationPointer::Got(p.clone()), //NonNull::new(p.as_ptr() as *mut u8).unwrap()),
-        );
+        patch_source.insert(name.clone(), RelocationPointer::Got(p.clone()));
         got = got.update(name, p);
     }
 

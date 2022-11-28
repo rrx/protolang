@@ -2,16 +2,26 @@
 #include <stdlib.h>
 #include <uv.h>
 
-int uvtest() {
-    uv_loop_t *loop = malloc(sizeof(uv_loop_t));
+uv_loop_t *loop;
+
+int init() {
+    loop = malloc(sizeof(uv_loop_t));
     uv_loop_init(loop);
+}
 
-    printf("Now quitting.\n");
-    uv_run(loop, UV_RUN_DEFAULT);
+int step() {
+    return uv_run(loop, UV_RUN_ONCE);
+}
 
+int cleanup() {
     uv_loop_close(loop);
     free(loop);
-    printf("s2: %p, %p\n", stdout, *((long *)stdout));
-    fflush(0);
+}
+
+int uvtest() {
+    init();
+    printf("Now quitting.\n");
+    uv_run(loop, UV_RUN_DEFAULT);
+    cleanup();
     return 0;
 }
