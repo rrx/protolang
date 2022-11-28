@@ -391,26 +391,18 @@ impl UnlinkedCodeSegmentInner {
                 let mut pointers = HashMap::new();
                 let mut internal = HashMap::new();
 
-                let block_ptr = RelocationPointer::direct(block.as_ptr() as *const ()).unwrap();
-                internal.insert(self.section_name.clone(), block_ptr);
+                let block_ptr = RelocationPointer::Smart(block.offset(0));
+                internal.insert(self.section_name.clone(), block_ptr.clone());
                 pointers.insert(self.section_name.clone(), block_ptr);
 
-                unsafe {
-                    for (_name, s) in &symbols {
-                        let value_ptr = RelocationPointer::direct(
-                            block.as_ptr().offset(s.address as isize) as *const (),
-                        )
-                        .unwrap();
-                        pointers.insert(s.name.clone(), value_ptr);
-                    }
+                for (_, s) in &symbols {
+                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
+                    pointers.insert(s.name.clone(), value_ptr);
+                }
 
-                    for (_name, s) in &self.internal {
-                        let value_ptr = RelocationPointer::direct(
-                            block.as_ptr().offset(s.address as isize) as *const (),
-                        )
-                        .unwrap();
-                        internal.insert(s.name.clone(), value_ptr);
-                    }
+                for s in self.internal.values() {
+                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
+                    internal.insert(s.name.clone(), value_ptr);
                 }
 
                 Ok(Some(PatchBlock::Data(PatchDataBlock {
@@ -470,22 +462,14 @@ impl UnlinkedCodeSegmentInner {
                 let mut pointers = HashMap::new();
                 let mut internal = HashMap::new();
 
-                unsafe {
-                    for (_, s) in &symbols {
-                        let ptr = RelocationPointer::direct(
-                            block.as_ptr().offset(s.address as isize) as *const (),
-                        )
-                        .unwrap();
-                        pointers.insert(s.name.clone(), ptr);
-                    }
+                for (_, s) in &symbols {
+                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
+                    pointers.insert(s.name.clone(), value_ptr);
+                }
 
-                    for (_name, s) in &self.internal {
-                        let value_ptr = RelocationPointer::direct(
-                            block.as_ptr().offset(s.address as isize) as *const (),
-                        )
-                        .unwrap();
-                        internal.insert(s.name.clone(), value_ptr);
-                    }
+                for s in self.internal.values() {
+                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
+                    internal.insert(s.name.clone(), value_ptr);
                 }
 
                 Ok(Some(PatchBlock::Code(PatchCodeBlock {
@@ -504,4 +488,63 @@ impl UnlinkedCodeSegmentInner {
             Ok(None)
         }
     }
+
+    pub fn create_block(
+        &self,
+        code_page_name: &str,
+        kind: PatchBlockKind,
+        symbols: Vec<CodeSymbol>,
+        b: &mut BlockFactory,
+    ) -> Result<Option<PatchBlockInner>, Box<dyn Error>> {
+        if symbols.len() > 0 {
+            let size = self.bytes.len();
+            if let Some(block) = b.alloc_block(size) {
+                log::debug!(
+                    "Code Block: {}, size: {}",
+                    &code_page_name,
+                    self.bytes.len()
+                );
+                for symbol in &symbols {
+                    log::debug!(" Code Symbol: {}", symbol);
+                }
+
+                for r in &self.relocations {
+                    log::debug!(" Code Relocation: {}", r);
+                }
+
+                // copy code into the block
+                block.as_mut_slice()[0..size].copy_from_slice(&self.bytes);
+
+                // for each symbol, add a reference to it's full address
+                let mut pointers = HashMap::new();
+                let mut internal = HashMap::new();
+
+                for s in &symbols {
+                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
+                    pointers.insert(s.name.clone(), value_ptr);
+                }
+
+                for s in self.internal.values() {
+                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
+                    internal.insert(s.name.clone(), value_ptr);
+                }
+
+                Ok(Some(PatchBlockInner {
+                    kind,
+                    name: code_page_name.to_string(),
+                    block,
+                    externs: self.externs.clone(),
+                    symbols: pointers,
+                    internal,
+                    relocations: self.relocations.clone(),
+                }))
+            } else {
+                // oom, throw error
+                unimplemented!()
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
 }

@@ -90,7 +90,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 for (symbol, ptr) in symbols {
                     //let p =
                     //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    pointers.insert(symbol.clone(), *ptr);
+                    pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
             PatchBlock::Data(PatchDataBlock {
@@ -99,13 +99,13 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 for (symbol, ptr) in internal {
                     //let p =
                     //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    pointers.insert(symbol.clone(), *ptr);
+                    pointers.insert(symbol.clone(), ptr.clone());
                 }
 
                 for (symbol, ptr) in symbols {
                     //let p =
                     //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    pointers.insert(symbol.clone(), *ptr);
+                    pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
         }
@@ -123,11 +123,11 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 for r in relocations {
                     let direct = pointers
                         .get(&r.name)
-                        .expect(&format!("symbol missing {}", &r.name));
+                        .expect(&format!("symbol missing {}", &r.name)).clone();
                     match r.effect() {
-                        AddToGot => add_to_got.insert(r.name.clone(), *direct),
-                        AddToPlt => add_to_plt.insert(r.name.clone(), *direct),
-                        DoNothing => add_direct.insert(r.name.clone(), *direct),
+                        AddToGot => add_to_got.insert(r.name.clone(), direct),
+                        AddToPlt => add_to_plt.insert(r.name.clone(), direct),
+                        DoNothing => add_direct.insert(r.name.clone(), direct),
                     };
                 }
             }
@@ -140,7 +140,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                     //let p = RelocationPointer::Direct(ptr.clone());
                     //let p =
                     //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
-                    add_to_got.insert(symbol.clone(), *ptr);
+                    add_to_got.insert(symbol.clone(), ptr.clone());
                 }
 
                 // add all data objects to the GOT
@@ -148,7 +148,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                     let direct = pointers
                         .get(&r.name)
                         .expect(&format!("symbol missing {}", &r.name));
-                    add_to_got.insert(r.name.clone(), *direct);
+                    add_to_got.insert(r.name.clone(), direct.clone());
                 }
             }
         }

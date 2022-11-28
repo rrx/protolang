@@ -3,22 +3,27 @@ use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::fmt;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use crate::SmartPointer;
 
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum RelocationPointer {
     Got(NonNull<u8>),
     Plt(NonNull<u8>),
     Direct(NonNull<u8>),
     Shared(NonNull<u8>),
+    Smart(SmartPointer),
 }
 impl RelocationPointer {
     pub fn as_ptr(&self) -> *const () {
         match self {
             Self::Got(p) | Self::Plt(p) | Self::Direct(p) | Self::Shared(p) => {
                 p.as_ptr() as *const ()
+            }
+            Self::Smart(p) => {
+                p.as_ptr() as *const()
             }
         }
     }
@@ -33,6 +38,7 @@ impl fmt::Display for RelocationPointer {
             Self::Plt(p) => write!(f, "P({:#08x})", p.as_ptr() as usize),
             Self::Direct(p) => write!(f, "D({:#08x})", p.as_ptr() as usize),
             Self::Shared(p) => write!(f, "S({:#08x})", p.as_ptr() as usize),
+            Self::Smart(p) => write!(f, "X({:#08x})", p.as_ptr() as usize),
         }
     }
 }

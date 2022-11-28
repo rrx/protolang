@@ -100,6 +100,7 @@ impl BlockFactory {
                 );
 
                 Some(Block {
+                    permission: BlockPermission::RW,
                     layout: b.layout,
                     size: b.size,
                     p: Some(b.p),
@@ -147,11 +148,24 @@ impl BlockFactoryInner {
     }
 }
 
+#[derive(Clone)]
+pub enum BlockReference  {
+    Heap(HeapBlock),
+    Block(BlockFactory)
+}
+
+#[derive(Clone)]
 pub struct SmartPointer {
     layout: Layout,
     p: NonNull<u8>,
-    block: HeapBlock,
+    block_ref: BlockReference,
 }
+impl fmt::Debug for SmartPointer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SmartPointer").field("p", &self.p).finish()
+    }
+}
+
 
 impl SmartPointer {
     pub fn as_ptr(&self) -> *const u8 {
@@ -169,7 +183,12 @@ impl SmartPointer {
 
 impl Drop for SmartPointer {
     fn drop(&mut self) {
-        self.block.clone().free(self);
+        match &self.block_ref {
+            BlockReference::Heap(b) => {
+                b.clone().free(self);
+            }
+            BlockReference::Block(_) => ()
+        }
     }
 }
 
@@ -221,7 +240,7 @@ impl HeapBlock {
         Some(SmartPointer {
             layout,
             p,
-            block: self.clone(),
+            block_ref: BlockReference::Heap(self.clone()),
         })
     }
 
@@ -241,8 +260,15 @@ impl HeapBlock {
     }
 }
 
+pub enum BlockPermission {
+    RW,
+    RO,
+    RX
+}
+
 pub struct Block {
     layout: Layout,
+    permission: BlockPermission,
     pub(crate) size: usize,
     p: Option<NonNull<u8>>,
     factory: BlockFactory,
@@ -255,6 +281,21 @@ impl fmt::Debug for Block {
 }
 
 impl Block {
+    pub fn offset(&self, relative_address: usize) -> SmartPointer {
+        if relative_address > self.layout.size()  {
+            panic!("Out of range");
+        }
+        let _size = self.layout.size() - relative_address;
+        unsafe {
+            let p = self.as_ptr().offset(relative_address as isize);
+            SmartPointer {
+                layout: self.layout,
+                p: NonNull::new(p as *mut u8).unwrap(),
+                block_ref: BlockReference::Block(self.factory.clone())
+            }
+        }
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         let ptr = self.p.unwrap().as_ptr();
         let size = self.layout.size();
@@ -279,6 +320,7 @@ impl Block {
         self.make_read_only()?;
         let p = self.p.take();
         Ok(Block {
+            permission: BlockPermission::RO,
             layout: self.layout,
             size: self.size,
             p,
@@ -291,6 +333,7 @@ impl Block {
         let p = self.p.take();
         log::debug!("make exec: {:#08x}", p.unwrap().as_ptr() as usize);
         Ok(Block {
+            permission: BlockPermission::RX,
             layout: self.layout,
             size: self.size,
             p,

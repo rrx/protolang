@@ -38,6 +38,12 @@ pub enum LinkedBlockInner {
 }
 
 #[derive(Debug)]
+pub enum PatchBlockKind {
+    Code,
+    Data,
+}
+
+#[derive(Debug)]
 pub enum PatchBlock {
     Code(PatchCodeBlock),
     Data(PatchDataBlock),
@@ -60,6 +66,17 @@ impl PatchBlock {
             Self::Data(block) => block.disassemble(),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct PatchBlockInner {
+    pub(crate) kind: PatchBlockKind,
+    pub(crate) name: String,
+    pub(crate) block: Block,
+    pub(crate) externs: HashSet<String>,
+    pub(crate) symbols: HashMap<String, RelocationPointer>,
+    pub(crate) internal: HashMap<String, RelocationPointer>,
+    pub(crate) relocations: Vec<CodeRelocation>,
 }
 
 #[derive(Debug)]
