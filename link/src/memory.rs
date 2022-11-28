@@ -149,9 +149,9 @@ impl BlockFactoryInner {
 }
 
 #[derive(Clone)]
-pub enum BlockReference  {
+pub enum BlockReference {
     Heap(HeapBlock),
-    Block(BlockFactory)
+    Block(BlockFactory),
 }
 
 #[derive(Clone)]
@@ -165,7 +165,6 @@ impl fmt::Debug for SmartPointer {
         f.debug_struct("SmartPointer").field("p", &self.p).finish()
     }
 }
-
 
 impl SmartPointer {
     pub fn as_ptr(&self) -> *const u8 {
@@ -187,7 +186,7 @@ impl Drop for SmartPointer {
             BlockReference::Heap(b) => {
                 b.clone().free(self);
             }
-            BlockReference::Block(_) => ()
+            BlockReference::Block(_) => (),
         }
     }
 }
@@ -263,7 +262,7 @@ impl HeapBlock {
 pub enum BlockPermission {
     RW,
     RO,
-    RX
+    RX,
 }
 
 pub struct Block {
@@ -282,7 +281,7 @@ impl fmt::Debug for Block {
 
 impl Block {
     pub fn offset(&self, relative_address: usize) -> SmartPointer {
-        if relative_address > self.layout.size()  {
+        if relative_address > self.layout.size() {
             panic!("Out of range");
         }
         let _size = self.layout.size() - relative_address;
@@ -291,7 +290,7 @@ impl Block {
             SmartPointer {
                 layout: self.layout,
                 p: NonNull::new(p as *mut u8).unwrap(),
-                block_ref: BlockReference::Block(self.factory.clone())
+                block_ref: BlockReference::Block(self.factory.clone()),
             }
         }
     }

@@ -18,10 +18,7 @@ fn test_live_static() {
     assert_eq!(0x11, ret);
 }
 
-
 fn main() {
     env_logger::init();
     test_live_static();
 }
-
-

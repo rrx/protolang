@@ -18,9 +18,8 @@ pub struct LinkModule {
 
     /// symbols exported
     exports: im::HashMap<String, *const ()>,
-
-    /// Global Object Table, optional
-    got: Option<DataBlock>,
+    // Global Object Table, optional
+    //got: Option<DataBlock>,
     //blocks: im::HashMap<String, Block>,
 }
 

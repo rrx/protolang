@@ -1,8 +1,8 @@
 use super::*;
+use crate::SmartPointer;
 use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::fmt;
 use std::ptr::NonNull;
-use crate::SmartPointer;
 
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;
@@ -21,9 +21,7 @@ impl RelocationPointer {
             Self::Got(p) | Self::Plt(p) | Self::Direct(p) | Self::Shared(p) => {
                 p.as_ptr() as *const ()
             }
-            Self::Smart(p) => {
-                p.as_ptr() as *const()
-            }
+            Self::Smart(p) => p.as_ptr() as *const (),
         }
     }
     pub fn direct(p: *const ()) -> Option<Self> {

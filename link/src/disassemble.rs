@@ -9,7 +9,7 @@ impl PatchBlock {
                 eprintln!(
                     "Code Block Disassemble: Base: {:#08x}, Name: {}",
                     base, &self.name
-                    );
+                );
                 let mut pointers = im::HashMap::new();
                 for (name, ptr) in &self.symbols {
                     eprintln!(" {:#08x}: {}", ptr.as_ptr() as usize, name);
@@ -23,7 +23,7 @@ impl PatchBlock {
                 disassemble_code(&self.block.as_slice()[0..size], pointers);
             }
 
-            PatchBlockKind::Data => {
+            PatchBlockKind::Data | PatchBlockKind::DataRO => {
                 let base = self.block.as_ptr() as usize;
                 eprint_bytes(&self.block.as_slice()[0..self.block.size]);
                 let mut pointers = im::HashMap::new();
@@ -31,7 +31,7 @@ impl PatchBlock {
                 eprintln!(
                     "Data Block Disassemble: Base: {:#08x}, Name: {}",
                     base, &self.name
-                    );
+                );
                 eprintln!("data_rw@{:#08x}+{:#x}", base, self.block.size);
                 for (name, ptr_ref) in &self.symbols {
                     let ptr = ptr_ref.as_ptr();
@@ -44,7 +44,7 @@ impl PatchBlock {
                             ptr as usize - base,
                             value,
                             &name
-                            )
+                        )
                     }
                 }
                 let size = self.block.size;
@@ -52,25 +52,6 @@ impl PatchBlock {
                 println!(" buf: {:?}", buf);
             }
         }
-    }
-}
-
-impl ExecutableCodeBlock {
-    pub fn disassemble(&self) {
-        let base = self.as_ptr() as usize;
-        println!("code@{:#08x}", base);
-        let _pointers = im::HashMap::new();
-        disassemble_code(&self.as_slice()[0..self.0.size], _pointers);
-    }
-}
-
-impl ReadonlyDataBlock {
-    pub fn disassemble(&self) {
-        let base = self.as_ptr() as usize;
-        println!("data_ro@{:#08x}+{:#x}", base, self.0.size);
-        eprint_bytes(&self.as_slice()[0..self.size()]);
-        //let _pointers = im::HashMap::new();
-        //disassemble_data(&self.as_slice()[0..self.0.size], _pointers);
     }
 }
 
@@ -83,26 +64,6 @@ fn eprint_bytes(buf: &[u8]) {
     .unwrap();
     eprintln!("{}", x);
 }
-/*
-impl WritableDataBlock {
-    pub fn disassemble(&self) {
-        let base = self.as_ptr() as usize;
-        eprintln!("data_rw@{:#08x}+{:#x}", base, self.0.size);
-        eprint_bytes(&self.as_slice()[0..self.size()]);
-        //let _pointers = im::HashMap::new();
-        //disassemble_data(&self.as_slice()[0..self.0.size], _pointers);
-    }
-}
-*/
-
-/*
-pub fn disassemble_data(buf: &[u8], pointers: im::HashMap<usize, String>) {
-    for (ptr, name) in pointers {
-        println!("ptr: {:?}", (ptr, name));
-    }
-    println!("buf: {:?}", buf);
-}
-*/
 
 pub fn disassemble_buf(buf: &[u8]) {
     let pointers = im::HashMap::new();

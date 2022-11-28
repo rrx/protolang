@@ -56,7 +56,9 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
             .map(|(_, s)| s.clone())
             .filter(|s| s.kind == CodeSymbolKind::Data || s.kind == CodeSymbolKind::Section)
             .collect::<Vec<_>>();
-        if let Some(block) = unlinked.create_block(&name, PatchBlockKind::Data, data_symbols, &mut link.mem)? {
+        if let Some(block) =
+            unlinked.create_block(&name, PatchBlockKind::Data, data_symbols, &mut link.mem)?
+        {
             //block.disassemble();
             blocks.push((name, block));
         }
@@ -69,7 +71,9 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
             .filter(|s| s.kind == CodeSymbolKind::Text)
             .collect::<Vec<_>>();
         let name = format!("{}.code", &unlinked.name);
-        if let Some(block) = unlinked.create_block(&name, PatchBlockKind::Code, code_symbols, &mut link.mem)? {
+        if let Some(block) =
+            unlinked.create_block(&name, PatchBlockKind::Code, code_symbols, &mut link.mem)?
+        {
             //block.disassemble();
             blocks.push((name, block));
         }
@@ -79,7 +83,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     let mut pointers = im::HashMap::new();
     for (_block_name, block) in &blocks {
         match &block.kind {
-            PatchBlockKind::Code =>  {
+            PatchBlockKind::Code => {
                 for symbol in &block.externs {
                     if let Some(ptr) = link.libraries.search_dynamic(&symbol) {
                         // data pointers should already have a got in the shared library
@@ -102,7 +106,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                     pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
-            PatchBlockKind::Data => {
+            PatchBlockKind::Data | PatchBlockKind::DataRO => {
                 for (symbol, ptr) in &block.internal {
                     pointers.insert(symbol.clone(), ptr.clone());
                 }
@@ -126,7 +130,8 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 for r in &block.relocations {
                     let direct = pointers
                         .get(&r.name)
-                        .expect(&format!("symbol missing {}", &r.name)).clone();
+                        .expect(&format!("symbol missing {}", &r.name))
+                        .clone();
                     match r.effect() {
                         AddToGot => add_to_got.insert(r.name.clone(), direct),
                         AddToPlt => add_to_plt.insert(r.name.clone(), direct),
@@ -134,7 +139,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                     };
                 }
             }
-            PatchBlockKind::Data => {
+            PatchBlockKind::Data | PatchBlockKind::DataRO => {
                 for (symbol, ptr) in &block.symbols {
                     add_to_got.insert(symbol.clone(), ptr.clone());
                 }
