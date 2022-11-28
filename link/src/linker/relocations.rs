@@ -264,11 +264,11 @@ impl CodeRelocation {
 }
 
 pub fn patch_code(
-    block: PatchBlockInner,
+    block: PatchBlock,
     pointers: PatchSymbolPointers,
     got: TableVersion,
     plt: TableVersion,
-) -> PatchBlockInner {
+) -> PatchBlock {
     log::debug!(
         "patching code {} at base {:#08x}",
         &block.name,
@@ -296,11 +296,11 @@ pub fn patch_code(
 }
 
 pub fn patch_data(
-    block: PatchBlockInner,
+    block: PatchBlock,
     pointers: PatchSymbolPointers,
     got: TableVersion,
     plt: TableVersion,
-) -> PatchBlockInner {
+) -> PatchBlock {
     log::debug!(
         "patching data {} at base {:#08x}",
         &block.name,

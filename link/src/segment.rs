@@ -222,19 +222,6 @@ impl UnlinkedCodeSegmentInner {
                 symbols_by_id.insert(s.index().clone(), s);
             }
 
-            /*
-            for section in obj_file.sections() {
-                let section_name = section.name()?.to_string();
-                internal.insert(section_name.clone(), CodeSymbol {
-                    name: section_name.clone(),
-                    size: section.size(),
-                    address: section.address(),
-                    kind: CodeSymbolKind::Section,
-                    def: CodeSymbolDefinition::Defined
-                });
-            }
-            */
-
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
                 let section_index = section.index().0;
@@ -357,148 +344,13 @@ impl UnlinkedCodeSegmentInner {
         Ok(segments)
     }
 
-    pub fn create_data2(
-        &self,
-        code_page_name: &str,
-        b: &mut BlockFactory,
-    ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
-        // get a list of data symbols
-        let symbols = self
-            .defined
-            .iter()
-            .filter(|(_, s)| s.kind == CodeSymbolKind::Data || s.kind == CodeSymbolKind::Section)
-            .collect::<Vec<_>>();
-
-        if symbols.len() > 0 {
-            // allocate enough space for the actual data, and a lookup table as well
-            let size = self.bytes.len() + symbols.len() * std::mem::size_of::<usize>();
-
-            if let Some(block) = b.alloc_block(size) {
-                log::debug!(
-                    "Data Block: {}, size: {}",
-                    &code_page_name,
-                    self.bytes.len()
-                );
-                for (_symbol_name, symbol) in &symbols {
-                    log::debug!(" Data Symbol: {}", symbol);
-                }
-                // to create the data section, we need to copy the data, but we also need
-                // to create pointers to the data
-
-                // copy the data over, and the symbols have the offsets
-                // append the got entries after the data
-                block.as_mut_slice()[0..self.bytes.len()].copy_from_slice(&self.bytes);
-                let mut pointers = HashMap::new();
-                let mut internal = HashMap::new();
-
-                let block_ptr = RelocationPointer::Smart(block.offset(0));
-                internal.insert(self.section_name.clone(), block_ptr.clone());
-                pointers.insert(self.section_name.clone(), block_ptr);
-
-                for (_, s) in &symbols {
-                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
-                    pointers.insert(s.name.clone(), value_ptr);
-                }
-
-                for s in self.internal.values() {
-                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
-                    internal.insert(s.name.clone(), value_ptr);
-                }
-
-                Ok(Some(PatchBlock::Data(PatchDataBlock {
-                    name: code_page_name.to_string(),
-                    block: WritableDataBlock::new(block),
-                    symbols: pointers,
-                    internal,
-                    relocations: self.relocations.clone(),
-                })))
-            } else {
-                // oom?
-                unimplemented!()
-            }
-        } else {
-            log::debug!(
-                "no symbols in {}, size:{}, {:?}",
-                code_page_name,
-                self.bytes.len(),
-                &self.relocations.len()
-            );
-            Ok(None)
-        }
-    }
-
-    pub fn create_code2(
-        &self,
-        code_page_name: &str,
-        b: &mut BlockFactory,
-    ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
-        // get a list of data symbols
-        let symbols = self
-            .defined
-            .iter()
-            .filter(|(_, s)| s.kind == CodeSymbolKind::Text)
-            .collect::<Vec<_>>();
-
-        if symbols.len() > 0 {
-            let size = self.bytes.len();
-            if let Some(block) = b.alloc_block(size) {
-                log::debug!(
-                    "Code Block: {}, size: {}",
-                    &code_page_name,
-                    self.bytes.len()
-                );
-                for (_symbol_name, symbol) in &symbols {
-                    log::debug!(" Code Symbol: {}", symbol);
-                }
-
-                for r in &self.relocations {
-                    log::debug!(" Code Relocation: {}", r);
-                }
-
-                // copy code into the block
-                block.as_mut_slice()[0..size].copy_from_slice(&self.bytes);
-
-                // for each symbol, add a reference to it's full address
-                let mut pointers = HashMap::new();
-                let mut internal = HashMap::new();
-                let block_ptr = RelocationPointer::Smart(block.offset(0));
-                internal.insert(self.section_name.clone(), block_ptr.clone());
-                pointers.insert(self.section_name.clone(), block_ptr);
-
-                for (_, s) in &symbols {
-                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
-                    pointers.insert(s.name.clone(), value_ptr);
-                }
-
-                for s in self.internal.values() {
-                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
-                    internal.insert(s.name.clone(), value_ptr);
-                }
-
-                Ok(Some(PatchBlock::Code(PatchCodeBlock {
-                    name: code_page_name.to_string(),
-                    block: WritableCodeBlock::new(block),
-                    externs: self.externs.clone(),
-                    symbols: pointers,
-                    internal,
-                    relocations: self.relocations.clone(),
-                })))
-            } else {
-                // oom?
-                unimplemented!()
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
     pub fn create_block(
         &self,
         code_page_name: &str,
         kind: PatchBlockKind,
         symbols: Vec<CodeSymbol>,
         b: &mut BlockFactory,
-    ) -> Result<Option<PatchBlockInner>, Box<dyn Error>> {
+    ) -> Result<Option<PatchBlock>, Box<dyn Error>> {
         if symbols.len() > 0 {
             let size = self.bytes.len();
             if let Some(block) = b.alloc_block(size) {
@@ -536,7 +388,7 @@ impl UnlinkedCodeSegmentInner {
                     internal.insert(s.name.clone(), value_ptr);
                 }
 
-                Ok(Some(PatchBlockInner {
+                Ok(Some(PatchBlock {
                     kind,
                     name: code_page_name.to_string(),
                     block,

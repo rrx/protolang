@@ -23,9 +23,6 @@ impl LinkVersion {
 
     pub fn lookup(&self, symbol: &str) -> Option<RelocationPointer> {
         match self.pointers.get(symbol) {
-            //Some(RelocationPointer::Got(ptr)) => unsafe {
-            //Some(*(*ptr as *const usize) as *const ())
-            //},
             Some(ptr) => Some(ptr.clone()),
             None => self.libraries.search_dynamic(symbol),
         }
@@ -59,17 +56,11 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
             .map(|(_, s)| s.clone())
             .filter(|s| s.kind == CodeSymbolKind::Data || s.kind == CodeSymbolKind::Section)
             .collect::<Vec<_>>();
-
         if let Some(block) = unlinked.create_block(&name, PatchBlockKind::Data, data_symbols, &mut link.mem)? {
             //block.disassemble();
             blocks.push((name, block));
         }
 
-        //if let Some(block) = unlinked.create_data(&name, &mut link.mem)? {
-            //block.disassemble();
-            //blocks.push((name, block));
-        //}
-        //
         // get a list of code symbols
         let code_symbols = unlinked
             .defined
@@ -108,21 +99,15 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 }
 
                 for (symbol, ptr) in &block.symbols {
-                    //let p =
-                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
                     pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
             PatchBlockKind::Data => {
                 for (symbol, ptr) in &block.internal {
-                    //let p =
-                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
                     pointers.insert(symbol.clone(), ptr.clone());
                 }
 
                 for (symbol, ptr) in &block.symbols {
-                    //let p =
-                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
                     pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
@@ -151,9 +136,6 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
             }
             PatchBlockKind::Data => {
                 for (symbol, ptr) in &block.symbols {
-                    //let p = RelocationPointer::Direct(ptr.clone());
-                    //let p =
-                    //RelocationPointer::Direct(NonNull::new(ptr.clone() as *mut u8).unwrap());
                     add_to_got.insert(symbol.clone(), ptr.clone());
                 }
 

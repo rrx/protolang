@@ -33,9 +33,9 @@ impl LinkedBlock {
 }
 #[derive(Debug)]
 pub enum LinkedBlockInner {
-    Code(PatchBlockInner),
-    DataRO(PatchBlockInner),
-    DataRW(PatchBlockInner),
+    Code(PatchBlock),
+    DataRO(PatchBlock),
+    DataRW(PatchBlock),
 }
 
 
@@ -45,25 +45,14 @@ pub enum PatchBlockKind {
     Data,
 }
 
+
+/*
 #[derive(Debug)]
 pub enum PatchBlock {
     Code(PatchCodeBlock),
     Data(PatchDataBlock),
 }
 impl PatchBlock {
-    /*
-    pub fn patch(
-        mut self,
-        pointers: PatchSymbolPointers,
-        got: TableVersion,
-        plt: TableVersion,
-    ) -> LinkedBlock {
-        match self {
-            Self::Code(block) => patch_code(block, pointers, got, plt),
-            Self::Data(block) => patch_data(block, pointers, got, plt),
-        }
-    }
-    */
     pub fn disassemble(&self) {
         match self {
             Self::Code(block) => block.disassemble(),
@@ -71,9 +60,10 @@ impl PatchBlock {
         }
     }
 }
+*/
 
 #[derive(Debug)]
-pub struct PatchBlockInner {
+pub struct PatchBlock {
     pub(crate) kind: PatchBlockKind,
     pub(crate) name: String,
     pub(crate) block: Block,
@@ -82,7 +72,7 @@ pub struct PatchBlockInner {
     pub(crate) internal: HashMap<String, RelocationPointer>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }
-impl PatchBlockInner {
+impl PatchBlock {
     pub fn patch(
         mut self,
         pointers: PatchSymbolPointers,

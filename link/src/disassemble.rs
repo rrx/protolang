@@ -1,7 +1,7 @@
 use super::*;
 use capstone::prelude::*;
 
-impl PatchBlockInner {
+impl PatchBlock {
     pub fn disassemble(&self) {
         match self.kind {
             PatchBlockKind::Code => {
