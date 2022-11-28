@@ -2,7 +2,6 @@ use super::*;
 use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::fmt;
 use std::ptr::NonNull;
-use std::sync::Arc;
 use crate::SmartPointer;
 
 const R_X86_64_GOTPCREL: u32 = 41;
@@ -292,7 +291,6 @@ pub fn patch_code(
     }
 
     block
-    //LinkedBlock(Arc::new(LinkedBlockInner::Code(block.make_executable().unwrap())))
 }
 
 pub fn patch_data(
@@ -307,7 +305,6 @@ pub fn patch_data(
         block.block.as_ptr() as usize
     );
 
-    //block.disassemble();
     for r in &block.relocations {
         let patch_base = block.block.as_ptr();
         let addr = match r.effect() {
@@ -333,6 +330,5 @@ pub fn patch_data(
 
         r.patch(patch_base as *mut u8, addr);
     }
-    //block.disassemble();
     block
 }

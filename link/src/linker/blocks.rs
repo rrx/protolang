@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::error::Error;
 
 pub enum DataBlock {
-    RW(WritableDataBlock),
+    //RW(WritableDataBlock),
     RO(ReadonlyDataBlock),
 }
 
@@ -22,12 +22,11 @@ pub type LinkedSymbolPointers = im::HashMap<String, RelocationPointer>;
 pub struct LinkedBlock(pub Arc<LinkedBlockInner>);
 impl LinkedBlock {
     pub fn disassemble(&self) {
-        //let pointers = im::HashMap::new();
         let inner = &self.0.as_ref();
         match inner {
-            LinkedBlockInner::Code(block) => block.disassemble(), //disassemble_code(block.as_slice(), pointers),
-            LinkedBlockInner::DataRO(block) => block.disassemble(), //disassemble_data(block.as_slice(), pointers),
-            LinkedBlockInner::DataRW(block) => block.disassemble(), //disassemble_data(block.as_slice(), pointers),
+            LinkedBlockInner::Code(block) => block.disassemble(),
+            LinkedBlockInner::DataRO(block) => block.disassemble(),
+            LinkedBlockInner::DataRW(block) => block.disassemble(),
         }
     }
 }
@@ -44,23 +43,6 @@ pub enum PatchBlockKind {
     Code,
     Data,
 }
-
-
-/*
-#[derive(Debug)]
-pub enum PatchBlock {
-    Code(PatchCodeBlock),
-    Data(PatchDataBlock),
-}
-impl PatchBlock {
-    pub fn disassemble(&self) {
-        match self {
-            Self::Code(block) => block.disassemble(),
-            Self::Data(block) => block.disassemble(),
-        }
-    }
-}
-*/
 
 #[derive(Debug)]
 pub struct PatchBlock {
@@ -86,7 +68,7 @@ impl PatchBlock {
         block.finalize()
     }
 
-    pub fn finalize(mut self) -> Result<LinkedBlock, Box<dyn Error>> {
+    pub fn finalize(self) -> Result<LinkedBlock, Box<dyn Error>> {
         match self.kind {
             PatchBlockKind::Code => {
                 Ok(LinkedBlock(Arc::new(LinkedBlockInner::Code(self.make_executable()?))))
@@ -108,6 +90,8 @@ impl PatchBlock {
     }
 }
 
+
+/*
 #[derive(Debug)]
 pub struct PatchDataBlock {
     pub(crate) name: String,
@@ -126,7 +110,9 @@ pub struct PatchCodeBlock {
     pub(crate) externs: HashSet<String>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }
+*/
 
+/*
 #[derive(Debug)]
 pub struct WritableDataBlock(pub(crate) Block);
 impl WritableDataBlock {
@@ -154,6 +140,7 @@ impl WritableDataBlock {
         Ok(ReadonlyDataBlock(self.0.make_readonly_block()?))
     }
 }
+*/
 
 #[derive(Debug)]
 pub struct WritableCodeBlock(pub(crate) Block);

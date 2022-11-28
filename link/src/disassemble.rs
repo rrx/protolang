@@ -6,7 +6,7 @@ impl PatchBlock {
         match self.kind {
             PatchBlockKind::Code => {
                 let base = self.block.as_ptr() as usize;
-                println!(
+                eprintln!(
                     "Code Block Disassemble: Base: {:#08x}, Name: {}",
                     base, &self.name
                     );
@@ -25,60 +25,33 @@ impl PatchBlock {
 
             PatchBlockKind::Data => {
                 let base = self.block.as_ptr() as usize;
-                eprintln!("data_rw@{:#08x}+{:#x}", base, self.block.size);
                 eprint_bytes(&self.block.as_slice()[0..self.block.size]);
-            }
-        }
-    }
-}
-
-impl PatchDataBlock {
-    pub fn disassemble(&self) {
-        let mut pointers = im::HashMap::new();
-        let base = self.block.as_ptr() as usize;
-        println!(
-            "Data Block Disassemble: Base: {:#08x}, Name: {}",
-            base, &self.name
-        );
-        for (name, ptr_ref) in &self.symbols {
-            let ptr = ptr_ref.as_ptr();
-            pointers.insert(ptr as usize - base, name.clone());
-            unsafe {
-                let value = std::ptr::read(ptr as *const u64);
+                let mut pointers = im::HashMap::new();
+                let base = self.block.as_ptr() as usize;
                 eprintln!(
-                    " {:#08x}, Offset: {:#08x}, Value: {:#08x} {}",
-                    ptr as usize,
-                    ptr as usize - base,
-                    value,
-                    &name
-                )
+                    "Data Block Disassemble: Base: {:#08x}, Name: {}",
+                    base, &self.name
+                    );
+                eprintln!("data_rw@{:#08x}+{:#x}", base, self.block.size);
+                for (name, ptr_ref) in &self.symbols {
+                    let ptr = ptr_ref.as_ptr();
+                    pointers.insert(ptr as usize - base, name.clone());
+                    unsafe {
+                        let value = std::ptr::read(ptr as *const u64);
+                        eprintln!(
+                            " {:#08x}, Offset: {:#08x}, Value: {:#08x} {}",
+                            ptr as usize,
+                            ptr as usize - base,
+                            value,
+                            &name
+                            )
+                    }
+                }
+                let size = self.block.size;
+                let buf = &self.block.as_slice()[0..size];
+                println!(" buf: {:?}", buf);
             }
         }
-        let size = self.block.0.size;
-        let buf = &self.block.as_slice()[0..size];
-        //disassemble_data(&self.block.as_slice()[0..size], pointers);
-        println!(" buf: {:?}", buf);
-    }
-}
-
-impl PatchCodeBlock {
-    pub fn disassemble(&self) {
-        let base = self.block.as_ptr() as usize;
-        println!(
-            "Code Block Disassemble: Base: {:#08x}, Name: {}",
-            base, &self.name
-        );
-        let mut pointers = im::HashMap::new();
-        for (name, ptr) in &self.symbols {
-            eprintln!(" {:#08x}: {}", ptr.as_ptr() as usize, name);
-            pointers.insert(ptr.as_ptr() as usize - base, name.clone());
-        }
-        for r in &self.relocations {
-            eprintln!(" {}", &r);
-        }
-        let size = self.block.0.size;
-        let buf = &self.block.as_slice()[0..size];
-        disassemble_code(&self.block.as_slice()[0..size], pointers);
     }
 }
 
@@ -110,7 +83,7 @@ fn eprint_bytes(buf: &[u8]) {
     .unwrap();
     eprintln!("{}", x);
 }
-
+/*
 impl WritableDataBlock {
     pub fn disassemble(&self) {
         let base = self.as_ptr() as usize;
@@ -120,6 +93,7 @@ impl WritableDataBlock {
         //disassemble_data(&self.as_slice()[0..self.0.size], _pointers);
     }
 }
+*/
 
 /*
 pub fn disassemble_data(buf: &[u8], pointers: im::HashMap<usize, String>) {

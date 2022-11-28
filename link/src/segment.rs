@@ -326,9 +326,6 @@ impl UnlinkedCodeSegmentInner {
                     data.to_vec()
                 };
 
-                //let got_entries = vec![];
-                //let plt_entries = vec![];
-
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
                     section_name,
