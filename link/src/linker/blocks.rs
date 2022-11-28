@@ -88,17 +88,22 @@ impl PatchBlockInner {
         pointers: PatchSymbolPointers,
         got: TableVersion,
         plt: TableVersion,
-    ) -> LinkedBlock {
-        match self.kind {
+    ) -> Result<LinkedBlock, Box<dyn Error>> {
+        let block = match self.kind {
             PatchBlockKind::Code => patch_code(self, pointers, got, plt),
             PatchBlockKind::Data => patch_data(self, pointers, got, plt),
-        }
+        };
+        block.finalize()
     }
 
-    pub fn finalize(mut self) -> Result<Self, Box<dyn Error>> {
+    pub fn finalize(mut self) -> Result<LinkedBlock, Box<dyn Error>> {
         match self.kind {
-            PatchBlockKind::Code => Ok(self),
-            PatchBlockKind::Data => Ok(self.make_executable()?)
+            PatchBlockKind::Code => {
+                Ok(LinkedBlock(Arc::new(LinkedBlockInner::Code(self.make_executable()?))))
+            }
+            PatchBlockKind::Data => {
+                Ok(LinkedBlock(Arc::new(LinkedBlockInner::DataRW(self))))
+            }
         }
     }
 

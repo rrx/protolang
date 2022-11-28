@@ -268,7 +268,7 @@ pub fn patch_code(
     pointers: PatchSymbolPointers,
     got: TableVersion,
     plt: TableVersion,
-) -> LinkedBlock {
+) -> PatchBlockInner {
     log::debug!(
         "patching code {} at base {:#08x}",
         &block.name,
@@ -291,7 +291,8 @@ pub fn patch_code(
         r.patch(patch_base as *mut u8, addr);
     }
 
-    LinkedBlock(Arc::new(LinkedBlockInner::Code(block.make_executable().unwrap())))
+    block
+    //LinkedBlock(Arc::new(LinkedBlockInner::Code(block.make_executable().unwrap())))
 }
 
 pub fn patch_data(
@@ -299,7 +300,7 @@ pub fn patch_data(
     pointers: PatchSymbolPointers,
     got: TableVersion,
     plt: TableVersion,
-) -> LinkedBlock {
+) -> PatchBlockInner {
     log::debug!(
         "patching data {} at base {:#08x}",
         &block.name,
@@ -333,6 +334,5 @@ pub fn patch_data(
         r.patch(patch_base as *mut u8, addr);
     }
     //block.disassemble();
-
-    LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block)))
+    block
 }

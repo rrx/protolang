@@ -233,7 +233,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     // patch everything
     let mut linked = im::HashMap::new();
     for (block_name, block) in blocks {
-        let patched_block = block.patch(patch_source.clone(), got.clone(), plt.clone());
+        let patched_block = block.patch(patch_source.clone(), got.clone(), plt.clone())?;
         //patched_block.disassemble();
         linked.insert(block_name.clone(), patched_block);
     }
