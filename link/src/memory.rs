@@ -23,6 +23,10 @@ pub struct BlockInner {
 }
 
 impl BlockFactoryInner {
+    pub fn used(&self) -> usize {
+        self.heap.used()
+    }
+
     pub fn force_rw(&mut self) {
         self.mprotect(libc::PROT_READ | libc::PROT_WRITE).unwrap();
     }
@@ -56,6 +60,10 @@ impl BlockFactory {
     pub fn get_mem_ptr(&self) -> (*const u8, usize) {
         let m = &self.0.lock().unwrap().m;
         (m.as_ptr(), m.len())
+    }
+
+    pub fn used(&self) -> usize {
+        self.0.as_ref().lock().unwrap().heap.used()
     }
 
     pub fn force_rw(&mut self) {
@@ -182,9 +190,10 @@ impl SmartPointer {
 
 impl Drop for SmartPointer {
     fn drop(&mut self) {
+        eprintln!("dropping: {:?}", self);
         match &self.block_ref {
             BlockReference::Heap(b) => {
-                b.clone().free(self);
+                //b.clone().free(self);
             }
             BlockReference::Block(_) => (),
         }
@@ -194,6 +203,12 @@ impl Drop for SmartPointer {
 pub struct HeapBlockInner {
     block: Block,
     heap: Heap,
+}
+
+impl HeapBlockInner {
+    pub fn used(&self) -> usize {
+        self.heap.used()
+    }
 }
 
 #[derive(Clone)]
@@ -256,6 +271,10 @@ impl HeapBlock {
                 .heap
                 .deallocate(pointer.p, pointer.layout);
         }
+    }
+
+    pub fn used(&self) -> usize {
+        self.0.lock().unwrap().heap.used()
     }
 }
 

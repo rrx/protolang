@@ -82,10 +82,17 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     // generate a list of symbols and their pointers
     let mut pointers = im::HashMap::new();
     for (_block_name, block) in &blocks {
+        for (symbol, ptr) in &block.symbols {
+            pointers.insert(symbol.clone(), ptr.clone());
+        }
+    }
+
+    for (_block_name, block) in &blocks {
         match &block.kind {
             PatchBlockKind::Code => {
                 for symbol in &block.externs {
-                    if let Some(ptr) = link.libraries.search_dynamic(&symbol) {
+                    if pointers.contains_key(symbol) {
+                    } else if let Some(ptr) = link.libraries.search_dynamic(&symbol) {
                         // data pointers should already have a got in the shared library
                         unsafe {
                             let p = ptr.as_ptr() as *const usize;
@@ -99,19 +106,14 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
 
                             pointers.insert(symbol.clone(), ptr);
                         }
+                    } else {
+                        log::error!("Unable to resolve shared library:{}", symbol);
+                        return Err(LinkError::NotFound.into());
                     }
-                }
-
-                for (symbol, ptr) in &block.symbols {
-                    pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
             PatchBlockKind::Data | PatchBlockKind::DataRO => {
                 for (symbol, ptr) in &block.internal {
-                    pointers.insert(symbol.clone(), ptr.clone());
-                }
-
-                for (symbol, ptr) in &block.symbols {
                     pointers.insert(symbol.clone(), ptr.clone());
                 }
             }
@@ -167,8 +169,8 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
     }
 
     // get tables
-    let mut got = link.got.clone();
-    let mut plt = link.plt.clone();
+    let mut got = link.got.as_ref().unwrap().clone();
+    let mut plt = link.plt.as_ref().unwrap().clone();
 
     // create a GOT entry, and add it to the mapping for patch
     for (name, direct) in add_to_got {
@@ -180,7 +182,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         p.copy(buf.as_slice());
         patch_source.insert(
             name.clone(),
-            RelocationPointer::Got(NonNull::new(p.as_ptr() as *mut u8).unwrap()),
+            RelocationPointer::Got(p.clone()), //NonNull::new(p.as_ptr() as *mut u8).unwrap()),
         );
         got = got.update(name, p);
     }

@@ -10,6 +10,10 @@ impl SmartBlock {
     pub fn new(heap: HeapBlock) -> Self {
         Self { heap }
     }
+
+    pub fn used(&self) -> usize {
+        self.heap.used()
+    }
 }
 
 #[derive(Clone)]
@@ -35,6 +39,14 @@ impl TableVersion {
             block,
             entries: im::HashMap::new(),
         }
+    }
+
+    pub fn used(&self) -> usize {
+        self.block.used()
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
     }
 
     pub fn create_buffer(&mut self, size: usize) -> SmartPointer {

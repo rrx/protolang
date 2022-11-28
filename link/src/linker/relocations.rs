@@ -9,7 +9,7 @@ const R_X86_64_REX_GOTP: u32 = 42;
 
 #[derive(Clone, Debug)]
 pub enum RelocationPointer {
-    Got(NonNull<u8>),
+    Got(SmartPointer), //NonNull<u8>),
     Plt(NonNull<u8>),
     Direct(NonNull<u8>),
     Shared(NonNull<u8>),
@@ -18,14 +18,21 @@ pub enum RelocationPointer {
 impl RelocationPointer {
     pub fn as_ptr(&self) -> *const () {
         match self {
-            Self::Got(p) | Self::Plt(p) | Self::Direct(p) | Self::Shared(p) => {
-                p.as_ptr() as *const ()
-            }
+            Self::Plt(p) | Self::Direct(p) | Self::Shared(p) => p.as_ptr() as *const (),
+            Self::Got(p) => p.as_ptr() as *const (),
             Self::Smart(p) => p.as_ptr() as *const (),
         }
     }
-    pub fn direct(p: *const ()) -> Option<Self> {
+    pub fn direct2(p: *const ()) -> Option<Self> {
         NonNull::new(p as *mut u8).map(|p| Self::Direct(p))
+    }
+
+    pub fn shared(p: *const ()) -> Option<Self> {
+        NonNull::new(p as *mut u8).map(|p| Self::Shared(p))
+    }
+
+    pub fn smart(p: SmartPointer) -> Self {
+        Self::Smart(p)
     }
 }
 impl fmt::Display for RelocationPointer {

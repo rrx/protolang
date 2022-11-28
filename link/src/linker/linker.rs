@@ -13,10 +13,23 @@ pub struct Link {
     pub(crate) unlinked: HashMap<String, UnlinkedCodeSegment>,
     pub(crate) libraries: SharedLibraryRepo,
     pub(crate) mem: BlockFactory,
-    plt_block: SmartBlock,
-    got_block: SmartBlock,
-    pub(crate) got: TableVersion,
-    pub(crate) plt: TableVersion,
+    //plt_block: SmartBlock,
+    //got_block: SmartBlock,
+    pub(crate) got: Option<TableVersion>,
+    pub(crate) plt: Option<TableVersion>,
+}
+
+impl Drop for Link {
+    fn drop(&mut self) {
+        self.libraries.clear();
+        eprintln!("GOT Used: {}", self.got.as_ref().unwrap().used());
+        eprintln!("PLT Used: {}", self.plt.as_ref().unwrap().used());
+        self.got.take();
+        self.plt.take();
+        self.unlinked.clear();
+        eprintln!("MEM Used: {}", self.mem.used());
+        assert_eq!(self.used(), 0);
+    }
 }
 
 impl Link {
@@ -33,11 +46,15 @@ impl Link {
             unlinked: HashMap::new(),
             libraries: SharedLibraryRepo::default(),
             mem,
-            got_block,
-            plt_block,
-            got,
-            plt,
+            //got_block,
+            //plt_block,
+            got: Some(got),
+            plt: Some(plt),
         }
+    }
+
+    pub fn used(&self) -> usize {
+        self.mem.used()
     }
 
     pub fn get_mem_ptr(&self) -> (*const u8, usize) {

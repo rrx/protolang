@@ -13,7 +13,7 @@ pub enum Library {
 }
 
 impl Library {
-    pub fn lookup(&self, name: &str) -> Option<*const ()> {
+    pub fn lookup(&self, name: &str) -> Option<RelocationPointer> {
         let cstr = CString::new(name).unwrap();
         unsafe {
             match self {
@@ -21,7 +21,7 @@ impl Library {
                     let result: Result<libloading::Symbol<unsafe fn()>, libloading::Error> =
                         lib.get(cstr.as_bytes());
                     if let Ok(f) = result {
-                        Some(f.into_raw().into_raw() as *const ())
+                        RelocationPointer::shared(f.into_raw().into_raw() as *const ())
                     } else {
                         None
                     }
@@ -31,7 +31,7 @@ impl Library {
                     if symbol.is_null() {
                         None
                     } else {
-                        Some(symbol as *const ())
+                        RelocationPointer::shared(symbol as *const ())
                     }
                 }
             }
@@ -49,11 +49,11 @@ impl Library {
         // call the main function
 
         // make sure we dereference the pointer!
-        let ptr = self.lookup(name).ok_or(crate::LinkError::SymbolNotFound)? as *const ();
+        let ptr = self.lookup(name).ok_or(crate::LinkError::SymbolNotFound)?;
         unsafe {
             type MyFunc<P, T> = unsafe extern "cdecl" fn(P) -> T;
-            log::debug!("invoking {} @ {:#08x}", name, ptr as usize);
-            let f: MyFunc<P, T> = std::mem::transmute(ptr);
+            log::debug!("invoking {} @ {:#08x}", name, ptr.as_ptr() as usize);
+            let f: MyFunc<P, T> = std::mem::transmute(ptr.as_ptr());
             let ret = f(args);
             Ok(ret)
         }
@@ -63,6 +63,11 @@ impl Library {
 #[derive(Clone)]
 pub struct SharedLibraryRepo {
     map: im::HashMap<String, SharedLibrary>,
+}
+impl SharedLibraryRepo {
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
 }
 
 #[derive(Clone)]
@@ -145,7 +150,7 @@ impl SharedLibraryRepo {
         for (_name, lib) in &self.map {
             if let Some(p) = lib.lookup(symbol) {
                 return Some(RelocationPointer::Shared(
-                    NonNull::new(p as *mut u8).unwrap(),
+                    NonNull::new(p.as_ptr() as *mut u8).unwrap(),
                 ));
             }
         }

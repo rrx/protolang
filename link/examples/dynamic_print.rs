@@ -3,7 +3,7 @@ use std::ffi::CString;
 use std::path::Path;
 
 fn test_lib(lib: SharedLibrary) {
-    let stdout_ptr = lib.lookup("stdout").unwrap() as *const usize;
+    let stdout_ptr = lib.lookup("stdout").unwrap().as_ptr() as *const usize;
     unsafe {
         //let stdout = *stdout_ptr as *const usize;
         let ret: i64 = lib.invoke("printf", ("asdf1\n",)).unwrap();
