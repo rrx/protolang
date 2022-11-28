@@ -154,11 +154,12 @@ impl CodeRelocation {
                     //let value = patch as isize + rel.r.addend as isize - addr as isize;
 
                     let before = std::ptr::read(patch);
-                    (patch as *mut u32).replace(value as u32);
                     log::debug!("patch_base: {:#08x}", patch_base as usize);
                     log::debug!("patch: {:#08x}", patch as usize);
                     log::debug!("value: {:#04x}", value as u32);
                     log::debug!("addr:  {:#08x}", addr as usize);
+
+                    (patch as *mut u32).replace(value as u32);
 
                     log::debug!(
                         "rel got {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
@@ -263,7 +264,7 @@ impl CodeRelocation {
 }
 
 pub fn patch_code(
-    block: PatchCodeBlock,
+    block: PatchBlockInner,
     pointers: PatchSymbolPointers,
     got: TableVersion,
     plt: TableVersion,
@@ -287,16 +288,14 @@ pub fn patch_code(
             &r.name
         );
 
-        r.patch(patch_base, addr);
+        r.patch(patch_base as *mut u8, addr);
     }
 
-    LinkedBlock(Arc::new(LinkedBlockInner::Code(
-        block.block.make_exec_block().unwrap(),
-    )))
+    LinkedBlock(Arc::new(LinkedBlockInner::Code(block.make_executable().unwrap())))
 }
 
 pub fn patch_data(
-    block: PatchDataBlock,
+    block: PatchBlockInner,
     pointers: PatchSymbolPointers,
     got: TableVersion,
     plt: TableVersion,
@@ -331,9 +330,9 @@ pub fn patch_data(
             &r.name
         );
 
-        r.patch(patch_base, addr);
+        r.patch(patch_base as *mut u8, addr);
     }
     //block.disassemble();
 
-    LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block.block)))
+    LinkedBlock(Arc::new(LinkedBlockInner::DataRW(block)))
 }

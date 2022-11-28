@@ -28,7 +28,7 @@ pub struct CodeSymbol {
     name: String,
     size: u64,
     pub(crate) address: u64,
-    kind: CodeSymbolKind,
+    pub(crate) kind: CodeSymbolKind,
     pub(crate) def: CodeSymbolDefinition,
 }
 
@@ -357,7 +357,7 @@ impl UnlinkedCodeSegmentInner {
         Ok(segments)
     }
 
-    pub fn create_data(
+    pub fn create_data2(
         &self,
         code_page_name: &str,
         b: &mut BlockFactory,
@@ -427,7 +427,7 @@ impl UnlinkedCodeSegmentInner {
         }
     }
 
-    pub fn create_code(
+    pub fn create_code2(
         &self,
         code_page_name: &str,
         b: &mut BlockFactory,
@@ -461,6 +461,9 @@ impl UnlinkedCodeSegmentInner {
                 // for each symbol, add a reference to it's full address
                 let mut pointers = HashMap::new();
                 let mut internal = HashMap::new();
+                let block_ptr = RelocationPointer::Smart(block.offset(0));
+                internal.insert(self.section_name.clone(), block_ptr.clone());
+                pointers.insert(self.section_name.clone(), block_ptr);
 
                 for (_, s) in &symbols {
                     let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
@@ -500,16 +503,17 @@ impl UnlinkedCodeSegmentInner {
             let size = self.bytes.len();
             if let Some(block) = b.alloc_block(size) {
                 log::debug!(
-                    "Code Block: {}, size: {}",
+                    "Block[{:?}]: {}, size: {}",
+                    kind,
                     &code_page_name,
                     self.bytes.len()
                 );
                 for symbol in &symbols {
-                    log::debug!(" Code Symbol: {}", symbol);
+                    log::debug!(" Symbol: {}", symbol);
                 }
 
                 for r in &self.relocations {
-                    log::debug!(" Code Relocation: {}", r);
+                    log::debug!(" Relocation: {}", r);
                 }
 
                 // copy code into the block
@@ -518,6 +522,9 @@ impl UnlinkedCodeSegmentInner {
                 // for each symbol, add a reference to it's full address
                 let mut pointers = HashMap::new();
                 let mut internal = HashMap::new();
+                let block_ptr = RelocationPointer::Smart(block.offset(0));
+                internal.insert(self.section_name.clone(), block_ptr.clone());
+                pointers.insert(self.section_name.clone(), block_ptr);
 
                 for s in &symbols {
                     let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
@@ -543,6 +550,12 @@ impl UnlinkedCodeSegmentInner {
                 unimplemented!()
             }
         } else {
+            log::debug!(
+                "no symbols in {}, size:{}, {:?}",
+                code_page_name,
+                self.bytes.len(),
+                &self.relocations.len()
+            );
             Ok(None)
         }
     }

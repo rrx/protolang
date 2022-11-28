@@ -1,6 +1,37 @@
 use super::*;
 use capstone::prelude::*;
 
+impl PatchBlockInner {
+    pub fn disassemble(&self) {
+        match self.kind {
+            PatchBlockKind::Code => {
+                let base = self.block.as_ptr() as usize;
+                println!(
+                    "Code Block Disassemble: Base: {:#08x}, Name: {}",
+                    base, &self.name
+                    );
+                let mut pointers = im::HashMap::new();
+                for (name, ptr) in &self.symbols {
+                    eprintln!(" {:#08x}: {}", ptr.as_ptr() as usize, name);
+                    pointers.insert(ptr.as_ptr() as usize - base, name.clone());
+                }
+                for r in &self.relocations {
+                    eprintln!(" {}", &r);
+                }
+                let size = self.block.size;
+                let buf = &self.block.as_slice()[0..size];
+                disassemble_code(&self.block.as_slice()[0..size], pointers);
+            }
+
+            PatchBlockKind::Data => {
+                let base = self.block.as_ptr() as usize;
+                eprintln!("data_rw@{:#08x}+{:#x}", base, self.block.size);
+                eprint_bytes(&self.block.as_slice()[0..self.block.size]);
+            }
+        }
+    }
+}
+
 impl PatchDataBlock {
     pub fn disassemble(&self) {
         let mut pointers = im::HashMap::new();

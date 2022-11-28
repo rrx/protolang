@@ -3,6 +3,7 @@ use crate::memory::*;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::Arc;
+use std::error::Error;
 
 pub enum DataBlock {
     RW(WritableDataBlock),
@@ -32,10 +33,11 @@ impl LinkedBlock {
 }
 #[derive(Debug)]
 pub enum LinkedBlockInner {
-    Code(ExecutableCodeBlock),
-    DataRO(ReadonlyDataBlock),
-    DataRW(WritableDataBlock),
+    Code(PatchBlockInner),
+    DataRO(PatchBlockInner),
+    DataRW(PatchBlockInner),
 }
+
 
 #[derive(Debug)]
 pub enum PatchBlockKind {
@@ -49,6 +51,7 @@ pub enum PatchBlock {
     Data(PatchDataBlock),
 }
 impl PatchBlock {
+    /*
     pub fn patch(
         mut self,
         pointers: PatchSymbolPointers,
@@ -60,6 +63,7 @@ impl PatchBlock {
             Self::Data(block) => patch_data(block, pointers, got, plt),
         }
     }
+    */
     pub fn disassemble(&self) {
         match self {
             Self::Code(block) => block.disassemble(),
@@ -77,6 +81,36 @@ pub struct PatchBlockInner {
     pub(crate) symbols: HashMap<String, RelocationPointer>,
     pub(crate) internal: HashMap<String, RelocationPointer>,
     pub(crate) relocations: Vec<CodeRelocation>,
+}
+impl PatchBlockInner {
+    pub fn patch(
+        mut self,
+        pointers: PatchSymbolPointers,
+        got: TableVersion,
+        plt: TableVersion,
+    ) -> LinkedBlock {
+        match self.kind {
+            PatchBlockKind::Code => patch_code(self, pointers, got, plt),
+            PatchBlockKind::Data => patch_data(self, pointers, got, plt),
+        }
+    }
+
+    pub fn finalize(mut self) -> Result<Self, Box<dyn Error>> {
+        match self.kind {
+            PatchBlockKind::Code => Ok(self),
+            PatchBlockKind::Data => Ok(self.make_executable()?)
+        }
+    }
+
+    pub fn make_readonly(mut self) -> io::Result<Self> {
+        self.block = self.block.make_readonly_block()?;
+        Ok(self)
+    }
+
+    pub fn make_executable(mut self) -> io::Result<Self> {
+        self.block = self.block.make_exec_block()?;
+        Ok(self)
+    }
 }
 
 #[derive(Debug)]

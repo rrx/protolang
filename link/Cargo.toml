@@ -21,6 +21,10 @@ env_logger = "0.9"
 #test-log = { git = "https://github.com/rrx/test-log.git" }
 test-log = { path = "/home/rrx/code/test-log" }
 
+[[examples]]
+name = "link-test"
+test = true
+
 [lib]
 name = "link"
 crate_type = ["dylib", "rlib", "staticlib"]
