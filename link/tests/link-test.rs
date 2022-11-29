@@ -96,7 +96,6 @@ fn test_libuv() {
     let mut b = Link::new();
     b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
-    //b.add_library("libc", &temp_path("/usr/lib/x86_64-linux-musl/libc.so")).unwrap();
     b.add_library("libuv", Path::new("libuv.so")).unwrap();
     b.add_obj_file("test", &temp_path("uvtest.o")).unwrap();
     let version = b.link().unwrap();
@@ -129,7 +128,7 @@ fn test_libc() {
     test_print_string(version);
 }
 
-#[test]
+//#[test]
 fn test_libc_musl() {
     let mut b = Link::new();
     b.add_library("libc", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))
@@ -170,8 +169,10 @@ fn test_multi_libc() {
 #[test]
 fn test_string() {
     let mut b = Link::new();
-    b.add_library("libc", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))
+    b.add_library("libc", &temp_path("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
+    //b.add_library("libc", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))
+        //.unwrap();
     b.add_obj_file("string", &temp_path("print_string.o"))
         .unwrap();
 

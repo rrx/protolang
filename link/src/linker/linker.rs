@@ -157,6 +157,9 @@ impl Link {
         if missing.len() == 0 && duplicates.len() == 0 {
             build_version(self)
         } else {
+            for symbol in missing {
+                log::error!("Missing symbol: {}", symbol);
+            }
             Err(LinkError::MissingSymbol.into())
         }
     }

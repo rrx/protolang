@@ -1081,7 +1081,7 @@ dependencies = [
  "memmap",
  "object",
  "proc-maps",
- "test-log 0.2.11",
+ "test-log 0.2.11 (git+https://github.com/rrx/test-log.git)",
 ]
 
 [[package]]
@@ -2002,6 +2002,8 @@ dependencies = [
 [[package]]
 name = "test-log"
 version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38f0c854faeb68a048f0f2dc410c5ddae3bf83854ef0e4977d58306a5edef50e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2011,8 +2013,7 @@ dependencies = [
 [[package]]
 name = "test-log"
 version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38f0c854faeb68a048f0f2dc410c5ddae3bf83854ef0e4977d58306a5edef50e"
+source = "git+https://github.com/rrx/test-log.git#093417424e731ee5ab366668c0a75b51466545b3"
 dependencies = [
  "proc-macro2",
  "quote",
