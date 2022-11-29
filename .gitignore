@@ -4,3 +4,4 @@ tmp
 .devenv*
 devenv.local.nix
 .direnv
+zig-*

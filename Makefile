@@ -13,6 +13,9 @@ test:
 CFLAGS=-fPIC -fno-direct-access-external-data ${NIX_CFLAGS_COMPILE}
 
 functions:
+	zig build
+
+function2:
 	clang ${CFLAGS} -c link/testfiles/testfunction.c -o ./tmp/testfunction.o
 	clang ${CFLAGS} -c link/testfiles/simplefunction.c -o ./tmp/simplefunction.o
 	clang ${CFLAGS} -c link/testfiles/asdf.c -o ./tmp/asdf.o

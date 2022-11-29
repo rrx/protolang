@@ -73,7 +73,7 @@
           ${pkgs.rustToolchain}/bin/cargo --version
           export LLVM_SYS_130_PREFIX=${pkgs.llvmPackages_13.llvm.dev};
           export RUST_BACKTRACE=1
-          export RUST_FLAGS="-A dead_code"
+          export RUSTFLAGS="-A dead_code"
 
         '';
       };
