@@ -79,7 +79,7 @@ impl AstBuilder {
         match env.resolve(&n.to_string()) {
             Some(v) => v.clone(),
             None => {
-                eprintln!("Unable to find symbol: {}", n);
+                log::error!("Unable to find symbol: {}", n);
                 unimplemented!();
             }
         }
@@ -131,7 +131,7 @@ impl AstBuilder {
                         (v.clone(), env)
                     }
                     None => {
-                        //eprintln!("Unable to resolve: {:?}", &var);
+                        //log::error!("Unable to resolve: {:?}", &var);
                         // name doesn't resolve, so we can't assign, declare instead
                         // We could make this configurable behavior.  By default, we may not
                         // want to declare new variables, to prevent shadowing.  Python does this
@@ -353,19 +353,19 @@ impl AstBuilder {
         // infer all types
         let eqs = self.equations.clone();
         for eq in &eqs {
-            eprintln!("EQ: {:?}", &eq);
+            log::debug!("EQ: {:?}", &eq);
         }
         if eqs.len() == 0 {
-            eprintln!("No equations");
+            log::info!("No equations");
         }
 
         let (res, subst) = Self::unify(eqs);
         let ast = ast.resolve(&subst)?;
 
-        eprintln!("ENV: {}", env);
-        eprintln!("RES: {:?}", res);
-        eprintln!("SUB: {:?}", subst);
-        eprintln!("AST: {}", &ast.to_ron().unwrap());
+        log::debug!("ENV: {}", env);
+        log::debug!("RES: {:?}", res);
+        log::debug!("SUB: {:?}", subst);
+        log::debug!("AST: {}", &ast.to_ron().unwrap());
         if res == UnifyResult::Ok {
             //let _ = visitor::visit(&ast, self, &mut subst).unwrap();
         }

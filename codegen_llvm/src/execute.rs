@@ -42,8 +42,8 @@ impl<'a> Executor<'a> {
             )
             .expect("Unable to create target machine");
 
-        eprintln!("Default: {:?}", triple.as_str());
-        eprintln!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
+        log::debug!("Default: {:?}", triple.as_str());
+        log::debug!("Host: {}", TargetMachine::get_host_cpu_name().to_str()?);
 
         let pass_manager_builder = PassManagerBuilder::create();
 
@@ -89,7 +89,8 @@ impl<'a> Executor<'a> {
                 Ok(())
             }
             Err(error) => {
-                module.print_to_stderr();
+                let s = module.print_to_string();
+                log::debug!("Module: {}", s);
                 Err(error.into())
             }
         }
@@ -101,7 +102,7 @@ impl<'a> Executor<'a> {
         ast: &Ast,
         context: &'a Context,
     ) -> Result<Module<'a>, Box<dyn Error>> {
-        println!("AST: {}", &ast.to_ron());
+        log::debug!("AST: {}", &ast.to_ron());
         let mut defmap = crate::DefinitionMap::default();
         let module = crate::generate(&context, name, &ast, &mut defmap).unwrap();
         self.optimizer.run_on(&module);

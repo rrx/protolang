@@ -13,3 +13,13 @@ frontend = { path = "../frontend" }
 lang3 = { path = "../lang3" }
 link = { path = "../link" }
 env_logger = "*"
+log = "*"
+
+[dev-dependencies]
+criterion = "0.3"
+test-log = "0.2"
+
+[[bench]]
+name = "reload"
+harness = false
+

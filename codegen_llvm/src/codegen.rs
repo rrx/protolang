@@ -203,7 +203,7 @@ impl<'a> ModuleGenerator<'a> {
     }
 
     fn print(&self) {
-        self.module.print_to_stderr()
+        log::info!("Module: {}", self.module.print_to_string())
     }
 
     fn add_int(&mut self, a: IntValue<'a>, b: IntValue<'a>) -> BasicValueEnum<'a> {
@@ -583,8 +583,8 @@ pub fn generate<'a>(
     let mut gen = ModuleGenerator::new(&context, name);
     gen.scan(ast, defmap);
     let v = codegen(&mut gen, &ast, defmap);
-    println!("v: {:?}", v);
-    println!("def: {:?}", defmap);
+    log::debug!("v: {:?}", v);
+    log::debug!("def: {:?}", defmap);
     gen.print();
     Ok(gen.module)
 }

@@ -372,6 +372,7 @@ version = "0.1.0"
 dependencies = [
  "codegen_ir",
  "inkwell",
+ "log",
 ]
 
 [[package]]
@@ -2262,11 +2263,14 @@ version = "0.1.0"
 dependencies = [
  "codegen_ir",
  "codegen_llvm",
+ "criterion",
  "env_logger",
  "frontend",
  "lang3",
  "link",
+ "log",
  "notify",
+ "test-log 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

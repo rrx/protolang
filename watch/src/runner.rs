@@ -51,7 +51,7 @@ impl<'a> Runner<'a> {
             .write_to_file(&module, FileType::Object, &Path::new("out.o"))
             .unwrap();
 
-        println!("asm {}", std::str::from_utf8(asm_buf.as_slice()).unwrap());
+        log::debug!("asm {}", std::str::from_utf8(asm_buf.as_slice()).unwrap());
 
         self.linker.add_obj_buf(name, obj_buf.as_slice())
     }
@@ -64,7 +64,7 @@ impl<'a> Runner<'a> {
     }
 
     pub fn load_path(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        println!("load: {}", &path.to_string_lossy());
+        log::debug!("load: {}", &path.to_string_lossy());
         let stem = path.file_stem().unwrap().to_string_lossy();
         if let Some(ext) = path.extension() {
             match ext.to_string_lossy().as_ref() {
@@ -72,15 +72,15 @@ impl<'a> Runner<'a> {
                     self.compile_lang3(stem.as_ref(), &path)?;
                 }
                 "so" => {
-                    println!("loading object file {}", &path.to_string_lossy());
+                    log::debug!("loading object file {}", &path.to_string_lossy());
                     let _ = self.linker.add_library(stem.as_ref(), &path)?;
                 }
                 "o" => {
-                    println!("loading object file {}", &path.to_string_lossy());
+                    log::debug!("loading object file {}", &path.to_string_lossy());
                     let _ = self.linker.add_obj_file(stem.as_ref(), &path)?;
                 }
                 _ => {
-                    println!("skipping {}", &path.to_string_lossy());
+                    log::debug!("skipping {}", &path.to_string_lossy());
                 }
             }
         }

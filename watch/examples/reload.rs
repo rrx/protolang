@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // invoke the new function
         let ret: i64 = version.invoke("main", ())?;
-        eprintln!("out: {}, {}", count, ret);
+        log::debug!("out: {}, {}", count, ret);
         assert_eq!(count + 10, ret);
         count += 1;
         if count > 1000 {

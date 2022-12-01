@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use protolang::eval::{Environment, Interpreter};
-use protolang::lexer;
-use protolang::parser::{parse_program, unparse_expr, Unparse};
+use lang1::eval::{Environment, Interpreter};
+use lang1::lexer;
+use lang1::parser::{parse_program, unparse_expr, Unparse};
 
 const FILENAME: &str = "benches/test.p";
 
@@ -18,8 +18,7 @@ fn parse(c: &mut Criterion) {
     });
 
     let mut lexer = lexer::LexerState::default();
-    let (_, _) = lexer.lex(contents.as_str()).unwrap();
-    let tokens = lexer.tokens().clone();
+    let (_, tokens) = lexer.lex(contents.as_str()).unwrap();
 
     c.bench_function("parse", |b| {
         b.iter(|| {
@@ -46,8 +45,7 @@ fn interpret(c: &mut Criterion) {
         .unwrap()
         .to_string();
     let mut lexer = lexer::LexerState::default();
-    let (_, _) = lexer.lex(contents.as_str()).unwrap();
-    let tokens = lexer.tokens().clone();
+    let (_, tokens) = lexer.lex(contents.as_str()).unwrap();
     let (_, expr) = parse_program(tokens.clone()).unwrap();
     unparse_expr(&expr, true);
     c.bench_function("interpret", |b| {

@@ -20,12 +20,12 @@ pub struct Link {
 impl Drop for Link {
     fn drop(&mut self) {
         self.libraries.clear();
-        eprintln!("GOT Used: {}", self.got.as_ref().unwrap().used());
-        eprintln!("PLT Used: {}", self.plt.as_ref().unwrap().used());
+        log::debug!("GOT Used: {}", self.got.as_ref().unwrap().used());
+        log::debug!("PLT Used: {}", self.plt.as_ref().unwrap().used());
         self.got.take();
         self.plt.take();
         self.unlinked.clear();
-        eprintln!("MEM Used: {}", self.mem.used());
+        log::debug!("MEM Used: {}", self.mem.used());
         assert_eq!(self.used(), 0);
     }
 }
@@ -50,10 +50,10 @@ impl Link {
     }
 
     pub fn debug(&self) {
-        eprintln!("GOT Used: {}", self.got.as_ref().unwrap().used());
-        eprintln!("PLT Used: {}", self.plt.as_ref().unwrap().used());
-        eprintln!("MEM Used: {}", self.mem.used());
-        eprintln!("GOT");
+        log::debug!("GOT Used: {}", self.got.as_ref().unwrap().used());
+        log::debug!("PLT Used: {}", self.plt.as_ref().unwrap().used());
+        log::debug!("MEM Used: {}", self.mem.used());
+        log::debug!("GOT");
         self.got.as_ref().unwrap().debug();
     }
 
