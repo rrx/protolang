@@ -44,4 +44,12 @@ pub fn build(b: *Builder) !void {
   lib.force_pic = true;
   lib.setTarget(target);
   lib.install();
+
+  const main = b.addExecutable("empty_main", "link/testfiles/empty_main.c");
+  main.setBuildMode(mode);
+  main.force_pic = true;
+  main.setTarget(target);
+  main.linkLibC();
+  main.install();
+
 }
