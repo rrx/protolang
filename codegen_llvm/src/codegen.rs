@@ -112,7 +112,7 @@ fn lookup_function_declaration<'a>(
     match ast {
         Ast::Variable(Variable {
             definition_id,
-            ref name,
+            name: _,
         }) => lookup_function_declaration_by_id(definition_id, defmap),
         _ => unimplemented!(),
     }
@@ -120,7 +120,7 @@ fn lookup_function_declaration<'a>(
 
 fn scan<'a>(ast: &Ast, context: &'a Context, module: &Module<'a>, defmap: &mut DefinitionMap<'a>) {
     for def in codegen_ir::scan::scan_definitions(ast) {
-        let ast: Ast = def.clone().into();
+        //let ast: Ast = def.clone().into();
         let name = def.get_name();
 
         match &*def.expr {
@@ -442,7 +442,7 @@ fn codegen_definition<'a>(
     def: &hir::Definition,
     defmap: &mut DefinitionMap<'a>,
 ) -> BasicValueEnum<'a> {
-    let name = match &def.name {
+    let _name = match &def.name {
         Some(name) => name.clone(),
         None => format!("v{}", &def.variable),
     };
@@ -460,7 +460,7 @@ fn codegen_definition<'a>(
 fn codegen_extern<'a>(
     gen: &mut ModuleGenerator<'a>,
     v: &hir::Extern,
-    defmap: &mut DefinitionMap<'a>,
+    _defmap: &mut DefinitionMap<'a>,
 ) -> BasicValueEnum<'a> {
     let name = &v.name;
     let llvm_type = convert_type(&gen.context, &v.typ);
@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn codegen_extern() {
         let mut defs = Definitions::new();
-        let x1_module = gen_x1_module(&mut defs);
+        let x1_module = gen_x1_module(&mut defs, 1);
         let x1_main = gen_x1_main(&mut defs);
 
         let context = Context::create();

@@ -69,6 +69,9 @@
             #lib.makeLibraryPath
             #([ pkg-config stdenv.cc.cc.lib libffi ncurses zlib libuv musl]);
 
+        RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
+
+
         shellHook = ''
           ${pkgs.rustToolchain}/bin/cargo --version
           export LLVM_SYS_130_PREFIX=${pkgs.llvmPackages_13.llvm.dev};

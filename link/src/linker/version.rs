@@ -11,6 +11,9 @@ impl LinkVersionSync {
     pub fn new(version: LinkVersion) -> Self {
         Self(Arc::new(Mutex::new(version)))
     }
+    pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
+        self.0.as_ref().lock().unwrap().invoke(name, ())
+    }
 }
 
 #[derive(Clone)]
@@ -188,8 +191,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         let v = direct.as_ptr() as usize;
         // write usize to buffer
         let buf = v.to_ne_bytes();
-        let mut p = got.create_buffer(buf.len());
-        p.copy(buf.as_slice());
+        let p = got.create_buffer(buf.as_slice());
         patch_source.insert(name.clone(), RelocationPointer::Got(p.clone()));
         got = got.update(name, p);
     }
@@ -202,8 +204,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
         // write usize to buffer
         let mut buf = [0u8; 5];
         buf[0] = 0xe9;
-        let mut p = got.create_buffer(buf.len());
-        p.copy(buf.as_slice());
+        let p = got.create_buffer(buf.as_slice());
 
         // save as direct for now
         patch_source.insert(

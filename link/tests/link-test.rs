@@ -172,7 +172,7 @@ fn test_string() {
     b.add_library("libc", &temp_path("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
     //b.add_library("libc", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))
-        //.unwrap();
+    //.unwrap();
     b.add_obj_file("string", &temp_path("print_string.o"))
         .unwrap();
 

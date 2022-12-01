@@ -79,7 +79,7 @@ pub fn gen_fib(defs: &mut Definitions) -> Ast {
     Sequence::new(vec![dfib.into(), df_main.into()]).into()
 }
 
-pub fn gen_x1_module(defs: &mut Definitions) -> Ast {
+pub fn gen_x1_module(defs: &mut Definitions, add: i64) -> Ast {
     // single parameter function type
     let typ = FunctionType::export(vec![Type::i64(), Type::i64()]);
 
@@ -88,7 +88,7 @@ pub fn gen_x1_module(defs: &mut Definitions) -> Ast {
     let p = defs.new_variable();
     let x1 = hir::new_lambda(
         vec![p.clone()],
-        hir::add(p.clone().into(), hir::i64(1)),
+        hir::add(p.clone().into(), hir::i64(add)),
         typ.clone(),
     );
     let dx1 = defs.new_definition("x1", x1.into());

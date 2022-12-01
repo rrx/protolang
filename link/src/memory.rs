@@ -162,19 +162,26 @@ pub enum BlockReference {
     Block(BlockFactory),
 }
 
-#[derive(Clone)]
-pub struct SmartPointer {
+#[derive(Clone, Debug)]
+pub struct SmartPointer(Arc<SmartPointerInner>);
+impl SmartPointer {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.0.as_ptr() as *const u8
+    }
+}
+
+pub struct SmartPointerInner {
     layout: Layout,
     p: NonNull<u8>,
     block_ref: BlockReference,
 }
-impl fmt::Debug for SmartPointer {
+impl fmt::Debug for SmartPointerInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SmartPointer").field("p", &self.p).finish()
     }
 }
 
-impl SmartPointer {
+impl SmartPointerInner {
     pub fn as_ptr(&self) -> *const u8 {
         self.p.as_ptr() as *const u8
     }
@@ -188,11 +195,11 @@ impl SmartPointer {
     }
 }
 
-impl Drop for SmartPointer {
+impl Drop for SmartPointerInner {
     fn drop(&mut self) {
         // nothing to do, it get's handled when we drop the ref?
         match &self.block_ref {
-            BlockReference::Heap(_) => {}
+            BlockReference::Heap(b) => b.free(self),
             BlockReference::Block(_) => (),
         }
     }
@@ -227,16 +234,20 @@ impl HeapBlock {
     }
 
     pub fn add_buf(&mut self, buf: &[u8]) -> Option<SmartPointer> {
-        match self.alloc(buf.len()) {
+        match self.alloc_inner(buf.len()) {
             Some(mut p) => {
                 p.copy(buf);
-                Some(p)
+                Some(SmartPointer(Arc::new(p)))
             }
             None => None,
         }
     }
 
     pub fn alloc(&mut self, size: usize) -> Option<SmartPointer> {
+        self.alloc_inner(size).map(|v| SmartPointer(Arc::new(v)))
+    }
+
+    fn alloc_inner(&mut self, size: usize) -> Option<SmartPointerInner> {
         assert!(size > 0);
         let layout = Layout::from_size_align(size, 1).unwrap();
         let p = self
@@ -247,27 +258,32 @@ impl HeapBlock {
             .allocate_first_fit(layout)
             .unwrap();
 
-        log::debug!("alloc: {:#08x}, {}", p.as_ptr() as usize, size,);
+        log::debug!("Block Heap Alloc: {:#08x}+{:#x}", p.as_ptr() as usize, size);
 
-        Some(SmartPointer {
+        Some(SmartPointerInner {
             layout,
             p,
             block_ref: BlockReference::Heap(self.clone()),
         })
     }
 
-    fn free(&mut self, pointer: &SmartPointer) {
-        log::debug!(
-            "Freeing Pointer at {:#08x}+{:x}",
-            pointer.as_ptr() as usize,
-            pointer.layout.size()
-        );
-        unsafe {
-            self.0
-                .lock()
-                .unwrap()
-                .heap
-                .deallocate(pointer.p, pointer.layout);
+    fn free(&self, pointer: &SmartPointerInner) {
+        match &pointer.block_ref {
+            BlockReference::Heap(_) => {
+                log::debug!(
+                    "Block Heap Free: {:#08x}+{:#x}",
+                    pointer.as_ptr() as usize,
+                    pointer.layout.size()
+                );
+                unsafe {
+                    self.0
+                        .lock()
+                        .unwrap()
+                        .heap
+                        .deallocate(pointer.p, pointer.layout);
+                }
+            }
+            _ => unreachable!(),
         }
     }
 
@@ -304,11 +320,11 @@ impl Block {
         let _size = self.layout.size() - relative_address;
         unsafe {
             let p = self.as_ptr().offset(relative_address as isize);
-            SmartPointer {
+            SmartPointer(Arc::new(SmartPointerInner {
                 layout: self.layout,
                 p: NonNull::new(p as *mut u8).unwrap(),
                 block_ref: BlockReference::Block(self.factory.clone()),
-            }
+            }))
         }
     }
 
@@ -390,6 +406,7 @@ impl Block {
 
 impl Drop for Block {
     fn drop(&mut self) {
+        log::debug!("Dropping block: {:?}", self.p);
         // we need to make it mutable again before deallocating
         // because the allocator needs to make some changes
         if self.p.is_some() {
@@ -431,14 +448,16 @@ mod tests {
     fn heapblock() {
         let b = BlockFactory::create(2).unwrap();
         let mut h = b.alloc_block(1).unwrap().make_heap_block();
-        let v1 = h.alloc(10).unwrap();
-        let v2 = h.alloc(10).unwrap();
-        log::debug!("V Size: {:#08x}", v1.as_ptr() as usize);
-        log::debug!("V Size: {:#08x}", v2.as_ptr() as usize);
+        let v1 = h.alloc_inner(10).unwrap();
+        let v2 = h.alloc_inner(10).unwrap();
+        log::debug!("V Size: {:#08x}, used: {}", v1.as_ptr() as usize, h.used());
+        log::debug!("V Size: {:#08x}, used: {}", v2.as_ptr() as usize, h.used());
         drop(v1);
         drop(v2);
-        let v3 = h.alloc(10).unwrap();
-        log::debug!("V Size: {:#08x}", v3.as_ptr() as usize);
+        let v3 = h.alloc_inner(10).unwrap();
+        log::debug!("V Size: {:#08x}, used: {}", v3.as_ptr() as usize, h.used());
         b.debug();
+        drop(v3);
+        assert_eq!(0, h.used());
     }
 }

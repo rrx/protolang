@@ -49,6 +49,14 @@ impl Link {
         }
     }
 
+    pub fn debug(&self) {
+        eprintln!("GOT Used: {}", self.got.as_ref().unwrap().used());
+        eprintln!("PLT Used: {}", self.plt.as_ref().unwrap().used());
+        eprintln!("MEM Used: {}", self.mem.used());
+        eprintln!("GOT");
+        self.got.as_ref().unwrap().debug();
+    }
+
     pub fn used(&self) -> usize {
         self.mem.used()
     }

@@ -2262,6 +2262,7 @@ version = "0.1.0"
 dependencies = [
  "codegen_ir",
  "codegen_llvm",
+ "env_logger",
  "frontend",
  "lang3",
  "link",

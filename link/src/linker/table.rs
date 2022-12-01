@@ -1,5 +1,4 @@
 use crate::memory::*;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SmartBlock {
@@ -17,20 +16,9 @@ impl SmartBlock {
 }
 
 #[derive(Clone)]
-pub struct SyncPointer(Arc<SmartPointer>);
-impl SyncPointer {
-    pub fn new(p: SmartPointer) -> Self {
-        Self(Arc::new(p))
-    }
-    pub fn as_ptr(&self) -> *const u8 {
-        self.0.as_ref().as_ptr()
-    }
-}
-
-#[derive(Clone)]
 pub struct TableVersion {
     block: SmartBlock,
-    entries: im::HashMap<String, SyncPointer>,
+    entries: im::HashMap<String, SmartPointer>,
 }
 
 impl TableVersion {
@@ -49,17 +37,21 @@ impl TableVersion {
         self.entries.clear();
     }
 
-    pub fn create_buffer(&mut self, size: usize) -> SmartPointer {
+    pub fn create_buffer(&mut self, buf: &[u8]) -> SmartPointer {
+        self.block.heap.add_buf(buf).unwrap()
+    }
+
+    pub fn create_buffer_empty(&mut self, size: usize) -> SmartPointer {
         self.block.heap.alloc(size).unwrap()
     }
 
     // update and return a new version of the table
     pub fn update(mut self, name: String, p: SmartPointer) -> Self {
-        self.entries.insert(name, SyncPointer::new(p));
+        self.entries.insert(name, p);
         self
     }
 
-    pub fn get(&self, name: &str) -> Option<SyncPointer> {
+    pub fn get(&self, name: &str) -> Option<SmartPointer> {
         self.entries.get(name).cloned()
     }
 
@@ -67,7 +59,7 @@ impl TableVersion {
         log::debug!("Table@{:#08x}", self.block.heap.base() as usize);
         for (k, v) in &self.entries {
             unsafe {
-                let ptr = v.0.as_ptr() as *const usize;
+                let ptr = v.as_ptr() as *const usize;
                 log::debug!(" {:#08x}:*{:#08x}:{}", ptr as usize, *ptr, k);
             }
         }

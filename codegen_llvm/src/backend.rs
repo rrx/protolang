@@ -37,10 +37,10 @@ impl<'a> LLVMBackend<'a> {
         })
     }
 
-    pub fn compile_module(&mut self, name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
+    pub fn compile_module(&mut self, _name: &str, ast: &Ast) -> Result<(), Box<dyn Error>> {
         let mut defmap = DefinitionMap::default();
         let module = generate(&self.context.context, "test", &ast, &mut defmap)?;
-        self.exec.add(&module);
+        self.exec.add(&module)?;
         Ok(())
     }
 
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn codegen_selfref() {
         let context = LLVMBackendContext::new();
-        let b = context.backend();
+        let _b = context.backend();
         let mut defs = Definitions::new();
 
         let ast = gen_self_reference(&mut defs);
@@ -100,7 +100,7 @@ mod tests {
     fn codegen_extern() {
         let mut defs = Definitions::new();
 
-        let x1_module = gen_x1_module(&mut defs);
+        let x1_module = gen_x1_module(&mut defs, 1);
         let x1_main = gen_x1_main(&mut defs);
 
         let context = LLVMBackendContext::new();
