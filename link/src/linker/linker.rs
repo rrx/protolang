@@ -107,6 +107,14 @@ impl Link {
         Ok(())
     }
 
+    pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        use object::elf;
+        use object::Endianness;
+        let out_data = write_file::<elf::FileHeader64<Endianness>>(self)?;
+        std::fs::write(path, out_data)?;
+        Ok(())
+    }
+
     pub fn link(&mut self) -> Result<LinkVersion, Box<dyn Error>> {
         let mut pointers = im::HashMap::new();
         let mut duplicates = HashSet::new();

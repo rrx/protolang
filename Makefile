@@ -1,4 +1,10 @@
-default: build functions test doc
+default:
+	RUST_LOG=debug cargo run --example write
+	readelf -a tmp/out.exe
+	objdump -D tmp/out.exe
+
+
+all: build functions test doc
 
 build:
 	cargo build
@@ -14,6 +20,7 @@ CFLAGS=-fPIC -fno-direct-access-external-data ${NIX_CFLAGS_COMPILE}
 
 functions:
 	zig build
+	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
 
 function2:
 	clang ${CFLAGS} -c link/testfiles/testfunction.c -o ./tmp/testfunction.o

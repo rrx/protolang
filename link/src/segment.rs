@@ -2,6 +2,7 @@ use object::{
     Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationTarget, SectionKind,
     SymbolKind, SymbolScope, SymbolSection,
 };
+
 use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
