@@ -1,6 +1,4 @@
-use std::convert::TryInto;
 use std::error::Error;
-use std::{env, fs, process};
 
 use object::elf;
 use object::read::elf::{Dyn, FileHeader, ProgramHeader, Rel, Rela, SectionHeader, Sym};
@@ -182,64 +180,68 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     out_ph.push(ProgramHeaderEntry {
         p_type: elf::PT_LOAD,
         p_flags: elf::PF_R,
-        p_offset: 0, // first thing we load
+        p_offset: 0, // read section starts at 0 offset to include headers
         p_vaddr: ro_addr_start as u64,
         p_paddr: ro_addr_start as u64,
         p_filesz: 0x1000,
         p_memsz: 0x1000,
         p_align: 0x1000,
     });
+    offset += 0x1000;
 
     // program LOAD (RX)
     out_ph.push(ProgramHeaderEntry {
         p_type: elf::PT_LOAD,
         p_flags: elf::PF_R | elf::PF_X,
-        p_offset: 0, // first thing we load
+        p_offset: offset,
         p_vaddr: rx_addr_start as u64,
         p_paddr: rx_addr_start as u64,
         p_filesz: 0x1000,
         p_memsz: 0x1000,
         p_align: 0x1000,
     });
+    offset += 0x1000;
 
     // program LOAD (RW)
     out_ph.push(ProgramHeaderEntry {
         p_type: elf::PT_LOAD,
         p_flags: elf::PF_R | elf::PF_W,
-        p_offset: 0, // first thing we load
+        p_offset: offset,
         p_vaddr: rw_addr_start as u64,
         p_paddr: rw_addr_start as u64,
         p_filesz: 0x1000,
         p_memsz: 0x1000,
         p_align: 0x1000,
     });
+    offset += 0x1000;
 
-    let mut out_dynamic: Vec<u8> = Vec::new();
+    let mut out_dynamic = Vec::new();
 
     //let string = Some(writer.add_dynamic_string("libc.so.6".as_bytes()));
     //out_dynamic.push(Dynamic { tag: elf::DT_NEEDED, val: 0, string });
+    out_dynamic.push(Dynamic { tag: elf::DT_NULL, val: 0, string: None });
 
     // Assign dynamic strings.
 
-    /*
-    let before = writer.reserved_len();
-    writer.reserve_dynamic(out_dynamic.len());
-    let after = writer.reserved_len();
-    let dynamic_size = after - before;
-    // program DYNAMIC
-    out_ph.push(ProgramHeaderEntry {
-        p_type: elf::PT_DYNAMIC,
-        p_flags: elf::PF_R | elf::PF_W,
-        p_offset: offset, // calculate later
-        p_vaddr: rx_addr_start as u64,
-        p_paddr: rx_addr_start as u64,
-        p_filesz: dynamic_size as u64,
-        p_memsz: dynamic_size as u64,
-        p_align: 0x8,
-    });
-    offset += dynamic_size as u64;
-    */
+    if false {
+        let before = writer.reserved_len();
+        writer.reserve_dynamic(out_dynamic.len());
+        let after = writer.reserved_len();
+        let dynamic_size = 0;//after - before;
+                             //program DYNAMIC
+        out_ph.push(ProgramHeaderEntry {
+            p_type: elf::PT_DYNAMIC,
+            p_flags: elf::PF_R | elf::PF_W,
+            p_offset: offset,
+            p_vaddr: rx_addr_start as u64,
+            p_paddr: rx_addr_start as u64,
+            p_filesz: dynamic_size as u64,
+            p_memsz: dynamic_size as u64,
+            p_align: 0x8,
+        });
 
+        offset += dynamic_size as u64;
+    }
 
     let mut hash_addr = 0;
     let mut gnu_hash_addr = 0;
@@ -343,8 +345,29 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         });
     }
 
-    let dynamic_index = writer.reserve_dynamic_section_index();
-    out_sections_index.push(dynamic_index);
+    if false {
+        let name = Some(writer.add_section_name(".dynamic".as_bytes()));
+        let dynamic_index = writer.reserve_dynamic_section_index();
+        out_sections_index.push(dynamic_index);
+        dynamic_addr = rx_addr_start + offset;
+        let before = writer.reserved_len();
+        writer.reserve_dynamic(out_dynamic.len());
+        let after = writer.reserved_len();
+        out_sections.push(Section {
+            name,
+            sh_type: elf::SHT_DYNAMIC,
+            sh_flags: (elf::SHF_ALLOC | elf::SHF_WRITE) as usize,
+            sh_name: 0, // set offset to name later when it's allocated
+            sh_addr: dynamic_addr as usize,
+            sh_offset: offset as usize,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0x10,
+            sh_addralign: 8,
+            data: vec![],
+        });
+        offset += (after - before) as u64;
+    }
 
     let name = Some(writer.add_section_name(".dynstr".as_bytes()));
     let dynstr_index = writer.reserve_dynstr_section_index();
@@ -422,6 +445,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             }
             elf::SHT_STRTAB => {
             }
+            elf::SHT_DYNAMIC => {
+            }
             _ => unimplemented!()
         }
     }
@@ -465,17 +490,17 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
                 writer.write(section.data.as_slice());
             }
             elf::SHT_DYNAMIC => {
-                //for d in out_dynamic.iter() {
-                    //if let Some(string) = d.string {
-                        //writer.write_dynamic_string(d.tag, string);
-                    //} else {
-                        //writer.write_dynamic(d.tag, d.val);
-                    //}
-                //}
+                for d in out_dynamic.iter() {
+                    if let Some(string) = d.string {
+                        writer.write_dynamic_string(d.tag, string);
+                    } else {
+                        writer.write_dynamic(d.tag, d.val);
+                    }
+                }
             }
-            elf::SHT_DYNSYM => {
-                writer.write_null_dynamic_symbol();
-            }
+            //elf::SHT_DYNSYM => {
+                //writer.write_null_dynamic_symbol();
+            //}
             elf::SHT_STRTAB => {
             }
             _ => ()
@@ -517,11 +542,13 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
                 });
             }
             elf::SHT_STRTAB => (),
+            elf::SHT_DYNAMIC => {
+                writer.write_dynamic_section_header(dynamic_addr);
+            }
             _ => unimplemented!()
         }
     }
 
-    writer.write_dynamic_section_header(dynamic_addr);
     writer.write_strtab_section_header();
     writer.write_shstrtab_section_header();
     writer.write_dynstr_section_header(dynstr_addr);
