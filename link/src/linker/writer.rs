@@ -143,6 +143,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     offset += ph_size;
 
+
+
     if let Some(interp) = data.interp {
         out_ph.push(ProgramHeaderEntry {
             p_type: elf::PT_INTERP,
@@ -212,6 +214,33 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         p_align: 0x1000,
     });
 
+    //let mut out_dynamic = Vec::new();
+
+    //let string = Some(writer.add_dynamic_string("libc.so.6".as_bytes()));
+    //out_dynamic.push(Dynamic { tag: elf::DT_NEEDED, val: 0, string });
+
+    // Assign dynamic strings.
+
+    /*
+    let before = writer.reserved_len();
+    writer.reserve_dynamic(out_dynamic.len());
+    let after = writer.reserved_len();
+    let dynamic_size = after - before;
+    // program DYNAMIC
+    out_ph.push(ProgramHeaderEntry {
+        p_type: elf::PT_DYNAMIC,
+        p_flags: elf::PF_R | elf::PF_W,
+        p_offset: offset, // calculate later
+        p_vaddr: rx_addr_start as u64,
+        p_paddr: rx_addr_start as u64,
+        p_filesz: dynamic_size as u64,
+        p_memsz: dynamic_size as u64,
+        p_align: 0x8,
+    });
+    offset += dynamic_size as u64;
+    */
+
+
     let mut hash_addr = 0;
     let mut gnu_hash_addr = 0;
     let mut versym_addr = 0;
@@ -221,12 +250,35 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut dynsym_addr = 0;
     let mut dynstr_addr = 0;
 
-    let name = Some(writer.add_section_name(".data".as_bytes()));
-    let index = writer.reserve_section_index();
-    out_sections_index.push(index);
-
+    let mut code_sections = vec![];
+    let mut data_sections = vec![];
 
     for (_name, unlinked) in link.unlinked.iter() {
+        use object::SectionKind as K;
+        match unlinked.kind {
+            K::Data | K::UninitializedData | K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
+                //let name = Some(writer.add_section_name(unlinked.section_name.as_bytes()));
+                //let index = writer.reserve_section_index();
+                //out_sections_index.push(index);
+                data_sections.push(unlinked);
+            }
+            K::Text => {
+                //let name = Some(writer.add_section_name(unlinked.section_name.as_bytes()));
+                //let index = writer.reserve_section_index();
+                //out_sections_index.push(index);
+                code_sections.push(unlinked);
+            }
+
+            // ignore for now
+            K::Metadata => (),
+            K::Other => (),
+            K::Elf(x) => {
+                // ignore
+                //unimplemented!("Elf({:#x})", x);
+            }
+            _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind)
+        }
+
         for (name, symbol) in unlinked.defined.iter() {
             match symbol.kind {
                 CodeSymbolKind::Data => {
@@ -237,42 +289,62 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     }
 
-    out_sections.push(Section {
-        name,
-        sh_type: elf::SHT_PROGBITS,
-        sh_flags: elf::SHF_ALLOC as usize,
-        sh_name: shstrtab_offset as u32, // set offset to name later when it's allocated
-        sh_addr: (rw_addr_start + offset) as usize,
-        sh_offset: offset as usize,
-        sh_info: 0,
-        sh_link: 0,
-        sh_entsize: 0,
-        sh_addralign: 1,
-        data: vec![],
-    });
-    out_sections_index.push(index);
-    offset += 0;//interp.len() as u64;
+    if data_sections.len() > 0 {
+        let name = Some(writer.add_section_name(".data".as_bytes()));
+        let data_index = writer.reserve_section_index();
+        out_sections_index.push(data_index);
 
-    let name = Some(writer.add_section_name(".text".as_bytes()));
-    let index = writer.reserve_section_index();
-    out_sections_index.push(index);
-    out_sections.push(Section {
-        name,
-        sh_type: elf::SHT_PROGBITS,
-        sh_flags: elf::SHF_ALLOC as usize,
-        sh_name: shstrtab_offset as u32, // set offset to name later when it's allocated
-        sh_addr: (rx_addr_start + offset) as usize,
-        sh_offset: offset as usize,
-        sh_info: 0,
-        sh_link: 0,
-        sh_entsize: 0,
-        sh_addralign: 1,
-        data: vec![],
-    });
-    offset += 0;//interp.len() as u64;
+        let data_offset = offset;
+        let mut data = vec![];
+        for section in data_sections.iter() {
+            data.extend(section.bytes.clone());
+        }
+        offset += data.len() as u64;
 
-    /*
-    */
+        out_sections.push(Section {
+            name,
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags: elf::SHF_ALLOC as usize,
+            sh_name: 0,//shstrtab_offset as u32, // set offset to name later when it's allocated
+            sh_addr: (rw_addr_start + data_offset) as usize,
+            sh_offset: data_offset as usize,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign: 1,
+            data,
+        });
+    }
+
+    if code_sections.len() > 0 {
+        let name = Some(writer.add_section_name(".text".as_bytes()));
+        let text_index = writer.reserve_section_index();
+        out_sections_index.push(text_index);
+
+        let text_offset = offset;
+        let mut data = vec![];
+        for section in code_sections.iter() {
+            data.extend(section.bytes.clone());
+        }
+        offset += data.len() as u64;
+
+        out_sections.push(Section {
+            name,
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags: (elf::SHF_ALLOC | elf::SHF_EXECINSTR) as usize,
+            sh_name: 0,//shstrtab_offset as u32, // set offset to name later when it's allocated
+            sh_addr: (rx_addr_start + text_offset) as usize,
+            sh_offset: offset as usize,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign: 1,
+            data,
+        });
+    }
+
+    //let dynamic_index = writer.reserve_dynamic_section_index();
+    //out_sections_index.push(dynamic_index);
 
     let name = Some(writer.add_section_name(".dynstr".as_bytes()));
     let dynstr_index = writer.reserve_dynstr_section_index();
@@ -335,18 +407,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     });
     offset += (after - before) as u64;
 
-    // Assign dynamic strings.
-    //let mut out_dynamic = Vec::new();
+    //let dynamic_symbol_index = writer.reserve_dynamic_symbol_index();
 
     // Assign dynamic symbol indices.
     //let mut out_dynsyms = Vec::new();
     //let mut out_dynsyms_index = vec![];
     //for out_dynsym in out_dynsyms.iter_mut() {
-    //out_dynsyms_index[out_dynsym.in_sym] = writer.reserve_dynamic_symbol_index();
-    //}
-
-
-
 
     // allocate and adjust offsets
     for (i, section) in out_sections.iter_mut().enumerate() {
@@ -359,6 +425,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             _ => unimplemented!()
         }
     }
+
 
     writer.reserve_symtab();
     writer.reserve_symtab_shndx();
@@ -397,16 +464,34 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
                 writer.write_align(section.sh_addralign as usize);
                 writer.write(section.data.as_slice());
             }
+            elf::SHT_DYNAMIC => {
+                //for d in out_dynamic.iter() {
+                    //if let Some(string) = d.string {
+                        //writer.write_dynamic_string(d.tag, string);
+                    //} else {
+                        //writer.write_dynamic(d.tag, d.val);
+                    //}
+                //}
+            }
+            elf::SHT_DYNSYM => {
+                writer.write_null_dynamic_symbol();
+            }
             elf::SHT_STRTAB => {
             }
             _ => ()
         }
     }
 
-    writer.write_null_symbol();
 
-    writer.write_strtab();
+
+
+
+
+    writer.write_null_symbol();
+    // write symbols
+
     writer.write_symtab_shndx();
+    writer.write_strtab();
     writer.write_shstrtab();
 
 
@@ -436,6 +521,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         }
     }
 
+    //writer.write_dynamic_section_header(dynamic_addr);
     writer.write_strtab_section_header();
     writer.write_shstrtab_section_header();
     writer.write_dynstr_section_header(dynstr_addr);

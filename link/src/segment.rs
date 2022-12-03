@@ -51,6 +51,7 @@ pub type UnlinkedCodeSegment = Arc<UnlinkedCodeSegmentInner>;
 
 pub struct UnlinkedCodeSegmentInner {
     pub(crate) name: String,
+    pub(crate) kind: SectionKind,
     pub(crate) section_name: String,
     pub(crate) bytes: Vec<u8>,
     pub(crate) defined: im::HashMap<String, CodeSymbol>,
@@ -327,8 +328,10 @@ impl UnlinkedCodeSegmentInner {
                     data.to_vec()
                 };
 
+
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
+                    kind: section.kind(),
                     section_name,
                     bytes,
                     externs: externs.clone(),
