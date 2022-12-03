@@ -7,4 +7,3 @@ fn main() {
         .unwrap();
     b.write(Path::new("./tmp/out.exe")).unwrap();
 }
-

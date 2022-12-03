@@ -328,7 +328,6 @@ impl UnlinkedCodeSegmentInner {
                     data.to_vec()
                 };
 
-
                 segments.push(UnlinkedCodeSegmentInner {
                     name,
                     kind: section.kind(),

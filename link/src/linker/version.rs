@@ -64,23 +64,26 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
 
         use object::SectionKind as K;
         match unlinked.kind {
-            K::Data | K::UninitializedData | K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
+            K::Data
+            | K::UninitializedData
+            | K::OtherString
+            | K::ReadOnlyString
+            | K::ReadOnlyData => {
                 let defined = unlinked.defined.values().cloned().collect();
                 if let Some(block) =
                     unlinked.create_block(&name, PatchBlockKind::Data, defined, &mut link.mem)?
-                    {
-                        blocks.push((name.clone(), block));
-                    }
+                {
+                    blocks.push((name.clone(), block));
+                }
             }
             K::Text => {
                 let defined = unlinked.defined.values().cloned().collect();
                 if let Some(block) =
                     unlinked.create_block(&name, PatchBlockKind::Code, defined, &mut link.mem)?
-                    {
-                        blocks.push((name, block));
-                    }
+                {
+                    blocks.push((name, block));
+                }
             }
-
 
             // ignore for now
             K::Metadata => (),
@@ -89,7 +92,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
                 // ignore
                 //unimplemented!("Elf({:#x})", x);
             }
-            _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind)
+            _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
         }
 
         // get a list of data symbols
