@@ -214,7 +214,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         p_align: 0x1000,
     });
 
-    //let mut out_dynamic = Vec::new();
+    let mut out_dynamic: Vec<u8> = Vec::new();
 
     //let string = Some(writer.add_dynamic_string("libc.so.6".as_bytes()));
     //out_dynamic.push(Dynamic { tag: elf::DT_NEEDED, val: 0, string });
@@ -343,8 +343,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         });
     }
 
-    //let dynamic_index = writer.reserve_dynamic_section_index();
-    //out_sections_index.push(dynamic_index);
+    let dynamic_index = writer.reserve_dynamic_section_index();
+    out_sections_index.push(dynamic_index);
 
     let name = Some(writer.add_section_name(".dynstr".as_bytes()));
     let dynstr_index = writer.reserve_dynstr_section_index();
@@ -521,7 +521,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         }
     }
 
-    //writer.write_dynamic_section_header(dynamic_addr);
+    writer.write_dynamic_section_header(dynamic_addr);
     writer.write_strtab_section_header();
     writer.write_shstrtab_section_header();
     writer.write_dynstr_section_header(dynstr_addr);
