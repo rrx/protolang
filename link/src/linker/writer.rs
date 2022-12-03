@@ -74,6 +74,7 @@ struct Data {
     ph: Vec<ProgramHeaderEntry>,
     dynamic: Vec<Dynamic>,
     sections: Vec<Section>,
+    page_size: u32,
     ro_size: u64,
     rw_size: u64,
     rx_size: u64,
@@ -83,30 +84,40 @@ struct Data {
     addr_dynamic: u64,
     addr_dynstr: u64,
     index_strtab: Option<SectionIndex>,
-    index_dynstr: Option<SectionIndex>,
+    //index_dynstr: Option<SectionIndex>,
 }
 impl Data {
     fn new(link: &Link) -> Self {
         let mut code_segments = vec![];
         let mut data_segments = vec![];
+
+        let mut ro_size = 0;
+        let mut rw_size = 0;
+        let mut rx_size = 0;
+
         for (_name, unlinked) in link.unlinked.iter() {
             use object::SectionKind as K;
             match unlinked.kind {
                 K::Data
-                | K::UninitializedData
-                | K::OtherString
+                | K::UninitializedData => {
+                    rw_size += unlinked.bytes.len();
+                    data_segments.push(unlinked.clone());
+                }
+                K::OtherString
                 | K::ReadOnlyString
                 | K::ReadOnlyData => {
+                    ro_size += unlinked.bytes.len();
                     data_segments.push(unlinked.clone());
                 }
                 K::Text => {
+                    rx_size += unlinked.bytes.len();
                     code_segments.push(unlinked.clone());
                 }
 
                 // ignore for now
                 K::Metadata => (),
                 K::Other => (),
-                K::Elf(x) => {
+                K::Elf(_x) => {
                     // ignore
                     //unimplemented!("Elf({:#x})", x);
                 }
@@ -122,20 +133,34 @@ impl Data {
             ph: vec![],
             dynamic: vec![],
             sections: vec![],
-            ro_size: 0,
-            rw_size: 0,
-            rx_size: 0,
+            page_size: 0x1000,
+            ro_size: ro_size as u64,
+            rw_size: rw_size as u64,
+            rx_size: rx_size as u64,
             ro_addr_start: 0x200000,
-            rx_addr_start: 0x201000,
-            rw_addr_start: 0x202000,
+            rx_addr_start: 0x200000,
+            rw_addr_start: 0x200000,
             addr_dynamic: 0,
             addr_dynstr: 0,
             index_strtab: None,
-            index_dynstr: None,
+            //index_dynstr: None,
         }
     }
 
+    fn reserve_dynamic(&mut self, w: &mut Writer) {
+        let string = Some(w.add_dynamic_string("libc.so.6".as_bytes()));
+        self.dynamic.push(Dynamic { tag: elf::DT_NEEDED, val: 0, string });
+        self.dynamic.push(Dynamic { tag: elf::DT_DEBUG, val: 0, string: None });
+        self.dynamic.push(Dynamic { tag: elf::DT_SYMTAB, val: 0, string: None });
+        self.dynamic.push(Dynamic {
+            tag: elf::DT_NULL,
+            val: 0,
+            string: None,
+        });
+    }
+
     fn reserve_header(&mut self, w: &mut Writer) {
+
         // Start reserving file ranges.
         w.reserve_file_header();
         let offset_fh = w.reserved_len();
@@ -174,9 +199,9 @@ impl Data {
             self.ph.push(ProgramHeaderEntry {
                 p_type: elf::PT_INTERP,
                 p_flags: elf::PF_R,
-                p_offset: 0,                 //offset, // calculate later
-                p_vaddr: self.ro_addr_start, // + offset,
-                p_paddr: self.ro_addr_start, // + offset,
+                p_offset: offset as u64,
+                p_vaddr: self.ro_addr_start + offset as u64,
+                p_paddr: self.ro_addr_start + offset as u64,
                 p_filesz: interp.len() as u64,
                 p_memsz: interp.len() as u64,
                 p_align: 1,
@@ -184,13 +209,14 @@ impl Data {
             offset += interp.len();
         }
 
-        self.ro_size = offset as u64;
+        // add headers to the ro_size
+        self.ro_size += offset as u64;
 
-        let align = 0x1000;
         // load segments
         // program LOAD (R)
+        let ro_size_page_aligned = size_align(self.ro_size as usize, self.page_size as usize);
         if self.data_segments.len() > 0 {
-            //let ro_size = 0;//0x210;
+            let ro_size_elf_aligned = size_align(self.ro_size as usize, 16);
             self.ph.push(ProgramHeaderEntry {
                 p_type: elf::PT_LOAD,
                 p_flags: elf::PF_R,
@@ -199,52 +225,48 @@ impl Data {
                 p_paddr: self.ro_addr_start as u64,
                 p_filesz: self.ro_size,
                 p_memsz: self.ro_size,
-                p_align: align,
+                p_align: self.page_size as u64,
             });
-            //offset += ro_size;
+            offset += ro_size_elf_aligned;
         }
 
+        self.rx_addr_start = self.ro_addr_start + ro_size_page_aligned as u64;
+        let rx_size_page_aligned = size_align(self.rx_size as usize, self.page_size as usize);
         if self.code_segments.len() > 0 {
             // program LOAD (RX)
-            let rx_offset = offset;
-            let rx_size = 0; //0x210;
+            //let rx_offset = offset;
+            let rx_size_elf_aligned = size_align(self.rx_size as usize, 16);
             self.ph.push(ProgramHeaderEntry {
                 p_type: elf::PT_LOAD,
                 p_flags: elf::PF_R | elf::PF_X,
-                p_offset: rx_offset as u64,
+                p_offset: offset as u64,
                 p_vaddr: (self.rx_addr_start + offset as u64),
                 p_paddr: (self.rx_addr_start + offset as u64),
-                p_filesz: rx_size,
-                p_memsz: rx_size,
-                p_align: align,
+                p_filesz: self.rx_size,
+                p_memsz: self.rx_size,
+                p_align: self.page_size as u64,
             });
-            offset += rx_size as usize;
+            offset += rx_size_elf_aligned;
         }
 
+        self.rw_addr_start = self.rx_addr_start + rx_size_page_aligned as u64;
+        let rw_size_page_aligned = size_align(self.rw_size as usize, self.page_size as usize);
         if self.data_segments.len() > 0 {
             // program LOAD (RW)
-            let rw_offset = offset;
-            let rw_size = 0; //0x210;
+            //let rw_offset = offset;
+            let rw_size_elf_aligned = size_align(self.rw_size as usize, 16);
             self.ph.push(ProgramHeaderEntry {
                 p_type: elf::PT_LOAD,
                 p_flags: elf::PF_R | elf::PF_W,
-                p_offset: rw_offset as u64,
-                p_vaddr: self.rw_addr_start as u64,
-                p_paddr: self.rw_addr_start as u64,
-                p_filesz: rw_size,
-                p_memsz: rw_size,
-                p_align: align,
+                p_offset: offset as u64,
+                p_vaddr: self.rw_addr_start + offset as u64,
+                p_paddr: self.rw_addr_start + offset as u64,
+                p_filesz: self.rw_size,
+                p_memsz: self.rw_size,
+                p_align: self.page_size as u64,
             });
-            offset += rw_size as usize;
+            offset += self.rw_size as usize;//_elf_aligned;
         }
-
-        //let string = Some(w.add_dynamic_string("libc.so.6".as_bytes()));
-        //self.dynamic.push(Dynamic { tag: elf::DT_NEEDED, val: 0, string });
-        self.dynamic.push(Dynamic {
-            tag: elf::DT_NULL,
-            val: 0,
-            string: None,
-        });
 
         //let before = writer.reserved_len();
         //writer.reserve_dynamic(out_dynamic.len());
@@ -257,8 +279,8 @@ impl Data {
                 p_type: elf::PT_DYNAMIC,
                 p_flags: elf::PF_R | elf::PF_W,
                 p_offset: offset as u64,
-                p_vaddr: self.rw_addr_start,
-                p_paddr: self.rw_addr_start,
+                p_vaddr: self.rw_addr_start + offset as u64,
+                p_paddr: self.rw_addr_start + offset as u64,
                 p_filesz: dynamic_size,
                 p_memsz: dynamic_size,
                 p_align: 0x8,
@@ -284,13 +306,13 @@ impl Data {
         if let Some(interp) = &self.interp {
             let name = Some(w.add_section_name(".interp".as_bytes()));
             let index = w.reserve_section_index();
-            let align = 1;
+            let align = 0x10;
             let start = w.reserve(interp.len(), align);
             self.sections.push(Section {
                 name,
                 sh_type: elf::SHT_PROGBITS,
                 sh_flags: elf::SHF_ALLOC as usize,
-                sh_name: 0, //shstrtab_offset as u32, // set offset to name later when it's allocated
+                sh_name: 0,
                 sh_addr: (self.ro_addr_start + start as u64) as usize,
                 sh_offset: start as usize,
                 sh_info: 0,
@@ -299,7 +321,6 @@ impl Data {
                 sh_addralign: align,
                 data: interp.as_bytes().to_vec(),
             });
-            //out_sections_index.push(index);
         }
     }
 
@@ -307,9 +328,7 @@ impl Data {
         if self.data_segments.len() > 0 {
             let name = Some(w.add_section_name(".data".as_bytes()));
             let data_index = w.reserve_section_index();
-            //out_sections_index.push(data_index);
 
-            //let data_offset = offset;
             let mut data = vec![];
             for segment in self.data_segments.iter() {
                 data.extend(segment.bytes.clone());
@@ -347,7 +366,7 @@ impl Data {
                 data.extend(segment.bytes.clone());
             }
             //offset += data.len() as u64;
-            let align = 0x10;
+            let align = 0x20;
             let start = w.reserve(data.len(), align);
 
             //offset = start as u64 + data.len() as u64;
@@ -369,12 +388,21 @@ impl Data {
 
     fn reserve_section_dynstr(&mut self, w: &mut Writer) {
         //let name = Some(w.add_section_name(".dynstr".as_bytes()));
-        self.index_dynstr = Some(w.reserve_dynstr_section_index());
+        let index_dynstr = Some(w.reserve_dynstr_section_index());
         //out_sections_index.push(shstrtab_index);
         let before = w.reserved_len();
         w.reserve_dynstr();
         let after = w.reserved_len();
         self.addr_dynstr = self.rw_addr_start; // + offset;
+    }
+
+    fn reserve_section_strtab(&mut self, w: &mut Writer) {
+        let name = Some(w.add_section_name(".strtab".as_bytes()));
+        self.index_strtab = Some(w.reserve_strtab_section_index());
+        //out_sections_index.push(shstrtab_index);
+        let before = w.reserved_len();
+        w.reserve_strtab();
+        let after = w.reserved_len();
         /*
         self.sections.push(Section {
             name,
@@ -389,31 +417,8 @@ impl Data {
             sh_addralign: 1,
             data: vec![],
         });
+        //offset += (after - before) as u64;
         */
-        //offset += (after - before) as u64;
-    }
-
-    fn reserve_section_strtab(&mut self, w: &mut Writer) {
-        let name = Some(w.add_section_name(".strtab".as_bytes()));
-        self.index_strtab = Some(w.reserve_strtab_section_index());
-        //out_sections_index.push(shstrtab_index);
-        let before = w.reserved_len();
-        w.reserve_strtab();
-        let after = w.reserved_len();
-        self.sections.push(Section {
-            name,
-            sh_type: elf::SHT_STRTAB,
-            sh_flags: 0,
-            sh_name: 0, //shstrtab_offset as u32, // set offset to name later when it's allocated
-            sh_addr: (self.ro_addr_start as usize), // + offset) as usize,
-            sh_offset: 0, //offset as usize,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign: 1,
-            data: vec![],
-        });
-        //offset += (after - before) as u64;
     }
 
     fn reserve_section_shstrtab(&mut self, w: &mut Writer) {
@@ -423,6 +428,7 @@ impl Data {
         let before = w.reserved_len();
         w.reserve_shstrtab();
         let after = w.reserved_len();
+        /*
         self.sections.push(Section {
             name,
             sh_type: elf::SHT_STRTAB,
@@ -437,6 +443,7 @@ impl Data {
             data: vec![],
         });
         //offset += (after - before) as u64;
+        */
     }
 
     fn reserve_section_dynamic(&mut self, w: &mut Writer) {
@@ -448,6 +455,7 @@ impl Data {
             //let before = w.reserved_len();
             w.reserve_dynamic(self.dynamic.len());
             //let after = w.reserved_len();
+            /*
             self.sections.push(Section {
                 name,
                 sh_type: elf::SHT_DYNAMIC,
@@ -456,11 +464,12 @@ impl Data {
                 sh_addr: self.addr_dynamic as usize,
                 sh_offset: 0,//before as usize,
                 sh_info: 0,
-                sh_link: self.index_dynstr.unwrap().0, // reference strtab
+                sh_link: w.dynstr_index().0, // reference dynstr
                 sh_entsize: 0x10,
                 sh_addralign: 8,
                 data: vec![],
             });
+            */
 
             //offset += dynamic_size as u64;
         }
@@ -478,17 +487,8 @@ impl Data {
                     w.write_align(section.sh_addralign as usize);
                     w.write(section.data.as_slice());
                 }
-                (elf::SHT_DYNAMIC, true) => {
-                    eprintln!("write: {:?}", section);
-                    w.write_align_dynamic();
-                    for d in self.dynamic.iter() {
-                        if let Some(string) = d.string {
-                            w.write_dynamic_string(d.tag, string);
-                        } else {
-                            w.write_dynamic(d.tag, d.val);
-                        }
-                    }
-                }
+                //(elf::SHT_DYNAMIC, true) => {
+                //}
                 //elf::SHT_DYNSYM => {
                 //writer.write_null_dynamic_symbol();
                 //}
@@ -499,6 +499,18 @@ impl Data {
         }
         w.write_dynstr();
         w.write_strtab();
+
+        // write dynamic
+        //eprintln!("write: {:?}", section);
+        w.write_align_dynamic();
+        for d in self.dynamic.iter() {
+            if let Some(string) = d.string {
+                w.write_dynamic_string(d.tag, string);
+            } else {
+                w.write_dynamic(d.tag, d.val);
+            }
+        }
+
         w.write_shstrtab();
 
         // write symbols
@@ -526,13 +538,13 @@ impl Data {
                 }
                 elf::SHT_STRTAB => (),
                 elf::SHT_DYNAMIC => {
-                    w.write_dynamic_section_header(self.addr_dynamic);
                 }
                 _ => unimplemented!(),
             }
         }
         w.write_dynstr_section_header(self.addr_dynstr);
         w.write_strtab_section_header();
+        w.write_dynamic_section_header(self.addr_dynamic);
         w.write_shstrtab_section_header();
 
         Ok(())
@@ -573,6 +585,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut data = Data::new(link);
     let is_class_64 = data.is_64;
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
+    data.reserve_dynamic(&mut writer);
     data.reserve_header(&mut writer);
     data.reserve_sections(&mut writer);
     data.write_header(&mut writer)?;
@@ -1037,6 +1050,12 @@ pub fn write_file2<Elf: FileHeader<Endian = Endianness>>(
     //writer.write_dynstr_section_header(dynstr_addr);
 
     Ok(out_data)
+}
+
+
+/// align size
+fn size_align(n: usize, align: usize) -> usize {
+    return (n + (align - 1)) & !(align - 1);
 }
 
 #[cfg(test)]
