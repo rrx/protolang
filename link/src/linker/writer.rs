@@ -440,6 +440,20 @@ impl Data {
         // add headers to the ro_size
         self.ro.size += offset as u64;
 
+        if let Some(interp) = &self.interp {
+            self.ph.push(ProgramHeaderEntry {
+                p_type: elf::PT_INTERP,
+                p_flags: elf::PF_R,
+                p_offset: offset as u64,
+                p_vaddr: self.ro.addr + offset as u64,
+                p_paddr: self.ro.addr + offset as u64,
+                p_filesz: interp.as_bytes().len() as u64,
+                p_memsz: interp.as_bytes().len() as u64,
+                p_align: 1,
+            });
+            offset += interp.len();
+        }
+
         // load segments
         // program LOAD (R)
         let ro_size_page_aligned = size_align(self.ro.size as usize, self.page_size as usize);
@@ -496,20 +510,6 @@ impl Data {
             offset += self.rw.size as usize; //_elf_aligned;
         }
 
-        if let Some(interp) = &self.interp {
-            self.ph.push(ProgramHeaderEntry {
-                p_type: elf::PT_INTERP,
-                p_flags: elf::PF_R,
-                p_offset: offset as u64,
-                p_vaddr: self.ro.addr + offset as u64,
-                p_paddr: self.ro.addr + offset as u64,
-                p_filesz: interp.as_bytes().len() as u64,
-                p_memsz: interp.as_bytes().len() as u64,
-                p_align: 1,
-            });
-            offset += interp.len();
-        }
-
         //let before = writer.reserved_len();
         //writer.reserve_dynamic(out_dynamic.len());
         //let after = writer.reserved_len();
@@ -533,8 +533,8 @@ impl Data {
     fn reserve_sections(&mut self, w: &mut Writer, components: &mut Vec<Box<dyn ElfComponent>>) {
         let null_section_index = w.reserve_null_section_index();
         //self.reserve_section_interp(w);
-        self.reserve_section_data(w);
-        self.reserve_section_code(w);
+        //self.reserve_section_data(w);
+        //self.reserve_section_code(w);
 
         components.iter_mut().for_each(|c| {
             c.reserve(self, w);
@@ -729,12 +729,34 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
 
     let mut components: Vec<Box<dyn ElfComponent>> = vec![];
-    let name_id = writer.add_section_name(".interp".as_bytes());
     if data.interp.is_some() {
-        let interp = data.interp.take().unwrap_or(String::default()).into_bytes();
-        let s = AllocateSection::new(interp.clone(), 0x10, AllocSegment::RO).name_section(name_id);
+        let name_id = writer.add_section_name(".interp".as_bytes());
+        //let interp = data.interp.take().unwrap_or(String::default()).into_bytes();
+        let s = AllocateSection::new(
+            data.interp.clone().unwrap().as_bytes().to_vec(),
+            0x10,
+            AllocSegment::RO,
+        )
+        .name_section(name_id);
         components.push(Box::new(s));
     }
+
+    let mut buf = vec![];
+    for segment in data.data_segments.iter() {
+        buf.extend(segment.bytes.clone());
+    }
+    let name_id = writer.add_section_name(".data".as_bytes());
+    let s = AllocateSection::new(buf, 0x20, AllocSegment::RW).name_section(name_id);
+    components.push(Box::new(s));
+
+    let mut buf = vec![];
+    for segment in data.code_segments.iter() {
+        buf.extend(segment.bytes.clone());
+    }
+    let name_id = writer.add_section_name(".text".as_bytes());
+    let s = AllocateSection::new(buf, 0x20, AllocSegment::RX).name_section(name_id);
+    components.push(Box::new(s));
+
     components.push(Box::new(DynStrSection::default()));
     components.push(Box::new(DynSymSection::default()));
     components.push(Box::new(StrTabSection::default()));
