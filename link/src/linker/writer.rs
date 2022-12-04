@@ -447,7 +447,25 @@ impl ElfComponent for StrTabSection {
 
 struct BufferSection {
     name_id: StringId,
+    align: usize,
     buf: Vec<u8>,
+}
+
+impl BufferSection {
+    fn reserve(&self, w: &mut Writer) {
+        let index = w.reserve_section_index();
+        let pos = w.reserved_len();
+        let align_pos = size_align(pos, self.align);
+        w.reserve_until(align_pos);
+        w.reserve(self.buf.len(), self.align);
+    }
+
+    fn write(&self, w: &mut Writer) {
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.align);
+        w.pad_until(aligned_pos);
+        w.write(self.buf.as_slice());
+    }
 }
 
 struct Segment {
@@ -948,6 +966,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     //data.rx.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     rx_blocks.push(BufferSection {
         name_id,
+        align: 0x10,
         buf: buf.to_vec(),
     });
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RX).name_section(name_id);
@@ -966,6 +985,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     //data.rw.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     rw_blocks.push(BufferSection {
         name_id,
+        align: 0x10,
         buf: buf.to_vec(),
     });
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RW).name_section(name_id);
@@ -995,8 +1015,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     for b in rx_blocks.iter().chain(rw_blocks.iter()) {
-        let index = writer.reserve_section_index();
-        writer.reserve(b.buf.len(), 1);
+        b.reserve(&mut writer);
     }
 
     //data.rx.reserve(&mut data, &mut writer);
@@ -1033,7 +1052,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     for b in rx_blocks.iter().chain(rw_blocks.iter()) {
-        writer.write(b.buf.as_slice());
+        b.write(&mut writer);
     }
 
     for c in components.iter() {
@@ -1049,8 +1068,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         c.write_section_header(&data, &mut writer);
     }
 
-    let mut offset = 0;
-    for b in rx_blocks.iter().chain(rw_blocks.iter()) {
+    //let mut offset = 0;
+    for b in rx_blocks.iter() {
+        //b.write_section_header(&mut writer);
         let size = b.buf.len();
         writer.write_section_header(&object::write::elf::SectionHeader {
             name: Some(b.name_id),
@@ -1064,7 +1084,25 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             sh_addralign: data.rx.align as u64,
             sh_size: data.rx.size as u64,
         });
-        offset += size as u64;
+        //offset += size as u64;
+    }
+
+    for b in rw_blocks.iter() {
+        //b.write_section_header(&mut writer);
+        let size = b.buf.len();
+        writer.write_section_header(&object::write::elf::SectionHeader {
+            name: Some(b.name_id),
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags: data.rw.flags as u64,
+            sh_addr: data.rw.addr,
+            sh_offset: data.rw.offset, // + offset,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign: data.rw.align as u64,
+            sh_size: data.rw.size as u64,
+        });
+        //offset += size as u64;
     }
 
     for c in components.iter() {
