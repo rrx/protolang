@@ -83,6 +83,8 @@ struct Data {
     rw_addr_start: u64,
     addr_dynamic: u64,
     addr_dynstr: u64,
+    addr_dynsym: u64,
+    addr_text: u64,
     index_strtab: Option<SectionIndex>,
     //index_dynstr: Option<SectionIndex>,
 }
@@ -134,11 +136,13 @@ impl Data {
             ro_size: ro_size as u64,
             rw_size: rw_size as u64,
             rx_size: rx_size as u64,
-            ro_addr_start: 0x200000,
-            rx_addr_start: 0x200000,
-            rw_addr_start: 0x200000,
+            ro_addr_start: 0x000000,
+            rx_addr_start: 0x000000,
+            rw_addr_start: 0x000000,
             addr_dynamic: 0,
             addr_dynstr: 0,
+            addr_dynsym: 0,
+            addr_text: 0,
             index_strtab: None,
             //index_dynstr: None,
         }
@@ -302,6 +306,7 @@ impl Data {
         self.reserve_section_data(w);
         self.reserve_section_code(w);
         self.reserve_section_dynstr(w);
+        self.reserve_section_dynsym(w);
         self.reserve_section_strtab(w);
         self.reserve_section_dynamic(w);
 
@@ -377,6 +382,7 @@ impl Data {
             let align = 0x20;
             let start = w.reserve(data.len(), align);
 
+            self.addr_text = self.rx_addr_start + start as u64;
             //offset = start as u64 + data.len() as u64;
             self.sections.push(Section {
                 name,
@@ -392,6 +398,17 @@ impl Data {
                 data,
             });
         }
+    }
+
+    fn reserve_section_dynsym(&mut self, w: &mut Writer) {
+        //w.reserve_dynamic_symbol_index();
+        w.reserve_null_dynamic_symbol_index();
+
+        let index_dynsym = Some(w.reserve_dynsym_section_index());
+        let before = w.reserved_len();
+        w.reserve_dynsym();
+        let after = w.reserved_len();
+        self.addr_dynsym = self.ro_addr_start; // + offset;
     }
 
     fn reserve_section_dynstr(&mut self, w: &mut Writer) {
@@ -459,27 +476,12 @@ impl Data {
             let name = Some(w.add_section_name(".dynamic".as_bytes()));
             let dynamic_index = w.reserve_dynamic_section_index();
             //out_sections_index.push(dynamic_index);
-            self.addr_dynamic = self.rw_addr_start; // + offset;
-                                                    //let before = w.reserved_len();
-            w.reserve_dynamic(self.dynamic.len());
-            //let after = w.reserved_len();
-            /*
-            self.sections.push(Section {
-                name,
-                sh_type: elf::SHT_DYNAMIC,
-                sh_flags: (elf::SHF_ALLOC | elf::SHF_WRITE) as usize,
-                sh_name: 0, // set offset to name later when it's allocated
-                sh_addr: self.addr_dynamic as usize,
-                sh_offset: 0,//before as usize,
-                sh_info: 0,
-                sh_link: w.dynstr_index().0, // reference dynstr
-                sh_entsize: 0x10,
-                sh_addralign: 8,
-                data: vec![],
-            });
-            */
 
-            //offset += dynamic_size as u64;
+            let before = w.reserved_len();
+            let align_offset = size_align(before, 0x10);
+            w.reserve_until(align_offset);
+            w.reserve_dynamic(self.dynamic.len());
+            self.addr_dynamic = self.rw_addr_start + align_offset as u64;
         }
     }
 
@@ -491,7 +493,7 @@ impl Data {
                     elf::SHT_PROGBITS | elf::SHT_NOTE | elf::SHT_INIT_ARRAY | elf::SHT_FINI_ARRAY,
                     true,
                 ) => {
-                    eprintln!("write: {:?}", section);
+                    //eprintln!("write: {:?}", section);
                     w.write_align(section.sh_addralign as usize);
                     w.write(section.data.as_slice());
                 }
@@ -505,19 +507,16 @@ impl Data {
                 _ => (),
             }
         }
+
         w.write_dynstr();
+
+        // dynsym
+        w.write_null_dynamic_symbol();
+        //w.write_dynsym();
+
         w.write_strtab();
 
-        // write dynamic
-        //eprintln!("write: {:?}", section);
-        w.write_align_dynamic();
-        for d in self.dynamic.iter() {
-            if let Some(string) = d.string {
-                w.write_dynamic_string(d.tag, string);
-            } else {
-                w.write_dynamic(d.tag, d.val);
-            }
-        }
+        self.write_dynamic(w);
 
         w.write_shstrtab();
 
@@ -550,6 +549,7 @@ impl Data {
             }
         }
         w.write_dynstr_section_header(self.addr_dynstr);
+        w.write_dynsym_section_header(self.addr_dynsym, 1);
         w.write_strtab_section_header();
         w.write_dynamic_section_header(self.addr_dynamic);
         w.write_shstrtab_section_header();
@@ -557,14 +557,29 @@ impl Data {
         Ok(())
     }
 
+    fn write_dynamic(&self, w: &mut Writer) {
+        // write dynamic
+        let pos = w.len();
+        let aligned_pos = size_align(pos, 0x10);
+        w.pad_until(aligned_pos);
+        w.write_align_dynamic();
+        for d in self.dynamic.iter() {
+            if let Some(string) = d.string {
+                w.write_dynamic_string(d.tag, string);
+            } else {
+                w.write_dynamic(d.tag, d.val);
+            }
+        }
+    }
+
     fn write_header(&self, w: &mut Writer) -> Result<()> {
         w.write_file_header(&object::write::elf::FileHeader {
-            os_abi: 0x00,    // SysV
-            abi_version: 0,  // ignored on linux
-            e_type: 0x02,    // ET_EXEC - Executable file
-            e_machine: 0x3E, // AMD x86-64
-            e_entry: 0,      // e_entry
-            e_flags: 0,      // e_flags
+            os_abi: 0x00,            // SysV
+            abi_version: 0,          // ignored on linux
+            e_type: 0x02,            // ET_EXEC - Executable file
+            e_machine: 0x3E,         // AMD x86-64
+            e_entry: self.addr_text, // e_entry, normally points to _start
+            e_flags: 0,              // e_flags
         })?;
 
         w.write_align_program_headers();

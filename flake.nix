@@ -51,6 +51,7 @@
           zig
           pkg-config
           rust-bindgen
+          rustup
           cargo-criterion
           bazel_5
           libsigsegv

@@ -94,37 +94,6 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
             }
             _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
         }
-
-        // get a list of data symbols
-        /*
-        let data_symbols = unlinked
-            .defined
-            .iter()
-            .map(|(_, s)| s.clone())
-            .filter(|s| s.kind == CodeSymbolKind::Data || s.kind == CodeSymbolKind::Section)
-            .collect::<Vec<_>>();
-        if let Some(block) =
-            unlinked.create_block(&name, PatchBlockKind::Data, data_symbols, &mut link.mem)?
-        {
-            //block.disassemble();
-            blocks.push((name, block));
-        }
-
-        // get a list of code symbols
-        let code_symbols = unlinked
-            .defined
-            .iter()
-            .map(|(_, s)| s.clone())
-            .filter(|s| s.kind == CodeSymbolKind::Text)
-            .collect::<Vec<_>>();
-        let name = format!("{}.code", &unlinked.name);
-        if let Some(block) =
-            unlinked.create_block(&name, PatchBlockKind::Code, code_symbols, &mut link.mem)?
-        {
-            //block.disassemble();
-            blocks.push((name, block));
-        }
-        */
     }
 
     // generate a list of symbols and their pointers

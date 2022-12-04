@@ -1,0 +1,13 @@
+[package]
+name = "freestanding"
+version = "0.1.0"
+authors = [""]
+edition = "2021"
+
+[dependencies]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
