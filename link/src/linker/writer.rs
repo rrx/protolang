@@ -66,6 +66,138 @@ struct DynamicSymbol {
     gnu_hash: Option<u32>,
 }
 
+trait ElfComponent {
+    fn reserve(&self, data: &mut Data, w: &mut Writer) {}
+    fn write(&self, data: &Data, w: &mut Writer) {}
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {}
+}
+
+#[derive(Default)]
+struct DynamicSection {
+    index: Option<SectionIndex>,
+}
+
+impl ElfComponent for DynamicSection {
+    fn reserve(&self, data: &mut Data, w: &mut Writer) {
+        let name = Some(w.add_section_name(".dynamic".as_bytes()));
+        let dynamic_index = w.reserve_dynamic_section_index();
+        let before = w.reserved_len();
+        let align_offset = size_align(before, 0x10);
+        w.reserve_until(align_offset);
+        w.reserve_dynamic(data.dynamic.len());
+        data.addr_dynamic = data.rw_addr_start + align_offset as u64;
+    }
+
+    fn write(&self, data: &Data, w: &mut Writer) {
+        // write dynamic
+        let pos = w.len();
+        let aligned_pos = size_align(pos, 0x10);
+        w.pad_until(aligned_pos);
+        w.write_align_dynamic();
+        for d in data.dynamic.iter() {
+            if let Some(string) = d.string {
+                w.write_dynamic_string(d.tag, string);
+            } else {
+                w.write_dynamic(d.tag, d.val);
+            }
+        }
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_dynamic_section_header(data.addr_dynamic);
+    }
+}
+
+#[derive(Default)]
+struct DynSymSection {
+    index: Option<SectionIndex>,
+}
+
+impl ElfComponent for DynSymSection {
+    fn reserve(&self, data: &mut Data, w: &mut Writer) {
+        //w.reserve_dynamic_symbol_index();
+        w.reserve_null_dynamic_symbol_index();
+
+        data.index_dynsym = Some(w.reserve_dynsym_section_index());
+        let before = w.reserved_len();
+        w.reserve_dynsym();
+        let after = w.reserved_len();
+        data.addr_dynsym = data.ro_addr_start;
+    }
+
+    fn write(&self, data: &Data, w: &mut Writer) {
+        w.write_null_dynamic_symbol();
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_dynsym_section_header(data.addr_dynsym, 1);
+    }
+}
+
+#[derive(Default)]
+struct DynStrSection {
+    index: Option<SectionIndex>,
+}
+impl ElfComponent for DynStrSection {
+    fn reserve(&self, data: &mut Data, w: &mut Writer) {
+        data.index_dynstr = Some(w.reserve_dynstr_section_index());
+        let before = w.reserved_len();
+        w.reserve_dynstr();
+        let after = w.reserved_len();
+        data.addr_dynstr = data.rw_addr_start;
+    }
+
+    fn write(&self, data: &Data, w: &mut Writer) {
+        w.write_dynstr();
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_dynstr_section_header(data.addr_dynstr);
+    }
+}
+
+#[derive(Default)]
+struct ShStrTabSection {
+    index: Option<SectionIndex>,
+}
+impl ElfComponent for ShStrTabSection {
+    fn reserve(&self, data: &mut Data, w: &mut Writer) {
+        let name = Some(w.add_section_name(".shstrtab".as_bytes()));
+        let shstrtab_index = w.reserve_shstrtab_section_index();
+        let before = w.reserved_len();
+        w.reserve_shstrtab();
+        let after = w.reserved_len();
+    }
+
+    fn write(&self, data: &Data, w: &mut Writer) {
+        w.write_shstrtab();
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_shstrtab_section_header();
+    }
+}
+
+#[derive(Default)]
+struct StrTabSection {
+    index: Option<SectionIndex>,
+}
+impl ElfComponent for StrTabSection {
+    fn reserve(&self, data: &mut Data, w: &mut Writer) {
+        let name = Some(w.add_section_name(".strtab".as_bytes()));
+        data.index_strtab = Some(w.reserve_strtab_section_index());
+        w.reserve_strtab();
+    }
+
+    fn write(&self, data: &Data, w: &mut Writer) {
+        w.write_strtab();
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_strtab_section_header();
+    }
+}
+
 struct Data {
     interp: Option<String>,
     is_64: bool,
@@ -86,7 +218,8 @@ struct Data {
     addr_dynsym: u64,
     addr_text: u64,
     index_strtab: Option<SectionIndex>,
-    //index_dynstr: Option<SectionIndex>,
+    index_dynstr: Option<SectionIndex>,
+    index_dynsym: Option<SectionIndex>,
 }
 impl Data {
     fn new(link: &Link) -> Self {
@@ -144,7 +277,8 @@ impl Data {
             addr_dynsym: 0,
             addr_text: 0,
             index_strtab: None,
-            //index_dynstr: None,
+            index_dynstr: None,
+            index_dynsym: None,
         }
     }
 
@@ -300,18 +434,16 @@ impl Data {
         }
     }
 
-    fn reserve_sections(&mut self, w: &mut Writer) {
+    fn reserve_sections(&mut self, w: &mut Writer, components: &Vec<Box<dyn ElfComponent>>) {
         let null_section_index = w.reserve_null_section_index();
         self.reserve_section_interp(w);
         self.reserve_section_data(w);
         self.reserve_section_code(w);
-        self.reserve_section_dynstr(w);
-        self.reserve_section_dynsym(w);
-        self.reserve_section_strtab(w);
-        self.reserve_section_dynamic(w);
 
-        // shstrtab needs to be allocated last, once all headers are reserved
-        self.reserve_section_shstrtab(w);
+        components.iter().for_each(|c| {
+            c.reserve(self, w);
+        });
+
         w.reserve_section_headers();
     }
 
@@ -400,92 +532,11 @@ impl Data {
         }
     }
 
-    fn reserve_section_dynsym(&mut self, w: &mut Writer) {
-        //w.reserve_dynamic_symbol_index();
-        w.reserve_null_dynamic_symbol_index();
-
-        let index_dynsym = Some(w.reserve_dynsym_section_index());
-        let before = w.reserved_len();
-        w.reserve_dynsym();
-        let after = w.reserved_len();
-        self.addr_dynsym = self.ro_addr_start; // + offset;
-    }
-
-    fn reserve_section_dynstr(&mut self, w: &mut Writer) {
-        //let name = Some(w.add_section_name(".dynstr".as_bytes()));
-        let index_dynstr = Some(w.reserve_dynstr_section_index());
-        //out_sections_index.push(shstrtab_index);
-        let before = w.reserved_len();
-        w.reserve_dynstr();
-        let after = w.reserved_len();
-        self.addr_dynstr = self.rw_addr_start; // + offset;
-    }
-
-    fn reserve_section_strtab(&mut self, w: &mut Writer) {
-        let name = Some(w.add_section_name(".strtab".as_bytes()));
-        self.index_strtab = Some(w.reserve_strtab_section_index());
-        //out_sections_index.push(shstrtab_index);
-        let before = w.reserved_len();
-        w.reserve_strtab();
-        let after = w.reserved_len();
-        /*
-        self.sections.push(Section {
-            name,
-            sh_type: elf::SHT_STRTAB,
-            sh_flags: 0,
-            sh_name: 0, //shstrtab_offset as u32, // set offset to name later when it's allocated
-            sh_addr: (self.ro_addr_start as usize), // + offset) as usize,
-            sh_offset: 0, //offset as usize,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign: 1,
-            data: vec![],
-        });
-        //offset += (after - before) as u64;
-        */
-    }
-
-    fn reserve_section_shstrtab(&mut self, w: &mut Writer) {
-        let name = Some(w.add_section_name(".shstrtab".as_bytes()));
-        let shstrtab_index = w.reserve_shstrtab_section_index();
-        //out_sections_index.push(shstrtab_index);
-        let before = w.reserved_len();
-        w.reserve_shstrtab();
-        let after = w.reserved_len();
-        /*
-        self.sections.push(Section {
-            name,
-            sh_type: elf::SHT_STRTAB,
-            sh_flags: 0,
-            sh_name: 0, //shstrtab_offset as u32, // set offset to name later when it's allocated
-            sh_addr: (self.ro_addr_start as usize), // + offset) as usize,
-            sh_offset: 0, //offset as usize,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign: 1,
-            data: vec![],
-        });
-        //offset += (after - before) as u64;
-        */
-    }
-
-    fn reserve_section_dynamic(&mut self, w: &mut Writer) {
-        if self.dynamic.len() > 0 {
-            let name = Some(w.add_section_name(".dynamic".as_bytes()));
-            let dynamic_index = w.reserve_dynamic_section_index();
-            //out_sections_index.push(dynamic_index);
-
-            let before = w.reserved_len();
-            let align_offset = size_align(before, 0x10);
-            w.reserve_until(align_offset);
-            w.reserve_dynamic(self.dynamic.len());
-            self.addr_dynamic = self.rw_addr_start + align_offset as u64;
-        }
-    }
-
-    fn write_sections(&self, w: &mut Writer) -> Result<()> {
+    fn write_sections(
+        &self,
+        w: &mut Writer,
+        components: &Vec<Box<dyn ElfComponent>>,
+    ) -> Result<()> {
         for section in self.sections.iter() {
             //w.pad_until(section.sh_offset as usize);
             match (section.sh_type, section.is_alloc()) {
@@ -508,17 +559,9 @@ impl Data {
             }
         }
 
-        w.write_dynstr();
-
-        // dynsym
-        w.write_null_dynamic_symbol();
-        //w.write_dynsym();
-
-        w.write_strtab();
-
-        self.write_dynamic(w);
-
-        w.write_shstrtab();
+        for c in components {
+            c.write(self, w);
+        }
 
         // write symbols
         w.write_null_symbol();
@@ -548,28 +591,12 @@ impl Data {
                 _ => unimplemented!(),
             }
         }
-        w.write_dynstr_section_header(self.addr_dynstr);
-        w.write_dynsym_section_header(self.addr_dynsym, 1);
-        w.write_strtab_section_header();
-        w.write_dynamic_section_header(self.addr_dynamic);
-        w.write_shstrtab_section_header();
+
+        for c in components {
+            c.write_section_header(self, w);
+        }
 
         Ok(())
-    }
-
-    fn write_dynamic(&self, w: &mut Writer) {
-        // write dynamic
-        let pos = w.len();
-        let aligned_pos = size_align(pos, 0x10);
-        w.pad_until(aligned_pos);
-        w.write_align_dynamic();
-        for d in self.dynamic.iter() {
-            if let Some(string) = d.string {
-                w.write_dynamic_string(d.tag, string);
-            } else {
-                w.write_dynamic(d.tag, d.val);
-            }
-        }
     }
 
     fn write_header(&self, w: &mut Writer) -> Result<()> {
@@ -607,11 +634,21 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut data = Data::new(link);
     let is_class_64 = data.is_64;
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
+
+    let mut components: Vec<Box<dyn ElfComponent>> = vec![];
+    components.push(Box::new(DynStrSection::default()));
+    components.push(Box::new(DynSymSection::default()));
+    components.push(Box::new(StrTabSection::default()));
+    components.push(Box::new(DynamicSection::default()));
+
+    // shstrtab needs to be allocated last, once all headers are reserved
+    components.push(Box::new(ShStrTabSection::default()));
+
     data.reserve_dynamic(&mut writer);
     data.reserve_header(&mut writer);
-    data.reserve_sections(&mut writer);
+    data.reserve_sections(&mut writer, &components);
     data.write_header(&mut writer)?;
-    data.write_sections(&mut writer)?;
+    data.write_sections(&mut writer, &components)?;
     Ok(out_data)
 }
 
