@@ -451,7 +451,7 @@ struct BufferSection {
     addr: usize,
     offset: usize,
     size: usize,
-    align: usize,
+    //align: usize,
     buf: Vec<u8>,
 }
 
@@ -464,12 +464,23 @@ impl BufferSection {
         }
     }
 
+    fn align(&self) -> usize {
+        0x10
+        /*
+        match self.alloc {
+            AllocSegment::RO => data.ro.align,
+            AllocSegment::RW => data.rw.align,
+            AllocSegment::RX => data.rx.align,
+        }
+        */
+    }
+
     fn reserve(&self, w: &mut Writer) {
         let index = w.reserve_section_index();
         let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align);
+        let align_pos = size_align(pos, self.align());
         w.reserve_until(align_pos);
-        w.reserve(self.buf.len(), self.align);
+        w.reserve(self.buf.len(), self.align());
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -478,15 +489,20 @@ impl BufferSection {
             AllocSegment::RW => &data.rw,
             AllocSegment::RX => &data.rx,
         };
-        self.addr = segment.addr as usize;
+        self.addr = segment.base as usize;
         self.offset = segment.offset as usize;
         self.size = self.buf.len();//segment.size as usize;
     }
 
-    fn write(&self, w: &mut Writer) {
+    fn write(&mut self, w: &mut Writer) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align);
+        let aligned_pos = size_align(pos, self.align());
+        //w.write_align(aligned_pos - pos);
+        //w.pad_until(self.offset);//aligned_pos);
         w.pad_until(aligned_pos);
+        self.addr = self.addr as usize + w.len();
+        self.offset = w.len();
+        eprintln!("write at: {:#0x}, size: {:#0x}", w.len(), self.buf.len());
         w.write(self.buf.as_slice());
     }
 
@@ -500,13 +516,14 @@ impl BufferSection {
             sh_info: 0,
             sh_link: 0,
             sh_entsize: 0,
-            sh_addralign: self.align as u64,
+            sh_addralign: self.align() as u64,
             sh_size: self.size as u64,
         });
     }
 }
 
 struct Segment {
+    base: u64,
     addr: u64,
     offset: u64,
     size: usize,
@@ -515,25 +532,11 @@ struct Segment {
     blocks: Vec<BufferSection>,
     components: Vec<Box<dyn ElfComponent>>,
 }
-/*
-impl Default for Segment {
-    fn default() -> Self {
-        Self {
-            addr: 0,
-            offset: 0,
-            size: 0,
-            flags: 0,
-            align: 0x1000,
-            blocks: vec![],
-            components: vec![]
-        }
-    }
-}
-*/
 
 impl Segment {
     fn new_ro() -> Self {
         Self {
+            base: 0,
             addr: 0,
             offset: 0,
             size: 0,
@@ -546,6 +549,7 @@ impl Segment {
 
     fn new_rw() -> Self {
         Self {
+            base: 0,
             addr: 0,
             offset: 0,
             size: 0,
@@ -558,6 +562,7 @@ impl Segment {
 
     fn new_rx() -> Self {
         Self {
+            base: 0,
             addr: 0,
             offset: 0,
             size: 0,
@@ -803,8 +808,10 @@ impl Data {
         let base = 0;
         let mut offset = 0;
         let ro_size_elf_aligned = size_align(self.ro.size as usize, align);
+        self.ro.base = base;
         self.ro.addr = base + offset as u64;
         self.ro.offset = offset as u64;
+        self.ro.align = align as u32;
         eprintln!("{:#0x}, {:#0x}", base, offset);
         offset += ro_size_elf_aligned;
 
@@ -813,8 +820,10 @@ impl Data {
             self.page_size as usize,
         ) as u64;
         let rx_size_elf_aligned = size_align(self.rx.size as usize, align);
+        self.rx.base = base;
         self.rx.addr = base + offset as u64;
         self.rx.offset = offset as u64;
+        self.rx.align = align as u32;
         eprintln!("{:#0x}, {:#0x}", base, offset);
         offset += rx_size_elf_aligned;
 
@@ -823,8 +832,10 @@ impl Data {
             self.page_size as usize,
         ) as u64;
         let rw_size_elf_aligned = size_align(self.rw.size as usize, align);
+        self.rw.base = base;
         self.rw.addr = base + offset as u64;
         self.rw.offset = offset as u64;
+        self.rw.align = align as u32;
         eprintln!("{:#0x}, {:#0x}", base, offset);
         offset += rw_size_elf_aligned;
     }
@@ -885,6 +896,7 @@ impl Data {
             p_memsz: self.rx.size as u64,
             p_align: self.page_size as u64,
         });
+        eprintln!("{:#0x}, {:#0x}", self.rx.offset, addr);
 
         // program LOAD (RW)
         let addr = self.rw.addr; // + self.rw.offset as u64;
@@ -971,8 +983,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut ro_components: Vec<Box<dyn ElfComponent>> = vec![];
     //let mut rw_components = vec![];
     //let mut rx_components = vec![];
-    let mut rx_blocks = vec![];
-    let mut rw_blocks = vec![];
+    let mut blocks = vec![];
+    //let mut rw_blocks = vec![];
 
     let page_align = 0x1000;
     let mut components: Vec<Box<dyn ElfComponent>> = vec![];
@@ -996,16 +1008,15 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // .text
     let mut buf = vec![];
-
     for segment in data.code_segments.iter() {
         buf.extend(segment.bytes.clone());
     }
     let name_id = writer.add_section_name(".text".as_bytes());
     //data.rx.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-    rx_blocks.push(BufferSection {
+    blocks.push(BufferSection {
         alloc: AllocSegment::RX,
         name_id, addr: 0, offset: 0, size: 0,
-        align: 0x10,
+        //align: 0x10,
         buf: buf.to_vec(),
     });
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RX).name_section(name_id);
@@ -1022,10 +1033,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
     let name_id = writer.add_section_name(".data".as_bytes());
     //data.rw.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-    rw_blocks.push(BufferSection {
+    blocks.push(BufferSection {
         alloc: AllocSegment::RW,
         name_id, addr: 0, offset: 0, size: 0,
-        align: 0x10,
+        //align: 0x10,
         buf: buf.to_vec(),
     });
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RW).name_section(name_id);
@@ -1054,7 +1065,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         c.reserve(&mut data, &mut writer);
     }
 
-    for b in rx_blocks.iter().chain(rw_blocks.iter()) {
+    for b in blocks.iter() {
         b.reserve(&mut writer);
     }
 
@@ -1085,7 +1096,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
 
-    for b in rx_blocks.iter_mut().chain(rw_blocks.iter_mut()) {
+    for b in blocks.iter_mut() {
         b.update(&mut data);
     }
 
@@ -1096,7 +1107,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         c.write(&data, &mut writer);
     }
 
-    for b in rx_blocks.iter().chain(rw_blocks.iter()) {
+    for b in blocks.iter_mut() {
         b.write(&mut writer);
     }
 
@@ -1114,7 +1125,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     //let mut offset = 0;
-    for b in rx_blocks.iter() {
+    for b in blocks.iter() {
         //b.write_section_header(&mut writer);
         //let size = b.buf.len();
         b.write_section_header(&mut writer);
@@ -1135,10 +1146,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         //offset += size as u64;
     }
 
-    for b in rw_blocks.iter() {
+    //for b in rw_blocks.iter() {
         //b.write_section_header(&mut writer);
         //let size = b.buf.len();
-        b.write_section_header(&mut writer);
+        //b.write_section_header(&mut writer);
         /*
         writer.write_section_header(&object::write::elf::SectionHeader {
             name: Some(b.name_id),
@@ -1154,7 +1165,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         });
         */
         //offset += size as u64;
-    }
+    //}
 
     for c in components.iter() {
         c.write_section_header(&data, &mut writer);
