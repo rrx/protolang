@@ -119,32 +119,42 @@ enum AllocSegment {
     RX,
 }
 
-struct AllocateSection<'a, T> {
-    name: String,
+struct AllocateSection<'a> {
+    //name: &'a str,
+    //name_bytes: Vec<u8>,
     data: Vec<u8>,
     name_id: Option<StringId>,
     align: usize,
     addr: u64,
     alloc: AllocSegment,
-    _p: std::marker::PhantomData<&'a T>
+    _p: std::marker::PhantomData<&'a u8>,
 }
 
-impl<'a, t> AllocateSection<'a, T> {
-    pub fn new(name: String, data: &'a [u8], align: usize, alloc: AllocSegment) -> Self {
+impl<'a> AllocateSection<'a> {
+    pub fn new(data: Vec<u8>, align: usize, alloc: AllocSegment) -> Self {
+        //let name_bytes = name.as_bytes().to_vec();
+        //let name_id = Some(w.add_section_name(name.as_bytes()));
         Self {
-            data,
-            name,
+            data, //: data.to_vec(),
+            //name,
+            //name_bytes,
             name_id: None,
             align,
             addr: 0,
             alloc,
-            //_p: std::marker::PhantomData::default()
+            _p: std::marker::PhantomData::default(),
         }
+    }
+
+    pub fn name_section(mut self, name_id: StringId) -> Self {
+        self.name_id = Some(name_id);
+        self
     }
 }
 
 impl<'a> ElfComponent for AllocateSection<'a> {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
+        //self.name_id = Some(w.add_section_name(self.name_bytes.as_slice()));
         //self.name_id = Some(w.add_section_name(self.name.as_bytes()));
         let index = w.reserve_section_index();
         self.addr = w.reserve(self.data.len(), self.align as usize) as u64;
@@ -152,7 +162,7 @@ impl<'a> ElfComponent for AllocateSection<'a> {
 
     fn write(&self, data: &Data, w: &mut Writer) {
         w.write_align(self.align as usize);
-        w.write(self.data);
+        w.write(self.data.as_slice());
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
@@ -719,13 +729,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
 
     let mut components: Vec<Box<dyn ElfComponent>> = vec![];
-    if let Some(interp) = data.interp {
-        let s = AllocateSection::new(
-            ".interp".to_string(),
-            interp.as_bytes().to_vec(),
-            0x10,
-            AllocSegment::RO,
-        );
+    let name_id = writer.add_section_name(".interp".as_bytes());
+    if data.interp.is_some() {
+        let interp = data.interp.take().unwrap_or(String::default()).into_bytes();
+        let s = AllocateSection::new(interp.clone(), 0x10, AllocSegment::RO).name_section(name_id);
         components.push(Box::new(s));
     }
     components.push(Box::new(DynStrSection::default()));
