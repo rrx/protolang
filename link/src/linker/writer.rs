@@ -446,12 +446,24 @@ impl ElfComponent for StrTabSection {
 }
 
 struct BufferSection {
+    alloc: AllocSegment,
     name_id: StringId,
+    addr: usize,
+    offset: usize,
+    size: usize,
     align: usize,
     buf: Vec<u8>,
 }
 
 impl BufferSection {
+    fn flags(&self) -> u32 {
+        match self.alloc {
+            AllocSegment::RO => elf::SHF_ALLOC,
+            AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
+            AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
+        }
+    }
+
     fn reserve(&self, w: &mut Writer) {
         let index = w.reserve_section_index();
         let pos = w.reserved_len();
@@ -460,11 +472,37 @@ impl BufferSection {
         w.reserve(self.buf.len(), self.align);
     }
 
+    fn update(&mut self, data: &mut Data) {
+        let segment = match self.alloc {
+            AllocSegment::RO => &data.ro,
+            AllocSegment::RW => &data.rw,
+            AllocSegment::RX => &data.rx,
+        };
+        self.addr = segment.addr as usize;
+        self.offset = segment.offset as usize;
+        self.size = self.buf.len();//segment.size as usize;
+    }
+
     fn write(&self, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
         w.write(self.buf.as_slice());
+    }
+
+    fn write_section_header(&self, w: &mut Writer) {
+        w.write_section_header(&object::write::elf::SectionHeader {
+            name: Some(self.name_id),
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags: self.flags() as u64,
+            sh_addr: self.addr as u64,
+            sh_offset: self.offset as u64, // + offset,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign: self.align as u64,
+            sh_size: self.size as u64,
+        });
     }
 }
 
@@ -965,7 +1003,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let name_id = writer.add_section_name(".text".as_bytes());
     //data.rx.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     rx_blocks.push(BufferSection {
-        name_id,
+        alloc: AllocSegment::RX,
+        name_id, addr: 0, offset: 0, size: 0,
         align: 0x10,
         buf: buf.to_vec(),
     });
@@ -984,7 +1023,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let name_id = writer.add_section_name(".data".as_bytes());
     //data.rw.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     rw_blocks.push(BufferSection {
-        name_id,
+        alloc: AllocSegment::RW,
+        name_id, addr: 0, offset: 0, size: 0,
         align: 0x10,
         buf: buf.to_vec(),
     });
@@ -1034,6 +1074,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     writer.reserve_section_headers();
 
+    data.update_segments();
+
     // UPDATE
     for c in ro_components.iter_mut() {
         c.update(&mut data);
@@ -1042,7 +1084,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         c.update(&mut data);
     }
 
-    data.update_segments();
+
+    for b in rx_blocks.iter_mut().chain(rw_blocks.iter_mut()) {
+        b.update(&mut data);
+    }
 
     // WRITE
     data.write_header(&mut writer)?;
@@ -1071,7 +1116,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     //let mut offset = 0;
     for b in rx_blocks.iter() {
         //b.write_section_header(&mut writer);
-        let size = b.buf.len();
+        //let size = b.buf.len();
+        b.write_section_header(&mut writer);
+        /*
         writer.write_section_header(&object::write::elf::SectionHeader {
             name: Some(b.name_id),
             sh_type: elf::SHT_PROGBITS,
@@ -1084,12 +1131,15 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             sh_addralign: data.rx.align as u64,
             sh_size: data.rx.size as u64,
         });
+        */
         //offset += size as u64;
     }
 
     for b in rw_blocks.iter() {
         //b.write_section_header(&mut writer);
-        let size = b.buf.len();
+        //let size = b.buf.len();
+        b.write_section_header(&mut writer);
+        /*
         writer.write_section_header(&object::write::elf::SectionHeader {
             name: Some(b.name_id),
             sh_type: elf::SHT_PROGBITS,
@@ -1102,6 +1152,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             sh_addralign: data.rw.align as u64,
             sh_size: data.rw.size as u64,
         });
+        */
         //offset += size as u64;
     }
 
