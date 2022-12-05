@@ -77,6 +77,65 @@ trait ElfComponent {
     fn write(&self, data: &Data, w: &mut Writer) {}
     fn write_section_header(&self, data: &Data, w: &mut Writer) {}
 }
+
+struct HeaderComponent {}
+
+impl ElfComponent for HeaderComponent {
+    fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
+        if w.reserved_len() > 0 {
+            panic!("Must start with file header");
+        }
+
+        // Start reserving file ranges.
+        w.reserve_file_header();
+        data.size_fh = w.reserved_len();
+
+        let ph_count = data.get_header_count();
+
+        let before = w.reserved_len();
+        w.reserve_program_headers(ph_count as u32);
+        let after = w.reserved_len();
+        data.size_ph = after - before;
+
+        // add headers to the ro_size
+        data.ro.add_data(data.size_fh, 0x10);
+        data.ro.add_data(data.size_ph, 0x10);
+
+        // add interp size to data section
+        //if self.interp.is_some() {
+        //self.ro.size += self.interp.as_ref().unwrap().len();
+        //}
+    }
+    fn update(&self, data: &mut Data) {}
+    fn write(&self, data: &Data, w: &mut Writer) {
+        w.write_file_header(&object::write::elf::FileHeader {
+            os_abi: 0x00,            // SysV
+            abi_version: 0,          // ignored on linux
+            e_type: elf::ET_EXEC,    // ET_EXEC - Executable file
+            e_machine: 0x3E,         // AMD x86-64
+            e_entry: data.addr_text, // e_entry, normally points to _start
+            e_flags: 0,              // e_flags
+        })
+        .unwrap();
+
+        w.write_align_program_headers();
+
+        for ph in data.gen_ph().iter() {
+            w.write_program_header(&object::write::elf::ProgramHeader {
+                p_type: ph.p_type,
+                p_flags: ph.p_flags,
+                p_offset: ph.p_offset,
+                p_vaddr: ph.p_vaddr,
+                p_paddr: ph.p_paddr,
+                p_filesz: ph.p_filesz,
+                p_memsz: ph.p_memsz,
+                p_align: ph.p_align,
+            });
+        }
+    }
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {}
+}
+
 struct SegmentSection {
     index: Option<SectionIndex>,
     align: usize,
@@ -164,11 +223,7 @@ impl ElfComponent for SegmentSection {
             AllocSegment::RW => data.rw.offset,
             AllocSegment::RX => data.rx.offset,
         };
-        let sh_flags = match self.alloc {
-            AllocSegment::RO => elf::SHF_ALLOC,
-            AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
-            AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
-        };
+        let sh_flags = self.alloc.flags();
 
         let mut offset = 0;
         for c in components {
@@ -177,19 +232,21 @@ impl ElfComponent for SegmentSection {
 
         for b in blocks.iter() {
             let size = b.buf.len();
-            w.write_section_header(&object::write::elf::SectionHeader {
-                name: Some(b.name_id),
-                sh_type: elf::SHT_PROGBITS,
-                sh_flags: sh_flags as u64,
-                sh_addr: addr,
-                sh_offset: segment_offset + offset,
-                sh_info: 0,
-                sh_link: 0,
-                sh_entsize: 0,
-                sh_addralign: self.align as u64,
-                sh_size: size as u64,
-            });
-            offset += size as u64;
+            if let Some(name_id) = b.name_id {
+                w.write_section_header(&object::write::elf::SectionHeader {
+                    name: Some(name_id),
+                    sh_type: elf::SHT_PROGBITS,
+                    sh_flags: sh_flags as u64,
+                    sh_addr: addr,
+                    sh_offset: segment_offset + offset,
+                    sh_info: 0,
+                    sh_link: 0,
+                    sh_entsize: 0,
+                    sh_addralign: self.align as u64,
+                    sh_size: size as u64,
+                });
+                offset += size as u64;
+            }
         }
     }
 }
@@ -221,7 +278,7 @@ impl ElfComponent for DynamicSection {
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
         // allocate space in the rw segment
-        data.rw.size += after - before;
+        data.rw.add_data(after - before, self.align);
         data.size_dynamic = after - before;
         //data.addr_dynamic = data.rw.addr;// + self.start as u64;
     }
@@ -258,18 +315,28 @@ enum AllocSegment {
     RX,
 }
 
-struct AllocateSection<'a> {
+impl AllocSegment {
+    fn flags(&self) -> u32 {
+        match self {
+            AllocSegment::RO => elf::SHF_ALLOC,
+            AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
+            AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
+        }
+    }
+}
+
+struct AllocateSection {
     data: Vec<u8>,
     name_id: Option<StringId>,
     align: usize,
     page_align: usize,
     addr: u64,
     offset: u64,
+    size: usize,
     alloc: AllocSegment,
-    _p: std::marker::PhantomData<&'a u8>,
 }
 
-impl<'a> AllocateSection<'a> {
+impl AllocateSection {
     pub fn new(data: Vec<u8>, align: usize, page_align: usize, alloc: AllocSegment) -> Self {
         Self {
             data,
@@ -278,8 +345,8 @@ impl<'a> AllocateSection<'a> {
             page_align,
             addr: 0,
             offset: 0,
+            size: 0,
             alloc,
-            _p: std::marker::PhantomData::default(),
         }
     }
 
@@ -289,7 +356,7 @@ impl<'a> AllocateSection<'a> {
     }
 }
 
-impl<'a> ElfComponent for AllocateSection<'a> {
+impl ElfComponent for AllocateSection {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
         let index = w.reserve_section_index();
 
@@ -297,12 +364,20 @@ impl<'a> ElfComponent for AllocateSection<'a> {
         let align_pos = size_align(pos, self.align);
         w.reserve_until(align_pos);
 
-        self.offset = w.reserve(self.data.len(), self.align as usize) as u64;
-        let size = (self.offset - pos as u64) as usize;
+        let start = w.reserved_len();
+        self.offset = start as u64;
+        w.reserve(self.data.len(), self.align as usize) as u64;
+        let end = w.reserved_len() as u64;
+        self.size = self.data.len(); //(self.offset - pos as u64) as usize;
+                                     //let size = self.data.len();
+        eprintln!(
+            "reserveA: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
+            pos, start, self.offset, self.size
+        );
         match self.alloc {
-            AllocSegment::RO => data.ro.size += size,
-            AllocSegment::RW => data.rw.size += size,
-            AllocSegment::RX => data.rx.size += size,
+            AllocSegment::RO => data.ro.add_data(self.size, self.align),
+            AllocSegment::RW => data.rx.add_data(self.size, self.align),
+            AllocSegment::RX => data.rx.add_data(self.size, self.align),
         };
     }
 
@@ -311,7 +386,14 @@ impl<'a> ElfComponent for AllocateSection<'a> {
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
         //w.write_align(self.align as usize);
+        let addr = w.len();
         w.write(self.data.as_slice());
+        let end = w.len();
+        let size = end - addr;
+        eprintln!(
+            "writeA: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
+            pos, addr, self.offset, size
+        );
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
@@ -320,11 +402,7 @@ impl<'a> ElfComponent for AllocateSection<'a> {
             AllocSegment::RW => data.rw.addr, // + self.offset,
             AllocSegment::RX => data.rx.addr, // + self.offset,
         };
-        let sh_flags = match self.alloc {
-            AllocSegment::RO => elf::SHF_ALLOC,
-            AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
-            AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
-        };
+        let sh_flags = self.alloc.flags();
         w.write_section_header(&object::write::elf::SectionHeader {
             name: self.name_id,
             sh_type: elf::SHT_PROGBITS,
@@ -447,7 +525,7 @@ impl ElfComponent for StrTabSection {
 
 struct BufferSection {
     alloc: AllocSegment,
-    name_id: StringId,
+    name_id: Option<StringId>,
     addr: usize,
     offset: usize,
     size: usize,
@@ -456,14 +534,6 @@ struct BufferSection {
 }
 
 impl BufferSection {
-    fn flags(&self) -> u32 {
-        match self.alloc {
-            AllocSegment::RO => elf::SHF_ALLOC,
-            AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
-            AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
-        }
-    }
-
     fn align(&self) -> usize {
         0x10
         /*
@@ -480,7 +550,15 @@ impl BufferSection {
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.align());
         w.reserve_until(align_pos);
-        w.reserve(self.buf.len(), self.align());
+        let start = w.reserved_len();
+        let end = w.reserve(self.buf.len(), self.align());
+        eprintln!(
+            "reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
+            pos,
+            start,
+            end,
+            self.buf.len()
+        );
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -491,7 +569,7 @@ impl BufferSection {
         };
         self.addr = segment.base as usize;
         self.offset = segment.offset as usize;
-        self.size = self.buf.len();//segment.size as usize;
+        self.size = self.buf.len(); //segment.size as usize;
     }
 
     fn write(&mut self, w: &mut Writer) {
@@ -502,23 +580,31 @@ impl BufferSection {
         w.pad_until(aligned_pos);
         self.addr = self.addr as usize + w.len();
         self.offset = w.len();
-        eprintln!("write at: {:#0x}, size: {:#0x}", w.len(), self.buf.len());
+        eprintln!(
+            "write at: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
+            pos,
+            self.addr,
+            self.offset,
+            self.buf.len()
+        );
         w.write(self.buf.as_slice());
     }
 
     fn write_section_header(&self, w: &mut Writer) {
-        w.write_section_header(&object::write::elf::SectionHeader {
-            name: Some(self.name_id),
-            sh_type: elf::SHT_PROGBITS,
-            sh_flags: self.flags() as u64,
-            sh_addr: self.addr as u64,
-            sh_offset: self.offset as u64, // + offset,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign: self.align() as u64,
-            sh_size: self.size as u64,
-        });
+        if let Some(name_id) = self.name_id {
+            w.write_section_header(&object::write::elf::SectionHeader {
+                name: Some(name_id),
+                sh_type: elf::SHT_PROGBITS,
+                sh_flags: self.alloc.flags() as u64,
+                sh_addr: self.addr as u64,
+                sh_offset: self.offset as u64, // + offset,
+                sh_info: 0,
+                sh_link: 0,
+                sh_entsize: 0,
+                sh_addralign: self.align() as u64,
+                sh_size: self.size as u64,
+            });
+        }
     }
 }
 
@@ -573,49 +659,8 @@ impl Segment {
         }
     }
 
-    fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
-        for c in self.components.iter_mut() {
-            c.reserve(data, w);
-        }
-        for b in self.blocks.iter() {
-            let index = w.reserve_section_index();
-            w.reserve(b.buf.len(), 1);
-        }
-    }
-
-    fn update(&self, data: &mut Data) {}
-
-    fn write(&self, data: &Data, w: &mut Writer) {
-        for c in self.components.iter() {
-            c.write(data, w);
-        }
-        for b in self.blocks.iter() {
-            w.write(b.buf.as_slice());
-        }
-    }
-
-    fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        let mut offset = 0;
-        for c in self.components.iter() {
-            c.write_section_header(data, w);
-        }
-
-        for b in self.blocks.iter() {
-            let size = b.buf.len();
-            w.write_section_header(&object::write::elf::SectionHeader {
-                name: Some(b.name_id),
-                sh_type: elf::SHT_PROGBITS,
-                sh_flags: self.flags as u64,
-                sh_addr: self.addr,
-                sh_offset: self.offset + offset,
-                sh_info: 0,
-                sh_link: 0,
-                sh_entsize: 0,
-                sh_addralign: self.align as u64,
-                sh_size: self.size as u64,
-            });
-            offset += size as u64;
-        }
+    fn add_data(&mut self, size: usize, align: usize) {
+        self.size = size_align(self.size, align) + size;
     }
 }
 
@@ -680,11 +725,12 @@ impl Data {
         }
 
         let mut ro = Segment::new_ro();
-        ro.size = ro_size;
+        //ro.size = 0;//ro_size;
         let mut rw = Segment::new_rw();
-        rw.size = rw_size;
+        //rw.size = 0;//rw_size;
+        //rx.add_data(rx_size, 0x10);// = 0;//rx_size;
         let mut rx = Segment::new_rx();
-        rx.size = rx_size;
+        rx.add_data(rx_size, 0x10); // = 0;//rx_size;
 
         Self {
             is_64: true,
@@ -711,21 +757,6 @@ impl Data {
             size_dynamic: 0,
         }
     }
-
-    //fn reserve(&mut self, w: &mut Writer) {
-    //self.ro.reserve(self, w);
-    //}
-
-    /*
-     fn reserve(&mut self, w: &mut Writer, alloc: AllocSegment) {
-         let s = match alloc {
-             AllocSegment::RO => &mut self.ro,
-             AllocSegment::RW => &mut self.rw,
-             AllocSegment::RX => &mut self.rx,
-         };
-         s.reserve(self, w);
-     }
-    */
 
     fn add_library(&mut self, w: &mut Writer, string_id: StringId) {
         self.libs.push(Library { string_id });
@@ -778,6 +809,8 @@ impl Data {
         ph_count
     }
 
+    /*
+
     fn reserve_header(&mut self, w: &mut Writer) {
         if w.reserved_len() > 0 {
             panic!("Must start with file header");
@@ -798,10 +831,11 @@ impl Data {
         self.ro.size += self.size_fh + self.size_ph;
 
         // add interp size to data section
-        if self.interp.is_some() {
-            self.ro.size += self.interp.as_ref().unwrap().len();
-        }
+        //if self.interp.is_some() {
+            //self.ro.size += self.interp.as_ref().unwrap().len();
+        //}
     }
+    */
 
     fn update_segments(&mut self) {
         let align = 0x10;
@@ -812,11 +846,14 @@ impl Data {
         self.ro.addr = base + offset as u64;
         self.ro.offset = offset as u64;
         self.ro.align = align as u32;
-        eprintln!("{:#0x}, {:#0x}", base, offset);
+        eprintln!(
+            "RO {:#0x}, {:#0x}, size: {:#0x}",
+            base, offset, self.ro.size
+        );
         offset += ro_size_elf_aligned;
 
         let base = size_align(
-            base as usize + self.ro.size as usize,
+            base as usize + offset, //self.ro.size as usize,
             self.page_size as usize,
         ) as u64;
         let rx_size_elf_aligned = size_align(self.rx.size as usize, align);
@@ -824,11 +861,14 @@ impl Data {
         self.rx.addr = base + offset as u64;
         self.rx.offset = offset as u64;
         self.rx.align = align as u32;
-        eprintln!("{:#0x}, {:#0x}", base, offset);
+        eprintln!(
+            "RX {:#0x}, {:#0x}, size: {:#0x} {}",
+            base, offset, self.rx.size, rx_size_elf_aligned
+        );
         offset += rx_size_elf_aligned;
 
         let base = size_align(
-            base as usize + self.rx.size as usize,
+            base as usize + rx_size_elf_aligned, //self.rx.size as usize,
             self.page_size as usize,
         ) as u64;
         let rw_size_elf_aligned = size_align(self.rw.size as usize, align);
@@ -836,8 +876,11 @@ impl Data {
         self.rw.addr = base + offset as u64;
         self.rw.offset = offset as u64;
         self.rw.align = align as u32;
-        eprintln!("{:#0x}, {:#0x}", base, offset);
-        offset += rw_size_elf_aligned;
+        eprintln!(
+            "RW {:#0x}, {:#0x}, size: {:#0x}",
+            base, offset, self.rw.size
+        );
+        //offset += rw_size_elf_aligned;
     }
 
     fn gen_ph(&self) -> Vec<ProgramHeaderEntry> {
@@ -855,9 +898,10 @@ impl Data {
             p_memsz: self.size_ph as u64,
             p_align: 8,
         });
+        let mut offset = offset + self.size_ph as u64;
 
         if let Some(interp) = &self.interp {
-            let offset = self.size_fh as u64 + self.size_ph as u64;
+            //offset = size_align(offset as usize, 0x10) as u64;
             ph.push(ProgramHeaderEntry {
                 p_type: elf::PT_INTERP,
                 p_flags: elf::PF_R,
@@ -868,6 +912,7 @@ impl Data {
                 p_memsz: interp.as_bytes().len() as u64,
                 p_align: 1,
             });
+            //offset += interp.as_bytes().len() as u64;
         }
 
         // load segments
@@ -935,6 +980,7 @@ impl Data {
         w.reserve_section_headers();
     }
 
+    /*
     fn write_sections(
         &self,
         w: &mut Writer,
@@ -969,6 +1015,7 @@ impl Data {
         }
         Ok(())
     }
+    */
 }
 
 pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
@@ -986,9 +1033,11 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut blocks = vec![];
     //let mut rw_blocks = vec![];
 
+    ro_components.push(Box::new(HeaderComponent {}));
+
     let page_align = 0x1000;
     let mut components: Vec<Box<dyn ElfComponent>> = vec![];
-    if data.interp.is_some() {
+    if true && data.interp.is_some() {
         let name_id = writer.add_section_name(".interp".as_bytes());
         //let interp = data.interp.take().unwrap_or(String::default()).into_bytes();
         let buf = data.interp.clone().unwrap().as_bytes().to_vec();
@@ -1011,11 +1060,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     for segment in data.code_segments.iter() {
         buf.extend(segment.bytes.clone());
     }
-    let name_id = writer.add_section_name(".text".as_bytes());
+    let name_id = Some(writer.add_section_name(".text".as_bytes()));
     //data.rx.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     blocks.push(BufferSection {
         alloc: AllocSegment::RX,
-        name_id, addr: 0, offset: 0, size: 0,
+        name_id,
+        addr: 0,
+        offset: 0,
+        size: 0,
         //align: 0x10,
         buf: buf.to_vec(),
     });
@@ -1031,11 +1083,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         buf.extend(segment.bytes.clone());
         //data.rw.blocks.push(segment.bytes.clone());
     }
-    let name_id = writer.add_section_name(".data".as_bytes());
+    let name_id = Some(writer.add_section_name(".data".as_bytes()));
     //data.rw.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     blocks.push(BufferSection {
         alloc: AllocSegment::RW,
-        name_id, addr: 0, offset: 0, size: 0,
+        name_id,
+        addr: 0,
+        offset: 0,
+        size: 0,
         //align: 0x10,
         buf: buf.to_vec(),
     });
@@ -1058,9 +1113,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     // RESERVE
 
     //data.reserve_dynamic(&mut writer);
-    data.reserve_header(&mut writer);
+    //data.reserve_header(&mut writer);
     let null_section_index = writer.reserve_null_section_index();
-
     for c in ro_components.iter_mut() {
         c.reserve(&mut data, &mut writer);
     }
@@ -1095,14 +1149,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         c.update(&mut data);
     }
 
-
     for b in blocks.iter_mut() {
         b.update(&mut data);
     }
 
     // WRITE
-    data.write_header(&mut writer)?;
-
+    //data.write_header(&mut writer)?;
     for c in ro_components.iter_mut() {
         c.write(&data, &mut writer);
     }
@@ -1124,54 +1176,13 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         c.write_section_header(&data, &mut writer);
     }
 
-    //let mut offset = 0;
     for b in blocks.iter() {
-        //b.write_section_header(&mut writer);
-        //let size = b.buf.len();
         b.write_section_header(&mut writer);
-        /*
-        writer.write_section_header(&object::write::elf::SectionHeader {
-            name: Some(b.name_id),
-            sh_type: elf::SHT_PROGBITS,
-            sh_flags: data.rx.flags as u64,
-            sh_addr: data.rx.addr,
-            sh_offset: data.rx.offset, // + offset,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign: data.rx.align as u64,
-            sh_size: data.rx.size as u64,
-        });
-        */
-        //offset += size as u64;
     }
-
-    //for b in rw_blocks.iter() {
-        //b.write_section_header(&mut writer);
-        //let size = b.buf.len();
-        //b.write_section_header(&mut writer);
-        /*
-        writer.write_section_header(&object::write::elf::SectionHeader {
-            name: Some(b.name_id),
-            sh_type: elf::SHT_PROGBITS,
-            sh_flags: data.rw.flags as u64,
-            sh_addr: data.rw.addr,
-            sh_offset: data.rw.offset, // + offset,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign: data.rw.align as u64,
-            sh_size: data.rw.size as u64,
-        });
-        */
-        //offset += size as u64;
-    //}
 
     for c in components.iter() {
         c.write_section_header(&data, &mut writer);
     }
-
-    //data.write_sections(&mut writer, &components)?;
 
     Ok(out_data)
 }
