@@ -421,6 +421,80 @@ impl ElfComponent for AllocateSection {
 }
 */
 
+struct SymTabSection {
+    index: Option<SectionIndex>,
+    align: usize,
+}
+impl Default for SymTabSection {
+    fn default() -> Self {
+        Self {
+            index: None,
+            align: 0x10,
+        }
+    }
+}
+
+impl ElfComponent for SymTabSection {
+    fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
+        //w.reserve_symbol_index(data.index_text);
+        //w.reserve_symbol_index(data.index_data);
+        w.reserve_symtab_section_index();
+        w.reserve_symtab_shndx_section_index();
+        w.reserve_symtab();
+        w.reserve_symtab_shndx();
+    }
+
+    fn write(&self, data: &Data, w: &mut Writer) {
+        // write symbols
+        w.write_null_symbol();
+        for sym in &data.sections.ro.symbols {
+            eprintln!("write sym: {:?}", sym.offset);
+            w.write_symbol(&object::write::elf::Sym {
+                name: sym.name_id,
+                section: data.index_text, //None,//sym.section,
+                st_info: 0,               //in_sym.st_info(),
+                st_other: 0,              //in_sym.st_other(),
+                st_shndx: 0,              //in_sym.st_shndx(endian),
+                st_value: 0,              //in_sym.st_value(endian).into(),
+                st_size: 0,               //in_sym.st_size(endian).into(),
+            });
+        }
+        w.write_symtab_shndx();
+        return;
+        for sym in &data.sections.rx.symbols {
+            eprintln!("write sym: {:?}", (sym.name_id, sym.offset));
+            w.write_symbol(&object::write::elf::Sym {
+                name: sym.name_id,
+                section: data.index_data, //None,//sym.section,
+                st_info: 0,               //in_sym.st_info(),
+                st_other: 0,              //in_sym.st_other(),
+                st_shndx: 0,              //in_sym.st_shndx(endian),
+                st_value: 0,              //in_sym.st_value(endian).into(),
+                st_size: 0,               //in_sym.st_size(endian).into(),
+            });
+        }
+
+        for sym in &data.sections.rw.symbols {
+            eprintln!("write sym: {:?}", sym.offset);
+            w.write_symbol(&object::write::elf::Sym {
+                name: sym.name_id,
+                section: None, //sym.section,
+                st_info: 0,    //in_sym.st_info(),
+                st_other: 0,   //in_sym.st_other(),
+                st_shndx: 0,   //in_sym.st_shndx(endian),
+                st_value: 0,   //in_sym.st_value(endian).into(),
+                st_size: 0,    //in_sym.st_size(endian).into(),
+            });
+        }
+        w.write_symtab_shndx();
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_symtab_section_header(0);
+        w.write_symtab_shndx_section_header();
+    }
+}
+
 struct DynSymSection {
     index: Option<SectionIndex>,
     align: usize,
@@ -490,7 +564,7 @@ struct ShStrTabSection {
 }
 impl ElfComponent for ShStrTabSection {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
-        let name = Some(w.add_section_name(".shstrtab".as_bytes()));
+        //let name = Some(w.add_section_name(".shstrtab".as_bytes()));
         let shstrtab_index = w.reserve_shstrtab_section_index();
         let before = w.reserved_len();
         w.reserve_shstrtab();
@@ -512,7 +586,7 @@ struct StrTabSection {
 }
 impl ElfComponent for StrTabSection {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
-        let name = Some(w.add_section_name(".strtab".as_bytes()));
+        //let name = Some(w.add_section_name(".strtab".as_bytes()));
         data.index_strtab = Some(w.reserve_strtab_section_index());
         w.reserve_strtab();
     }
@@ -539,7 +613,15 @@ struct BufferSection {
 
 impl BufferSection {
     fn new(alloc: AllocSegment, name_id: Option<StringId>, buf: Vec<u8>) -> Self {
-        Self { alloc, name_id, addr: 0, offset: 0, size: 0, base: 0, buf }
+        Self {
+            alloc,
+            name_id,
+            addr: 0,
+            offset: 0,
+            size: 0,
+            base: 0,
+            buf,
+        }
     }
     fn align(&self) -> usize {
         0x10
@@ -556,6 +638,18 @@ impl BufferSection {
 impl ElfComponent for BufferSection {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
         let index = w.reserve_section_index();
+        match self.alloc {
+            AllocSegment::RO => (), //data.index_.align,
+            AllocSegment::RW => {
+                data.index_data = Some(index);
+                w.reserve_symbol_index(data.index_data);
+            }
+            AllocSegment::RX => {
+                data.index_text = Some(index);
+                w.reserve_symbol_index(data.index_text);
+            }
+        }
+
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.align());
         w.reserve_until(align_pos);
@@ -568,7 +662,7 @@ impl ElfComponent for BufferSection {
             AllocSegment::RW => data.rw.add_data(self.size, self.align()),
             AllocSegment::RX => data.rx.add_data(self.size, self.align()),
         };
-        eprintln!(
+        log::debug!(
             "reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
             pos,
             start,
@@ -591,7 +685,7 @@ impl ElfComponent for BufferSection {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align());
         w.pad_until(aligned_pos);
-        eprintln!(
+        log::debug!(
             "write at: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
             pos,
             self.addr,
@@ -675,6 +769,24 @@ impl Segment {
     }
 }
 
+#[derive(Default)]
+struct ProgSymbol {
+    name_id: Option<StringId>,
+    offset: usize,
+}
+
+#[derive(Default)]
+struct ProgSection {
+    symbols: Vec<ProgSymbol>,
+}
+
+#[derive(Default)]
+struct Sections {
+    ro: ProgSection,
+    rw: ProgSection,
+    rx: ProgSection,
+}
+
 struct Data {
     interp: Option<String>,
     is_64: bool,
@@ -692,14 +804,78 @@ struct Data {
     addr_dynstr: u64,
     addr_dynsym: u64,
     addr_text: u64,
+    index_data: Option<SectionIndex>,
+    index_text: Option<SectionIndex>,
     index_strtab: Option<SectionIndex>,
     index_dynstr: Option<SectionIndex>,
     index_dynsym: Option<SectionIndex>,
     size_fh: usize,
     size_ph: usize,
     size_dynamic: usize,
+    sections: Sections,
 }
 impl Data {
+    fn read_unlinked<'a>(link: &'a Link, w: &mut Writer<'a>, s: &mut Sections) {
+        let mut ro_size = 0;
+        let mut rw_size = 0;
+        let mut rx_size = 0;
+
+        for (_name, unlinked) in link.unlinked.iter() {
+            use object::SectionKind as K;
+            match unlinked.kind {
+                K::Data | K::UninitializedData => {
+                    //w.reserve_symbol_index(None);
+                    for (name, symbol) in unlinked.defined.iter() {
+                        let name_id = Some(w.add_string(name.as_bytes()));
+
+                        let ps = ProgSymbol {
+                            name_id,
+                            offset: symbol.address as usize + rw_size as usize,
+                        };
+                        s.rw.symbols.push(ps);
+                    }
+                    rw_size += unlinked.bytes.len();
+
+                    //data_segments.push(unlinked.clone());
+                }
+                K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
+                    for (name, symbol) in unlinked.defined.iter() {
+                        let name_id = Some(w.add_string(name.as_bytes()));
+                        let ps = ProgSymbol {
+                            name_id,
+                            offset: symbol.address as usize + rw_size as usize,
+                        };
+                        s.ro.symbols.push(ps);
+                    }
+                    ro_size += unlinked.bytes.len();
+                    //data_segments.push(unlinked.clone());
+                }
+                K::Text => {
+                    //w.reserve_symbol_index(None);
+                    for (name, symbol) in unlinked.defined.iter() {
+                        let name_id = Some(w.add_string(name.as_bytes()));
+                        let ps = ProgSymbol {
+                            name_id,
+                            offset: symbol.address as usize + rw_size as usize,
+                        };
+                        s.rx.symbols.push(ps);
+                    }
+                    rx_size += unlinked.bytes.len();
+                    //code_segments.push(unlinked.clone());
+                }
+
+                // ignore for now
+                K::Metadata => (),
+                K::Other => (),
+                K::Elf(_x) => {
+                    // ignore
+                    //unimplemented!("Elf({:#x})", x);
+                }
+                _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
+            }
+        }
+    }
+
     fn new(link: &Link) -> Self {
         let mut code_segments = vec![];
         let mut data_segments = vec![];
@@ -743,6 +919,8 @@ impl Data {
         let mut rx = Segment::new_rx();
         //rx.add_data(rx_size, 0x10); // = 0;//rx_size;
 
+        //let sections = Self::read_unlinked(link, );
+
         Self {
             is_64: true,
             interp: Some("/lib/ld-linux-x86-64.so.2".to_string()),
@@ -763,9 +941,12 @@ impl Data {
             index_strtab: None,
             index_dynstr: None,
             index_dynsym: None,
+            index_data: None,
+            index_text: None,
             size_fh: 0,
             size_ph: 0,
             size_dynamic: 0,
+            sections: Sections::default(),
         }
     }
 
@@ -829,9 +1010,11 @@ impl Data {
         self.ro.addr = base + offset as u64;
         self.ro.offset = offset as u64;
         self.ro.align = align as u32;
-        eprintln!(
+        log::debug!(
             "RO {:#0x}, {:#0x}, size: {:#0x}",
-            base, offset, self.ro.size
+            base,
+            offset,
+            self.ro.size
         );
         offset += ro_size_elf_aligned;
 
@@ -844,9 +1027,12 @@ impl Data {
         self.rx.addr = base + offset as u64;
         self.rx.offset = offset as u64;
         self.rx.align = align as u32;
-        eprintln!(
+        log::debug!(
             "RX {:#0x}, {:#0x}, size: {:#0x} {}",
-            base, offset, self.rx.size, rx_size_elf_aligned
+            base,
+            offset,
+            self.rx.size,
+            rx_size_elf_aligned
         );
         offset += rx_size_elf_aligned;
 
@@ -859,9 +1045,11 @@ impl Data {
         self.rw.addr = base + offset as u64;
         self.rw.offset = offset as u64;
         self.rw.align = align as u32;
-        eprintln!(
+        log::debug!(
             "RW {:#0x}, {:#0x}, size: {:#0x}",
-            base, offset, self.rw.size
+            base,
+            offset,
+            self.rw.size
         );
         //offset += rw_size_elf_aligned;
     }
@@ -924,7 +1112,7 @@ impl Data {
             p_memsz: self.rx.size as u64,
             p_align: self.page_size as u64,
         });
-        eprintln!("{:#0x}, {:#0x}", self.rx.offset, addr);
+        log::debug!("{:#0x}, {:#0x}", self.rx.offset, addr);
 
         // program LOAD (RW)
         let addr = self.rw.addr; // + self.rw.offset as u64;
@@ -973,6 +1161,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let is_class_64 = data.is_64;
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
 
+    Data::read_unlinked(link, &mut writer, &mut data.sections);
+
     let mut blocks: Vec<Box<dyn ElfComponent>> = vec![];
     blocks.push(Box::new(HeaderComponent {}));
 
@@ -980,7 +1170,11 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     if data.interp.is_some() {
         let name_id = writer.add_section_name(".interp".as_bytes());
         let buf = data.interp.clone().unwrap().as_bytes().to_vec();
-        blocks.push(Box::new(BufferSection::new(AllocSegment::RO, Some(name_id), buf.to_vec())));
+        blocks.push(Box::new(BufferSection::new(
+            AllocSegment::RO,
+            Some(name_id),
+            buf.to_vec(),
+        )));
     }
 
     // .text
@@ -990,7 +1184,11 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         buf.extend(segment.bytes.clone());
     }
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf.to_vec())));
+    blocks.push(Box::new(BufferSection::new(
+        AllocSegment::RX,
+        name_id,
+        buf.to_vec(),
+    )));
 
     // .data
     let mut buf = vec![];
@@ -998,13 +1196,20 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         buf.extend(segment.bytes.clone());
     }
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf.to_vec())));
+    blocks.push(Box::new(BufferSection::new(
+        AllocSegment::RW,
+        name_id,
+        buf.to_vec(),
+    )));
 
     blocks.push(Box::new(DynamicSection::default()));
-
     blocks.push(Box::new(DynStrSection::default()));
     blocks.push(Box::new(DynSymSection::default()));
+
+    //blocks.push(Box::new(SymTabSection::default()));
     blocks.push(Box::new(StrTabSection::default()));
+
+    // relocations go here
 
     // shstrtab needs to be allocated last, once all headers are reserved
     blocks.push(Box::new(ShStrTabSection::default()));
@@ -1029,9 +1234,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     for b in blocks.iter_mut() {
         b.write(&data, &mut writer);
     }
-
-    // write symbols
-    writer.write_null_symbol();
 
     // SECTION HEADERS
     for b in blocks.iter() {
