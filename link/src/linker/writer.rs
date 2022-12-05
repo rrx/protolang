@@ -86,6 +86,8 @@ impl ElfComponent for HeaderComponent {
             panic!("Must start with file header");
         }
 
+        let null_section_index = w.reserve_null_section_index();
+
         // Start reserving file ranges.
         w.reserve_file_header();
         data.size_fh = w.reserved_len();
@@ -681,7 +683,7 @@ struct Data {
     ph: Vec<ProgramHeaderEntry>,
     libs: Vec<Library>,
     //dynamic: Vec<Dynamic>,
-    sections: Vec<Section>,
+    //sections: Vec<Section>,
     page_size: u32,
     ro: Segment,
     rw: Segment,
@@ -749,7 +751,7 @@ impl Data {
             ph: vec![],
             libs: vec![],
             //dynamic: vec![],
-            sections: vec![],
+            //sections: vec![],
             page_size: 0x1000,
             ro,
             rx,
@@ -971,37 +973,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let is_class_64 = data.is_64;
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
 
-    //let mut ro_components: Vec<Box<dyn ElfComponent>> = vec![];
-    //let mut rw_components = vec![];
-    //let mut rx_components = vec![];
     let mut blocks: Vec<Box<dyn ElfComponent>> = vec![];
-    //let mut rw_blocks = vec![];
-
     blocks.push(Box::new(HeaderComponent {}));
 
     let page_align = 0x1000;
-    //let mut components: Vec<Box<dyn ElfComponent>> = vec![];
     if data.interp.is_some() {
         let name_id = writer.add_section_name(".interp".as_bytes());
-        //let interp = data.interp.take().unwrap_or(String::default()).into_bytes();
         let buf = data.interp.clone().unwrap().as_bytes().to_vec();
-        /*
-        let s = AllocateSection::new(
-            buf,
-            //data.interp.clone().unwrap().as_bytes().to_vec(),
-            0x10,
-            page_align,
-            AllocSegment::RO,
-        )
-        .name_section(name_id);
-        ro_components.push(Box::new(s)); //BufferSection { name_id, buf: buf.to_vec() });
-        */
-
         blocks.push(Box::new(BufferSection::new(AllocSegment::RO, Some(name_id), buf.to_vec())));
-        //components.push(Box::new(s));
-        //data.ro.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-                                         //let s = SegmentSection::new(AllocSegment::RO, 0x20);//.name_section(name_id);
-                                         //components.push(Box::new(s));
     }
 
     // .text
@@ -1011,27 +990,15 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         buf.extend(segment.bytes.clone());
     }
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
-    //data.rx.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf.to_vec())));
-    //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RX).name_section(name_id);
-    //data.rx.components.push(Box::new(s));
-    //rx_components.push(Box::new(s));
-    //let s = SegmentSection::new(AllocSegment::RX, 0x20);//.name_section(name_id);
-    //components.push(Box::new(s));
 
     // .data
     let mut buf = vec![];
     for segment in data.data_segments.iter() {
         buf.extend(segment.bytes.clone());
-        //data.rw.blocks.push(segment.bytes.clone());
     }
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
-    //data.rw.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
     blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf.to_vec())));
-
-    //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RW).name_section(name_id);
-    //let s = SegmentSection::new(AllocSegment::RW, 0x20);//.name_section(name_id);
-    //components.push(Box::new(s));
 
     blocks.push(Box::new(DynamicSection::default()));
 
@@ -1046,78 +1013,30 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     data.add_library(&mut writer, string_id);
 
     // RESERVE
-
-    //data.reserve_dynamic(&mut writer);
-    //data.reserve_header(&mut writer);
-    let null_section_index = writer.reserve_null_section_index();
-    //for c in ro_components.iter_mut() {
-        //c.reserve(&mut data, &mut writer);
-    //}
-
     for b in blocks.iter_mut() {
         b.reserve(&mut data, &mut writer);
     }
 
-    //data.rx.reserve(&mut data, &mut writer);
-    //for c in rx_components.iter() {
-    //c.reserve(&mut data, &mut writer);
-    //}
-    //for c in rw_components.iter() {
-    //c.reserve(&mut data, &mut writer);
-    //}
-
-    //data.reserve(&mut writer);
-    //data.reserve_sections(&mut writer, &mut components);
-    //components.iter_mut().for_each(|c| {
-        //c.reserve(&mut data, &mut writer);
-    //});
-
     writer.reserve_section_headers();
 
-    data.update_segments();
-
     // UPDATE
-    //for c in ro_components.iter_mut() {
-        //c.update(&mut data);
-    //}
-    //for c in components.iter_mut() {
-        //c.update(&mut data);
-    //}
-
+    data.update_segments();
     for b in blocks.iter_mut() {
         b.update(&mut data);
     }
 
     // WRITE
-    //data.write_header(&mut writer)?;
-    //for c in ro_components.iter_mut() {
-        //c.write(&data, &mut writer);
-    //}
-
     for b in blocks.iter_mut() {
         b.write(&data, &mut writer);
     }
 
-    //for c in components.iter() {
-        //c.write(&data, &mut writer);
-    //}
-
     // write symbols
     writer.write_null_symbol();
 
-    // write section headers
-    //for c in ro_components.iter_mut() {
-        //c.write_section_header(&data, &mut writer);
-    //}
-
+    // SECTION HEADERS
     for b in blocks.iter() {
         b.write_section_header(&data, &mut writer);
     }
-
-    //for c in components.iter() {
-        //c.write_section_header(&data, &mut writer);
-    //}
-
     Ok(out_data)
 }
 
