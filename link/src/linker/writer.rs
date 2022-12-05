@@ -73,7 +73,7 @@ struct DynamicSymbol {
 
 trait ElfComponent {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {}
-    fn update(&self, data: &mut Data) {}
+    fn update(&mut self, data: &mut Data) {}
     fn write(&self, data: &Data, w: &mut Writer) {}
     fn write_section_header(&self, data: &Data, w: &mut Writer) {}
 }
@@ -100,13 +100,10 @@ impl ElfComponent for HeaderComponent {
         // add headers to the ro_size
         data.ro.add_data(data.size_fh, 0x10);
         data.ro.add_data(data.size_ph, 0x10);
-
-        // add interp size to data section
-        //if self.interp.is_some() {
-        //self.ro.size += self.interp.as_ref().unwrap().len();
-        //}
     }
-    fn update(&self, data: &mut Data) {}
+
+    fn update(&mut self, data: &mut Data) {}
+
     fn write(&self, data: &Data, w: &mut Writer) {
         w.write_file_header(&object::write::elf::FileHeader {
             os_abi: 0x00,            // SysV
@@ -133,9 +130,12 @@ impl ElfComponent for HeaderComponent {
             });
         }
     }
-    fn write_section_header(&self, data: &Data, w: &mut Writer) {}
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_null_section_header();
+    }
 }
 
+/*
 struct SegmentSection {
     index: Option<SectionIndex>,
     align: usize,
@@ -251,6 +251,8 @@ impl ElfComponent for SegmentSection {
     }
 }
 
+*/
+
 struct DynamicSection {
     index: Option<SectionIndex>,
     start: usize,
@@ -277,14 +279,14 @@ impl ElfComponent for DynamicSection {
         w.reserve_until(self.start);
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
+        let size = after - before;
         // allocate space in the rw segment
-        data.rw.add_data(after - before, self.align);
-        data.size_dynamic = after - before;
-        //data.addr_dynamic = data.rw.addr;// + self.start as u64;
+        data.rw.add_data(size, self.align);
+        data.size_dynamic = size;
     }
 
-    fn update(&self, data: &mut Data) {
-        data.addr_dynamic = data.rw.addr; // + self.start as u64;
+    fn update(&mut self, data: &mut Data) {
+        data.addr_dynamic = data.rw.addr;
     }
 
     fn write(&self, data: &Data, w: &mut Writer) {
@@ -292,7 +294,6 @@ impl ElfComponent for DynamicSection {
         // write dynamic
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align);
-        //w.pad_until(self.start);//aligned_pos);
         w.pad_until(aligned_pos);
         w.write_align_dynamic();
         for d in dynamic.iter() {
@@ -368,8 +369,7 @@ impl ElfComponent for AllocateSection {
         self.offset = start as u64;
         w.reserve(self.data.len(), self.align as usize) as u64;
         let end = w.reserved_len() as u64;
-        self.size = self.data.len(); //(self.offset - pos as u64) as usize;
-                                     //let size = self.data.len();
+        self.size = self.data.len();
         eprintln!(
             "reserveA: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
             pos, start, self.offset, self.size
@@ -385,7 +385,6 @@ impl ElfComponent for AllocateSection {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
-        //w.write_align(self.align as usize);
         let addr = w.len();
         w.write(self.data.as_slice());
         let end = w.len();
@@ -544,14 +543,18 @@ impl BufferSection {
         }
         */
     }
+}
 
-    fn reserve(&self, w: &mut Writer) {
+impl ElfComponent for BufferSection {
+    fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
         let index = w.reserve_section_index();
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.align());
         w.reserve_until(align_pos);
         let start = w.reserved_len();
         let end = w.reserve(self.buf.len(), self.align());
+        self.offset = end;
+        //self.addr = starself.addr as usize + w.len();
         eprintln!(
             "reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
             pos,
@@ -567,19 +570,20 @@ impl BufferSection {
             AllocSegment::RW => &data.rw,
             AllocSegment::RX => &data.rx,
         };
-        self.addr = segment.base as usize;
+        self.addr = segment.base as usize + self.offset;
         self.offset = segment.offset as usize;
         self.size = self.buf.len(); //segment.size as usize;
     }
 
-    fn write(&mut self, w: &mut Writer) {
+    fn write(&self, data: &Data, w: &mut Writer) {
+        //fn write(&mut self, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align());
         //w.write_align(aligned_pos - pos);
         //w.pad_until(self.offset);//aligned_pos);
         w.pad_until(aligned_pos);
-        self.addr = self.addr as usize + w.len();
-        self.offset = w.len();
+        //self.addr = self.addr as usize + w.len();
+        //self.offset = w.len();
         eprintln!(
             "write at: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
             pos,
@@ -590,7 +594,8 @@ impl BufferSection {
         w.write(self.buf.as_slice());
     }
 
-    fn write_section_header(&self, w: &mut Writer) {
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        //fn write_section_header(&self, w: &mut Writer) {
         if let Some(name_id) = self.name_id {
             w.write_section_header(&object::write::elf::SectionHeader {
                 name: Some(name_id),
@@ -1119,8 +1124,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         c.reserve(&mut data, &mut writer);
     }
 
-    for b in blocks.iter() {
-        b.reserve(&mut writer);
+    for b in blocks.iter_mut() {
+        b.reserve(&mut data, &mut writer);
     }
 
     //data.rx.reserve(&mut data, &mut writer);
@@ -1145,7 +1150,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     for c in ro_components.iter_mut() {
         c.update(&mut data);
     }
-    for c in components.iter() {
+    for c in components.iter_mut() {
         c.update(&mut data);
     }
 
@@ -1160,7 +1165,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     for b in blocks.iter_mut() {
-        b.write(&mut writer);
+        b.write(&data, &mut writer);
     }
 
     for c in components.iter() {
@@ -1171,13 +1176,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     writer.write_null_symbol();
 
     // write section headers
-    writer.write_null_section_header();
     for c in ro_components.iter_mut() {
         c.write_section_header(&data, &mut writer);
     }
 
     for b in blocks.iter() {
-        b.write_section_header(&mut writer);
+        b.write_section_header(&data, &mut writer);
     }
 
     for c in components.iter() {
