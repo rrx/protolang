@@ -561,7 +561,6 @@ impl ElfComponent for BufferSection {
         let end = w.reserve(self.buf.len(), self.align());
         self.size = self.buf.len();
         self.offset = start;
-        //self.addr = starself.addr as usize + w.len();
         match self.alloc {
             AllocSegment::RO => data.ro.add_data(self.size, self.align()),
             AllocSegment::RW => data.rw.add_data(self.size, self.align()),
@@ -584,19 +583,12 @@ impl ElfComponent for BufferSection {
         };
         self.base = segment.base as usize;
         self.addr = segment.base as usize + self.offset;
-        //self.offset = segment.offset as usize;
-        //self.size = self.buf.len(); //segment.size as usize;
     }
 
     fn write(&self, data: &Data, w: &mut Writer) {
-        //fn write(&mut self, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align());
-        //w.write_align(aligned_pos - pos);
-        //w.pad_until(self.offset);//aligned_pos);
         w.pad_until(aligned_pos);
-        //self.addr = self.addr as usize + w.len();
-        //self.offset = w.len();
         eprintln!(
             "write at: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
             pos,
@@ -608,14 +600,13 @@ impl ElfComponent for BufferSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        //fn write_section_header(&self, w: &mut Writer) {
         if let Some(name_id) = self.name_id {
             w.write_section_header(&object::write::elf::SectionHeader {
                 name: Some(name_id),
                 sh_type: elf::SHT_PROGBITS,
                 sh_flags: self.alloc.flags() as u64,
                 sh_addr: self.addr as u64,
-                sh_offset: self.offset as u64, // + offset,
+                sh_offset: self.offset as u64,
                 sh_info: 0,
                 sh_link: 0,
                 sh_entsize: 0,
@@ -632,7 +623,7 @@ struct Segment {
     offset: u64,
     size: usize,
     align: u32,
-    flags: u32,
+    alloc: AllocSegment,
     blocks: Vec<BufferSection>,
     components: Vec<Box<dyn ElfComponent>>,
 }
@@ -644,7 +635,7 @@ impl Segment {
             addr: 0,
             offset: 0,
             size: 0,
-            flags: elf::SHF_ALLOC,
+            alloc: AllocSegment::RO,
             align: 0x1000,
             blocks: vec![],
             components: vec![],
@@ -657,7 +648,7 @@ impl Segment {
             addr: 0,
             offset: 0,
             size: 0,
-            flags: elf::SHF_ALLOC | elf::SHF_WRITE,
+            alloc: AllocSegment::RW,
             align: 0x1000,
             blocks: vec![],
             components: vec![],
@@ -670,7 +661,7 @@ impl Segment {
             addr: 0,
             offset: 0,
             size: 0,
-            flags: elf::SHF_ALLOC | elf::SHF_EXECINSTR,
+            alloc: AllocSegment::RX,
             align: 0x1000,
             blocks: vec![],
             components: vec![],
@@ -827,34 +818,6 @@ impl Data {
         ph_count
     }
 
-    /*
-
-    fn reserve_header(&mut self, w: &mut Writer) {
-        if w.reserved_len() > 0 {
-            panic!("Must start with file header");
-        }
-
-        // Start reserving file ranges.
-        w.reserve_file_header();
-        self.size_fh = w.reserved_len();
-
-        let ph_count = self.get_header_count();
-
-        let before = w.reserved_len();
-        w.reserve_program_headers(ph_count as u32);
-        let after = w.reserved_len();
-        self.size_ph = after - before;
-
-        // add headers to the ro_size
-        self.ro.size += self.size_fh + self.size_ph;
-
-        // add interp size to data section
-        //if self.interp.is_some() {
-            //self.ro.size += self.interp.as_ref().unwrap().len();
-        //}
-    }
-    */
-
     fn update_segments(&mut self) {
         let align = 0x10;
         let base = 0;
@@ -997,43 +960,6 @@ impl Data {
 
         w.reserve_section_headers();
     }
-
-    /*
-    fn write_sections(
-        &self,
-        w: &mut Writer,
-        components: &Vec<Box<dyn ElfComponent>>,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    fn write_header(&self, w: &mut Writer) -> Result<()> {
-        w.write_file_header(&object::write::elf::FileHeader {
-            os_abi: 0x00,            // SysV
-            abi_version: 0,          // ignored on linux
-            e_type: elf::ET_EXEC,    // ET_EXEC - Executable file
-            e_machine: 0x3E,         // AMD x86-64
-            e_entry: self.addr_text, // e_entry, normally points to _start
-            e_flags: 0,              // e_flags
-        })?;
-
-        w.write_align_program_headers();
-
-        for ph in self.gen_ph().iter() {
-            w.write_program_header(&object::write::elf::ProgramHeader {
-                p_type: ph.p_type,
-                p_flags: ph.p_flags,
-                p_offset: ph.p_offset,
-                p_vaddr: ph.p_vaddr,
-                p_paddr: ph.p_paddr,
-                p_filesz: ph.p_filesz,
-                p_memsz: ph.p_memsz,
-                p_align: ph.p_align,
-            });
-        }
-        Ok(())
-    }
-    */
 }
 
 pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
@@ -1045,16 +971,16 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let is_class_64 = data.is_64;
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
 
-    let mut ro_components: Vec<Box<dyn ElfComponent>> = vec![];
+    //let mut ro_components: Vec<Box<dyn ElfComponent>> = vec![];
     //let mut rw_components = vec![];
     //let mut rx_components = vec![];
-    let mut blocks = vec![];
+    let mut blocks: Vec<Box<dyn ElfComponent>> = vec![];
     //let mut rw_blocks = vec![];
 
-    ro_components.push(Box::new(HeaderComponent {}));
+    blocks.push(Box::new(HeaderComponent {}));
 
     let page_align = 0x1000;
-    let mut components: Vec<Box<dyn ElfComponent>> = vec![];
+    //let mut components: Vec<Box<dyn ElfComponent>> = vec![];
     if data.interp.is_some() {
         let name_id = writer.add_section_name(".interp".as_bytes());
         //let interp = data.interp.take().unwrap_or(String::default()).into_bytes();
@@ -1071,7 +997,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         ro_components.push(Box::new(s)); //BufferSection { name_id, buf: buf.to_vec() });
         */
 
-        blocks.push(BufferSection::new(AllocSegment::RO, Some(name_id), buf.to_vec()));
+        blocks.push(Box::new(BufferSection::new(AllocSegment::RO, Some(name_id), buf.to_vec())));
         //components.push(Box::new(s));
         //data.ro.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
                                          //let s = SegmentSection::new(AllocSegment::RO, 0x20);//.name_section(name_id);
@@ -1086,7 +1012,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
     //data.rx.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-    blocks.push(BufferSection::new(AllocSegment::RX, name_id, buf.to_vec()));
+    blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf.to_vec())));
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RX).name_section(name_id);
     //data.rx.components.push(Box::new(s));
     //rx_components.push(Box::new(s));
@@ -1101,20 +1027,20 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
     //data.rw.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-    blocks.push(BufferSection::new(AllocSegment::RW, name_id, buf.to_vec()));
+    blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf.to_vec())));
 
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RW).name_section(name_id);
     //let s = SegmentSection::new(AllocSegment::RW, 0x20);//.name_section(name_id);
     //components.push(Box::new(s));
 
-    components.push(Box::new(DynamicSection::default()));
+    blocks.push(Box::new(DynamicSection::default()));
 
-    components.push(Box::new(DynStrSection::default()));
-    components.push(Box::new(DynSymSection::default()));
-    components.push(Box::new(StrTabSection::default()));
+    blocks.push(Box::new(DynStrSection::default()));
+    blocks.push(Box::new(DynSymSection::default()));
+    blocks.push(Box::new(StrTabSection::default()));
 
     // shstrtab needs to be allocated last, once all headers are reserved
-    components.push(Box::new(ShStrTabSection::default()));
+    blocks.push(Box::new(ShStrTabSection::default()));
 
     let string_id = writer.add_dynamic_string("libc.so.6".as_bytes());
     data.add_library(&mut writer, string_id);
@@ -1124,9 +1050,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     //data.reserve_dynamic(&mut writer);
     //data.reserve_header(&mut writer);
     let null_section_index = writer.reserve_null_section_index();
-    for c in ro_components.iter_mut() {
-        c.reserve(&mut data, &mut writer);
-    }
+    //for c in ro_components.iter_mut() {
+        //c.reserve(&mut data, &mut writer);
+    //}
 
     for b in blocks.iter_mut() {
         b.reserve(&mut data, &mut writer);
@@ -1142,21 +1068,21 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     //data.reserve(&mut writer);
     //data.reserve_sections(&mut writer, &mut components);
-    components.iter_mut().for_each(|c| {
-        c.reserve(&mut data, &mut writer);
-    });
+    //components.iter_mut().for_each(|c| {
+        //c.reserve(&mut data, &mut writer);
+    //});
 
     writer.reserve_section_headers();
 
     data.update_segments();
 
     // UPDATE
-    for c in ro_components.iter_mut() {
-        c.update(&mut data);
-    }
-    for c in components.iter_mut() {
-        c.update(&mut data);
-    }
+    //for c in ro_components.iter_mut() {
+        //c.update(&mut data);
+    //}
+    //for c in components.iter_mut() {
+        //c.update(&mut data);
+    //}
 
     for b in blocks.iter_mut() {
         b.update(&mut data);
@@ -1164,33 +1090,33 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // WRITE
     //data.write_header(&mut writer)?;
-    for c in ro_components.iter_mut() {
-        c.write(&data, &mut writer);
-    }
+    //for c in ro_components.iter_mut() {
+        //c.write(&data, &mut writer);
+    //}
 
     for b in blocks.iter_mut() {
         b.write(&data, &mut writer);
     }
 
-    for c in components.iter() {
-        c.write(&data, &mut writer);
-    }
+    //for c in components.iter() {
+        //c.write(&data, &mut writer);
+    //}
 
     // write symbols
     writer.write_null_symbol();
 
     // write section headers
-    for c in ro_components.iter_mut() {
-        c.write_section_header(&data, &mut writer);
-    }
+    //for c in ro_components.iter_mut() {
+        //c.write_section_header(&data, &mut writer);
+    //}
 
     for b in blocks.iter() {
         b.write_section_header(&data, &mut writer);
     }
 
-    for c in components.iter() {
-        c.write_section_header(&data, &mut writer);
-    }
+    //for c in components.iter() {
+        //c.write_section_header(&data, &mut writer);
+    //}
 
     Ok(out_data)
 }
