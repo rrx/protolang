@@ -326,6 +326,7 @@ impl AllocSegment {
     }
 }
 
+/*
 struct AllocateSection {
     data: Vec<u8>,
     name_id: Option<StringId>,
@@ -416,6 +417,7 @@ impl ElfComponent for AllocateSection {
         });
     }
 }
+*/
 
 struct DynSymSection {
     index: Option<SectionIndex>,
@@ -528,11 +530,15 @@ struct BufferSection {
     addr: usize,
     offset: usize,
     size: usize,
+    base: usize,
     //align: usize,
     buf: Vec<u8>,
 }
 
 impl BufferSection {
+    fn new(alloc: AllocSegment, name_id: Option<StringId>, buf: Vec<u8>) -> Self {
+        Self { alloc, name_id, addr: 0, offset: 0, size: 0, base: 0, buf }
+    }
     fn align(&self) -> usize {
         0x10
         /*
@@ -553,8 +559,14 @@ impl ElfComponent for BufferSection {
         w.reserve_until(align_pos);
         let start = w.reserved_len();
         let end = w.reserve(self.buf.len(), self.align());
-        self.offset = end;
+        self.size = self.buf.len();
+        self.offset = start;
         //self.addr = starself.addr as usize + w.len();
+        match self.alloc {
+            AllocSegment::RO => data.ro.add_data(self.size, self.align()),
+            AllocSegment::RW => data.rw.add_data(self.size, self.align()),
+            AllocSegment::RX => data.rx.add_data(self.size, self.align()),
+        };
         eprintln!(
             "reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
             pos,
@@ -570,9 +582,10 @@ impl ElfComponent for BufferSection {
             AllocSegment::RW => &data.rw,
             AllocSegment::RX => &data.rx,
         };
+        self.base = segment.base as usize;
         self.addr = segment.base as usize + self.offset;
-        self.offset = segment.offset as usize;
-        self.size = self.buf.len(); //segment.size as usize;
+        //self.offset = segment.offset as usize;
+        //self.size = self.buf.len(); //segment.size as usize;
     }
 
     fn write(&self, data: &Data, w: &mut Writer) {
@@ -735,7 +748,7 @@ impl Data {
         //rw.size = 0;//rw_size;
         //rx.add_data(rx_size, 0x10);// = 0;//rx_size;
         let mut rx = Segment::new_rx();
-        rx.add_data(rx_size, 0x10); // = 0;//rx_size;
+        //rx.add_data(rx_size, 0x10); // = 0;//rx_size;
 
         Self {
             is_64: true,
@@ -1042,40 +1055,38 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     let page_align = 0x1000;
     let mut components: Vec<Box<dyn ElfComponent>> = vec![];
-    if true && data.interp.is_some() {
+    if data.interp.is_some() {
         let name_id = writer.add_section_name(".interp".as_bytes());
         //let interp = data.interp.take().unwrap_or(String::default()).into_bytes();
         let buf = data.interp.clone().unwrap().as_bytes().to_vec();
+        /*
         let s = AllocateSection::new(
-            data.interp.clone().unwrap().as_bytes().to_vec(),
+            buf,
+            //data.interp.clone().unwrap().as_bytes().to_vec(),
             0x10,
             page_align,
             AllocSegment::RO,
         )
         .name_section(name_id);
+        ro_components.push(Box::new(s)); //BufferSection { name_id, buf: buf.to_vec() });
+        */
+
+        blocks.push(BufferSection::new(AllocSegment::RO, Some(name_id), buf.to_vec()));
         //components.push(Box::new(s));
         //data.ro.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-        ro_components.push(Box::new(s)); //BufferSection { name_id, buf: buf.to_vec() });
                                          //let s = SegmentSection::new(AllocSegment::RO, 0x20);//.name_section(name_id);
                                          //components.push(Box::new(s));
     }
 
     // .text
+    // Add .text section to the text load segment
     let mut buf = vec![];
     for segment in data.code_segments.iter() {
         buf.extend(segment.bytes.clone());
     }
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
     //data.rx.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-    blocks.push(BufferSection {
-        alloc: AllocSegment::RX,
-        name_id,
-        addr: 0,
-        offset: 0,
-        size: 0,
-        //align: 0x10,
-        buf: buf.to_vec(),
-    });
+    blocks.push(BufferSection::new(AllocSegment::RX, name_id, buf.to_vec()));
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RX).name_section(name_id);
     //data.rx.components.push(Box::new(s));
     //rx_components.push(Box::new(s));
@@ -1090,15 +1101,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
     //data.rw.blocks.push(BufferSection { name_id, buf: buf.to_vec() });
-    blocks.push(BufferSection {
-        alloc: AllocSegment::RW,
-        name_id,
-        addr: 0,
-        offset: 0,
-        size: 0,
-        //align: 0x10,
-        buf: buf.to_vec(),
-    });
+    blocks.push(BufferSection::new(AllocSegment::RW, name_id, buf.to_vec()));
+
     //let s = AllocateSection::new(buf, 0x20, page_align, AllocSegment::RW).name_section(name_id);
     //let s = SegmentSection::new(AllocSegment::RW, 0x20);//.name_section(name_id);
     //components.push(Box::new(s));
