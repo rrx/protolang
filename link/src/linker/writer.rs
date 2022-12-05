@@ -440,6 +440,18 @@ impl ElfComponent for SymTabSection {
         //w.reserve_symbol_index(data.index_data);
         w.reserve_symtab_section_index();
         w.reserve_symtab_shndx_section_index();
+
+        // reserve the symbols in the various sections
+        for sym in &data.sections.ro.symbols {
+            w.reserve_symbol_index(data.index_data);
+        }
+        for sym in &data.sections.rx.symbols {
+            w.reserve_symbol_index(data.index_text);
+        }
+        for sym in &data.sections.rw.symbols {
+            w.reserve_symbol_index(data.index_data);
+        }
+
         w.reserve_symtab();
         w.reserve_symtab_shndx();
     }
@@ -447,43 +459,55 @@ impl ElfComponent for SymTabSection {
     fn write(&self, data: &Data, w: &mut Writer) {
         // write symbols
         w.write_null_symbol();
+
+        // write symbols out
         for sym in &data.sections.ro.symbols {
-            eprintln!("write sym: {:?}", sym.offset);
-            w.write_symbol(&object::write::elf::Sym {
-                name: sym.name_id,
-                section: data.index_text, //None,//sym.section,
-                st_info: 0,               //in_sym.st_info(),
-                st_other: 0,              //in_sym.st_other(),
-                st_shndx: 0,              //in_sym.st_shndx(endian),
-                st_value: 0,              //in_sym.st_value(endian).into(),
-                st_size: 0,               //in_sym.st_size(endian).into(),
-            });
-        }
-        w.write_symtab_shndx();
-        return;
-        for sym in &data.sections.rx.symbols {
-            eprintln!("write sym: {:?}", (sym.name_id, sym.offset));
+            eprintln!("write sym: {:?}", &sym.s);
+            let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
+            let st_other = elf::STV_DEFAULT;
+            let st_shndx = elf::SHN_ABS;
+            let st_size = 1;
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
                 section: data.index_data, //None,//sym.section,
-                st_info: 0,               //in_sym.st_info(),
-                st_other: 0,              //in_sym.st_other(),
-                st_shndx: 0,              //in_sym.st_shndx(endian),
-                st_value: 0,              //in_sym.st_value(endian).into(),
-                st_size: 0,               //in_sym.st_size(endian).into(),
+                st_info,               //in_sym.st_info(),
+                st_other,              //in_sym.st_other(),
+                st_shndx,              //in_sym.st_shndx(endian),
+                st_value: sym.s.address,              //in_sym.st_value(endian).into(),
+                st_size,               //in_sym.st_size(endian).into(),
+            });
+        }
+        for sym in &data.sections.rx.symbols {
+            eprintln!("write sym: {:?}", (sym.name_id, &sym.s));
+            let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
+            let st_other = elf::STV_DEFAULT;
+            let st_shndx = elf::SHN_ABS;
+            let st_size = 1;
+            w.write_symbol(&object::write::elf::Sym {
+                name: sym.name_id,
+                section: data.index_text, //None,//sym.section,
+                st_info,                  //in_sym.st_info(),
+                st_other,                 //in_sym.st_other(),
+                st_shndx,                 //in_sym.st_shndx(endian),
+                st_value: sym.s.address,  //in_sym.st_value(endian).into(),
+                st_size,                  //in_sym.st_size(endian).into(),
             });
         }
 
         for sym in &data.sections.rw.symbols {
-            eprintln!("write sym: {:?}", sym.offset);
+            eprintln!("write sym: {:?}", &sym.s);
+            let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
+            let st_other = elf::STV_DEFAULT;
+            let st_shndx = elf::SHN_ABS;
+            let st_size = 1;
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
-                section: None, //sym.section,
-                st_info: 0,    //in_sym.st_info(),
-                st_other: 0,   //in_sym.st_other(),
-                st_shndx: 0,   //in_sym.st_shndx(endian),
-                st_value: 0,   //in_sym.st_value(endian).into(),
-                st_size: 0,    //in_sym.st_size(endian).into(),
+                section: data.index_data, //sym.section,
+                st_info,    //in_sym.st_info(),
+                st_other,   //in_sym.st_other(),
+                st_shndx,   //in_sym.st_shndx(endian),
+                st_value: sym.s.address,   //in_sym.st_value(endian).into(),
+                st_size,    //in_sym.st_size(endian).into(),
             });
         }
         w.write_symtab_shndx();
@@ -642,11 +666,11 @@ impl ElfComponent for BufferSection {
             AllocSegment::RO => (), //data.index_.align,
             AllocSegment::RW => {
                 data.index_data = Some(index);
-                w.reserve_symbol_index(data.index_data);
+                //w.reserve_symbol_index(data.index_data);
             }
             AllocSegment::RX => {
                 data.index_text = Some(index);
-                w.reserve_symbol_index(data.index_text);
+                //w.reserve_symbol_index(data.index_text);
             }
         }
 
@@ -769,10 +793,10 @@ impl Segment {
     }
 }
 
-#[derive(Default)]
+//#[derive(Default)]
 struct ProgSymbol {
     name_id: Option<StringId>,
-    offset: usize,
+    s: CodeSymbol,
 }
 
 #[derive(Default)]
@@ -828,40 +852,37 @@ impl Data {
                     for (name, symbol) in unlinked.defined.iter() {
                         let name_id = Some(w.add_string(name.as_bytes()));
 
-                        let ps = ProgSymbol {
-                            name_id,
-                            offset: symbol.address as usize + rw_size as usize,
-                        };
+                        let mut symbol = symbol.clone();
+                        symbol.address += rw_size as u64;
+
+                        let ps = ProgSymbol { name_id, s: symbol };
+
                         s.rw.symbols.push(ps);
                     }
                     rw_size += unlinked.bytes.len();
-
-                    //data_segments.push(unlinked.clone());
                 }
                 K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
                     for (name, symbol) in unlinked.defined.iter() {
                         let name_id = Some(w.add_string(name.as_bytes()));
-                        let ps = ProgSymbol {
-                            name_id,
-                            offset: symbol.address as usize + rw_size as usize,
-                        };
+                        let mut symbol = symbol.clone();
+                        symbol.address += ro_size as u64;
+
+                        let ps = ProgSymbol { name_id, s: symbol };
                         s.ro.symbols.push(ps);
                     }
                     ro_size += unlinked.bytes.len();
-                    //data_segments.push(unlinked.clone());
                 }
                 K::Text => {
                     //w.reserve_symbol_index(None);
                     for (name, symbol) in unlinked.defined.iter() {
                         let name_id = Some(w.add_string(name.as_bytes()));
-                        let ps = ProgSymbol {
-                            name_id,
-                            offset: symbol.address as usize + rw_size as usize,
-                        };
+                        let mut symbol = symbol.clone();
+                        symbol.address += rx_size as u64;
+
+                        let ps = ProgSymbol { name_id, s: symbol };
                         s.rx.symbols.push(ps);
                     }
                     rx_size += unlinked.bytes.len();
-                    //code_segments.push(unlinked.clone());
                 }
 
                 // ignore for now
@@ -1206,7 +1227,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     blocks.push(Box::new(DynStrSection::default()));
     blocks.push(Box::new(DynSymSection::default()));
 
-    //blocks.push(Box::new(SymTabSection::default()));
+    blocks.push(Box::new(SymTabSection::default()));
     blocks.push(Box::new(StrTabSection::default()));
 
     // relocations go here

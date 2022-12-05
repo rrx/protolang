@@ -1,7 +1,10 @@
 default:
+	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
 	RUST_LOG=debug cargo run --example write
 	readelf -a tmp/out.exe
 	objdump -D tmp/out.exe
+	readelf -s tmp/out.exe
+	objdump -t tmp/out.exe
 
 
 all: build functions test doc
