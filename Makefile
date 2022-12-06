@@ -2,9 +2,10 @@ default:
 	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
 	RUST_LOG=debug cargo run --example write
 	readelf -a tmp/out.exe
-	objdump -D tmp/out.exe
-	readelf -s tmp/out.exe
+	#objdump -D tmp/out.exe
+	#readelf -s tmp/out.exe
 	objdump -t tmp/out.exe
+	exec tmp/out.exe
 
 
 all: build functions test doc
@@ -33,6 +34,7 @@ function2:
 	clang ${CFLAGS} -c link/testfiles/link_shared.c -o ./tmp/link_shared.o
 	clang ${CFLAGS} -c link/testfiles/live.c -o ./tmp/live.o
 	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
+	clang ${CFLAGS} -g link/testfiles/empty_main.c -o ./tmp/empty_main
 	clang ${CFLAGS} -c link/testfiles/uvtest.c -o ./tmp/uvtest.o
 	clang ${CFLAGS} -c link/testfiles/globals.c -o ./tmp/globals.o
 	clang ${CFLAGS} -c link/testfiles/call_extern.c -o ./tmp/call_extern.o
@@ -45,9 +47,8 @@ function2:
 	clang -shared -fpic -Wl,--no-undefined link/testfiles/live.c -o ./tmp/live.so
 
 
-	#gcc -nostdlib -m32 link/testfiles/start.c -o ./tmp/start.o
+	clang ${CFLAGS} -c -nostdlib link/testfiles/start.c -o ./tmp/start.o
 	clang -nostdlib link/testfiles/start.c -o ./tmp/start
-	clang ${CFLAGS} -nostdlib link/testfiles/start.c -o ./tmp/start.o
 	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
 
 	clang ${CFLAGS} -g link/testfiles/invoke_print.c -o ./tmp/invoke_print

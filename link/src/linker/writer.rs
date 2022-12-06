@@ -108,12 +108,12 @@ impl ElfComponent for HeaderComponent {
 
     fn write(&self, data: &Data, w: &mut Writer) {
         w.write_file_header(&object::write::elf::FileHeader {
-            os_abi: 0x00,            // SysV
-            abi_version: 0,          // ignored on linux
-            e_type: elf::ET_EXEC,    // ET_EXEC - Executable file
-            e_machine: 0x3E,         // AMD x86-64
-            e_entry: data.addr_text, // e_entry, normally points to _start
-            e_flags: 0,              // e_flags
+            os_abi: 0x00,             // SysV
+            abi_version: 0,           // ignored on linux
+            e_type: elf::ET_EXEC,     // ET_EXEC - Executable file
+            e_machine: 0x3E,          // AMD x86-64
+            e_entry: data.addr_start, // e_entry, normally points to _start
+            e_flags: 0,               // e_flags
         })
         .unwrap();
 
@@ -312,7 +312,9 @@ impl ElfComponent for DynamicSection {
     }
 }
 
+#[derive(PartialEq)]
 enum AllocSegment {
+    Interp,
     RO,
     RW,
     RX,
@@ -321,7 +323,7 @@ enum AllocSegment {
 impl AllocSegment {
     fn flags(&self) -> u32 {
         match self {
-            AllocSegment::RO => elf::SHF_ALLOC,
+            AllocSegment::RO | AllocSegment::Interp => elf::SHF_ALLOC,
             AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
             AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
         }
@@ -439,7 +441,9 @@ impl ElfComponent for SymTabSection {
         //w.reserve_symbol_index(data.index_text);
         //w.reserve_symbol_index(data.index_data);
         w.reserve_symtab_section_index();
-        w.reserve_symtab_shndx_section_index();
+        if w.symtab_shndx_needed() {
+            w.reserve_symtab_shndx_section_index();
+        }
 
         // reserve the symbols in the various sections
         for sym in &data.sections.ro.symbols {
@@ -453,7 +457,18 @@ impl ElfComponent for SymTabSection {
         }
 
         w.reserve_symtab();
-        w.reserve_symtab_shndx();
+
+        if w.symtab_shndx_needed() {
+            w.reserve_symtab_shndx();
+        }
+    }
+
+    fn update(&mut self, data: &mut Data) {
+        for sym in &data.sections.rx.symbols {
+            if sym.is_start {
+                data.addr_start = data.rx.addr + sym.s.address;
+            }
+        }
     }
 
     fn write(&self, data: &Data, w: &mut Writer) {
@@ -462,23 +477,25 @@ impl ElfComponent for SymTabSection {
 
         // write symbols out
         for sym in &data.sections.ro.symbols {
-            eprintln!("write sym: {:?}", &sym.s);
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_other = elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
-            let st_size = 1;
+            let st_size = sym.s.size;
+            let addr = sym.s.address + data.ro.base;
+            eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
                 section: data.index_data, //None,//sym.section,
-                st_info,               //in_sym.st_info(),
-                st_other,              //in_sym.st_other(),
-                st_shndx,              //in_sym.st_shndx(endian),
-                st_value: sym.s.address,              //in_sym.st_value(endian).into(),
-                st_size,               //in_sym.st_size(endian).into(),
+                st_info,                  //in_sym.st_info(),
+                st_other,                 //in_sym.st_other(),
+                st_shndx,                 //in_sym.st_shndx(endian),
+                st_value: addr,           //in_sym.st_value(endian).into(),
+                st_size,                  //in_sym.st_size(endian).into(),
             });
         }
         for sym in &data.sections.rx.symbols {
-            eprintln!("write sym: {:?}", (sym.name_id, &sym.s));
+            let addr = sym.s.address + data.rx.addr;
+            eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_other = elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
@@ -489,13 +506,14 @@ impl ElfComponent for SymTabSection {
                 st_info,                  //in_sym.st_info(),
                 st_other,                 //in_sym.st_other(),
                 st_shndx,                 //in_sym.st_shndx(endian),
-                st_value: sym.s.address,  //in_sym.st_value(endian).into(),
+                st_value: addr,           //in_sym.st_value(endian).into(),
                 st_size,                  //in_sym.st_size(endian).into(),
             });
         }
 
         for sym in &data.sections.rw.symbols {
-            eprintln!("write sym: {:?}", &sym.s);
+            let addr = sym.s.address + data.rw.base;
+            eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_other = elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
@@ -503,19 +521,23 @@ impl ElfComponent for SymTabSection {
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
                 section: data.index_data, //sym.section,
-                st_info,    //in_sym.st_info(),
-                st_other,   //in_sym.st_other(),
-                st_shndx,   //in_sym.st_shndx(endian),
-                st_value: sym.s.address,   //in_sym.st_value(endian).into(),
-                st_size,    //in_sym.st_size(endian).into(),
+                st_info,                  //in_sym.st_info(),
+                st_other,                 //in_sym.st_other(),
+                st_shndx,                 //in_sym.st_shndx(endian),
+                st_value: addr,           //in_sym.st_value(endian).into(),
+                st_size,                  //in_sym.st_size(endian).into(),
             });
         }
-        w.write_symtab_shndx();
+        if w.symtab_shndx_needed() {
+            w.write_symtab_shndx();
+        }
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
         w.write_symtab_section_header(0);
-        w.write_symtab_shndx_section_header();
+        if w.symtab_shndx_needed() {
+            w.write_symtab_shndx_section_header();
+        }
     }
 }
 
@@ -534,7 +556,6 @@ impl Default for DynSymSection {
 
 impl ElfComponent for DynSymSection {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
-        //w.reserve_dynamic_symbol_index();
         w.reserve_null_dynamic_symbol_index();
 
         data.index_dynsym = Some(w.reserve_dynsym_section_index());
@@ -624,6 +645,7 @@ impl ElfComponent for StrTabSection {
     }
 }
 
+
 struct BufferSection {
     alloc: AllocSegment,
     name_id: Option<StringId>,
@@ -631,7 +653,6 @@ struct BufferSection {
     offset: usize,
     size: usize,
     base: usize,
-    //align: usize,
     buf: Vec<u8>,
 }
 
@@ -649,13 +670,6 @@ impl BufferSection {
     }
     fn align(&self) -> usize {
         0x10
-        /*
-        match self.alloc {
-            AllocSegment::RO => data.ro.align,
-            AllocSegment::RW => data.rw.align,
-            AllocSegment::RX => data.rx.align,
-        }
-        */
     }
 }
 
@@ -663,15 +677,14 @@ impl ElfComponent for BufferSection {
     fn reserve(&mut self, data: &mut Data, w: &mut Writer) {
         let index = w.reserve_section_index();
         match self.alloc {
-            AllocSegment::RO => (), //data.index_.align,
             AllocSegment::RW => {
                 data.index_data = Some(index);
-                //w.reserve_symbol_index(data.index_data);
             }
             AllocSegment::RX => {
                 data.index_text = Some(index);
-                //w.reserve_symbol_index(data.index_text);
             }
+            _ => ()
+            //AllocSegment::RO => (),
         }
 
         let pos = w.reserved_len();
@@ -682,10 +695,15 @@ impl ElfComponent for BufferSection {
         self.size = self.buf.len();
         self.offset = start;
         match self.alloc {
-            AllocSegment::RO => data.ro.add_data(self.size, self.align()),
+            AllocSegment::RO | AllocSegment::Interp => data.ro.add_data(self.size, self.align()),
             AllocSegment::RW => data.rw.add_data(self.size, self.align()),
             AllocSegment::RX => data.rx.add_data(self.size, self.align()),
         };
+
+        if self.alloc == AllocSegment::Interp {
+            data.addr_interp = start as u64;
+        }
+
         log::debug!(
             "reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
             pos,
@@ -697,10 +715,19 @@ impl ElfComponent for BufferSection {
 
     fn update(&mut self, data: &mut Data) {
         let segment = match self.alloc {
-            AllocSegment::RO => &data.ro,
+            AllocSegment::RO | AllocSegment::Interp => &data.ro,
             AllocSegment::RW => &data.rw,
             AllocSegment::RX => &data.rx,
         };
+        match self.alloc {
+            AllocSegment::RW => {
+                data.addr_text = self.offset as u64;
+            }
+            //AllocSegment::RX => {}
+            //AllocSegment::RO => (),
+            _ => ()
+        }
+
         self.base = segment.base as usize;
         self.addr = segment.base as usize + self.offset;
     }
@@ -793,9 +820,10 @@ impl Segment {
     }
 }
 
-//#[derive(Default)]
+#[derive(Debug)]
 struct ProgSymbol {
     name_id: Option<StringId>,
+    is_start: bool,
     s: CodeSymbol,
 }
 
@@ -818,8 +846,6 @@ struct Data {
     data_segments: Vec<UnlinkedCodeSegment>,
     ph: Vec<ProgramHeaderEntry>,
     libs: Vec<Library>,
-    //dynamic: Vec<Dynamic>,
-    //sections: Vec<Section>,
     page_size: u32,
     ro: Segment,
     rw: Segment,
@@ -828,6 +854,8 @@ struct Data {
     addr_dynstr: u64,
     addr_dynsym: u64,
     addr_text: u64,
+    addr_start: u64,
+    addr_interp: u64,
     index_data: Option<SectionIndex>,
     index_text: Option<SectionIndex>,
     index_strtab: Option<SectionIndex>,
@@ -846,6 +874,7 @@ impl Data {
 
         for (_name, unlinked) in link.unlinked.iter() {
             use object::SectionKind as K;
+            let is_start = false;
             match unlinked.kind {
                 K::Data | K::UninitializedData => {
                     //w.reserve_symbol_index(None);
@@ -855,7 +884,11 @@ impl Data {
                         let mut symbol = symbol.clone();
                         symbol.address += rw_size as u64;
 
-                        let ps = ProgSymbol { name_id, s: symbol };
+                        let ps = ProgSymbol {
+                            name_id,
+                            is_start,
+                            s: symbol,
+                        };
 
                         s.rw.symbols.push(ps);
                     }
@@ -866,8 +899,11 @@ impl Data {
                         let name_id = Some(w.add_string(name.as_bytes()));
                         let mut symbol = symbol.clone();
                         symbol.address += ro_size as u64;
-
-                        let ps = ProgSymbol { name_id, s: symbol };
+                        let ps = ProgSymbol {
+                            name_id,
+                            is_start,
+                            s: symbol,
+                        };
                         s.ro.symbols.push(ps);
                     }
                     ro_size += unlinked.bytes.len();
@@ -879,7 +915,12 @@ impl Data {
                         let mut symbol = symbol.clone();
                         symbol.address += rx_size as u64;
 
-                        let ps = ProgSymbol { name_id, s: symbol };
+                        let is_start = name == "_start";
+                        let ps = ProgSymbol {
+                            name_id,
+                            is_start,
+                            s: symbol,
+                        };
                         s.rx.symbols.push(ps);
                     }
                     rx_size += unlinked.bytes.len();
@@ -944,13 +985,12 @@ impl Data {
 
         Self {
             is_64: true,
-            interp: Some("/lib/ld-linux-x86-64.so.2".to_string()),
+            interp: None,
+            //interp: Some("/lib/ld-linux-x86-64.so.2".to_string()),
             code_segments,
             data_segments,
             ph: vec![],
             libs: vec![],
-            //dynamic: vec![],
-            //sections: vec![],
             page_size: 0x1000,
             ro,
             rx,
@@ -959,6 +999,8 @@ impl Data {
             addr_dynstr: 0,
             addr_dynsym: 0,
             addr_text: 0,
+            addr_start: 0,
+            addr_interp: 0,
             index_strtab: None,
             index_dynstr: None,
             index_dynsym: None,
@@ -985,16 +1027,19 @@ impl Data {
             });
         }
 
-        out.push(Dynamic {
-            tag: elf::DT_DEBUG,
-            val: 0,
-            string: None,
-        });
-        out.push(Dynamic {
-            tag: elf::DT_SYMTAB,
-            val: self.addr_dynsym,
-            string: None,
-        });
+        if false {
+            out.push(Dynamic {
+                tag: elf::DT_DEBUG,
+                val: 0,
+                string: None,
+            });
+
+            out.push(Dynamic {
+                tag: elf::DT_SYMTAB,
+                val: self.addr_dynsym,
+                string: None,
+            });
+        }
         out.push(Dynamic {
             tag: elf::DT_NULL,
             val: 0,
@@ -1004,7 +1049,7 @@ impl Data {
     }
 
     fn get_header_count(&self) -> usize {
-        let dynamic = self.gen_dynamic();
+        //let dynamic = self.gen_dynamic();
         // calculate the number of headers
         let mut ph_count = 1; // the header itself
         if let Some(_) = self.interp {
@@ -1016,7 +1061,7 @@ impl Data {
         // rx might be empty if there's no code
         // rw has symbols and tables usually
         ph_count += 3;
-        if dynamic.len() > 0 {
+        if self.libs.len() > 0 {
             ph_count += 1; // dynamic
         }
         ph_count
@@ -1076,7 +1121,7 @@ impl Data {
     }
 
     fn gen_ph(&self) -> Vec<ProgramHeaderEntry> {
-        let dynamic = self.gen_dynamic();
+        //let dynamic = self.gen_dynamic();
         let mut ph = vec![];
 
         let offset = self.size_fh as u64;
@@ -1094,15 +1139,18 @@ impl Data {
 
         if let Some(interp) = &self.interp {
             //offset = size_align(offset as usize, 0x10) as u64;
+            //
+            let cstr = std::ffi::CString::new(interp.as_bytes().to_vec()).unwrap();
+            let cstr_size = cstr.as_bytes_with_nul().len();
             ph.push(ProgramHeaderEntry {
                 p_type: elf::PT_INTERP,
                 p_flags: elf::PF_R,
-                p_offset: offset,
-                p_vaddr: self.ro.addr + offset,
-                p_paddr: self.ro.addr + offset,
-                p_filesz: interp.as_bytes().len() as u64,
-                p_memsz: interp.as_bytes().len() as u64,
-                p_align: 1,
+                p_offset: self.addr_interp,
+                p_vaddr: self.addr_interp,
+                p_paddr: self.addr_interp,
+                p_filesz: cstr_size as u64,
+                p_memsz: cstr_size as u64,
+                p_align: 0x10,
             });
             //offset += interp.as_bytes().len() as u64;
         }
@@ -1192,7 +1240,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         let name_id = writer.add_section_name(".interp".as_bytes());
         let buf = data.interp.clone().unwrap().as_bytes().to_vec();
         blocks.push(Box::new(BufferSection::new(
-            AllocSegment::RO,
+            AllocSegment::Interp,
             Some(name_id),
             buf.to_vec(),
         )));
@@ -1223,20 +1271,33 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         buf.to_vec(),
     )));
 
-    blocks.push(Box::new(DynamicSection::default()));
-    blocks.push(Box::new(DynStrSection::default()));
-    blocks.push(Box::new(DynSymSection::default()));
+    if data.libs.len() > 0 {
+        blocks.push(Box::new(DynamicSection::default()));
+    }
+
+    if writer.dynstr_needed() {
+        blocks.push(Box::new(DynStrSection::default()));
+    }
+
+    if data.libs.len() > 0 {
+        blocks.push(Box::new(DynSymSection::default()));
+    }
 
     blocks.push(Box::new(SymTabSection::default()));
-    blocks.push(Box::new(StrTabSection::default()));
+
+    if writer.strtab_needed() {
+        blocks.push(Box::new(StrTabSection::default()));
+    }
 
     // relocations go here
 
     // shstrtab needs to be allocated last, once all headers are reserved
     blocks.push(Box::new(ShStrTabSection::default()));
 
-    let string_id = writer.add_dynamic_string("libc.so.6".as_bytes());
-    data.add_library(&mut writer, string_id);
+    if false {
+        let string_id = writer.add_dynamic_string("libc.so.6".as_bytes());
+        data.add_library(&mut writer, string_id);
+    }
 
     // RESERVE
     for b in blocks.iter_mut() {
