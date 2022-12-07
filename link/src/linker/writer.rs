@@ -292,13 +292,7 @@ impl ElfComponent for SymTabSection {
         }
     }
 
-    fn update(&mut self, data: &mut Data) {
-        for sym in &data.sections.rx.symbols {
-            if sym.is_start {
-                data.addr_start = data.rx.addr + sym.s.address;
-            }
-        }
-    }
+    fn update(&mut self, data: &mut Data) {}
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
         // write symbols
@@ -969,27 +963,6 @@ impl Data {
         out
     }
 
-    /*
-    fn get_header_count(&self) -> usize {
-        //let dynamic = self.gen_dynamic();
-        // calculate the number of headers
-        let mut ph_count = 1; // the header itself
-        if let Some(_) = self.interp {
-            ph_count += 1;
-        }
-
-        // we always have 3 segemnts ro, rw, rx, they might be empty
-        // ro is never empty, because it includes the headers
-        // rx might be empty if there's no code
-        // rw has symbols and tables usually
-        ph_count += 3;
-        if self.libs.len() > 0 {
-            ph_count += 1; // dynamic
-        }
-        ph_count
-    }
-    */
-
     fn update_segments(&mut self) {
         let align = 0x10;
         let base = 0x80000;
@@ -1040,98 +1013,13 @@ impl Data {
             offset,
             self.rw.size
         );
-    }
 
-    fn gen_ph(&self) -> Vec<ProgramHeaderEntry> {
-        //let dynamic = self.gen_dynamic();
-        let mut ph = vec![];
-
-        let offset = self.size_fh as u64;
-        ph.push(ProgramHeaderEntry {
-            p_type: elf::PT_PHDR,
-            p_flags: elf::PF_R,
-            p_offset: self.size_fh as u64, // calculate later
-            p_vaddr: self.ro.addr as u64 + offset,
-            p_paddr: 0, //self.ro.addr as u64 + offset,
-            p_filesz: self.size_ph as u64,
-            p_memsz: self.size_ph as u64,
-            p_align: 8,
-        });
-        let mut offset = offset + self.size_ph as u64;
-
-        if let Some(interp) = &self.interp {
-            //offset = size_align(offset as usize, 0x10) as u64;
-            //
-            let cstr = std::ffi::CString::new(interp.as_bytes().to_vec()).unwrap();
-            let cstr_size = cstr.as_bytes_with_nul().len();
-            ph.push(ProgramHeaderEntry {
-                p_type: elf::PT_INTERP,
-                p_flags: elf::PF_R,
-                p_offset: self.addr_interp,
-                p_vaddr: self.addr_interp,
-                p_paddr: 0, //self.addr_interp,
-                p_filesz: cstr_size as u64,
-                p_memsz: cstr_size as u64,
-                p_align: 0x10,
-            });
-            //offset += interp.as_bytes().len() as u64;
+        // set entry point
+        for sym in &self.sections.rx.symbols {
+            if sym.is_start {
+                self.addr_start = self.rx.addr + sym.s.address;
+            }
         }
-
-        // load segments
-        // program LOAD (R)
-        let addr = self.ro.addr; // + self.ro.offset as u64;
-        ph.push(ProgramHeaderEntry {
-            p_type: elf::PT_LOAD,
-            p_flags: elf::PF_R,
-            p_offset: self.ro.offset, // read section starts at 0 offset to include headers
-            p_vaddr: addr,
-            p_paddr: 0, //addr,
-            p_filesz: self.ro.size as u64,
-            p_memsz: self.ro.size as u64,
-            p_align: self.page_size as u64,
-        });
-
-        // program LOAD (RX)
-        let addr = self.rx.addr; // + self.rx.offset as u64;
-        ph.push(ProgramHeaderEntry {
-            p_type: elf::PT_LOAD,
-            p_flags: elf::PF_R | elf::PF_X,
-            p_offset: self.rx.offset,
-            p_vaddr: addr,
-            p_paddr: 0, //addr,
-            p_filesz: self.rx.size as u64,
-            p_memsz: self.rx.size as u64,
-            p_align: self.page_size as u64,
-        });
-        log::debug!("{:#0x}, {:#0x}", self.rx.offset, addr);
-
-        // program LOAD (RW)
-        let addr = self.rw.addr; // + self.rw.offset as u64;
-        ph.push(ProgramHeaderEntry {
-            p_type: elf::PT_LOAD,
-            p_flags: elf::PF_R | elf::PF_W,
-            p_offset: self.rw.offset as u64,
-            p_vaddr: addr,
-            p_paddr: 0, //addr,
-            p_filesz: self.rw.size as u64,
-            p_memsz: self.rw.size as u64,
-            p_align: self.page_size as u64,
-        });
-
-        if self.size_dynamic > 0 {
-            //program DYNAMIC
-            ph.push(ProgramHeaderEntry {
-                p_type: elf::PT_DYNAMIC,
-                p_flags: elf::PF_R | elf::PF_W,
-                p_offset: self.rw.offset as u64,
-                p_vaddr: addr,
-                p_paddr: 0, //addr,
-                p_filesz: self.size_dynamic as u64,
-                p_memsz: self.size_dynamic as u64,
-                p_align: 0x8,
-            });
-        }
-        ph
     }
 }
 
@@ -1144,7 +1032,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let is_class_64 = data.is_64;
     let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
     data.add_section_headers = false;
-    //data.add_symbols = false;
+    data.add_symbols = false;
 
     Data::read_unlinked(link, &mut writer, &mut data.sections);
 

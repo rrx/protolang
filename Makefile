@@ -10,8 +10,8 @@ write:
 	exec tmp/out.exe
 
 read:
-	RUST_LOG=debug cargo run --example read tmp/out.exe
 	elfcat tmp/out.exe
+	RUST_LOG=debug cargo run --example read tmp/out.exe
 
 
 all: build functions test doc
