@@ -100,8 +100,8 @@ impl ElfComponent for HeaderComponent {
         data.size_ph = after - before;
 
         // add headers to the ro_size
-        data.ro.add_data(data.size_fh, 0x10);
-        data.ro.add_data(data.size_ph, 0x10);
+        data.ro.add_data(data.size_fh, 0x1);
+        data.ro.add_data(data.size_ph, 0x1);
     }
 
     fn update(&mut self, data: &mut Data) {}
@@ -645,7 +645,6 @@ impl ElfComponent for StrTabSection {
     }
 }
 
-
 struct BufferSection {
     alloc: AllocSegment,
     name_id: Option<StringId>,
@@ -683,8 +682,7 @@ impl ElfComponent for BufferSection {
             AllocSegment::RX => {
                 data.index_text = Some(index);
             }
-            _ => ()
-            //AllocSegment::RO => (),
+            _ => (), //AllocSegment::RO => (),
         }
 
         let pos = w.reserved_len();
@@ -725,7 +723,7 @@ impl ElfComponent for BufferSection {
             }
             //AllocSegment::RX => {}
             //AllocSegment::RO => (),
-            _ => ()
+            _ => (),
         }
 
         self.base = segment.base as usize;
@@ -1069,7 +1067,7 @@ impl Data {
 
     fn update_segments(&mut self) {
         let align = 0x10;
-        let base = 0;
+        let base = 0x80000;
         let mut offset = 0;
         let ro_size_elf_aligned = size_align(self.ro.size as usize, align);
         self.ro.base = base;
@@ -1130,7 +1128,7 @@ impl Data {
             p_flags: elf::PF_R,
             p_offset: self.size_fh as u64, // calculate later
             p_vaddr: self.ro.addr as u64 + offset,
-            p_paddr: self.ro.addr as u64 + offset,
+            p_paddr: 0, //self.ro.addr as u64 + offset,
             p_filesz: self.size_ph as u64,
             p_memsz: self.size_ph as u64,
             p_align: 8,
@@ -1147,7 +1145,7 @@ impl Data {
                 p_flags: elf::PF_R,
                 p_offset: self.addr_interp,
                 p_vaddr: self.addr_interp,
-                p_paddr: self.addr_interp,
+                p_paddr: 0, //self.addr_interp,
                 p_filesz: cstr_size as u64,
                 p_memsz: cstr_size as u64,
                 p_align: 0x10,
@@ -1163,7 +1161,7 @@ impl Data {
             p_flags: elf::PF_R,
             p_offset: self.ro.offset, // read section starts at 0 offset to include headers
             p_vaddr: addr,
-            p_paddr: addr,
+            p_paddr: 0, //addr,
             p_filesz: self.ro.size as u64,
             p_memsz: self.ro.size as u64,
             p_align: self.page_size as u64,
@@ -1176,7 +1174,7 @@ impl Data {
             p_flags: elf::PF_R | elf::PF_X,
             p_offset: self.rx.offset,
             p_vaddr: addr,
-            p_paddr: addr,
+            p_paddr: 0, //addr,
             p_filesz: self.rx.size as u64,
             p_memsz: self.rx.size as u64,
             p_align: self.page_size as u64,
@@ -1190,7 +1188,7 @@ impl Data {
             p_flags: elf::PF_R | elf::PF_W,
             p_offset: self.rw.offset as u64,
             p_vaddr: addr,
-            p_paddr: addr,
+            p_paddr: 0, //addr,
             p_filesz: self.rw.size as u64,
             p_memsz: self.rw.size as u64,
             p_align: self.page_size as u64,
@@ -1203,7 +1201,7 @@ impl Data {
                 p_flags: elf::PF_R | elf::PF_W,
                 p_offset: self.rw.offset as u64,
                 p_vaddr: addr,
-                p_paddr: addr,
+                p_paddr: 0, //addr,
                 p_filesz: self.size_dynamic as u64,
                 p_memsz: self.size_dynamic as u64,
                 p_align: 0x8,
