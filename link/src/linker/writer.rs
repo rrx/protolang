@@ -323,7 +323,8 @@ impl ElfComponent for SymTabSection {
         // write symbols out
         for sym in &data.sections.ro.symbols {
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
-            let st_other = elf::STV_DEFAULT;
+            let st_info = sym.s.st_info;
+            let st_other = sym.s.st_other; //elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
             let st_size = sym.s.size;
             let addr = sym.s.address + data.ro.base;
@@ -348,8 +349,8 @@ impl ElfComponent for SymTabSection {
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
                 section: data.index_text,
-                st_info,
-                st_other,
+                st_info: sym.s.st_info,
+                st_other: sym.s.st_other,
                 st_shndx,
                 st_value: addr,
                 st_size,
@@ -366,8 +367,8 @@ impl ElfComponent for SymTabSection {
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
                 section: data.index_data,
-                st_info,
-                st_other,
+                st_info: sym.s.st_info,
+                st_other: sym.s.st_other,
                 st_shndx,
                 st_value: addr,
                 st_size,
@@ -790,6 +791,7 @@ struct ProgSymbol {
 #[derive(Default)]
 struct ProgSection {
     symbols: Vec<ProgSymbol>,
+    relocations: Vec<CodeRelocation>,
 }
 
 #[derive(Default)]
@@ -840,7 +842,7 @@ impl Data {
             let is_start = false;
             match unlinked.kind {
                 K::Data | K::UninitializedData => {
-                    //w.reserve_symbol_index(None);
+                    s.rw.relocations.extend(unlinked.relocations.clone());
                     for (name, symbol) in unlinked.defined.iter() {
                         let name_id = Some(w.add_string(name.as_bytes()));
 
@@ -858,6 +860,7 @@ impl Data {
                     rw_size += unlinked.bytes.len();
                 }
                 K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
+                    s.ro.relocations.extend(unlinked.relocations.clone());
                     for (name, symbol) in unlinked.defined.iter() {
                         let name_id = Some(w.add_string(name.as_bytes()));
                         let mut symbol = symbol.clone();
@@ -872,7 +875,7 @@ impl Data {
                     ro_size += unlinked.bytes.len();
                 }
                 K::Text => {
-                    //w.reserve_symbol_index(None);
+                    s.rx.relocations.extend(unlinked.relocations.clone());
                     for (name, symbol) in unlinked.defined.iter() {
                         let name_id = Some(w.add_string(name.as_bytes()));
                         let mut symbol = symbol.clone();
@@ -944,7 +947,7 @@ impl Data {
 
         Self {
             is_64: true,
-            interp: "/lib/ld-linux-x86-64.so.2".to_string(),
+            interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             code_segments,
             data_segments,
             ph: vec![],
@@ -1093,7 +1096,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     blocks.push(Box::new(HeaderComponent {}));
 
     let page_align = 0x1000;
-    if data.is_dynamic() && false {
+    if data.is_dynamic() {
         let name_id = writer.add_section_name(".interp".as_bytes());
         let buf = data.interp.as_bytes().to_vec();
         blocks.push(Box::new(BufferSection::new(

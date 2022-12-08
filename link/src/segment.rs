@@ -1,6 +1,6 @@
 use object::{
     Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationTarget, SectionKind,
-    SymbolKind, SymbolScope, SymbolSection,
+    SymbolFlags, SymbolKind, SymbolScope, SymbolSection,
 };
 
 use std::error::Error;
@@ -31,6 +31,8 @@ pub struct CodeSymbol {
     pub(crate) address: u64,
     pub(crate) kind: CodeSymbolKind,
     pub(crate) def: CodeSymbolDefinition,
+    pub(crate) st_info: u8,
+    pub(crate) st_other: u8,
 }
 
 impl fmt::Display for CodeSymbol {
@@ -127,13 +129,19 @@ impl UnlinkedCodeSegmentInner {
                         let address = s.address() - section_start;
                         match (s.scope(), s.kind()) {
                             (SymbolScope::Dynamic | SymbolScope::Linkage, SymbolKind::Text) => {
-                                Some(CodeSymbol {
-                                    name,
-                                    address,
-                                    size: s.size(),
-                                    kind: CodeSymbolKind::Text,
-                                    def: CodeSymbolDefinition::Defined,
-                                })
+                                if let SymbolFlags::Elf { st_info, st_other } = s.flags() {
+                                    Some(CodeSymbol {
+                                        name,
+                                        address,
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Text,
+                                        def: CodeSymbolDefinition::Defined,
+                                        st_info,
+                                        st_other,
+                                    })
+                                } else {
+                                    unimplemented!()
+                                }
                             }
 
                             (SymbolScope::Dynamic, SymbolKind::Unknown) => {
@@ -145,45 +153,73 @@ impl UnlinkedCodeSegmentInner {
                                     _ => continue,
                                 };
 
-                                Some(CodeSymbol {
-                                    name,
-                                    address,
-                                    size: s.size(),
-                                    kind,
-                                    def: CodeSymbolDefinition::Defined,
-                                })
+                                if let SymbolFlags::Elf { st_info, st_other } = s.flags() {
+                                    Some(CodeSymbol {
+                                        name,
+                                        address,
+                                        size: s.size(),
+                                        kind,
+                                        def: CodeSymbolDefinition::Defined,
+                                        st_info,
+                                        st_other,
+                                    })
+                                } else {
+                                    unimplemented!()
+                                }
                             }
 
                             (
                                 SymbolScope::Dynamic | SymbolScope::Linkage,
                                 SymbolKind::Data | SymbolKind::Tls,
-                            ) => Some(CodeSymbol {
-                                name,
-                                address,
-                                size: s.size(),
-                                kind: CodeSymbolKind::Data,
-                                def: CodeSymbolDefinition::Defined,
-                            }),
+                            ) => {
+                                if let SymbolFlags::Elf { st_info, st_other } = s.flags() {
+                                    Some(CodeSymbol {
+                                        name,
+                                        address,
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Data,
+                                        def: CodeSymbolDefinition::Defined,
+                                        st_info,
+                                        st_other,
+                                    })
+                                } else {
+                                    unimplemented!()
+                                }
+                            }
 
-                            (SymbolScope::Compilation, SymbolKind::Data) => Some(CodeSymbol {
-                                name,
-                                address,
-                                size: s.size(),
-                                kind: CodeSymbolKind::Data,
-                                def: CodeSymbolDefinition::Defined,
-                            }),
+                            (SymbolScope::Compilation, SymbolKind::Data) => {
+                                if let SymbolFlags::Elf { st_info, st_other } = s.flags() {
+                                    Some(CodeSymbol {
+                                        name,
+                                        address,
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Data,
+                                        def: CodeSymbolDefinition::Defined,
+                                        st_info,
+                                        st_other,
+                                    })
+                                } else {
+                                    unimplemented!()
+                                }
+                            }
 
                             (SymbolScope::Compilation, SymbolKind::Section) => {
-                                let name = section.name()?.to_string();
-                                let code_symbol = CodeSymbol {
-                                    name: name.clone(),
-                                    address,
-                                    size: s.size(),
-                                    kind: CodeSymbolKind::Section,
-                                    def: CodeSymbolDefinition::Defined,
-                                };
-                                internal.insert(name, code_symbol.clone());
-                                Some(code_symbol)
+                                if let SymbolFlags::Elf { st_info, st_other } = s.flags() {
+                                    let name = section.name()?.to_string();
+                                    let code_symbol = CodeSymbol {
+                                        name: name.clone(),
+                                        address,
+                                        size: s.size(),
+                                        kind: CodeSymbolKind::Section,
+                                        def: CodeSymbolDefinition::Defined,
+                                        st_info,
+                                        st_other,
+                                    };
+                                    internal.insert(name, code_symbol.clone());
+                                    Some(code_symbol)
+                                } else {
+                                    unimplemented!()
+                                }
                             }
 
                             _ => unimplemented!(
