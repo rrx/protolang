@@ -1,18 +1,11 @@
 // read elf files
 use object::read::elf;
 use object::read::elf::ProgramHeader;
-use object::{
-    Object, ObjectSection, ObjectSegment, ObjectSymbol, ObjectSymbolTable, RelocationTarget,
-    SectionKind, SymbolKind, SymbolScope, SymbolSection,
-};
-use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::fmt;
 
 use object::elf::FileHeader64;
 
 use capstone::prelude::*;
-use object::Endianness;
 
 pub fn disassemble_code(buf: &[u8]) {
     let cs = capstone::Capstone::new()

@@ -8,10 +8,8 @@
 /// Overrides and Fallbacks:
 /// We can have modules with higher priority that the current module, or lower priority.
 /// A lower priority will resolve if it doesn't resolve in the overrides, or in the
-/// current module.  It will then check the remainder.  
+/// current module.  It will then check the remainder.
 ///
-use super::*;
-
 pub struct LinkModule {
     overrides: im::Vector<String>,
     fallbacks: im::Vector<String>,

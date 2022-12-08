@@ -1,11 +1,10 @@
 use std::error::Error;
 
 use object::elf;
-use object::read::elf::{Dyn, FileHeader, ProgramHeader, Rel, Rela, SectionHeader, Sym};
+use object::read::elf::FileHeader;
 use object::write::elf::{SectionIndex, Writer};
-use object::write::{Result, StringId};
+use object::write::StringId;
 use object::Endianness;
-//use core::slice::SlicePattern;
 
 use super::*;
 use crate::*;
@@ -72,8 +71,8 @@ struct DynamicSymbol {
 }
 
 trait ElfComponent {
-    fn program_header(&self, data: &Data) -> Option<ProgramHeaderEntry> {
-        None
+    fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
+        vec![]
     }
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {}
     fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {}
@@ -85,17 +84,31 @@ trait ElfComponent {
 struct HeaderComponent {}
 
 impl ElfComponent for HeaderComponent {
-    fn program_header(&self, data: &Data) -> Option<ProgramHeaderEntry> {
-        Some(ProgramHeaderEntry {
-            p_type: elf::PT_PHDR,
-            p_flags: elf::PF_R,
-            p_offset: data.size_fh as u64,
-            p_vaddr: data.ro.addr + data.size_fh as u64,
-            p_paddr: 0,
-            p_filesz: data.size_ph as u64,
-            p_memsz: data.size_ph as u64,
-            p_align: 8,
-        })
+    fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
+        vec![
+            // program header
+            ProgramHeaderEntry {
+                p_type: elf::PT_PHDR,
+                p_flags: elf::PF_R,
+                p_offset: data.size_fh as u64,
+                p_vaddr: data.ro.addr + data.size_fh as u64,
+                p_paddr: 0,
+                p_filesz: data.size_ph as u64,
+                p_memsz: data.size_ph as u64,
+                p_align: 8,
+            },
+            // add a load section for the file and program header, so it's covered
+            ProgramHeaderEntry {
+                p_type: elf::PT_LOAD,
+                p_flags: elf::PF_R,
+                p_offset: data.ro.offset,
+                p_vaddr: data.ro.addr,
+                p_paddr: 0,
+                p_filesz: data.ro.size as u64,
+                p_memsz: data.ro.size as u64,
+                p_align: data.page_size as u64,
+            },
+        ]
     }
 
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
@@ -111,7 +124,9 @@ impl ElfComponent for HeaderComponent {
         w.reserve_file_header();
         data.size_fh = w.reserved_len();
 
-        let ph_count = ph.len(); //data.get_header_count();
+        // we only need to know the number of program headers
+        // we don't need the actual headers
+        let ph_count = ph.len();
 
         let before = w.reserved_len();
         w.reserve_program_headers(ph_count as u32);
@@ -172,10 +187,10 @@ impl Default for DynamicSection {
 }
 
 impl ElfComponent for DynamicSection {
-    fn program_header(&self, data: &Data) -> Option<ProgramHeaderEntry> {
+    fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         //program DYNAMIC
         let addr = data.rw.addr;
-        Some(ProgramHeaderEntry {
+        vec![ProgramHeaderEntry {
             p_type: elf::PT_DYNAMIC,
             p_flags: elf::PF_R | elf::PF_W,
             p_offset: data.rw.offset as u64,
@@ -184,10 +199,9 @@ impl ElfComponent for DynamicSection {
             p_filesz: data.size_dynamic as u64,
             p_memsz: data.size_dynamic as u64,
             p_align: 0x8,
-        })
+        }]
     }
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        //let name = Some(w.add_section_name(".dynamic".as_bytes()));
         let dynamic_index = w.reserve_dynamic_section_index();
     }
 
@@ -195,7 +209,6 @@ impl ElfComponent for DynamicSection {
         let dynamic = data.gen_dynamic();
         let before = w.reserved_len();
         self.start = size_align(before, self.align);
-        //self.start = data.rw.offset as usize;
         w.reserve_until(self.start);
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
@@ -247,6 +260,9 @@ impl AllocSegment {
             AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
             AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
         }
+    }
+    fn align(&self) -> usize {
+        0x10
     }
 }
 
@@ -308,12 +324,12 @@ impl ElfComponent for SymTabSection {
             eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
-                section: data.index_data, //None,//sym.section,
-                st_info,                  //in_sym.st_info(),
-                st_other,                 //in_sym.st_other(),
-                st_shndx,                 //in_sym.st_shndx(endian),
-                st_value: addr,           //in_sym.st_value(endian).into(),
-                st_size,                  //in_sym.st_size(endian).into(),
+                section: data.index_data,
+                st_info,
+                st_other,
+                st_shndx,
+                st_value: addr,
+                st_size,
             });
         }
         for sym in &data.sections.rx.symbols {
@@ -325,12 +341,12 @@ impl ElfComponent for SymTabSection {
             let st_size = 1;
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
-                section: data.index_text, //None,//sym.section,
-                st_info,                  //in_sym.st_info(),
-                st_other,                 //in_sym.st_other(),
-                st_shndx,                 //in_sym.st_shndx(endian),
-                st_value: addr,           //in_sym.st_value(endian).into(),
-                st_size,                  //in_sym.st_size(endian).into(),
+                section: data.index_text,
+                st_info,
+                st_other,
+                st_shndx,
+                st_value: addr,
+                st_size,
             });
         }
 
@@ -343,12 +359,12 @@ impl ElfComponent for SymTabSection {
             let st_size = 1;
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
-                section: data.index_data, //sym.section,
-                st_info,                  //in_sym.st_info(),
-                st_other,                 //in_sym.st_other(),
-                st_shndx,                 //in_sym.st_shndx(endian),
-                st_value: addr,           //in_sym.st_value(endian).into(),
-                st_size,                  //in_sym.st_size(endian).into(),
+                section: data.index_data,
+                st_info,
+                st_other,
+                st_shndx,
+                st_value: addr,
+                st_size,
             });
         }
         if w.symtab_shndx_needed() {
@@ -509,73 +525,72 @@ impl BufferSection {
             buf,
         }
     }
-    fn align(&self) -> usize {
-        0x10
-    }
 }
 
 impl ElfComponent for BufferSection {
-    fn program_header(&self, data: &Data) -> Option<ProgramHeaderEntry> {
+    fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         match self.alloc {
             AllocSegment::Interp => {
-                let interp = data.interp.as_ref().unwrap();
-                let cstr = std::ffi::CString::new(interp.as_bytes().to_vec()).unwrap();
+                let interp = data.interp.as_bytes().to_vec();
+                let cstr = std::ffi::CString::new(interp).unwrap();
                 let cstr_size = cstr.as_bytes_with_nul().len();
-                Some(ProgramHeaderEntry {
+                vec![ProgramHeaderEntry {
                     p_type: elf::PT_INTERP,
                     p_flags: elf::PF_R,
                     p_offset: data.addr_interp,
                     p_vaddr: data.addr_interp,
-                    p_paddr: 0, //self.addr_interp,
+                    p_paddr: 0,
                     p_filesz: cstr_size as u64,
                     p_memsz: cstr_size as u64,
-                    p_align: 0x10,
-                })
+                    p_align: self.alloc.align() as u64,
+                }]
             }
 
             AllocSegment::RO => {
                 // load segments
                 // program LOAD (R)
-                let addr = data.ro.addr; // + self.ro.offset as u64;
-                Some(ProgramHeaderEntry {
+                let addr = data.ro.addr;
+                vec![ProgramHeaderEntry {
                     p_type: elf::PT_LOAD,
                     p_flags: elf::PF_R,
-                    p_offset: data.ro.offset, // read section starts at 0 offset to include headers
+                    p_offset: data.ro.offset,
                     p_vaddr: addr,
-                    p_paddr: 0, //addr,
+                    p_paddr: 0,
                     p_filesz: data.ro.size as u64,
                     p_memsz: data.ro.size as u64,
                     p_align: data.page_size as u64,
-                })
+                }]
             }
+
             AllocSegment::RX => {
                 // program LOAD (RX)
-                let addr = data.rx.addr; // + self.rx.offset as u64;
+                let addr = data.rx.addr;
                 log::debug!("{:#0x}, {:#0x}", data.rx.offset, addr);
-                Some(ProgramHeaderEntry {
+                vec![ProgramHeaderEntry {
                     p_type: elf::PT_LOAD,
                     p_flags: elf::PF_R | elf::PF_X,
                     p_offset: data.rx.offset,
                     p_vaddr: addr,
-                    p_paddr: 0, //addr,
+                    p_paddr: 0,
                     p_filesz: data.rx.size as u64,
                     p_memsz: data.rx.size as u64,
                     p_align: data.page_size as u64,
-                })
+                }]
             }
+
             AllocSegment::RW => {
                 // program LOAD (RW)
-                let addr = data.rw.addr; // + self.rw.offset as u64;
-                Some(ProgramHeaderEntry {
+                let addr = data.rw.addr;
+                vec![ProgramHeaderEntry {
                     p_type: elf::PT_LOAD,
                     p_flags: elf::PF_R | elf::PF_W,
                     p_offset: data.rw.offset as u64,
                     p_vaddr: addr,
-                    p_paddr: 0, //addr,
+                    p_paddr: 0,
                     p_filesz: data.rw.size as u64,
                     p_memsz: data.rw.size as u64,
                     p_align: data.page_size as u64,
-                })
+                }]
             }
         }
     }
@@ -594,17 +609,18 @@ impl ElfComponent for BufferSection {
     }
 
     fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+        let align = self.alloc.align();
         let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align());
+        let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
         let start = w.reserved_len();
-        let end = w.reserve(self.buf.len(), self.align());
+        let end = w.reserve(self.buf.len(), align);
         self.size = self.buf.len();
         self.offset = start;
         match self.alloc {
-            AllocSegment::RO | AllocSegment::Interp => data.ro.add_data(self.size, self.align()),
-            AllocSegment::RW => data.rw.add_data(self.size, self.align()),
-            AllocSegment::RX => data.rx.add_data(self.size, self.align()),
+            AllocSegment::RO | AllocSegment::Interp => data.ro.add_data(self.size, align),
+            AllocSegment::RW => data.rw.add_data(self.size, align),
+            AllocSegment::RX => data.rx.add_data(self.size, align),
         };
 
         if self.alloc == AllocSegment::Interp {
@@ -641,7 +657,7 @@ impl ElfComponent for BufferSection {
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align());
+        let aligned_pos = size_align(pos, self.alloc.align());
         w.pad_until(aligned_pos);
         log::debug!(
             "write at: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
@@ -665,7 +681,7 @@ impl ElfComponent for BufferSection {
                     sh_info: 0,
                     sh_link: 0,
                     sh_entsize: 0,
-                    sh_addralign: self.align() as u64,
+                    sh_addralign: self.alloc.align() as u64,
                     sh_size: self.size as u64,
                 });
             }
@@ -749,7 +765,7 @@ struct Sections {
 }
 
 struct Data {
-    interp: Option<String>,
+    interp: String,
     is_64: bool,
     code_segments: Vec<UnlinkedCodeSegment>,
     data_segments: Vec<UnlinkedCodeSegment>,
@@ -885,20 +901,13 @@ impl Data {
             }
         }
 
-        let mut ro = Segment::new_ro();
-        //ro.size = 0;//ro_size;
-        let mut rw = Segment::new_rw();
-        //rw.size = 0;//rw_size;
-        //rx.add_data(rx_size, 0x10);// = 0;//rx_size;
-        let mut rx = Segment::new_rx();
-        //rx.add_data(rx_size, 0x10); // = 0;//rx_size;
-
-        //let sections = Self::read_unlinked(link, );
+        let ro = Segment::new_ro();
+        let rw = Segment::new_rw();
+        let rx = Segment::new_rx();
 
         Self {
             is_64: true,
-            interp: None,
-            //interp: Some("/lib/ld-linux-x86-64.so.2".to_string()),
+            interp: "/lib/ld-linux-x86-64.so.2".to_string(),
             code_segments,
             data_segments,
             ph: vec![],
@@ -928,7 +937,11 @@ impl Data {
         }
     }
 
-    fn add_library(&mut self, w: &mut Writer, string_id: StringId) {
+    fn is_dynamic(&self) -> bool {
+        self.libs.len() > 0
+    }
+
+    fn add_library(&mut self, string_id: StringId) {
         self.libs.push(Library { string_id });
     }
 
@@ -964,7 +977,7 @@ impl Data {
     }
 
     fn update_segments(&mut self) {
-        let align = 0x10;
+        let align = AllocSegment::RO.align();
         let base = 0x80000;
         let mut offset = 0;
         let ro_size_elf_aligned = size_align(self.ro.size as usize, align);
@@ -980,10 +993,8 @@ impl Data {
         );
         offset += ro_size_elf_aligned;
 
-        let base = size_align(
-            base as usize + offset, //self.ro.size as usize,
-            self.page_size as usize,
-        ) as u64;
+        let align = AllocSegment::RX.align();
+        let base = size_align(base as usize + offset, self.page_size as usize) as u64;
         let rx_size_elf_aligned = size_align(self.rx.size as usize, align);
         self.rx.base = base;
         self.rx.addr = base + offset as u64;
@@ -998,10 +1009,8 @@ impl Data {
         );
         offset += rx_size_elf_aligned;
 
-        let base = size_align(
-            base as usize + rx_size_elf_aligned, //self.rx.size as usize,
-            self.page_size as usize,
-        ) as u64;
+        let align = AllocSegment::RW.align();
+        let base = size_align(base as usize + rx_size_elf_aligned, self.page_size as usize) as u64;
         let rw_size_elf_aligned = size_align(self.rw.size as usize, align);
         self.rw.base = base;
         self.rw.addr = base + offset as u64;
@@ -1029,8 +1038,11 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut out_data = Vec::new();
     let endian = Endianness::Little;
     let mut data = Data::new(link);
-    let is_class_64 = data.is_64;
-    let mut writer = object::write::elf::Writer::new(endian, is_class_64, &mut out_data);
+    let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
+    if false {
+        let string_id = writer.add_dynamic_string("libc.so.6".as_bytes());
+        data.add_library(string_id);
+    }
     data.add_section_headers = false;
     data.add_symbols = false;
 
@@ -1040,9 +1052,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     blocks.push(Box::new(HeaderComponent {}));
 
     let page_align = 0x1000;
-    if data.interp.is_some() {
+    if data.is_dynamic() {
         let name_id = writer.add_section_name(".interp".as_bytes());
-        let buf = data.interp.clone().unwrap().as_bytes().to_vec();
+        let buf = data.interp.as_bytes().to_vec();
         blocks.push(Box::new(BufferSection::new(
             AllocSegment::Interp,
             Some(name_id),
@@ -1076,11 +1088,11 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     )));
 
     // get a list of program headers
+    // we really only need to know the number of headers, so we can correctly
+    // set the values in the file header
     let mut ph = vec![];
     for b in blocks.iter() {
-        if let Some(p) = b.program_header(&data) {
-            ph.push(p);
-        }
+        ph.extend(b.program_header(&data));
     }
 
     if data.libs.len() > 0 {
@@ -1110,11 +1122,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.push(Box::new(ShStrTabSection::default()));
     }
 
-    if false {
-        let string_id = writer.add_dynamic_string("libc.so.6".as_bytes());
-        data.add_library(&mut writer, string_id);
-    }
-
     // RESERVE
     if data.add_section_headers {
         for b in blocks.iter_mut() {
@@ -1138,11 +1145,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // get a list of program headers
+    // we now have the values so they will be correctly written
     let mut ph = vec![];
     for b in blocks.iter() {
-        if let Some(p) = b.program_header(&data) {
-            ph.push(p);
-        }
+        ph.extend(b.program_header(&data));
     }
 
     // WRITE
