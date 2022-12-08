@@ -175,12 +175,14 @@ struct DynamicSection {
     index: Option<SectionIndex>,
     start: usize,
     align: usize,
+    size: usize,
 }
 impl Default for DynamicSection {
     fn default() -> Self {
         Self {
             index: None,
             start: 0,
+            size: 0,
             align: 0x10,
         }
     }
@@ -189,6 +191,7 @@ impl Default for DynamicSection {
 impl ElfComponent for DynamicSection {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         //program DYNAMIC
+        let size = self.size as u64;
         let addr = data.rw.addr;
         vec![ProgramHeaderEntry {
             p_type: elf::PT_DYNAMIC,
@@ -196,9 +199,9 @@ impl ElfComponent for DynamicSection {
             p_offset: data.rw.offset as u64,
             p_vaddr: addr,
             p_paddr: 0,
-            p_filesz: data.size_dynamic as u64,
-            p_memsz: data.size_dynamic as u64,
-            p_align: 0x8,
+            p_filesz: size,
+            p_memsz: size,
+            p_align: self.align as u64,
         }]
     }
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
@@ -212,10 +215,10 @@ impl ElfComponent for DynamicSection {
         w.reserve_until(self.start);
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
-        let size = after - before;
+        self.size = after - before;
         // allocate space in the rw segment
-        data.rw.add_data(size, self.align);
-        data.size_dynamic = size;
+        data.rw.add_data(self.size, self.align);
+        //data.size_dynamic = size;
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -224,11 +227,13 @@ impl ElfComponent for DynamicSection {
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
-        // write dynamic
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align);
+        eprintln!("reserve: {:#0x}, {:#0x}", &pos, aligned_pos);
         w.pad_until(aligned_pos);
         w.write_align_dynamic();
+        let pos2 = w.len();
+        eprintln!("reserve: {:#0x}, {:#0x}, {:#0x}", &pos, aligned_pos, pos2);
         for d in dynamic.iter() {
             if let Some(string) = d.string {
                 w.write_dynamic_string(d.tag, string);
@@ -374,7 +379,9 @@ impl ElfComponent for SymTabSection {
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
         if data.add_section_headers {
-            w.write_symtab_section_header(0);
+            // one greater than the symbol table index of the last
+            // local symbol (binding STB_LOCAL)
+            w.write_symtab_section_header(1);
             if w.symtab_shndx_needed() {
                 w.write_symtab_shndx_section_header();
             }
@@ -1039,12 +1046,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let endian = Endianness::Little;
     let mut data = Data::new(link);
     let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
-    if false {
+    if true {
         let string_id = writer.add_dynamic_string("libc.so.6".as_bytes());
         data.add_library(string_id);
     }
-    data.add_section_headers = false;
-    data.add_symbols = false;
+    data.add_section_headers = true;
+    data.add_symbols = true;
 
     Data::read_unlinked(link, &mut writer, &mut data.sections);
 
@@ -1052,7 +1059,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     blocks.push(Box::new(HeaderComponent {}));
 
     let page_align = 0x1000;
-    if data.is_dynamic() {
+    if data.is_dynamic() && false {
         let name_id = writer.add_section_name(".interp".as_bytes());
         let buf = data.interp.as_bytes().to_vec();
         blocks.push(Box::new(BufferSection::new(
@@ -1087,24 +1094,16 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         buf.to_vec(),
     )));
 
-    // get a list of program headers
-    // we really only need to know the number of headers, so we can correctly
-    // set the values in the file header
-    let mut ph = vec![];
-    for b in blocks.iter() {
-        ph.extend(b.program_header(&data));
-    }
-
-    if data.libs.len() > 0 {
-        blocks.push(Box::new(DynamicSection::default()));
-    }
-
     if writer.dynstr_needed() {
         blocks.push(Box::new(DynStrSection::default()));
     }
 
-    if data.libs.len() > 0 {
+    if data.is_dynamic() {
         blocks.push(Box::new(DynSymSection::default()));
+    }
+
+    if data.is_dynamic() {
+        blocks.push(Box::new(DynamicSection::default()));
     }
 
     if data.add_symbols {
@@ -1123,6 +1122,15 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // RESERVE
+
+    // get a list of program headers
+    // we really only need to know the number of headers, so we can correctly
+    // set the values in the file header
+    let mut ph = vec![];
+    for b in blocks.iter() {
+        ph.extend(b.program_header(&data));
+    }
+
     if data.add_section_headers {
         for b in blocks.iter_mut() {
             b.reserve_section_index(&mut data, &mut writer);

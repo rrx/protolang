@@ -1,4 +1,4 @@
-default: read
+default: write
 
 write:
 	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
