@@ -217,6 +217,7 @@ impl ElfComponent for DynamicSection {
         let after = w.reserved_len();
         self.size = after - before;
         // allocate space in the rw segment
+        data.rw.size += after - self.start;
         data.rw.add_data(self.size, self.align);
         //data.size_dynamic = size;
     }
@@ -392,12 +393,14 @@ impl ElfComponent for SymTabSection {
 struct DynSymSection {
     index: Option<SectionIndex>,
     align: usize,
+    start: usize,
 }
 impl Default for DynSymSection {
     fn default() -> Self {
         Self {
             index: None,
             align: 0x10,
+            start: 0,
         }
     }
 }
@@ -414,10 +417,14 @@ impl ElfComponent for DynSymSection {
         let align_pos = size_align(pos, self.align);
         w.reserve_until(align_pos);
 
-        let start = w.reserved_len();
+        self.start = w.reserved_len();
         w.reserve_dynsym();
         let after = w.reserved_len();
-        data.addr_dynsym = data.ro.addr + start as u64;
+        data.ro.size += after - pos;
+    }
+
+    fn update(&mut self, data: &mut Data) {
+        data.addr_dynsym = data.ro.addr + self.start as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -434,9 +441,19 @@ impl ElfComponent for DynSymSection {
     }
 }
 
-#[derive(Default)]
 struct DynStrSection {
     index: Option<SectionIndex>,
+    align: usize,
+    start: usize,
+}
+impl Default for DynStrSection {
+    fn default() -> Self {
+        Self {
+            index: None,
+            align: 0x10,
+            start: 0,
+        }
+    }
 }
 impl ElfComponent for DynStrSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
@@ -444,13 +461,23 @@ impl ElfComponent for DynStrSection {
     }
 
     fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
-        let before = w.reserved_len();
+        let pos = w.reserved_len();
+        let align_pos = size_align(pos, self.align);
+        w.reserve_until(align_pos);
+        self.start = w.reserved_len();
         w.reserve_dynstr();
         let after = w.reserved_len();
-        data.addr_dynstr = data.ro.addr + before as u64;
+        data.ro.size += after - pos;
+    }
+
+    fn update(&mut self, data: &mut Data) {
+        data.addr_dynstr = data.ro.addr + self.start as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.align);
+        w.pad_until(aligned_pos);
         w.write_dynstr();
     }
 
@@ -865,6 +892,7 @@ impl Data {
                 // ignore for now
                 K::Metadata => (),
                 K::Other => (),
+                K::Note => (),
                 K::Elf(_x) => {
                     // ignore
                     //unimplemented!("Elf({:#x})", x);
@@ -901,6 +929,7 @@ impl Data {
                 // ignore for now
                 K::Metadata => (),
                 K::Other => (),
+                K::Note => (),
                 K::Elf(_x) => {
                     // ignore
                     //unimplemented!("Elf({:#x})", x);
@@ -1074,6 +1103,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         )));
     }
 
+    if writer.dynstr_needed() {
+        blocks.push(Box::new(DynStrSection::default()));
+    }
+
+    if data.is_dynamic() {
+        blocks.push(Box::new(DynSymSection::default()));
+    }
+
     // .text
     // Add .text section to the text load segment
     let mut buf = vec![];
@@ -1098,14 +1135,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         name_id,
         buf.to_vec(),
     )));
-
-    if writer.dynstr_needed() {
-        blocks.push(Box::new(DynStrSection::default()));
-    }
-
-    if data.is_dynamic() {
-        blocks.push(Box::new(DynSymSection::default()));
-    }
 
     if data.is_dynamic() {
         blocks.push(Box::new(DynamicSection::default()));
