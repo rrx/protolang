@@ -414,9 +414,10 @@ impl ElfComponent for DynSymSection {
         let align_pos = size_align(pos, self.align);
         w.reserve_until(align_pos);
 
+        let start = w.reserved_len();
         w.reserve_dynsym();
         let after = w.reserved_len();
-        data.addr_dynsym = data.ro.addr + align_pos as u64;
+        data.addr_dynsym = data.ro.addr + start as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -446,7 +447,7 @@ impl ElfComponent for DynStrSection {
         let before = w.reserved_len();
         w.reserve_dynstr();
         let after = w.reserved_len();
-        data.addr_dynstr = data.rw.addr;
+        data.addr_dynstr = data.ro.addr + before as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -962,19 +963,23 @@ impl Data {
             });
         }
 
-        if false {
-            out.push(Dynamic {
-                tag: elf::DT_DEBUG,
-                val: 0,
-                string: None,
-            });
+        out.push(Dynamic {
+            tag: elf::DT_DEBUG,
+            val: 0,
+            string: None,
+        });
 
-            out.push(Dynamic {
-                tag: elf::DT_SYMTAB,
-                val: self.addr_dynsym,
-                string: None,
-            });
-        }
+        out.push(Dynamic {
+            tag: elf::DT_SYMTAB,
+            val: self.addr_dynsym,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_STRTAB,
+            val: self.addr_dynstr,
+            string: None,
+        });
+
         out.push(Dynamic {
             tag: elf::DT_NULL,
             val: 0,
