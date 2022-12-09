@@ -84,12 +84,12 @@ impl ElfBlock for HeaderComponent {
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
         w.write_file_header(&object::write::elf::FileHeader {
-            os_abi: 0x00,             // SysV
-            abi_version: 0,           // ignored on linux
-            e_type: elf::ET_EXEC,     // ET_EXEC - Executable file
-            e_machine: 0x3E,          // AMD x86-64
+            os_abi: 0x00,                      // SysV
+            abi_version: 0,                    // ignored on linux
+            e_type: elf::ET_EXEC,              // ET_EXEC - Executable file
+            e_machine: 0x3E,                   // AMD x86-64
             e_entry: data.segments.addr_start, // e_entry, normally points to _start
-            e_flags: 0,               // e_flags
+            e_flags: 0,                        // e_flags
         })
         .unwrap();
 
@@ -112,7 +112,6 @@ impl ElfBlock for HeaderComponent {
         w.write_null_section_header();
     }
 }
-
 
 pub struct DynamicSection {
     index: Option<SectionIndex>,
@@ -761,5 +760,3 @@ impl ElfBlock for BufferSection {
         }
     }
 }
-
-

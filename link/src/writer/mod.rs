@@ -10,17 +10,13 @@ use std::collections::HashMap;
 use super::*;
 //use crate::*;
 
+mod blocks;
 mod section;
 mod segments;
-mod blocks;
 
+use blocks::*;
 use section::*;
 use segments::*;
-use blocks::*;
-
-enum SectionKind {
-    Interp,
-}
 
 pub struct ProgramHeaderEntry {
     p_type: u32,
@@ -31,6 +27,11 @@ pub struct ProgramHeaderEntry {
     p_filesz: u64,
     p_memsz: u64,
     p_align: u64,
+}
+
+/*
+enum SectionKind {
+    Interp,
 }
 
 #[derive(Debug)]
@@ -53,18 +54,6 @@ impl Section {
         self.sh_flags & elf::SHF_ALLOC as usize != 0
     }
 }
-
-struct Library {
-    string_id: StringId,
-}
-
-struct Dynamic {
-    tag: u32,
-    // Ignored if `string` is set.
-    val: u64,
-    string: Option<object::write::StringId>,
-}
-
 struct Symbol {
     in_sym: usize,
     name: Option<object::write::StringId>,
@@ -79,6 +68,18 @@ struct DynamicSymbol {
     gnu_hash: Option<u32>,
 }
 
+*/
+
+struct Library {
+    string_id: StringId,
+}
+
+struct Dynamic {
+    tag: u32,
+    // Ignored if `string` is set.
+    val: u64,
+    string: Option<object::write::StringId>,
+}
 
 #[derive(PartialEq)]
 pub enum AllocSegment {
