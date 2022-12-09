@@ -14,6 +14,7 @@ pub struct Link {
     pub(crate) mem: BlockFactory,
     pub(crate) got: Option<TableVersion>,
     pub(crate) plt: Option<TableVersion>,
+    libs: HashSet<String>,
 }
 
 impl Drop for Link {
@@ -45,6 +46,7 @@ impl Link {
             mem,
             got: Some(got),
             plt: Some(plt),
+            libs: HashSet::default(),
         }
     }
 
@@ -77,6 +79,7 @@ impl Link {
         unsafe {
             let lib = libloading::Library::new(path)?;
             self.libraries.add(name, lib);
+            self.libs.insert(path.to_string_lossy().to_string());
             log::debug!("Loaded library: {}", &path.to_string_lossy());
         }
         Ok(())
@@ -109,7 +112,11 @@ impl Link {
     pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         use object::elf;
         use object::Endianness;
-        let out_data = write_file::<elf::FileHeader64<Endianness>>(self)?;
+        let mut data = Data::new(self, self.libs.iter().cloned().collect());
+        //data.add_section_headers = true;
+        //data.add_symbols = true;
+
+        let out_data = write_file::<elf::FileHeader64<Endianness>>(self, data)?;
         std::fs::write(path, out_data)?;
         Ok(())
     }

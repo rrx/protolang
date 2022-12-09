@@ -801,12 +801,13 @@ struct Sections {
     rx: ProgSection,
 }
 
-struct Data {
+pub struct Data {
     interp: String,
     is_64: bool,
     code_segments: Vec<UnlinkedCodeSegment>,
     data_segments: Vec<UnlinkedCodeSegment>,
     ph: Vec<ProgramHeaderEntry>,
+    lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
     components: Vec<Box<dyn ElfComponent>>,
@@ -905,7 +906,7 @@ impl Data {
         }
     }
 
-    fn new(link: &Link) -> Self {
+    pub fn new(link: &Link, lib_names: Vec<String>) -> Self {
         let mut code_segments = vec![];
         let mut data_segments = vec![];
 
@@ -952,6 +953,7 @@ impl Data {
             data_segments,
             ph: vec![],
             components: vec![],
+            lib_names,
             libs: vec![],
             page_size: 0x1000,
             ro,
@@ -1078,17 +1080,17 @@ impl Data {
 
 pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     link: &Link,
+    mut data: Data,
 ) -> std::result::Result<Vec<u8>, Box<dyn Error>> {
     let mut out_data = Vec::new();
     let endian = Endianness::Little;
-    let mut data = Data::new(link);
     let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
-    if true {
-        let string_id = writer.add_dynamic_string("libc.so.6".as_bytes());
+
+    let lib_names = data.lib_names.clone();
+    for lib_name in lib_names.iter() {
+        let string_id = writer.add_dynamic_string(lib_name.as_bytes());
         data.add_library(string_id);
     }
-    data.add_section_headers = true;
-    data.add_symbols = true;
 
     Data::read_unlinked(link, &mut writer, &mut data.sections);
 

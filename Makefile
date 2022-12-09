@@ -1,13 +1,12 @@
 default: write
 
-write:
-	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
+write: function2
 	RUST_LOG=debug cargo run --example write
-	readelf -a tmp/out.exe
+	readelf -a tmp/static.exe
 	#objdump -D tmp/out.exe
 	#readelf -s tmp/out.exe
-	objdump -t tmp/out.exe
-	exec tmp/out.exe
+	objdump -t tmp/static.exe
+	exec tmp/static.exe
 
 read:
 	elfcat tmp/out.exe
@@ -54,7 +53,7 @@ function2:
 
 
 	clang ${CFLAGS} -c -nostdlib link/testfiles/start.c -o ./tmp/start.o
-	clang -nostdlib link/testfiles/start.c -o ./tmp/start
+	clang -nostdlib link/testfiles/globals.c link/testfiles/start.c -o ./tmp/start
 	clang ${CFLAGS} -shared link/testfiles/live.c -o ./tmp/live.so
 
 	clang ${CFLAGS} -g link/testfiles/invoke_print.c -o ./tmp/invoke_print
