@@ -8,7 +8,6 @@ use object::Endianness;
 use std::collections::HashMap;
 
 use super::*;
-//use crate::*;
 
 mod blocks;
 mod section;
@@ -81,7 +80,7 @@ struct Dynamic {
     string: Option<object::write::StringId>,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum AllocSegment {
     Interp,
     RO,
@@ -120,6 +119,7 @@ pub struct Data {
     index_dynsym: Option<SectionIndex>,
     add_section_headers: bool,
     add_symbols: bool,
+    debug: bool,
 }
 impl Data {
     pub fn new(lib_names: Vec<String>) -> Self {
@@ -141,6 +141,7 @@ impl Data {
             index_dynsym: None,
             add_section_headers: true,
             add_symbols: true,
+            debug: true,
         }
     }
 
@@ -186,6 +187,26 @@ impl Data {
         });
         out
     }
+
+    pub fn debug(&mut self, link: &Link) {
+        let mut out_data = Vec::new();
+        let endian = Endianness::Little;
+        let mut writer = object::write::elf::Writer::new(endian, self.is_64, &mut out_data);
+
+        // add libraries if they are configured
+        let lib_names = self.lib_names.clone();
+        for lib_name in lib_names.iter() {
+            let string_id = writer.add_dynamic_string(lib_name.as_bytes());
+            self.add_library(string_id);
+        }
+
+        // load bytes and relocations
+        self.segments.load(link, &mut writer);
+        //self.segments.load(link);
+        //self.segments.read_unlinked(link, &mut writer);
+
+        self.segments.rx.debug();
+    }
 }
 
 pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
@@ -204,8 +225,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // load bytes and relocations
-    data.segments.load(link);
-    data.segments.read_unlinked(link, &mut writer);
+    //data.segments.load(link);
+    //data.segments.read_unlinked(link, &mut writer);
+    data.segments.load(link, &mut writer);
 
     // configure blocks
     // these are used to correctly order the reservation of space
@@ -314,6 +336,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             b.write_section_header(&data, &mut writer);
         }
     }
+
+    data.debug(link);
     Ok(out_data)
 }
 

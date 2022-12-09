@@ -46,8 +46,8 @@ impl ElfBlock for HeaderComponent {
                 p_offset: data.segments.ro.offset,
                 p_vaddr: data.segments.ro.addr,
                 p_paddr: 0,
-                p_filesz: data.segments.ro.size as u64,
-                p_memsz: data.segments.ro.size as u64,
+                p_filesz: data.segments.ro.size() as u64,
+                p_memsz: data.segments.ro.size() as u64,
                 p_align: data.page_size as u64,
             },
         ]
@@ -159,7 +159,7 @@ impl ElfBlock for DynamicSection {
         let after = w.reserved_len();
         self.size = after - before;
         // allocate space in the rw segment
-        data.segments.rw.size += after - self.start;
+        //data.segments.rw.size += after - self.start;
         data.segments.rw.add_data(self.size, self.align);
     }
 
@@ -429,6 +429,7 @@ impl ElfBlock for DynSymSection {
         w.reserve_dynsym();
         let after = w.reserved_len();
         data.segments.ro.size += after - pos;
+        //data.segments.ro.add_data(after - pos, align_pos);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -474,6 +475,7 @@ impl ElfBlock for DynStrSection {
         w.reserve_dynstr();
         let after = w.reserved_len();
         data.segments.ro.size += after - pos;
+        //data.segments.ro.add_data(after - pos, align_pos);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -591,8 +593,8 @@ impl ElfBlock for BufferSection {
                     p_offset: data.segments.ro.offset,
                     p_vaddr: addr,
                     p_paddr: 0,
-                    p_filesz: data.segments.ro.size as u64,
-                    p_memsz: data.segments.ro.size as u64,
+                    p_filesz: data.segments.ro.size() as u64,
+                    p_memsz: data.segments.ro.size() as u64,
                     p_align: data.page_size as u64,
                 }]
             }
@@ -600,15 +602,15 @@ impl ElfBlock for BufferSection {
             AllocSegment::RX => {
                 // program LOAD (RX)
                 let addr = data.segments.rx.addr;
-                log::debug!("rx: {:#0x}, {:#0x}", data.segments.rx.offset, addr);
+                //log::debug!("rx: {:#0x}, {:#0x}", data.segments.rx.offset, addr);
                 vec![ProgramHeaderEntry {
                     p_type: elf::PT_LOAD,
                     p_flags: elf::PF_R | elf::PF_X,
                     p_offset: data.segments.rx.offset,
                     p_vaddr: addr,
                     p_paddr: 0,
-                    p_filesz: data.segments.rx.size as u64,
-                    p_memsz: data.segments.rx.size as u64,
+                    p_filesz: data.segments.rx.size() as u64,
+                    p_memsz: data.segments.rx.size() as u64,
                     p_align: data.page_size as u64,
                 }]
             }
@@ -622,8 +624,8 @@ impl ElfBlock for BufferSection {
                     p_offset: data.segments.rw.offset as u64,
                     p_vaddr: addr,
                     p_paddr: 0,
-                    p_filesz: data.segments.rw.size as u64,
-                    p_memsz: data.segments.rw.size as u64,
+                    p_filesz: data.segments.rw.size() as u64,
+                    p_memsz: data.segments.rw.size() as u64,
                     p_align: data.page_size as u64,
                 }]
             }
@@ -662,13 +664,13 @@ impl ElfBlock for BufferSection {
             data.addr_interp = start as u64;
         }
 
-        log::debug!(
-            "reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
-            pos,
-            start,
-            end,
-            self.buf.len()
-        );
+        //log::debug!(
+        //"reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",
+        //pos,
+        //start,
+        //end,
+        //self.buf.len()
+        //);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -678,6 +680,7 @@ impl ElfBlock for BufferSection {
             AllocSegment::RX => &data.segments.rx,
         };
 
+        self.offset = segment.offset as usize;
         self.base = segment.base as usize;
         self.addr = segment.base as usize + self.offset;
 
@@ -733,13 +736,13 @@ impl ElfBlock for BufferSection {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.alloc.align());
         w.pad_until(aligned_pos);
-        log::debug!(
-            "write at: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
-            pos,
-            self.addr,
-            self.offset,
-            self.buf.len()
-        );
+        //log::debug!(
+        //"write at: pos: {:#0x}, addr: {:#0x}, offset: {:#0x}, size: {:#0x}",
+        //pos,
+        //self.addr,
+        //self.offset,
+        //self.buf.len()
+        //);
         w.write(self.buf.as_slice());
     }
 

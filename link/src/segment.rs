@@ -263,6 +263,7 @@ impl UnlinkedCodeSegmentInner {
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
                 let section_index = section.index().0;
+                /*
                 log::debug!(
                     " Section[{:?}, {}, address: {}, size: {}, align: {}, kind: {:?}, relocs: {}]",
                     section_index,
@@ -273,6 +274,7 @@ impl UnlinkedCodeSegmentInner {
                     section.kind(),
                     section.relocations().count()
                 );
+                */
                 let mut defined = im::HashMap::new();
 
                 let mut section_symbols = vec![];
