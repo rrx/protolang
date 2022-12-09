@@ -5,7 +5,7 @@ use test_log::test;
 //#[test]
 // not working yet
 fn test_start() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_obj_file("start", &temp_path("start.o")).unwrap();
     let version = b.link().unwrap();
     let ret: i64 = version.invoke("_start", ()).unwrap();
@@ -14,7 +14,7 @@ fn test_start() {
 
 #[test]
 fn test_live_shared() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("t1", &temp_path("live.so")).unwrap();
     let version = b.link().unwrap();
     let ret: i64 = version.invoke("call_live", (3,)).unwrap();
@@ -24,7 +24,7 @@ fn test_live_shared() {
 
 #[test]
 fn test_load_from_shared() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("live", &temp_path("live.so")).unwrap();
     b.add_obj_file("globals", &temp_path("globals.o")).unwrap();
     b.add_obj_file("call", &temp_path("call_extern.o")).unwrap();
@@ -45,7 +45,7 @@ fn test_load_from_shared() {
 
 #[test]
 fn test_live_static() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_obj_file("t1", &temp_path("live.o")).unwrap();
     let version = b.link().unwrap();
     let ret: i64 = version.invoke("call_live", (3,)).unwrap();
@@ -56,7 +56,7 @@ fn test_live_static() {
 //#[test]
 // not working yet
 fn test_empty_main() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_obj_file("main", &temp_path("empty_main.o")).unwrap();
     b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
         .unwrap();
@@ -84,7 +84,7 @@ fn test_empty_main() {
 // not working yet
 //#[test]
 fn test_segfault() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("t2", &temp_path("libsigsegv.so")).unwrap();
     b.add_obj_file("t3", &temp_path("segfault.o")).unwrap();
     let version = b.link().unwrap();
@@ -93,7 +93,7 @@ fn test_segfault() {
 
 #[test]
 fn test_libuv() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("libc", Path::new("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
     b.add_library("libuv", Path::new("libuv.so")).unwrap();
@@ -115,7 +115,7 @@ fn test_libuv() {
 
 #[test]
 fn test_libc() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("libc", &temp_path("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
     b.add_obj_file("stuff", &temp_path("print_stuff.o"))
@@ -130,7 +130,7 @@ fn test_libc() {
 
 //#[test]
 fn test_libc_musl() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("libc", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))
         .unwrap();
     b.add_obj_file("stuff", &temp_path("print_stuff.o"))
@@ -150,7 +150,7 @@ fn test_libc_musl() {
 
 #[test]
 fn test_multi_libc() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("libc", &temp_path("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
     b.add_library("musl", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))
@@ -168,7 +168,7 @@ fn test_multi_libc() {
 
 #[test]
 fn test_string() {
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_library("libc", &temp_path("/lib/x86_64-linux-gnu/libc.so.6"))
         .unwrap();
     //b.add_library("libc", &temp_path("/usr/lib/x86_64-linux-musl/libc.so"))

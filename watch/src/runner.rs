@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 pub struct Runner<'a> {
     context: &'a Context,
-    linker: Link,
+    linker: DynamicLink,
     execute: Executor<'a>,
 }
 impl<'a> Runner<'a> {
@@ -20,7 +20,7 @@ impl<'a> Runner<'a> {
     ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             context,
-            linker: Link::new(),
+            linker: DynamicLink::new(),
             execute: Executor::create(optimization_level, size_level)?,
         })
     }

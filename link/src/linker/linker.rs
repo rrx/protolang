@@ -8,29 +8,25 @@ use std::fs;
 use super::*;
 use crate::*;
 
-pub struct Link {
-    pub(crate) unlinked: HashMap<String, UnlinkedCodeSegment>,
+pub struct DynamicLink {
     pub(crate) libraries: SharedLibraryRepo,
     pub(crate) mem: BlockFactory,
     pub(crate) got: Option<TableVersion>,
     pub(crate) plt: Option<TableVersion>,
-    libs: HashSet<String>,
+    pub(crate) link: Link,
 }
-
-impl Drop for Link {
+impl Drop for DynamicLink {
     fn drop(&mut self) {
         self.libraries.clear();
         log::debug!("GOT Used: {}", self.got.as_ref().unwrap().used());
         log::debug!("PLT Used: {}", self.plt.as_ref().unwrap().used());
         self.got.take();
         self.plt.take();
-        self.unlinked.clear();
         log::debug!("MEM Used: {}", self.mem.used());
         assert_eq!(self.used(), 0);
     }
 }
-
-impl Link {
+impl DynamicLink {
     pub fn new() -> Self {
         let mem = BlockFactory::create(2000).unwrap();
         let got_mem = mem.alloc_block(1024 * 1024).unwrap().make_heap_block();
@@ -41,13 +37,16 @@ impl Link {
         let plt = TableVersion::new(plt_block.clone());
 
         Self {
-            unlinked: HashMap::new(),
             libraries: SharedLibraryRepo::default(),
             mem,
             got: Some(got),
             plt: Some(plt),
-            libs: HashSet::default(),
+            link: Link::new(),
         }
+    }
+
+    pub fn used(&self) -> usize {
+        self.mem.used()
     }
 
     pub fn debug(&self) {
@@ -58,16 +57,8 @@ impl Link {
         self.got.as_ref().unwrap().debug();
     }
 
-    pub fn used(&self) -> usize {
-        self.mem.used()
-    }
-
     pub fn get_mem_ptr(&self) -> (*const u8, usize) {
         self.mem.get_mem_ptr()
-    }
-
-    pub fn remove(&mut self, name: &str) {
-        self.unlinked.remove(&name.to_string());
     }
 
     pub fn add_library_repo(&mut self, repo: SharedLibraryRepo) -> Result<(), Box<dyn Error>> {
@@ -79,46 +70,18 @@ impl Link {
         unsafe {
             let lib = libloading::Library::new(path)?;
             self.libraries.add(name, lib);
-            self.libs.insert(path.to_string_lossy().to_string());
+            self.link.add_library(name, path)?;
             log::debug!("Loaded library: {}", &path.to_string_lossy());
         }
         Ok(())
     }
 
-    fn add_segments(&mut self, segments: Vec<UnlinkedCodeSegmentInner>) {
-        for s in segments {
-            self.unlinked.insert(s.name.clone(), Arc::new(s));
-        }
-    }
-
-    pub fn add_archive_file(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
-        let buf = fs::read(path)?;
-        let segments = UnlinkedCodeSegmentInner::read_archive(name, buf.as_slice())?;
-        self.add_segments(segments);
-        Ok(())
-    }
-
     pub fn add_obj_file(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
-        let buf = fs::read(path)?;
-        self.add_obj_buf(name, buf.as_slice())
+        self.link.add_obj_file(name, path)
     }
 
     pub fn add_obj_buf(&mut self, name: &str, buf: &[u8]) -> Result<(), Box<dyn Error>> {
-        let segments = UnlinkedCodeSegmentInner::create_segments(name, buf)?;
-        self.add_segments(segments);
-        Ok(())
-    }
-
-    pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        use object::elf;
-        use object::Endianness;
-        let mut data = crate::writer::Data::new(self.libs.iter().cloned().collect());
-        //data.add_section_headers = true;
-        //data.add_symbols = true;
-
-        let out_data = crate::writer::write_file::<elf::FileHeader64<Endianness>>(self, data)?;
-        std::fs::write(path, out_data)?;
-        Ok(())
+        self.link.add_obj_buf(name, buf)
     }
 
     pub fn link(&mut self) -> Result<LinkVersion, Box<dyn Error>> {
@@ -126,7 +89,7 @@ impl Link {
         let mut duplicates = HashSet::new();
 
         // get all of the symbols and the name that provides it
-        for (link_name, unlinked) in &self.unlinked {
+        for (link_name, unlinked) in &self.link.unlinked {
             log::debug!("Linking: {}", link_name);
             for (symbol_name, code_symbol) in &unlinked.defined {
                 if code_symbol.def == CodeSymbolDefinition::Defined {
@@ -145,7 +108,7 @@ impl Link {
 
         // check for missing symbols, and try shared libraries to fill in the details
         let mut missing = HashSet::new();
-        for (_name, unlinked) in &self.unlinked {
+        for (_name, unlinked) in &self.link.unlinked {
             let mut children = HashSet::new();
             //log::debug!("checking: {}", name);
             // ensure all relocations map somewhere
@@ -186,6 +149,76 @@ impl Link {
         }
     }
 }
+pub(crate) type UnlinkedMap = HashMap<String, UnlinkedCodeSegment>;
+
+pub struct Link {
+    pub(crate) unlinked: UnlinkedMap,
+    //dynamic: Option<DynamicLink>,
+    libs: HashSet<String>,
+}
+
+/*
+impl Drop for Link {
+    fn drop(&mut self) {
+        self.unlinked.clear();
+    }
+}
+*/
+
+impl Link {
+    pub fn new() -> Self {
+        Self {
+            unlinked: HashMap::new(),
+            //dynamic: None,
+            libs: HashSet::default(),
+        }
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.unlinked.remove(&name.to_string());
+    }
+
+    pub fn add_library(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
+        self.libs.insert(path.to_string_lossy().to_string());
+        Ok(())
+    }
+
+    fn add_segments(&mut self, segments: Vec<UnlinkedCodeSegmentInner>) {
+        for s in segments {
+            self.unlinked.insert(s.name.clone(), Arc::new(s));
+        }
+    }
+
+    pub fn add_archive_file(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
+        let buf = fs::read(path)?;
+        let segments = UnlinkedCodeSegmentInner::read_archive(name, buf.as_slice())?;
+        self.add_segments(segments);
+        Ok(())
+    }
+
+    pub fn add_obj_file(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
+        let buf = fs::read(path)?;
+        self.add_obj_buf(name, buf.as_slice())
+    }
+
+    pub fn add_obj_buf(&mut self, name: &str, buf: &[u8]) -> Result<(), Box<dyn Error>> {
+        let segments = UnlinkedCodeSegmentInner::create_segments(name, buf)?;
+        self.add_segments(segments);
+        Ok(())
+    }
+
+    pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        use object::elf;
+        use object::Endianness;
+        let mut data = crate::writer::Data::new(self.libs.iter().cloned().collect());
+        //data.add_section_headers = true;
+        //data.add_symbols = true;
+
+        let out_data = crate::writer::write_file::<elf::FileHeader64<Endianness>>(self, data)?;
+        std::fs::write(path, out_data)?;
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -195,7 +228,7 @@ mod tests {
 
     #[test]
     fn linker_segfault() {
-        let mut b = Link::new();
+        let mut b = DynamicLink::new();
         b.add_library("test", Path::new("libsigsegv.so"));
         b.add_obj_file("test", Path::new("../tmp/segfault.o"))
             .unwrap();
@@ -209,7 +242,7 @@ mod tests {
 
     #[test]
     fn linker_global_long() {
-        let mut b = Link::new();
+        let mut b = DynamicLink::new();
         b.add_obj_file("test", Path::new("../tmp/live.o")).unwrap();
         let collection = b.link().unwrap();
 
@@ -228,7 +261,7 @@ mod tests {
 
     #[test]
     fn linker_shared() {
-        let mut b = Link::new();
+        let mut b = DynamicLink::new();
         b.add_library("gz", Path::new("../tmp/libz.so")).unwrap();
         b.add_obj_file("test", Path::new("../tmp/link_shared.o"))
             .unwrap();
@@ -240,7 +273,7 @@ mod tests {
 
     #[test]
     fn linker_livelink() {
-        let mut b = Link::new();
+        let mut b = DynamicLink::new();
         b.add_library("libc", Path::new("/usr/lib/x86_64-linux-musl/libc.so"))
             .unwrap();
         b.add_library("libc", Path::new("../tmp/live.so")).unwrap();

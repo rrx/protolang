@@ -56,10 +56,10 @@ impl LinkVersion {
     }
 }
 
-pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
+pub fn build_version(link: &mut DynamicLink) -> Result<LinkVersion, Box<dyn Error>> {
     // create data and code patch blocks
     let mut blocks = vec![];
-    for (_name, unlinked) in &link.unlinked {
+    for (_name, unlinked) in &link.link.unlinked {
         let name = format!("{}.data", &unlinked.name);
 
         use object::SectionKind as K;
@@ -88,7 +88,7 @@ pub fn build_version(link: &mut Link) -> Result<LinkVersion, Box<dyn Error>> {
             // ignore for now
             K::Metadata => (),
             K::Other => (),
-            K::Elf(x) => {
+            K::Elf(_x) => {
                 // ignore
                 //unimplemented!("Elf({:#x})", x);
             }

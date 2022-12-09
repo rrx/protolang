@@ -10,7 +10,7 @@ fn temp_path(filename: &str) -> Box<Path> {
 
 fn test_live_static() {
     eprintln!("cwd:{}", std::env::current_dir().unwrap().to_string_lossy());
-    let mut b = Link::new();
+    let mut b = DynamicLink::new();
     b.add_obj_file("t1", &temp_path("live.o")).unwrap();
     let version = b.link().unwrap();
     let ret: i64 = version.invoke("call_live", (3,)).unwrap();
