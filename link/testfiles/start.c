@@ -6,8 +6,8 @@ __attribute__((force_align_arg_pointer))
 void _start() {
 
     /* main body of program: call main(), etc */
-    long x = g1;
-    callme();
+    /*long x = g1;*/
+    /*callme();*/
 
     /* exit system call */
     asm("movl $1,%eax;"

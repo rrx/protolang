@@ -58,9 +58,9 @@ pub enum PatchEffect {
 pub struct LinkRelocation {
     kind: RelocationKind,
     encoding: RelocationEncoding,
-    size: u8,
+    pub(crate) size: u8,
     target: RelocationTarget,
-    addend: i64,
+    pub(crate) addend: i64,
     implicit_addend: bool,
 }
 
@@ -114,6 +114,10 @@ impl CodeRelocation {
         &self,
         // pointer to the base of the relocation slice
         patch_base: *mut u8,
+
+        // this will be the same for patch_base when live
+        v_base: *mut u8, // the virtual base, where the segment will be mapped
+
         // pointer to address
         addr: *const u8,
     ) {
@@ -122,14 +126,17 @@ impl CodeRelocation {
             RelocationKind::Elf(R_X86_64_GOTPCREL) => {
                 unsafe {
                     let patch = patch_base.offset(self.offset as isize);
+                    let v = v_base.offset(self.offset as isize);
 
                     // this works
-                    let value = addr as isize + self.r.addend as isize - patch as isize;
+                    let value = addr as isize + self.r.addend as isize - v as isize;
 
                     let before = std::ptr::read(patch);
                     (patch as *mut u32).replace(value as u32);
                     log::debug!("patch_base: {:#08x}", patch_base as usize);
                     log::debug!("patch: {:#08x}", patch as usize);
+                    log::debug!("v_base: {:#08x}", v_base as usize);
+                    log::debug!("v: {:#08x}", v as usize);
                     log::debug!("value: {:#04x}", value as u32);
                     log::debug!("addr:  {:#08x}", addr as usize);
 
@@ -150,9 +157,10 @@ impl CodeRelocation {
                 // we are computing the offset from the current instruction pointer
                 unsafe {
                     let patch = patch_base.offset(self.offset as isize);
+                    let v = v_base.offset(self.offset as isize);
 
                     // this works
-                    let value = addr as isize + self.r.addend as isize - patch as isize;
+                    let value = addr as isize + self.r.addend as isize - v as isize;
 
                     // this does not work
                     //let value = patch as isize + rel.r.addend as isize - addr as isize;
@@ -160,6 +168,8 @@ impl CodeRelocation {
                     let before = std::ptr::read(patch);
                     log::debug!("patch_base: {:#08x}", patch_base as usize);
                     log::debug!("patch: {:#08x}", patch as usize);
+                    log::debug!("v_base: {:#08x}", v_base as usize);
+                    log::debug!("v: {:#08x}", v as usize);
                     log::debug!("value: {:#04x}", value as u32);
                     log::debug!("addr:  {:#08x}", addr as usize);
 
@@ -188,6 +198,7 @@ impl CodeRelocation {
                     let vaddr = *(addr as *const usize) as usize;
                     let adjusted = vaddr + self.r.addend as usize;
                     let patch = patch_base.offset(self.offset as isize);
+                    let v = v_base.offset(self.offset as isize);
                     let before = std::ptr::read(patch);
 
                     let patch = match self.r.size {
@@ -219,8 +230,9 @@ impl CodeRelocation {
                     // we need to dereference here, because the pointer is coming from the GOT
                     let vaddr = *(addr as *const usize) as usize;
                     let patch = patch_base.offset(self.offset as isize);
+                    let v = v_base.offset(self.offset as isize);
                     let before = std::ptr::read(patch as *const usize);
-                    let relative_address = vaddr as isize + self.r.addend as isize - patch as isize;
+                    let relative_address = vaddr as isize + self.r.addend as isize - v as isize;
 
                     // patch as 32 bit
                     let patch = patch as *mut u32;
@@ -244,8 +256,9 @@ impl CodeRelocation {
                 // complicated pointer arithmetic to update the relocations
                 unsafe {
                     let patch = patch_base.offset(self.offset as isize);
+                    let v = v_base.offset(self.offset as isize);
 
-                    let symbol_address = addr as isize + self.r.addend as isize - patch as isize;
+                    let symbol_address = addr as isize + self.r.addend as isize - v as isize;
 
                     // patch as 32 bit
                     let patch = patch as *mut u32;
@@ -292,7 +305,7 @@ pub fn patch_code(
             &r.name
         );
 
-        r.patch(patch_base as *mut u8, addr);
+        r.patch(patch_base as *mut u8, patch_base as *mut u8, addr);
     }
 
     block
@@ -333,7 +346,7 @@ pub fn patch_data(
             &r.name
         );
 
-        r.patch(patch_base as *mut u8, addr);
+        r.patch(patch_base as *mut u8, patch_base as *mut u8, addr);
     }
     block
 }

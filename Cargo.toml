@@ -11,7 +11,7 @@ members = [
   "codegen_llvm",
   "codegen_interp",
   "data",
-  "freestanding"
+  #"freestanding"
 ]
 
 [profile.release]

@@ -5,6 +5,8 @@ use object::read::elf::FileHeader;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::Endianness;
+use std::collections::HashMap;
+
 
 use super::*;
 use crate::*;
@@ -272,6 +274,99 @@ impl AllocSegment {
     }
 }
 
+struct RelocationSection {
+    index: Option<SectionIndex>,
+    align: usize,
+    data_name: Option<StringId>,
+    text_name: Option<StringId>,
+    data_offset: usize,
+    text_offset: usize,
+    data_index: SectionIndex,
+    text_index: SectionIndex,
+}
+impl Default for RelocationSection {
+    fn default() -> Self {
+        Self {
+            index: None,
+            data_name: None,
+            text_name: None,
+            align: 0x10,
+            data_offset: 0,
+            text_offset: 0,
+            data_index: SectionIndex::default(),
+            text_index: SectionIndex::default(),
+        }
+    }
+}
+impl ElfComponent for RelocationSection {
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+        self.text_name = Some(w.add_section_name(".rela.text".as_bytes()));
+        self.text_index = w.reserve_section_index();
+        self.data_name = Some(w.add_section_name(".rela.data".as_bytes()));
+        self.data_index = w.reserve_section_index();
+    }
+
+    fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+        self.text_offset = w.reserve_relocations(data.sections.rx.relocations.len(), true);
+        self.data_offset = w.reserve_relocations(data.sections.rw.relocations.len(), true);
+    }
+
+    fn update(&mut self, data: &mut Data) {}
+
+    fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+        w.write_align_relocation();
+        for rel in data.sections.rx.relocations.iter() {
+            let r_offset = rel.offset;
+            let r_addend = rel.r.addend;
+            let r_sym = 0;
+            let r_type = 0;
+            w.write_relocation(
+                true,
+                &object::write::elf::Rel {
+                    r_offset,
+                    r_sym,
+                    r_type,
+                    r_addend,
+                },
+            );
+        }
+        for rel in data.sections.rw.relocations.iter() {
+            let r_offset = rel.offset;
+            let r_addend = rel.r.addend;
+            let r_sym = 0;
+            let r_type = 0;
+            w.write_relocation(
+                true,
+                &object::write::elf::Rel {
+                    r_offset,
+                    r_sym,
+                    r_type,
+                    r_addend,
+                },
+            );
+        }
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        w.write_relocation_section_header(
+            self.text_name.unwrap(),
+            data.index_text.unwrap(),
+            data.index_symtab.unwrap(),
+            self.text_offset,
+            data.sections.rx.relocations.len(),
+            true,
+        );
+        w.write_relocation_section_header(
+            self.data_name.unwrap(),
+            data.index_data.unwrap(),
+            data.index_symtab.unwrap(),
+            self.data_offset,
+            data.sections.rw.relocations.len(),
+            true,
+        );
+    }
+}
+
 struct SymTabSection {
     index: Option<SectionIndex>,
     align: usize,
@@ -289,7 +384,7 @@ impl ElfComponent for SymTabSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         //w.reserve_symbol_index(data.index_text);
         //w.reserve_symbol_index(data.index_data);
-        w.reserve_symtab_section_index();
+        data.index_symtab = Some(w.reserve_symtab_section_index());
         if w.symtab_shndx_needed() {
             w.reserve_symtab_shndx_section_index();
         }
@@ -321,14 +416,14 @@ impl ElfComponent for SymTabSection {
         w.write_null_symbol();
 
         // write symbols out
-        for sym in &data.sections.ro.symbols {
+        for (_, sym) in &data.sections.ro.symbols {
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_info = sym.s.st_info;
             let st_other = sym.s.st_other; //elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
             let st_size = sym.s.size;
             let addr = sym.s.address + data.ro.base;
-            eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
+            //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
                 section: data.index_data,
@@ -339,9 +434,9 @@ impl ElfComponent for SymTabSection {
                 st_size,
             });
         }
-        for sym in &data.sections.rx.symbols {
+        for (_, sym) in &data.sections.rx.symbols {
             let addr = sym.s.address + data.rx.addr;
-            eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
+            //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_other = elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
@@ -357,9 +452,9 @@ impl ElfComponent for SymTabSection {
             });
         }
 
-        for sym in &data.sections.rw.symbols {
+        for (_, sym) in &data.sections.rw.symbols {
             let addr = sym.s.address + data.rw.base;
-            eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
+            //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_other = elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
@@ -673,6 +768,18 @@ impl ElfComponent for BufferSection {
     }
 
     fn update(&mut self, data: &mut Data) {
+        // set the address correctly on the pointers, now that we have assigned addresses
+        // to the load segments
+        let mut pointers = HashMap::new();
+        for (name, s) in data.sections.rx.symbols.iter() {
+            let addr = data.rx.base + s.s.address;
+            pointers.insert(name, addr);
+        }
+        for (name, s) in data.sections.rw.symbols.iter() {
+            let addr = data.rw.base + s.s.address;
+            pointers.insert(name, addr);
+        }
+
         let segment = match self.alloc {
             AllocSegment::RO | AllocSegment::Interp => &data.ro,
             AllocSegment::RW => &data.rw,
@@ -680,9 +787,25 @@ impl ElfComponent for BufferSection {
         };
         match self.alloc {
             AllocSegment::RW => {
-                data.addr_text = self.offset as u64;
+                data.addr_rw = self.offset as u64;
+                let patch_base = self.buf.as_ptr();
+                let v_base = data.rw.base;
+                for r in data.data_relocs.iter() {
+                    let addr = *pointers.get(&r.name).unwrap();
+                    log::debug!("R-RW: vbase: {:#0x}, addr: {:#0x}, {}", v_base, addr as usize, &r.name);
+                    r.patch(patch_base as *mut u8, v_base as *mut u8, addr as *const u8);
+                }
             }
-            //AllocSegment::RX => {}
+            AllocSegment::RX => {
+                data.addr_rx = self.offset as u64;
+                let patch_base = self.buf.as_ptr();
+                let v_base = data.rx.base;
+                for r in data.text_relocs.iter() {
+                    let addr = *pointers.get(&r.name).unwrap();
+                    log::debug!("R-RX: vbase: {:#0x}, addr: {:#0x}, {}", v_base, addr as usize, &r.name);
+                    r.patch(patch_base as *mut u8, v_base as *mut u8, addr as *const u8);
+                }
+            }
             //AllocSegment::RO => (),
             _ => (),
         }
@@ -790,7 +913,7 @@ struct ProgSymbol {
 
 #[derive(Default)]
 struct ProgSection {
-    symbols: Vec<ProgSymbol>,
+    symbols: HashMap<String, ProgSymbol>,
     relocations: Vec<CodeRelocation>,
 }
 
@@ -804,8 +927,12 @@ struct Sections {
 pub struct Data {
     interp: String,
     is_64: bool,
-    code_segments: Vec<UnlinkedCodeSegment>,
-    data_segments: Vec<UnlinkedCodeSegment>,
+    //code_segments: Vec<UnlinkedCodeSegment>,
+    //data_segments: Vec<UnlinkedCodeSegment>,
+    data_buf: Vec<u8>,
+    text_buf: Vec<u8>,
+    data_relocs: Vec<CodeRelocation>,
+    text_relocs: Vec<CodeRelocation>,
     ph: Vec<ProgramHeaderEntry>,
     lib_names: Vec<String>,
     libs: Vec<Library>,
@@ -817,12 +944,14 @@ pub struct Data {
     addr_dynamic: u64,
     addr_dynstr: u64,
     addr_dynsym: u64,
-    addr_text: u64,
+    addr_rx: u64,
+    addr_rw: u64,
     addr_start: u64,
     addr_interp: u64,
     index_data: Option<SectionIndex>,
     index_text: Option<SectionIndex>,
     index_strtab: Option<SectionIndex>,
+    index_symtab: Option<SectionIndex>,
     index_dynstr: Option<SectionIndex>,
     index_dynsym: Option<SectionIndex>,
     size_fh: usize,
@@ -838,6 +967,7 @@ impl Data {
         let mut rw_size = 0;
         let mut rx_size = 0;
 
+        // get symbols and relocations
         for (_name, unlinked) in link.unlinked.iter() {
             use object::SectionKind as K;
             let is_start = false;
@@ -856,7 +986,7 @@ impl Data {
                             s: symbol,
                         };
 
-                        s.rw.symbols.push(ps);
+                        s.rw.symbols.insert(name.clone(), ps);
                     }
                     rw_size += unlinked.bytes.len();
                 }
@@ -871,7 +1001,7 @@ impl Data {
                             is_start,
                             s: symbol,
                         };
-                        s.ro.symbols.push(ps);
+                        s.ro.symbols.insert(name.clone(), ps);
                     }
                     ro_size += unlinked.bytes.len();
                 }
@@ -888,7 +1018,7 @@ impl Data {
                             is_start,
                             s: symbol,
                         };
-                        s.rx.symbols.push(ps);
+                        s.rx.symbols.insert(name.clone(), ps);
                     }
                     rx_size += unlinked.bytes.len();
                 }
@@ -907,27 +1037,31 @@ impl Data {
     }
 
     pub fn new(link: &Link, lib_names: Vec<String>) -> Self {
-        let mut code_segments = vec![];
-        let mut data_segments = vec![];
-
         let mut ro_size = 0;
         let mut rw_size = 0;
         let mut rx_size = 0;
+        let mut data_buf = vec![];
+        let mut text_buf = vec![];
 
+        let mut data_relocs = vec![];
+        let mut text_relocs = vec![];
         for (_name, unlinked) in link.unlinked.iter() {
             use object::SectionKind as K;
             match unlinked.kind {
                 K::Data | K::UninitializedData => {
                     rw_size += unlinked.bytes.len();
-                    data_segments.push(unlinked.clone());
+                    data_buf.extend(unlinked.bytes.clone());
+                    data_relocs.extend(unlinked.relocations.clone());
                 }
                 K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
                     ro_size += unlinked.bytes.len();
-                    data_segments.push(unlinked.clone());
+                    data_buf.extend(unlinked.bytes.clone());
+                    data_relocs.extend(unlinked.relocations.clone());
                 }
                 K::Text => {
                     rx_size += unlinked.bytes.len();
-                    code_segments.push(unlinked.clone());
+                    text_buf.extend(unlinked.bytes.clone());
+                    text_relocs.extend(unlinked.relocations.clone());
                 }
 
                 // ignore for now
@@ -949,8 +1083,10 @@ impl Data {
         Self {
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
-            code_segments,
-            data_segments,
+            data_buf,
+            text_buf,
+            text_relocs,
+            data_relocs,
             ph: vec![],
             components: vec![],
             lib_names,
@@ -962,10 +1098,12 @@ impl Data {
             addr_dynamic: 0,
             addr_dynstr: 0,
             addr_dynsym: 0,
-            addr_text: 0,
+            addr_rx: 0,
+            addr_rw: 0,
             addr_start: 0,
             addr_interp: 0,
             index_strtab: None,
+            index_symtab: None,
             index_dynstr: None,
             index_dynsym: None,
             index_data: None,
@@ -1070,7 +1208,7 @@ impl Data {
         );
 
         // set entry point
-        for sym in &self.sections.rx.symbols {
+        for (_name, sym) in &self.sections.rx.symbols {
             if sym.is_start {
                 self.addr_start = self.rx.addr + sym.s.address;
             }
@@ -1118,27 +1256,21 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // .text
     // Add .text section to the text load segment
-    let mut buf = vec![];
-    for segment in data.code_segments.iter() {
-        buf.extend(segment.bytes.clone());
-    }
+    let buf = data.text_buf.clone();
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
     blocks.push(Box::new(BufferSection::new(
         AllocSegment::RX,
         name_id,
-        buf.to_vec(),
+        buf,
     )));
 
     // .data
-    let mut buf = vec![];
-    for segment in data.data_segments.iter() {
-        buf.extend(segment.bytes.clone());
-    }
+    let buf = data.data_buf.clone();
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
     blocks.push(Box::new(BufferSection::new(
         AllocSegment::RW,
         name_id,
-        buf.to_vec(),
+        buf,
     )));
 
     if data.is_dynamic() {
@@ -1154,6 +1286,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // relocations go here
+    blocks.push(Box::new(RelocationSection::default()));
 
     // shstrtab needs to be allocated last, once all headers are reserved
     if data.add_symbols {

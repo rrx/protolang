@@ -1,9 +1,9 @@
 default: write
 
-write: function2
+write: functions
 	RUST_LOG=debug cargo run --example write
 	readelf -a tmp/static.exe
-	#objdump -D tmp/out.exe
+	objdump -D tmp/static.exe
 	#readelf -s tmp/out.exe
 	objdump -t tmp/static.exe
 	exec tmp/static.exe
@@ -27,11 +27,11 @@ test:
 
 CFLAGS=-fPIC -fno-direct-access-external-data ${NIX_CFLAGS_COMPILE}
 
-functions:
+functions2:
 	zig build
 	clang ${CFLAGS} -c link/testfiles/empty_main.c -o ./tmp/empty_main.o
 
-function2:
+functions:
 	clang ${CFLAGS} -c link/testfiles/testfunction.c -o ./tmp/testfunction.o
 	clang ${CFLAGS} -c link/testfiles/simplefunction.c -o ./tmp/simplefunction.o
 	clang ${CFLAGS} -c link/testfiles/asdf.c -o ./tmp/asdf.o
