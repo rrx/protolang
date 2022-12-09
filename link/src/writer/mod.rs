@@ -77,7 +77,7 @@ struct DynamicSymbol {
     gnu_hash: Option<u32>,
 }
 
-trait ElfComponent {
+trait ElfBlock {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         vec![]
     }
@@ -102,7 +102,7 @@ impl Default for HeaderComponent {
     }
 }
 
-impl ElfComponent for HeaderComponent {
+impl ElfBlock for HeaderComponent {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         vec![
             // program header
@@ -207,7 +207,7 @@ impl Default for DynamicSection {
     }
 }
 
-impl ElfComponent for DynamicSection {
+impl ElfBlock for DynamicSection {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         //program DYNAMIC
         let size = self.size as u64;
@@ -238,7 +238,6 @@ impl ElfComponent for DynamicSection {
         // allocate space in the rw segment
         data.segments.rw.size += after - self.start;
         data.segments.rw.add_data(self.size, self.align);
-        //data.size_dynamic = size;
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -264,9 +263,7 @@ impl ElfComponent for DynamicSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        if data.add_section_headers {
-            w.write_dynamic_section_header(data.addr_dynamic);
-        }
+        w.write_dynamic_section_header(data.addr_dynamic);
     }
 }
 
@@ -315,7 +312,7 @@ impl Default for RelocationSection {
         }
     }
 }
-impl ElfComponent for RelocationSection {
+impl ElfBlock for RelocationSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         self.text_name = Some(w.add_section_name(".rela.text".as_bytes()));
         self.text_index = w.reserve_section_index();
@@ -397,7 +394,7 @@ impl Default for SymTabSection {
     }
 }
 
-impl ElfComponent for SymTabSection {
+impl ElfBlock for SymTabSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         data.index_symtab = Some(w.reserve_symtab_section_index());
         if w.symtab_shndx_needed() {
@@ -490,13 +487,11 @@ impl ElfComponent for SymTabSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        if data.add_section_headers {
-            // one greater than the symbol table index of the last
-            // local symbol (binding STB_LOCAL)
-            w.write_symtab_section_header(1);
-            if w.symtab_shndx_needed() {
-                w.write_symtab_shndx_section_header();
-            }
+        // one greater than the symbol table index of the last
+        // local symbol (binding STB_LOCAL)
+        w.write_symtab_section_header(1);
+        if w.symtab_shndx_needed() {
+            w.write_symtab_shndx_section_header();
         }
     }
 }
@@ -516,7 +511,7 @@ impl Default for DynSymSection {
     }
 }
 
-impl ElfComponent for DynSymSection {
+impl ElfBlock for DynSymSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         w.reserve_null_dynamic_symbol_index();
 
@@ -546,9 +541,7 @@ impl ElfComponent for DynSymSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        if data.add_section_headers {
-            w.write_dynsym_section_header(data.addr_dynsym, 1);
-        }
+        w.write_dynsym_section_header(data.addr_dynsym, 1);
     }
 }
 
@@ -566,7 +559,7 @@ impl Default for DynStrSection {
         }
     }
 }
-impl ElfComponent for DynStrSection {
+impl ElfBlock for DynStrSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         data.index_dynstr = Some(w.reserve_dynstr_section_index());
     }
@@ -593,9 +586,7 @@ impl ElfComponent for DynStrSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        if data.add_section_headers {
-            w.write_dynstr_section_header(data.addr_dynstr);
-        }
+        w.write_dynstr_section_header(data.addr_dynstr);
     }
 }
 
@@ -603,7 +594,7 @@ impl ElfComponent for DynStrSection {
 struct ShStrTabSection {
     index: Option<SectionIndex>,
 }
-impl ElfComponent for ShStrTabSection {
+impl ElfBlock for ShStrTabSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         let shstrtab_index = w.reserve_shstrtab_section_index();
     }
@@ -619,9 +610,7 @@ impl ElfComponent for ShStrTabSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        if data.add_section_headers {
-            w.write_shstrtab_section_header();
-        }
+        w.write_shstrtab_section_header();
     }
 }
 
@@ -629,7 +618,7 @@ impl ElfComponent for ShStrTabSection {
 struct StrTabSection {
     index: Option<SectionIndex>,
 }
-impl ElfComponent for StrTabSection {
+impl ElfBlock for StrTabSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         data.index_strtab = Some(w.reserve_strtab_section_index());
     }
@@ -643,9 +632,7 @@ impl ElfComponent for StrTabSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        if data.add_section_headers {
-            w.write_strtab_section_header();
-        }
+        w.write_strtab_section_header();
     }
 }
 
@@ -673,7 +660,7 @@ impl BufferSection {
     }
 }
 
-impl ElfComponent for BufferSection {
+impl ElfBlock for BufferSection {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         match self.alloc {
             AllocSegment::Interp => {
@@ -855,21 +842,19 @@ impl ElfComponent for BufferSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        if data.add_section_headers {
-            if let Some(name_id) = self.name_id {
-                w.write_section_header(&object::write::elf::SectionHeader {
-                    name: Some(name_id),
-                    sh_type: elf::SHT_PROGBITS,
-                    sh_flags: self.alloc.flags() as u64,
-                    sh_addr: self.addr as u64,
-                    sh_offset: self.offset as u64,
-                    sh_info: 0,
-                    sh_link: 0,
-                    sh_entsize: 0,
-                    sh_addralign: self.alloc.align() as u64,
-                    sh_size: self.size as u64,
-                });
-            }
+        if let Some(name_id) = self.name_id {
+            w.write_section_header(&object::write::elf::SectionHeader {
+                name: Some(name_id),
+                sh_type: elf::SHT_PROGBITS,
+                sh_flags: self.alloc.flags() as u64,
+                sh_addr: self.addr as u64,
+                sh_offset: self.offset as u64,
+                sh_info: 0,
+                sh_link: 0,
+                sh_entsize: 0,
+                sh_addralign: self.alloc.align() as u64,
+                sh_size: self.size as u64,
+            });
         }
     }
 }
@@ -881,7 +866,6 @@ pub struct Data {
     lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
-    components: Vec<Box<dyn ElfComponent>>,
     segments: Segments,
     addr_dynamic: u64,
     addr_dynstr: u64,
@@ -892,10 +876,6 @@ pub struct Data {
     index_symtab: Option<SectionIndex>,
     index_dynstr: Option<SectionIndex>,
     index_dynsym: Option<SectionIndex>,
-    //size_fh: usize,
-    //size_ph: usize,
-    size_dynamic: usize,
-    //sections: Sections,
     add_section_headers: bool,
     add_symbols: bool,
 }
@@ -905,7 +885,6 @@ impl Data {
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             ph: vec![],
-            components: vec![],
             lib_names,
             libs: vec![],
             page_size: 0x1000,
@@ -919,9 +898,6 @@ impl Data {
             index_symtab: None,
             index_dynstr: None,
             index_dynsym: None,
-            //size_fh: 0,
-            //size_ph: 0,
-            size_dynamic: 0,
             add_section_headers: true,
             add_symbols: true,
         }
@@ -1034,6 +1010,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let endian = Endianness::Little;
     let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
 
+    // add libraries if they are configured
     let lib_names = data.lib_names.clone();
     for lib_name in lib_names.iter() {
         let string_id = writer.add_dynamic_string(lib_name.as_bytes());
@@ -1042,13 +1019,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // load bytes and relocations
     data.segments.load(link);
-
     data.segments.read_unlinked(link, &mut writer);
 
-    let mut blocks: Vec<Box<dyn ElfComponent>> = vec![];
+    // configure blocks
+    // these are used to correctly order the reservation of space
+    // and to write things out in the correct order
+    let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
     blocks.push(Box::new(HeaderComponent::default()));
 
-    let page_align = 0x1000;
     if data.is_dynamic() {
         let name_id = writer.add_section_name(".interp".as_bytes());
         let buf = data.interp.as_bytes().to_vec();
@@ -1108,6 +1086,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         ph.extend(b.program_header(&data));
     }
 
+    // section headers are optional
     if data.add_section_headers {
         for b in blocks.iter_mut() {
             b.reserve_section_index(&mut data, &mut writer);
@@ -1123,11 +1102,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // UPDATE
+
     data.update_segments();
 
     for b in blocks.iter_mut() {
         b.update(&mut data);
     }
+
+    // WRITE
 
     // get a list of program headers
     // we now have the values so they will be correctly written
@@ -1136,14 +1118,15 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         ph.extend(b.program_header(&data));
     }
 
-    // WRITE
     for b in blocks.iter_mut() {
         b.write(&data, &ph, &mut writer);
     }
 
     // SECTION HEADERS
-    for b in blocks.iter() {
-        b.write_section_header(&data, &mut writer);
+    if data.add_section_headers {
+        for b in blocks.iter() {
+            b.write_section_header(&data, &mut writer);
+        }
     }
     Ok(out_data)
 }
