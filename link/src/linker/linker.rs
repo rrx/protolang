@@ -112,7 +112,7 @@ impl Link {
     pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         use object::elf;
         use object::Endianness;
-        let mut data = crate::writer::Data::new(self, self.libs.iter().cloned().collect());
+        let mut data = crate::writer::Data::new(self.libs.iter().cloned().collect());
         //data.add_section_headers = true;
         //data.add_symbols = true;
 

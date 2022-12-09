@@ -65,6 +65,7 @@ pub struct Segment {
     pub alloc: AllocSegment,
     pub bytes: Vec<u8>,
     pub relocations: Vec<CodeRelocation>,
+    pub section: ProgSection,
     //pub blocks: Vec<BufferSection>,
     //pub components: Vec<Box<dyn ElfComponent>>,
 }
@@ -80,6 +81,7 @@ impl Segment {
             align: 0x1000,
             bytes: vec![],
             relocations: vec![],
+            section: ProgSection::new(AllocSegment::RO),
         }
     }
 
@@ -93,6 +95,7 @@ impl Segment {
             align: 0x1000,
             bytes: vec![],
             relocations: vec![],
+            section: ProgSection::new(AllocSegment::RW),
             //blocks: vec![],
             //components: vec![],
         }
@@ -108,6 +111,7 @@ impl Segment {
             align: 0x1000,
             bytes: vec![],
             relocations: vec![],
+            section: ProgSection::new(AllocSegment::RX),
             //blocks: vec![],
             //components: vec![],
         }
@@ -117,4 +121,3 @@ impl Segment {
         self.size = size_align(self.size, align) + size;
     }
 }
-
