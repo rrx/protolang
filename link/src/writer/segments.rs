@@ -54,6 +54,80 @@ impl Segments {
             }
         }
     }
+
+    pub fn read_unlinked<'a>(&mut self, link: &'a Link, w: &mut Writer<'a>) {
+        let mut ro_size = 0;
+        let mut rw_size = 0;
+        let mut rx_size = 0;
+
+        // get symbols and relocations
+        for (_name, unlinked) in link.unlinked.iter() {
+            use object::SectionKind as K;
+            let is_start = false;
+            match unlinked.kind {
+                K::Data | K::UninitializedData => {
+                    self.rw.relocations.extend(unlinked.relocations.clone());
+                    for (name, symbol) in unlinked.defined.iter() {
+                        let name_id = Some(w.add_string(name.as_bytes()));
+
+                        let mut symbol = symbol.clone();
+                        symbol.address += rw_size as u64;
+
+                        let ps = ProgSymbol {
+                            name_id,
+                            is_start,
+                            s: symbol,
+                        };
+
+                        self.rw.section.symbols.insert(name.clone(), ps);
+                    }
+                    rw_size += unlinked.bytes.len();
+                }
+                K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
+                    self.ro.relocations.extend(unlinked.relocations.clone());
+                    for (name, symbol) in unlinked.defined.iter() {
+                        let name_id = Some(w.add_string(name.as_bytes()));
+                        let mut symbol = symbol.clone();
+                        symbol.address += ro_size as u64;
+                        let ps = ProgSymbol {
+                            name_id,
+                            is_start,
+                            s: symbol,
+                        };
+                        self.ro.section.symbols.insert(name.clone(), ps);
+                    }
+                    ro_size += unlinked.bytes.len();
+                }
+                K::Text => {
+                    self.rx.relocations.extend(unlinked.relocations.clone());
+                    for (name, symbol) in unlinked.defined.iter() {
+                        let name_id = Some(w.add_string(name.as_bytes()));
+                        let mut symbol = symbol.clone();
+                        symbol.address += rx_size as u64;
+
+                        let is_start = name == "_start";
+                        let ps = ProgSymbol {
+                            name_id,
+                            is_start,
+                            s: symbol,
+                        };
+                        self.rx.section.symbols.insert(name.clone(), ps);
+                    }
+                    rx_size += unlinked.bytes.len();
+                }
+
+                // ignore for now
+                K::Metadata => (),
+                K::Other => (),
+                K::Note => (),
+                K::Elf(_x) => {
+                    // ignore
+                    //unimplemented!("Elf({:#x})", x);
+                }
+                _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
+            }
+        }
+    }
 }
 
 pub struct Segment {

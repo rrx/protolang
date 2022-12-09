@@ -88,7 +88,19 @@ trait ElfComponent {
     fn write_section_header(&self, data: &Data, w: &mut Writer) {}
 }
 
-struct HeaderComponent {}
+struct HeaderComponent {
+    size_fh: usize,
+    size_ph: usize,
+}
+
+impl Default for HeaderComponent {
+    fn default() -> Self {
+        Self {
+            size_fh: 0,
+            size_ph: 0,
+        }
+    }
+}
 
 impl ElfComponent for HeaderComponent {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
@@ -97,11 +109,11 @@ impl ElfComponent for HeaderComponent {
             ProgramHeaderEntry {
                 p_type: elf::PT_PHDR,
                 p_flags: elf::PF_R,
-                p_offset: data.size_fh as u64,
-                p_vaddr: data.segments.ro.addr + data.size_fh as u64,
+                p_offset: self.size_fh as u64,
+                p_vaddr: data.segments.ro.addr + self.size_fh as u64,
                 p_paddr: 0,
-                p_filesz: data.size_ph as u64,
-                p_memsz: data.size_ph as u64,
+                p_filesz: self.size_ph as u64,
+                p_memsz: self.size_ph as u64,
                 p_align: 8,
             },
             // add a load section for the file and program header, so it's covered
@@ -129,7 +141,7 @@ impl ElfComponent for HeaderComponent {
 
         // Start reserving file ranges.
         w.reserve_file_header();
-        data.size_fh = w.reserved_len();
+        self.size_fh = w.reserved_len();
 
         // we only need to know the number of program headers
         // we don't need the actual headers
@@ -138,11 +150,11 @@ impl ElfComponent for HeaderComponent {
         let before = w.reserved_len();
         w.reserve_program_headers(ph_count as u32);
         let after = w.reserved_len();
-        data.size_ph = after - before;
+        self.size_ph = after - before;
 
         // add headers to the ro_size
-        data.segments.ro.add_data(data.size_fh, 0x1);
-        data.segments.ro.add_data(data.size_ph, 0x1);
+        data.segments.ro.add_data(self.size_fh, 0x1);
+        data.segments.ro.add_data(self.size_ph, 0x1);
     }
 
     fn update(&mut self, data: &mut Data) {}
@@ -880,88 +892,14 @@ pub struct Data {
     index_symtab: Option<SectionIndex>,
     index_dynstr: Option<SectionIndex>,
     index_dynsym: Option<SectionIndex>,
-    size_fh: usize,
-    size_ph: usize,
+    //size_fh: usize,
+    //size_ph: usize,
     size_dynamic: usize,
     //sections: Sections,
     add_section_headers: bool,
     add_symbols: bool,
 }
 impl Data {
-    fn read_unlinked<'a>(link: &'a Link, w: &mut Writer<'a>, s: &mut Segments) {
-        let mut ro_size = 0;
-        let mut rw_size = 0;
-        let mut rx_size = 0;
-
-        // get symbols and relocations
-        for (_name, unlinked) in link.unlinked.iter() {
-            use object::SectionKind as K;
-            let is_start = false;
-            match unlinked.kind {
-                K::Data | K::UninitializedData => {
-                    s.rw.relocations.extend(unlinked.relocations.clone());
-                    for (name, symbol) in unlinked.defined.iter() {
-                        let name_id = Some(w.add_string(name.as_bytes()));
-
-                        let mut symbol = symbol.clone();
-                        symbol.address += rw_size as u64;
-
-                        let ps = ProgSymbol {
-                            name_id,
-                            is_start,
-                            s: symbol,
-                        };
-
-                        s.rw.section.symbols.insert(name.clone(), ps);
-                    }
-                    rw_size += unlinked.bytes.len();
-                }
-                K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
-                    s.ro.relocations.extend(unlinked.relocations.clone());
-                    for (name, symbol) in unlinked.defined.iter() {
-                        let name_id = Some(w.add_string(name.as_bytes()));
-                        let mut symbol = symbol.clone();
-                        symbol.address += ro_size as u64;
-                        let ps = ProgSymbol {
-                            name_id,
-                            is_start,
-                            s: symbol,
-                        };
-                        s.ro.section.symbols.insert(name.clone(), ps);
-                    }
-                    ro_size += unlinked.bytes.len();
-                }
-                K::Text => {
-                    s.rx.relocations.extend(unlinked.relocations.clone());
-                    for (name, symbol) in unlinked.defined.iter() {
-                        let name_id = Some(w.add_string(name.as_bytes()));
-                        let mut symbol = symbol.clone();
-                        symbol.address += rx_size as u64;
-
-                        let is_start = name == "_start";
-                        let ps = ProgSymbol {
-                            name_id,
-                            is_start,
-                            s: symbol,
-                        };
-                        s.rx.section.symbols.insert(name.clone(), ps);
-                    }
-                    rx_size += unlinked.bytes.len();
-                }
-
-                // ignore for now
-                K::Metadata => (),
-                K::Other => (),
-                K::Note => (),
-                K::Elf(_x) => {
-                    // ignore
-                    //unimplemented!("Elf({:#x})", x);
-                }
-                _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
-            }
-        }
-    }
-
     pub fn new(lib_names: Vec<String>) -> Self {
         Self {
             is_64: true,
@@ -981,8 +919,8 @@ impl Data {
             index_symtab: None,
             index_dynstr: None,
             index_dynsym: None,
-            size_fh: 0,
-            size_ph: 0,
+            //size_fh: 0,
+            //size_ph: 0,
             size_dynamic: 0,
             add_section_headers: true,
             add_symbols: true,
@@ -1105,10 +1043,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     // load bytes and relocations
     data.segments.load(link);
 
-    Data::read_unlinked(link, &mut writer, &mut data.segments);
+    data.segments.read_unlinked(link, &mut writer);
 
     let mut blocks: Vec<Box<dyn ElfComponent>> = vec![];
-    blocks.push(Box::new(HeaderComponent {}));
+    blocks.push(Box::new(HeaderComponent::default()));
 
     let page_align = 0x1000;
     if data.is_dynamic() {
