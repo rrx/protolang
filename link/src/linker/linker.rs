@@ -112,11 +112,11 @@ impl Link {
     pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         use object::elf;
         use object::Endianness;
-        let mut data = Data::new(self, self.libs.iter().cloned().collect());
+        let mut data = crate::writer::Data::new(self, self.libs.iter().cloned().collect());
         //data.add_section_headers = true;
         //data.add_symbols = true;
 
-        let out_data = write_file::<elf::FileHeader64<Endianness>>(self, data)?;
+        let out_data = crate::writer::write_file::<elf::FileHeader64<Endianness>>(self, data)?;
         std::fs::write(path, out_data)?;
         Ok(())
     }

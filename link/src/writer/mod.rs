@@ -7,9 +7,11 @@ use object::write::StringId;
 use object::Endianness;
 use std::collections::HashMap;
 
-
 use super::*;
 use crate::*;
+
+mod section;
+use section::*;
 
 enum SectionKind {
     Interp,
@@ -254,7 +256,7 @@ impl ElfComponent for DynamicSection {
 }
 
 #[derive(PartialEq)]
-enum AllocSegment {
+pub enum AllocSegment {
     Interp,
     RO,
     RW,
@@ -262,14 +264,14 @@ enum AllocSegment {
 }
 
 impl AllocSegment {
-    fn flags(&self) -> u32 {
+    pub fn flags(&self) -> u32 {
         match self {
             AllocSegment::RO | AllocSegment::Interp => elf::SHF_ALLOC,
             AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
             AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
         }
     }
-    fn align(&self) -> usize {
+    pub fn align(&self) -> usize {
         0x10
     }
 }
@@ -792,7 +794,12 @@ impl ElfComponent for BufferSection {
                 let v_base = data.rw.base;
                 for r in data.data_relocs.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
-                    log::debug!("R-RW: vbase: {:#0x}, addr: {:#0x}, {}", v_base, addr as usize, &r.name);
+                    log::debug!(
+                        "R-RW: vbase: {:#0x}, addr: {:#0x}, {}",
+                        v_base,
+                        addr as usize,
+                        &r.name
+                    );
                     r.patch(patch_base as *mut u8, v_base as *mut u8, addr as *const u8);
                 }
             }
@@ -802,7 +809,12 @@ impl ElfComponent for BufferSection {
                 let v_base = data.rx.base;
                 for r in data.text_relocs.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
-                    log::debug!("R-RX: vbase: {:#0x}, addr: {:#0x}, {}", v_base, addr as usize, &r.name);
+                    log::debug!(
+                        "R-RX: vbase: {:#0x}, addr: {:#0x}, {}",
+                        v_base,
+                        addr as usize,
+                        &r.name
+                    );
                     r.patch(patch_base as *mut u8, v_base as *mut u8, addr as *const u8);
                 }
             }
@@ -902,26 +914,6 @@ impl Segment {
     fn add_data(&mut self, size: usize, align: usize) {
         self.size = size_align(self.size, align) + size;
     }
-}
-
-#[derive(Debug)]
-struct ProgSymbol {
-    name_id: Option<StringId>,
-    is_start: bool,
-    s: CodeSymbol,
-}
-
-#[derive(Default)]
-struct ProgSection {
-    symbols: HashMap<String, ProgSymbol>,
-    relocations: Vec<CodeRelocation>,
-}
-
-#[derive(Default)]
-struct Sections {
-    ro: ProgSection,
-    rw: ProgSection,
-    rx: ProgSection,
 }
 
 pub struct Data {
@@ -1258,20 +1250,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     // Add .text section to the text load segment
     let buf = data.text_buf.clone();
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(
-        AllocSegment::RX,
-        name_id,
-        buf,
-    )));
+    blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf)));
 
     // .data
     let buf = data.data_buf.clone();
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(
-        AllocSegment::RW,
-        name_id,
-        buf,
-    )));
+    blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
 
     if data.is_dynamic() {
         blocks.push(Box::new(DynamicSection::default()));
