@@ -11,7 +11,10 @@ use super::*;
 use crate::*;
 
 mod section;
+mod segments;
+
 use section::*;
+use segments::*;
 
 enum SectionKind {
     Interp,
@@ -95,7 +98,7 @@ impl ElfComponent for HeaderComponent {
                 p_type: elf::PT_PHDR,
                 p_flags: elf::PF_R,
                 p_offset: data.size_fh as u64,
-                p_vaddr: data.ro.addr + data.size_fh as u64,
+                p_vaddr: data.segments.ro.addr + data.size_fh as u64,
                 p_paddr: 0,
                 p_filesz: data.size_ph as u64,
                 p_memsz: data.size_ph as u64,
@@ -105,11 +108,11 @@ impl ElfComponent for HeaderComponent {
             ProgramHeaderEntry {
                 p_type: elf::PT_LOAD,
                 p_flags: elf::PF_R,
-                p_offset: data.ro.offset,
-                p_vaddr: data.ro.addr,
+                p_offset: data.segments.ro.offset,
+                p_vaddr: data.segments.ro.addr,
                 p_paddr: 0,
-                p_filesz: data.ro.size as u64,
-                p_memsz: data.ro.size as u64,
+                p_filesz: data.segments.ro.size as u64,
+                p_memsz: data.segments.ro.size as u64,
                 p_align: data.page_size as u64,
             },
         ]
@@ -138,8 +141,8 @@ impl ElfComponent for HeaderComponent {
         data.size_ph = after - before;
 
         // add headers to the ro_size
-        data.ro.add_data(data.size_fh, 0x1);
-        data.ro.add_data(data.size_ph, 0x1);
+        data.segments.ro.add_data(data.size_fh, 0x1);
+        data.segments.ro.add_data(data.size_ph, 0x1);
     }
 
     fn update(&mut self, data: &mut Data) {}
@@ -196,11 +199,11 @@ impl ElfComponent for DynamicSection {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         //program DYNAMIC
         let size = self.size as u64;
-        let addr = data.rw.addr;
+        let addr = data.segments.rw.addr;
         vec![ProgramHeaderEntry {
             p_type: elf::PT_DYNAMIC,
             p_flags: elf::PF_R | elf::PF_W,
-            p_offset: data.rw.offset as u64,
+            p_offset: data.segments.rw.offset as u64,
             p_vaddr: addr,
             p_paddr: 0,
             p_filesz: size,
@@ -221,13 +224,13 @@ impl ElfComponent for DynamicSection {
         let after = w.reserved_len();
         self.size = after - before;
         // allocate space in the rw segment
-        data.rw.size += after - self.start;
-        data.rw.add_data(self.size, self.align);
+        data.segments.rw.size += after - self.start;
+        data.segments.rw.add_data(self.size, self.align);
         //data.size_dynamic = size;
     }
 
     fn update(&mut self, data: &mut Data) {
-        data.addr_dynamic = data.rw.addr;
+        data.addr_dynamic = data.segments.rw.addr;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -352,7 +355,7 @@ impl ElfComponent for RelocationSection {
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
         w.write_relocation_section_header(
             self.text_name.unwrap(),
-            data.index_text.unwrap(),
+            data.sections.rx.index.unwrap(),
             data.index_symtab.unwrap(),
             self.text_offset,
             data.sections.rx.relocations.len(),
@@ -360,7 +363,7 @@ impl ElfComponent for RelocationSection {
         );
         w.write_relocation_section_header(
             self.data_name.unwrap(),
-            data.index_data.unwrap(),
+            data.sections.rw.index.unwrap(),
             data.index_symtab.unwrap(),
             self.data_offset,
             data.sections.rw.relocations.len(),
@@ -384,8 +387,6 @@ impl Default for SymTabSection {
 
 impl ElfComponent for SymTabSection {
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        //w.reserve_symbol_index(data.index_text);
-        //w.reserve_symbol_index(data.index_data);
         data.index_symtab = Some(w.reserve_symtab_section_index());
         if w.symtab_shndx_needed() {
             w.reserve_symtab_shndx_section_index();
@@ -395,13 +396,13 @@ impl ElfComponent for SymTabSection {
     fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
         // reserve the symbols in the various sections
         for sym in &data.sections.ro.symbols {
-            w.reserve_symbol_index(data.index_data);
+            w.reserve_symbol_index(data.sections.ro.index);
         }
         for sym in &data.sections.rx.symbols {
-            w.reserve_symbol_index(data.index_text);
+            w.reserve_symbol_index(data.sections.rx.index);
         }
         for sym in &data.sections.rw.symbols {
-            w.reserve_symbol_index(data.index_data);
+            w.reserve_symbol_index(data.sections.rw.index);
         }
 
         w.reserve_symtab();
@@ -424,11 +425,11 @@ impl ElfComponent for SymTabSection {
             let st_other = sym.s.st_other; //elf::STV_DEFAULT;
             let st_shndx = elf::SHN_ABS;
             let st_size = sym.s.size;
-            let addr = sym.s.address + data.ro.base;
+            let addr = sym.s.address + data.segments.ro.base;
             //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
-                section: data.index_data,
+                section: data.sections.rw.index,
                 st_info,
                 st_other,
                 st_shndx,
@@ -437,7 +438,7 @@ impl ElfComponent for SymTabSection {
             });
         }
         for (_, sym) in &data.sections.rx.symbols {
-            let addr = sym.s.address + data.rx.addr;
+            let addr = sym.s.address + data.segments.rx.addr;
             //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_other = elf::STV_DEFAULT;
@@ -445,7 +446,7 @@ impl ElfComponent for SymTabSection {
             let st_size = 1;
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
-                section: data.index_text,
+                section: data.sections.rx.index,
                 st_info: sym.s.st_info,
                 st_other: sym.s.st_other,
                 st_shndx,
@@ -455,7 +456,7 @@ impl ElfComponent for SymTabSection {
         }
 
         for (_, sym) in &data.sections.rw.symbols {
-            let addr = sym.s.address + data.rw.base;
+            let addr = sym.s.address + data.segments.rw.base;
             //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
             let st_info = (elf::STB_GLOBAL << 4) + elf::STT_FUNC;
             let st_other = elf::STV_DEFAULT;
@@ -463,7 +464,7 @@ impl ElfComponent for SymTabSection {
             let st_size = 1;
             w.write_symbol(&object::write::elf::Sym {
                 name: sym.name_id,
-                section: data.index_data,
+                section: data.sections.rw.index,
                 st_info: sym.s.st_info,
                 st_other: sym.s.st_other,
                 st_shndx,
@@ -518,11 +519,11 @@ impl ElfComponent for DynSymSection {
         self.start = w.reserved_len();
         w.reserve_dynsym();
         let after = w.reserved_len();
-        data.ro.size += after - pos;
+        data.segments.ro.size += after - pos;
     }
 
     fn update(&mut self, data: &mut Data) {
-        data.addr_dynsym = data.ro.addr + self.start as u64;
+        data.addr_dynsym = data.segments.ro.addr + self.start as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -565,11 +566,11 @@ impl ElfComponent for DynStrSection {
         self.start = w.reserved_len();
         w.reserve_dynstr();
         let after = w.reserved_len();
-        data.ro.size += after - pos;
+        data.segments.ro.size += after - pos;
     }
 
     fn update(&mut self, data: &mut Data) {
-        data.addr_dynstr = data.ro.addr + self.start as u64;
+        data.addr_dynstr = data.segments.ro.addr + self.start as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -682,46 +683,46 @@ impl ElfComponent for BufferSection {
             AllocSegment::RO => {
                 // load segments
                 // program LOAD (R)
-                let addr = data.ro.addr;
+                let addr = data.segments.ro.addr;
                 vec![ProgramHeaderEntry {
                     p_type: elf::PT_LOAD,
                     p_flags: elf::PF_R,
-                    p_offset: data.ro.offset,
+                    p_offset: data.segments.ro.offset,
                     p_vaddr: addr,
                     p_paddr: 0,
-                    p_filesz: data.ro.size as u64,
-                    p_memsz: data.ro.size as u64,
+                    p_filesz: data.segments.ro.size as u64,
+                    p_memsz: data.segments.ro.size as u64,
                     p_align: data.page_size as u64,
                 }]
             }
 
             AllocSegment::RX => {
                 // program LOAD (RX)
-                let addr = data.rx.addr;
-                log::debug!("{:#0x}, {:#0x}", data.rx.offset, addr);
+                let addr = data.segments.rx.addr;
+                log::debug!("{:#0x}, {:#0x}", data.segments.rx.offset, addr);
                 vec![ProgramHeaderEntry {
                     p_type: elf::PT_LOAD,
                     p_flags: elf::PF_R | elf::PF_X,
-                    p_offset: data.rx.offset,
+                    p_offset: data.segments.rx.offset,
                     p_vaddr: addr,
                     p_paddr: 0,
-                    p_filesz: data.rx.size as u64,
-                    p_memsz: data.rx.size as u64,
+                    p_filesz: data.segments.rx.size as u64,
+                    p_memsz: data.segments.rx.size as u64,
                     p_align: data.page_size as u64,
                 }]
             }
 
             AllocSegment::RW => {
                 // program LOAD (RW)
-                let addr = data.rw.addr;
+                let addr = data.segments.rw.addr;
                 vec![ProgramHeaderEntry {
                     p_type: elf::PT_LOAD,
                     p_flags: elf::PF_R | elf::PF_W,
-                    p_offset: data.rw.offset as u64,
+                    p_offset: data.segments.rw.offset as u64,
                     p_vaddr: addr,
                     p_paddr: 0,
-                    p_filesz: data.rw.size as u64,
-                    p_memsz: data.rw.size as u64,
+                    p_filesz: data.segments.rw.size as u64,
+                    p_memsz: data.segments.rw.size as u64,
                     p_align: data.page_size as u64,
                 }]
             }
@@ -732,10 +733,10 @@ impl ElfComponent for BufferSection {
         let index = w.reserve_section_index();
         match self.alloc {
             AllocSegment::RW => {
-                data.index_data = Some(index);
+                data.sections.rw.index = Some(index);
             }
             AllocSegment::RX => {
-                data.index_text = Some(index);
+                data.sections.rx.index = Some(index);
             }
             _ => (), //AllocSegment::RO => (),
         }
@@ -751,9 +752,9 @@ impl ElfComponent for BufferSection {
         self.size = self.buf.len();
         self.offset = start;
         match self.alloc {
-            AllocSegment::RO | AllocSegment::Interp => data.ro.add_data(self.size, align),
-            AllocSegment::RW => data.rw.add_data(self.size, align),
-            AllocSegment::RX => data.rx.add_data(self.size, align),
+            AllocSegment::RO | AllocSegment::Interp => data.segments.ro.add_data(self.size, align),
+            AllocSegment::RW => data.segments.rw.add_data(self.size, align),
+            AllocSegment::RX => data.segments.rx.add_data(self.size, align),
         };
 
         if self.alloc == AllocSegment::Interp {
@@ -774,24 +775,24 @@ impl ElfComponent for BufferSection {
         // to the load segments
         let mut pointers = HashMap::new();
         for (name, s) in data.sections.rx.symbols.iter() {
-            let addr = data.rx.base + s.s.address;
+            let addr = data.segments.rx.base + s.s.address;
             pointers.insert(name, addr);
         }
         for (name, s) in data.sections.rw.symbols.iter() {
-            let addr = data.rw.base + s.s.address;
+            let addr = data.segments.rw.base + s.s.address;
             pointers.insert(name, addr);
         }
 
         let segment = match self.alloc {
-            AllocSegment::RO | AllocSegment::Interp => &data.ro,
-            AllocSegment::RW => &data.rw,
-            AllocSegment::RX => &data.rx,
+            AllocSegment::RO | AllocSegment::Interp => &data.segments.ro,
+            AllocSegment::RW => &data.segments.rw,
+            AllocSegment::RX => &data.segments.rx,
         };
         match self.alloc {
             AllocSegment::RW => {
-                data.addr_rw = self.offset as u64;
+                data.sections.rw.addr = self.offset as u64;
                 let patch_base = self.buf.as_ptr();
-                let v_base = data.rw.base;
+                let v_base = data.segments.rw.base;
                 for r in data.data_relocs.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
                     log::debug!(
@@ -804,9 +805,9 @@ impl ElfComponent for BufferSection {
                 }
             }
             AllocSegment::RX => {
-                data.addr_rx = self.offset as u64;
+                data.sections.rx.addr = self.offset as u64;
                 let patch_base = self.buf.as_ptr();
-                let v_base = data.rx.base;
+                let v_base = data.segments.rx.base;
                 for r in data.text_relocs.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
                     log::debug!(
@@ -860,62 +861,6 @@ impl ElfComponent for BufferSection {
     }
 }
 
-struct Segment {
-    base: u64,
-    addr: u64,
-    offset: u64,
-    size: usize,
-    align: u32,
-    alloc: AllocSegment,
-    blocks: Vec<BufferSection>,
-    components: Vec<Box<dyn ElfComponent>>,
-}
-
-impl Segment {
-    fn new_ro() -> Self {
-        Self {
-            base: 0,
-            addr: 0,
-            offset: 0,
-            size: 0,
-            alloc: AllocSegment::RO,
-            align: 0x1000,
-            blocks: vec![],
-            components: vec![],
-        }
-    }
-
-    fn new_rw() -> Self {
-        Self {
-            base: 0,
-            addr: 0,
-            offset: 0,
-            size: 0,
-            alloc: AllocSegment::RW,
-            align: 0x1000,
-            blocks: vec![],
-            components: vec![],
-        }
-    }
-
-    fn new_rx() -> Self {
-        Self {
-            base: 0,
-            addr: 0,
-            offset: 0,
-            size: 0,
-            alloc: AllocSegment::RX,
-            align: 0x1000,
-            blocks: vec![],
-            components: vec![],
-        }
-    }
-
-    fn add_data(&mut self, size: usize, align: usize) {
-        self.size = size_align(self.size, align) + size;
-    }
-}
-
 pub struct Data {
     interp: String,
     is_64: bool,
@@ -930,18 +875,12 @@ pub struct Data {
     libs: Vec<Library>,
     page_size: u32,
     components: Vec<Box<dyn ElfComponent>>,
-    ro: Segment,
-    rw: Segment,
-    rx: Segment,
+    segments: Segments,
     addr_dynamic: u64,
     addr_dynstr: u64,
     addr_dynsym: u64,
-    addr_rx: u64,
-    addr_rw: u64,
     addr_start: u64,
     addr_interp: u64,
-    index_data: Option<SectionIndex>,
-    index_text: Option<SectionIndex>,
     index_strtab: Option<SectionIndex>,
     index_symtab: Option<SectionIndex>,
     index_dynstr: Option<SectionIndex>,
@@ -1068,10 +1007,6 @@ impl Data {
             }
         }
 
-        let ro = Segment::new_ro();
-        let rw = Segment::new_rw();
-        let rx = Segment::new_rx();
-
         Self {
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
@@ -1084,22 +1019,16 @@ impl Data {
             lib_names,
             libs: vec![],
             page_size: 0x1000,
-            ro,
-            rx,
-            rw,
+            segments: Segments::default(),
             addr_dynamic: 0,
             addr_dynstr: 0,
             addr_dynsym: 0,
-            addr_rx: 0,
-            addr_rw: 0,
             addr_start: 0,
             addr_interp: 0,
             index_strtab: None,
             index_symtab: None,
             index_dynstr: None,
             index_dynsym: None,
-            index_data: None,
-            index_text: None,
             size_fh: 0,
             size_ph: 0,
             size_dynamic: 0,
@@ -1156,53 +1085,53 @@ impl Data {
         let align = AllocSegment::RO.align();
         let base = 0x80000;
         let mut offset = 0;
-        let ro_size_elf_aligned = size_align(self.ro.size as usize, align);
-        self.ro.base = base;
-        self.ro.addr = base + offset as u64;
-        self.ro.offset = offset as u64;
-        self.ro.align = align as u32;
+        let ro_size_elf_aligned = size_align(self.segments.ro.size as usize, align);
+        self.segments.ro.base = base;
+        self.segments.ro.addr = base + offset as u64;
+        self.segments.ro.offset = offset as u64;
+        self.segments.ro.align = align as u32;
         log::debug!(
             "RO {:#0x}, {:#0x}, size: {:#0x}",
             base,
             offset,
-            self.ro.size
+            self.segments.ro.size
         );
         offset += ro_size_elf_aligned;
 
         let align = AllocSegment::RX.align();
         let base = size_align(base as usize + offset, self.page_size as usize) as u64;
-        let rx_size_elf_aligned = size_align(self.rx.size as usize, align);
-        self.rx.base = base;
-        self.rx.addr = base + offset as u64;
-        self.rx.offset = offset as u64;
-        self.rx.align = align as u32;
+        let rx_size_elf_aligned = size_align(self.segments.rx.size as usize, align);
+        self.segments.rx.base = base;
+        self.segments.rx.addr = base + offset as u64;
+        self.segments.rx.offset = offset as u64;
+        self.segments.rx.align = align as u32;
         log::debug!(
             "RX {:#0x}, {:#0x}, size: {:#0x} {}",
             base,
             offset,
-            self.rx.size,
+            self.segments.rx.size,
             rx_size_elf_aligned
         );
         offset += rx_size_elf_aligned;
 
         let align = AllocSegment::RW.align();
         let base = size_align(base as usize + rx_size_elf_aligned, self.page_size as usize) as u64;
-        let rw_size_elf_aligned = size_align(self.rw.size as usize, align);
-        self.rw.base = base;
-        self.rw.addr = base + offset as u64;
-        self.rw.offset = offset as u64;
-        self.rw.align = align as u32;
+        let rw_size_elf_aligned = size_align(self.segments.rw.size as usize, align);
+        self.segments.rw.base = base;
+        self.segments.rw.addr = base + offset as u64;
+        self.segments.rw.offset = offset as u64;
+        self.segments.rw.align = align as u32;
         log::debug!(
             "RW {:#0x}, {:#0x}, size: {:#0x}",
             base,
             offset,
-            self.rw.size
+            self.segments.rw.size
         );
 
         // set entry point
         for (_name, sym) in &self.sections.rx.symbols {
             if sym.is_start {
-                self.addr_start = self.rx.addr + sym.s.address;
+                self.addr_start = self.segments.rx.addr + sym.s.address;
             }
         }
     }

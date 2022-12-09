@@ -17,16 +17,18 @@ pub struct ProgSymbol {
 }
 
 pub struct ProgSection {
-    pub index: SectionIndex,
+    pub index: Option<SectionIndex>,
     pub kind: AllocSegment,
+    pub addr: u64,
     pub symbols: HashMap<String, ProgSymbol>,
     pub relocations: Vec<CodeRelocation>,
 }
 impl ProgSection {
     pub fn new(kind: AllocSegment) -> Self {
         Self {
-            index: SectionIndex(0),
+            index: None,
             kind,
+            addr: 0,
             symbols: HashMap::new(),
             relocations: vec![],
         }
