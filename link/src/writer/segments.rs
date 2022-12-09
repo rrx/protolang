@@ -4,6 +4,7 @@ pub struct Segments {
     pub ro: Segment,
     pub rx: Segment,
     pub rw: Segment,
+    pub addr_start: u64,
 }
 impl Default for Segments {
     fn default() -> Self {
@@ -11,6 +12,7 @@ impl Default for Segments {
             ro: Segment::new_ro(),
             rw: Segment::new_rw(),
             rx: Segment::new_rx(),
+            addr_start: 0,
         }
     }
 }
@@ -125,6 +127,62 @@ impl Segments {
                     //unimplemented!("Elf({:#x})", x);
                 }
                 _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
+            }
+        }
+    }
+
+    /// update the segments
+    pub fn update(&mut self, base: usize, page_size: usize) {
+        let align = AllocSegment::RO.align();
+        //let base = 0x80000;
+        let mut offset = 0;
+        let ro_size_elf_aligned = size_align(self.ro.size as usize, align);
+        self.ro.base = base as u64;
+        self.ro.addr = base as u64 + offset as u64;
+        self.ro.offset = offset as u64;
+        self.ro.align = align as u32;
+        log::debug!(
+            "RO {:#0x}, {:#0x}, size: {:#0x}",
+            base,
+            offset,
+            self.ro.size
+        );
+        offset += ro_size_elf_aligned;
+
+        let align = AllocSegment::RX.align();
+        let base = size_align(base as usize + offset, page_size) as u64;
+        let rx_size_elf_aligned = size_align(self.rx.size as usize, align);
+        self.rx.base = base;
+        self.rx.addr = base + offset as u64;
+        self.rx.offset = offset as u64;
+        self.rx.align = align as u32;
+        log::debug!(
+            "RX {:#0x}, {:#0x}, size: {:#0x} {}",
+            base,
+            offset,
+            self.rx.size,
+            rx_size_elf_aligned
+        );
+        offset += rx_size_elf_aligned;
+
+        let align = AllocSegment::RW.align();
+        let base = size_align(base as usize + rx_size_elf_aligned, page_size) as u64;
+        let rw_size_elf_aligned = size_align(self.rw.size as usize, align);
+        self.rw.base = base;
+        self.rw.addr = base + offset as u64;
+        self.rw.offset = offset as u64;
+        self.rw.align = align as u32;
+        log::debug!(
+            "RW {:#0x}, {:#0x}, size: {:#0x}",
+            base,
+            offset,
+            self.rw.size
+        );
+
+        // set entry point
+        for (_name, sym) in &self.rx.section.symbols {
+            if sym.is_start {
+                self.addr_start = self.rx.addr + sym.s.address;
             }
         }
     }

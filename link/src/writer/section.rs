@@ -35,6 +35,8 @@ impl ProgSection {
     }
 }
 
+
+/*
 pub struct Sections {
     pub ro: ProgSection,
     pub rw: ProgSection,
@@ -49,3 +51,4 @@ impl Default for Sections {
         }
     }
 }
+*/
