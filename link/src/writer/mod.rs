@@ -793,7 +793,7 @@ impl ElfComponent for BufferSection {
                 data.sections.rw.addr = self.offset as u64;
                 let patch_base = self.buf.as_ptr();
                 let v_base = data.segments.rw.base;
-                for r in data.data_relocs.iter() {
+                for r in data.segments.rw.relocations.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
                     log::debug!(
                         "R-RW: vbase: {:#0x}, addr: {:#0x}, {}",
@@ -808,7 +808,7 @@ impl ElfComponent for BufferSection {
                 data.sections.rx.addr = self.offset as u64;
                 let patch_base = self.buf.as_ptr();
                 let v_base = data.segments.rx.base;
-                for r in data.text_relocs.iter() {
+                for r in data.segments.rx.relocations.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
                     log::debug!(
                         "R-RX: vbase: {:#0x}, addr: {:#0x}, {}",
@@ -866,10 +866,10 @@ pub struct Data {
     is_64: bool,
     //code_segments: Vec<UnlinkedCodeSegment>,
     //data_segments: Vec<UnlinkedCodeSegment>,
-    data_buf: Vec<u8>,
-    text_buf: Vec<u8>,
-    data_relocs: Vec<CodeRelocation>,
-    text_relocs: Vec<CodeRelocation>,
+    //data_buf: Vec<u8>,
+    //text_buf: Vec<u8>,
+    //data_relocs: Vec<CodeRelocation>,
+    //text_relocs: Vec<CodeRelocation>,
     ph: Vec<ProgramHeaderEntry>,
     lib_names: Vec<String>,
     libs: Vec<Library>,
@@ -968,6 +968,7 @@ impl Data {
     }
 
     pub fn new(link: &Link, lib_names: Vec<String>) -> Self {
+        /*
         let mut ro_size = 0;
         let mut rw_size = 0;
         let mut rx_size = 0;
@@ -1006,14 +1007,15 @@ impl Data {
                 _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
             }
         }
+        */
 
         Self {
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
-            data_buf,
-            text_buf,
-            text_relocs,
-            data_relocs,
+            //data_buf,
+            //text_buf,
+            //text_relocs,
+            //data_relocs,
             ph: vec![],
             components: vec![],
             lib_names,
@@ -1151,6 +1153,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         data.add_library(string_id);
     }
 
+    // load bytes and relocations
+    data.segments.load(link);
+
     Data::read_unlinked(link, &mut writer, &mut data.sections);
 
     let mut blocks: Vec<Box<dyn ElfComponent>> = vec![];
@@ -1177,12 +1182,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // .text
     // Add .text section to the text load segment
-    let buf = data.text_buf.clone();
+    let buf = data.segments.rx.bytes.clone();
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
     blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf)));
 
     // .data
-    let buf = data.data_buf.clone();
+    let buf = data.segments.rw.bytes.clone();
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
     blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
 

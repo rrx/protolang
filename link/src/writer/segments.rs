@@ -15,6 +15,47 @@ impl Default for Segments {
     }
 }
 
+impl Segments {
+    pub fn load(&mut self, link: &Link) {
+        let mut ro_size = 0;
+        let mut rw_size = 0;
+        let mut rx_size = 0;
+
+        let mut data_relocs = vec![];
+        let mut text_relocs = vec![];
+        for (_name, unlinked) in link.unlinked.iter() {
+            use object::SectionKind as K;
+            match unlinked.kind {
+                K::Data | K::UninitializedData => {
+                    rw_size += unlinked.bytes.len();
+                    self.rw.bytes.extend(unlinked.bytes.clone());
+                    data_relocs.extend(unlinked.relocations.clone());
+                }
+                K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
+                    ro_size += unlinked.bytes.len();
+                    self.ro.bytes.extend(unlinked.bytes.clone());
+                    data_relocs.extend(unlinked.relocations.clone());
+                }
+                K::Text => {
+                    rx_size += unlinked.bytes.len();
+                    self.rx.bytes.extend(unlinked.bytes.clone());
+                    text_relocs.extend(unlinked.relocations.clone());
+                }
+
+                // ignore for now
+                K::Metadata => (),
+                K::Other => (),
+                K::Note => (),
+                K::Elf(_x) => {
+                    // ignore
+                    //unimplemented!("Elf({:#x})", x);
+                }
+                _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
+            }
+        }
+    }
+}
+
 pub struct Segment {
     pub base: u64,
     pub addr: u64,
@@ -22,6 +63,8 @@ pub struct Segment {
     pub size: usize,
     pub align: u32,
     pub alloc: AllocSegment,
+    pub bytes: Vec<u8>,
+    pub relocations: Vec<CodeRelocation>,
     //pub blocks: Vec<BufferSection>,
     //pub components: Vec<Box<dyn ElfComponent>>,
 }
@@ -35,8 +78,8 @@ impl Segment {
             size: 0,
             alloc: AllocSegment::RO,
             align: 0x1000,
-            //blocks: vec![],
-            //components: vec![],
+            bytes: vec![],
+            relocations: vec![],
         }
     }
 
@@ -48,6 +91,8 @@ impl Segment {
             size: 0,
             alloc: AllocSegment::RW,
             align: 0x1000,
+            bytes: vec![],
+            relocations: vec![],
             //blocks: vec![],
             //components: vec![],
         }
@@ -61,6 +106,8 @@ impl Segment {
             size: 0,
             alloc: AllocSegment::RX,
             align: 0x1000,
+            bytes: vec![],
+            relocations: vec![],
             //blocks: vec![],
             //components: vec![],
         }
@@ -70,3 +117,4 @@ impl Segment {
         self.size = size_align(self.size, align) + size;
     }
 }
+
