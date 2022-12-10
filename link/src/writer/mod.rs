@@ -268,7 +268,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
     blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
 
-
     if data.add_symbols {
         blocks.push(Box::new(SymTabSection::default()));
     }

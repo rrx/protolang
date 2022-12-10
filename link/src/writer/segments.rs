@@ -308,7 +308,10 @@ impl Segment {
         let delta = size_align(size, align);
         eprintln!("x/{:#0x}/{:#0x}", size, delta);
         self.size += delta;
-        eprintln!("add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}", self.alloc, size, before, delta, self.size, align);
+        eprintln!(
+            "add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
+            self.alloc, size, before, delta, self.size, align
+        );
     }
 
     pub fn add_unlinked<'a>(&mut self, unlinked: &'a UnlinkedCodeSegment, w: &mut Writer<'a>) {
