@@ -118,6 +118,7 @@ pub struct DynamicSection {
     start: usize,
     align: usize,
     size: usize,
+    address: u64,
 }
 impl Default for DynamicSection {
     fn default() -> Self {
@@ -126,6 +127,7 @@ impl Default for DynamicSection {
             start: 0,
             size: 0,
             align: 0x10,
+            address: 0,
         }
     }
 }
@@ -161,11 +163,11 @@ impl ElfBlock for DynamicSection {
         // allocate space in the rw segment
         //data.segments.rw.size += after - self.start;
         //data.segments.rw.add_data(self.size, self.align);
-        data.segments.rw.add_data(after, 1);
+        data.segments.rw.add_data(after - before, 1);
     }
 
     fn update(&mut self, data: &mut Data) {
-        data.addr_dynamic = data.segments.rw.addr;
+        self.address = data.segments.rw.base + self.start as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -187,7 +189,7 @@ impl ElfBlock for DynamicSection {
     }
 
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
-        w.write_dynamic_section_header(data.addr_dynamic);
+        w.write_dynamic_section_header(self.address);
     }
 }
 
@@ -581,7 +583,7 @@ impl ElfBlock for BufferSection {
                     p_type: elf::PT_INTERP,
                     p_flags: elf::PF_R,
                     p_offset: data.addr_interp,
-                    p_vaddr: data.addr_interp,
+                    p_vaddr: data.segments.ro.base + data.addr_interp,
                     p_paddr: 0,
                     p_filesz: cstr_size as u64,
                     p_memsz: cstr_size as u64,
@@ -657,13 +659,19 @@ impl ElfBlock for BufferSection {
         let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
         let start = w.reserved_len();
-        let end = w.reserve(self.buf.len(), align);
+        w.reserve(self.buf.len(), align);
+        let after = w.reserved_len();
         self.size = self.buf.len();
         self.offset = start;
+        let delta = after - pos;
         match self.alloc {
-            AllocSegment::RO | AllocSegment::Interp => data.segments.ro.add_data(self.size, align),
-            AllocSegment::RW => data.segments.rw.add_data(self.size, align),
-            AllocSegment::RX => data.segments.rx.add_data(self.size, align),
+            //AllocSegment::RO | AllocSegment::Interp => data.segments.ro.add_data(self.size, align),
+            AllocSegment::RO | AllocSegment::Interp => data.segments.ro.add_data(delta, 1),
+            //AllocSegment::RW => data.segments.rw.add_data(self.size, align),
+            AllocSegment::RW => data.segments.rw.add_data(delta, 1),
+            //AllocSegment::RW => data.segments.rw.size += end - pos,
+            //AllocSegment::RX => data.segments.rx.add_data(self.size, align),
+            AllocSegment::RX => data.segments.rx.add_data(delta, 1),
         };
 
         if self.alloc == AllocSegment::Interp {
@@ -686,7 +694,7 @@ impl ElfBlock for BufferSection {
             AllocSegment::RX => &data.segments.rx,
         };
 
-        self.offset = segment.offset as usize;
+        //self.offset = segment.offset as usize;
         self.base = segment.base as usize;
         self.addr = segment.base as usize + self.offset;
 

@@ -4,9 +4,17 @@ write: functions
 	RUST_LOG=debug cargo run --example write
 	readelf -a tmp/static.exe
 	objdump -D tmp/static.exe
-	#readelf -s tmp/out.exe
-	objdump -t tmp/static.exe
+	#readelf -s tmp/static.exe
+	#objdump -t tmp/static.exe
 	exec tmp/static.exe
+
+dynamic: functions
+	RUST_LOG=debug cargo run --example write_dynamic
+	readelf -a tmp/dynamic.exe
+	objdump -D tmp/dynamic.exe
+	#readelf -s tmp/out.exe
+	#objdump -t tmp/static.exe
+	exec tmp/dynamic.exe
 
 read:
 	elfcat tmp/out.exe

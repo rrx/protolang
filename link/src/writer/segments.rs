@@ -6,6 +6,7 @@ pub struct Segments {
     pub rx: Segment,
     pub rw: Segment,
     pub addr_start: u64,
+    file_offset: u64,
 }
 impl Default for Segments {
     fn default() -> Self {
@@ -14,11 +15,20 @@ impl Default for Segments {
             rw: Segment::new_rw(),
             rx: Segment::new_rx(),
             addr_start: 0,
+            file_offset: 0,
         }
     }
 }
 
 impl Segments {
+    pub fn add_file_offset(&mut self, offset: u64) {
+        self.file_offset += offset;
+    }
+
+    pub fn file_offset(&self) -> u64 {
+        self.file_offset
+    }
+
     pub fn load<'a>(&mut self, link: &'a Link, w: &mut Writer<'a>) {
         for (_name, unlinked) in link.unlinked.iter() {
             use object::SectionKind as K;
@@ -177,12 +187,14 @@ impl Segments {
         self.ro.offset = offset as u64;
         self.ro.align = align as u32;
         log::debug!(
-            "RO base:{:#0x}, offset:{:#0x}, size:{:#0x}",
+            "RO base:{:#0x}, offset:{:#0x}, size:{:#0x}, fo:{:#0x}",
             base,
             offset,
-            self.ro.size
+            self.ro.size,
+            self.file_offset()
         );
         offset += ro_size_elf_aligned;
+        self.add_file_offset(self.ro.size as u64);
 
         let align = AllocSegment::RX.align();
         let base = size_align(base as usize + offset, page_size) as u64;
@@ -192,13 +204,15 @@ impl Segments {
         self.rx.offset = offset as u64;
         self.rx.align = align as u32;
         log::debug!(
-            "RX base:{:#0x}, offset:{:#0x}, size:{:#0x} {}",
+            "RX base:{:#0x}, offset:{:#0x}, size:{:#0x} {}, fo:{:#0x}",
             base,
             offset,
             self.rx.size,
-            rx_size_elf_aligned
+            rx_size_elf_aligned,
+            self.file_offset()
         );
         offset += rx_size_elf_aligned;
+        self.add_file_offset(self.rx.size as u64);
 
         let align = AllocSegment::RW.align();
         let base = size_align(base as usize + rx_size_elf_aligned, page_size) as u64;
@@ -208,11 +222,13 @@ impl Segments {
         self.rw.offset = offset as u64;
         self.rw.align = align as u32;
         log::debug!(
-            "RW base:{:#0x}, offset:{:#0x}, size:{:#0x}",
+            "RW base:{:#0x}, offset:{:#0x}, size:{:#0x}, fo:{:#0x}",
             base,
             offset,
-            self.rw.size
+            self.rw.size,
+            self.file_offset()
         );
+        self.add_file_offset(self.rw.size as u64);
 
         // set entry point
         for (_name, sym) in &self.rx.section.symbols {
@@ -227,7 +243,8 @@ pub struct Segment {
     pub base: u64,
     pub addr: u64,
     pub offset: u64,
-    pub size: usize,
+    size: usize,
+    segment_size: usize,
     pub align: u32,
     pub alloc: AllocSegment,
     pub bytes: Vec<u8>,
@@ -242,6 +259,7 @@ impl Segment {
             addr: 0,
             offset: 0,
             size: 0,
+            segment_size: 0,
             alloc: AllocSegment::RO,
             align: 0x1000,
             bytes: vec![],
@@ -256,6 +274,7 @@ impl Segment {
             addr: 0,
             offset: 0,
             size: 0,
+            segment_size: 0,
             alloc: AllocSegment::RW,
             align: 0x1000,
             bytes: vec![],
@@ -270,6 +289,7 @@ impl Segment {
             addr: 0,
             offset: 0,
             size: 0,
+            segment_size: 0,
             alloc: AllocSegment::RX,
             align: 0x1000,
             bytes: vec![],
@@ -284,23 +304,27 @@ impl Segment {
 
     pub fn add_data(&mut self, size: usize, align: usize) {
         // set size to match the offset size
-        self.size = size_align(self.size, align) + size;
+        let before = self.size;
+        let delta = size_align(size, align);
+        eprintln!("x/{:#0x}/{:#0x}", size, delta);
+        self.size += delta;
+        eprintln!("add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}", self.alloc, size, before, delta, self.size, align);
     }
 
     pub fn add_unlinked<'a>(&mut self, unlinked: &'a UnlinkedCodeSegment, w: &mut Writer<'a>) {
-        let base = self.size as u64;
+        //let base = self.size as u64;
         self.bytes.extend(unlinked.bytes.clone());
-        self.size += unlinked.bytes.len();
+        //self.size += unlinked.bytes.len();
         for r in &unlinked.relocations {
             let mut r = r.clone();
-            r.offset += base;
+            r.offset += self.segment_size as u64;
             self.relocations.push(r.clone());
         }
 
         for (name, symbol) in unlinked.defined.iter() {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
-            symbol.address += base;
+            symbol.address += self.segment_size as u64;
             let is_start = name == "_start";
             let ps = ProgSymbol {
                 name_id,
@@ -309,6 +333,7 @@ impl Segment {
             };
             self.section.symbols.insert(name.clone(), ps);
         }
+        self.segment_size += unlinked.bytes.len();
     }
 
     pub fn debug(&self) {
