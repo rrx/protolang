@@ -668,6 +668,9 @@ impl ElfBlock for BufferSection {
         let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
         let start = w.reserved_len();
+
+        //let buf = data.segments.ro.section.bytes.as_slice();
+
         w.reserve(self.buf.len(), align);
         let after = w.reserved_len();
         self.size = self.buf.len();
