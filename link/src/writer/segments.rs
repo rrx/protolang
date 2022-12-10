@@ -26,9 +26,13 @@ impl Segments {
                 K::Data | K::UninitializedData => {
                     self.rw.add_unlinked(unlinked, w);
                 }
-                K::OtherString | K::ReadOnlyString | K::ReadOnlyData => {
-                    //self.ro.add_unlinked(unlinked, w);
-                    // XXX: this is messing things up
+
+                // OtherString is usually comments, we can drop these
+                K::OtherString => (),
+                K::ReadOnlyString | K::ReadOnlyData => {
+                    eprintln!("X:{:?}", (&unlinked.name, &unlinked.kind));
+                    self.ro.add_unlinked(unlinked, w);
+                    // XXX: this can mess things up
                     // it adds things to RO before the text begins and gets confused
                 }
                 K::Text => {
@@ -279,7 +283,7 @@ impl Segment {
     }
 
     pub fn add_data(&mut self, size: usize, align: usize) {
-        // XXX: this should increment size, but it's throwing things out of wack
+        // set size to match the offset size
         self.size = size_align(self.size, align) + size;
     }
 

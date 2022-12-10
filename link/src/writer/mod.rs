@@ -277,7 +277,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // relocations go here
-    blocks.push(Box::new(RelocationSection::default()));
+    if RelocationSection::has_rx_relocs(&data) {
+        blocks.push(Box::new(RelocationSection::new(AllocSegment::RX)));
+    }
+    if RelocationSection::has_rw_relocs(&data) {
+        blocks.push(Box::new(RelocationSection::new(AllocSegment::RW)));
+    }
 
     // shstrtab needs to be allocated last, once all headers are reserved
     if data.add_symbols {
