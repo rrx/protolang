@@ -225,8 +225,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // load bytes and relocations
-    //data.segments.load(link);
-    //data.segments.read_unlinked(link, &mut writer);
     data.segments.load(link, &mut writer);
 
     // configure blocks
@@ -255,7 +253,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // .text
     // Add .text section to the text load segment
-    let buf = data.segments.rx.bytes.clone();
+    let buf = data.segments.rx.section.bytes.clone();
     let name_id = Some(writer.add_section_name(".text".as_bytes()));
     blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf)));
 
@@ -264,7 +262,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // .data
-    let buf = data.segments.rw.bytes.clone();
+    let buf = data.segments.rw.section.bytes.clone();
     let name_id = Some(writer.add_section_name(".data".as_bytes()));
     blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
 

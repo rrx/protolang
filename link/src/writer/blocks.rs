@@ -75,7 +75,11 @@ impl ElfBlock for HeaderComponent {
         let after = w.reserved_len();
         self.size_ph = after - before;
 
-        // add headers to the ro_size
+        // update file offset
+        //data.segments.add_file_offset(self.size_fh as u64);
+        //data.segments.add_file_offset(self.size_ph as u64);
+
+        // add to ro section
         data.segments.ro.add_data(self.size_fh, 0x1);
         data.segments.ro.add_data(self.size_ph, 0x1);
     }
@@ -108,6 +112,7 @@ impl ElfBlock for HeaderComponent {
             });
         }
     }
+
     fn write_section_header(&self, data: &Data, w: &mut Writer) {
         w.write_null_section_header();
     }
@@ -115,19 +120,21 @@ impl ElfBlock for HeaderComponent {
 
 pub struct DynamicSection {
     index: Option<SectionIndex>,
-    start: usize,
+    //start: usize,
     align: usize,
     size: usize,
     address: u64,
+    offset: usize,
 }
 impl Default for DynamicSection {
     fn default() -> Self {
         Self {
             index: None,
-            start: 0,
+            //start: 0,
             size: 0,
             align: 0x10,
             address: 0,
+            offset: 0,
         }
     }
 }
@@ -135,16 +142,16 @@ impl Default for DynamicSection {
 impl ElfBlock for DynamicSection {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         //program DYNAMIC
-        let size = self.size as u64;
-        let addr = data.segments.rw.addr;
+        //let size = self.size as u64;
+        //let addr = data.segments.rw.addr;
         vec![ProgramHeaderEntry {
             p_type: elf::PT_DYNAMIC,
             p_flags: elf::PF_R | elf::PF_W,
-            p_offset: data.segments.rw.offset as u64,
-            p_vaddr: addr,
+            p_offset: self.offset as u64, //data.segments.rw.offset as u64,
+            p_vaddr: self.address,
             p_paddr: 0,
-            p_filesz: size,
-            p_memsz: size,
+            p_filesz: self.size as u64,
+            p_memsz: self.size as u64,
             p_align: self.align as u64,
         }]
     }
@@ -155,19 +162,20 @@ impl ElfBlock for DynamicSection {
     fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
         let before = w.reserved_len();
-        self.start = size_align(before, self.align);
-        w.reserve_until(self.start);
+        self.offset = size_align(before, self.align);
+        w.reserve_until(self.offset);
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
-        self.size = after - before;
+        self.size = after - self.offset;
         // allocate space in the rw segment
         //data.segments.rw.size += after - self.start;
         //data.segments.rw.add_data(self.size, self.align);
         data.segments.rw.add_data(after - before, 1);
+        //data.segments.add_file_offset((after - before) as u64);
     }
 
     fn update(&mut self, data: &mut Data) {
-        self.address = data.segments.rw.base + self.start as u64;
+        self.address = data.segments.rw.base + self.offset as u64;
     }
 
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
@@ -212,10 +220,10 @@ impl RelocationSection {
         }
     }
     pub fn has_rx_relocs(data: &Data) -> bool {
-        data.segments.rx.relocations.len() > 0
+        data.segments.rx.section.relocations.len() > 0
     }
     pub fn has_rw_relocs(data: &Data) -> bool {
-        data.segments.rx.relocations.len() > 0
+        data.segments.rw.section.relocations.len() > 0
     }
 }
 
@@ -253,8 +261,8 @@ impl ElfBlock for RelocationSection {
     fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
         w.write_align_relocation();
         let maybe_relocations = match self.alloc {
-            AllocSegment::RX => Some(&data.segments.rx.relocations),
-            AllocSegment::RW => Some(&data.segments.rw.relocations),
+            AllocSegment::RX => Some(&data.segments.rx.section.relocations),
+            AllocSegment::RW => Some(&data.segments.rw.section.relocations),
             _ => None,
         };
 
@@ -289,7 +297,7 @@ impl ElfBlock for RelocationSection {
                 *index,
                 data.index_symtab.unwrap(),
                 self.offset,
-                data.segments.rx.relocations.len(),
+                data.segments.rx.section.relocations.len(),
                 true,
             );
         }
@@ -460,6 +468,7 @@ impl ElfBlock for DynSymSection {
         let after = w.reserved_len();
         //data.segments.ro.size += after - pos;
         data.segments.ro.add_data(after - pos, 1);
+        //data.segments.add_file_offset((after - pos) as u64);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -715,7 +724,7 @@ impl ElfBlock for BufferSection {
                 //data.segments.rw.addr = self.offset as u64;
                 let patch_base = self.buf.as_ptr();
                 let v_base = data.segments.rw.base;
-                for r in data.segments.rw.relocations.iter() {
+                for r in data.segments.rw.section.relocations.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
                     log::debug!(
                         "R-RW: vbase: {:#0x}, addr: {:#0x}, {}",
@@ -730,7 +739,7 @@ impl ElfBlock for BufferSection {
                 //data.segments.rx.addr = self.offset as u64;
                 let patch_base = self.buf.as_ptr();
                 let v_base = data.segments.rx.base;
-                for r in data.segments.rx.relocations.iter() {
+                for r in data.segments.rx.section.relocations.iter() {
                     let addr = *pointers.get(&r.name).unwrap();
                     log::debug!(
                         "R-RX: vbase: {:#0x}, addr: {:#0x}, {}",
