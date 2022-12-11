@@ -80,7 +80,7 @@ struct Dynamic {
     string: Option<object::write::StringId>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AllocSegment {
     Interp,
     RO,
@@ -109,6 +109,7 @@ pub struct Data {
     libs: Vec<Library>,
     page_size: u32,
     segments: Segments,
+    tracker: SegmentTracker,
     addr_dynamic: u64,
     addr_dynstr: u64,
     addr_dynsym: u64,
@@ -131,6 +132,7 @@ impl Data {
             libs: vec![],
             page_size: 0x1000,
             segments: Segments::default(),
+            tracker: SegmentTracker::new(0x80000),
             addr_dynamic: 0,
             addr_dynstr: 0,
             addr_dynsym: 0,
@@ -234,13 +236,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     blocks.push(Box::new(HeaderComponent::default()));
 
     if data.is_dynamic() {
-        let name_id = writer.add_section_name(".interp".as_bytes());
-        let buf = data.interp.as_bytes().to_vec();
-        blocks.push(Box::new(BufferSection::new(
-            AllocSegment::Interp,
-            Some(name_id),
-            buf.to_vec(),
-        )));
+        blocks.push(Box::new(InterpSection::new(&data)));
     }
 
     if writer.dynstr_needed() {

@@ -82,6 +82,9 @@ impl ElfBlock for HeaderComponent {
         // add to ro section
         data.segments.ro.add_data(self.size_fh, 0x1);
         data.segments.ro.add_data(self.size_ph, 0x1);
+
+        data.tracker.add_data(AllocSegment::RO, self.size_fh);
+        data.tracker.add_data(AllocSegment::RO, self.size_ph);
     }
 
     fn update(&mut self, data: &mut Data) {}
@@ -172,6 +175,9 @@ impl ElfBlock for DynamicSection {
         //data.segments.rw.add_data(self.size, self.align);
         data.segments.rw.add_data(after - before, 1);
         //data.segments.add_file_offset((after - before) as u64);
+        //
+
+        data.tracker.add_data(AllocSegment::RW, after - before);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -243,6 +249,7 @@ impl ElfBlock for RelocationSection {
     }
 
     fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+        let before = w.reserved_len();
         match self.alloc {
             AllocSegment::RX => {
                 self.offset =
@@ -254,6 +261,8 @@ impl ElfBlock for RelocationSection {
             }
             _ => (),
         }
+        let after = w.reserved_len();
+        data.tracker.add_data(AllocSegment::RO, after - before);
     }
 
     fn update(&mut self, data: &mut Data) {}
@@ -469,6 +478,7 @@ impl ElfBlock for DynSymSection {
         //data.segments.ro.size += after - pos;
         data.segments.ro.add_data(after - pos, 1);
         //data.segments.add_file_offset((after - pos) as u64);
+        data.tracker.add_data(AllocSegment::RO, after - pos);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -515,6 +525,7 @@ impl ElfBlock for DynStrSection {
         let after = w.reserved_len();
         //data.segments.ro.size += after - pos;
         data.segments.ro.add_data(after - pos, 1);
+        data.tracker.add_data(AllocSegment::RO, after - pos);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -557,6 +568,97 @@ impl ElfBlock for ShStrTabSection {
     }
 }
 
+use std::ffi::CString;
+pub struct InterpSection {
+    alloc: AllocSegment,
+    name_id: Option<StringId>,
+    cstr: CString,
+    offset: usize,
+}
+
+impl InterpSection {
+    pub fn new(data: &Data) -> Self {
+        let interp = data.interp.as_bytes().to_vec();
+        let cstr = std::ffi::CString::new(interp).unwrap();
+        Self {
+            alloc: AllocSegment::RO,
+            cstr,
+            name_id: None,
+            offset: 0,
+        }
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.cstr.as_bytes_with_nul()
+    }
+}
+
+impl ElfBlock for InterpSection {
+    fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
+        let buf = self.as_slice();
+        vec![ProgramHeaderEntry {
+            p_type: elf::PT_INTERP,
+            p_flags: elf::PF_R,
+            p_offset: data.addr_interp,
+            p_vaddr: data.segments.ro.base + data.addr_interp,
+            p_paddr: 0,
+            p_filesz: buf.len() as u64,
+            p_memsz: buf.len() as u64,
+            p_align: self.alloc.align() as u64,
+        }]
+    }
+
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+        self.name_id = Some(w.add_section_name(".interp".as_bytes()));
+        let index = w.reserve_section_index();
+    }
+
+    fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+        let align = self.alloc.align();
+        let pos = w.reserved_len();
+        let align_pos = size_align(pos, align);
+        w.reserve_until(align_pos);
+        self.offset = w.reserved_len();
+
+        let buf = self.as_slice();
+        w.reserve(buf.len(), align);
+        let after = w.reserved_len();
+        //self.size = self.buf.len();
+        //self.offset = start;
+        let delta = after - pos;
+        data.segments.ro.add_data(delta, 1);
+        data.tracker.add_data(AllocSegment::RO, delta);
+    }
+
+    fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.alloc.align());
+        w.pad_until(aligned_pos);
+        w.write(self.as_slice());
+    }
+
+    fn update(&mut self, data: &mut Data) {
+        data.addr_interp = self.offset as u64;
+    }
+
+    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+        if let Some(name_id) = self.name_id {
+            w.write_section_header(&object::write::elf::SectionHeader {
+                name: Some(name_id),
+                sh_type: elf::SHT_PROGBITS,
+                sh_flags: self.alloc.flags() as u64,
+                sh_addr: self.offset as u64,
+                sh_offset: self.offset as u64,
+                sh_info: 0,
+                sh_link: 0,
+                sh_entsize: 0,
+                sh_addralign: self.alloc.align() as u64,
+                sh_size: self.as_slice().len() as u64,
+            });
+        }
+    }
+}
+
 pub struct BufferSection {
     alloc: AllocSegment,
     name_id: Option<StringId>,
@@ -584,22 +686,6 @@ impl BufferSection {
 impl ElfBlock for BufferSection {
     fn program_header(&self, data: &Data) -> Vec<ProgramHeaderEntry> {
         match self.alloc {
-            AllocSegment::Interp => {
-                let interp = data.interp.as_bytes().to_vec();
-                let cstr = std::ffi::CString::new(interp).unwrap();
-                let cstr_size = cstr.as_bytes_with_nul().len();
-                vec![ProgramHeaderEntry {
-                    p_type: elf::PT_INTERP,
-                    p_flags: elf::PF_R,
-                    p_offset: data.addr_interp,
-                    p_vaddr: data.segments.ro.base + data.addr_interp,
-                    p_paddr: 0,
-                    p_filesz: cstr_size as u64,
-                    p_memsz: cstr_size as u64,
-                    p_align: self.alloc.align() as u64,
-                }]
-            }
-
             AllocSegment::RO => {
                 // load segments
                 // program LOAD (R)
@@ -646,6 +732,7 @@ impl ElfBlock for BufferSection {
                     p_align: data.page_size as u64,
                 }]
             }
+            _ => unimplemented!(),
         }
     }
 
@@ -685,10 +772,11 @@ impl ElfBlock for BufferSection {
             //AllocSegment::RX => data.segments.rx.add_data(self.size, align),
             AllocSegment::RX => data.segments.rx.add_data(delta, 1),
         };
+        data.tracker.add_data(self.alloc, delta);
 
-        if self.alloc == AllocSegment::Interp {
-            data.addr_interp = start as u64;
-        }
+        //if self.alloc == AllocSegment::Interp {
+        //data.addr_interp = start as u64;
+        //}
 
         //log::debug!(
         //"reserve: pos: {:#0x}, start: {:#0x}, end: {:#0x}, size: {:#0x}",

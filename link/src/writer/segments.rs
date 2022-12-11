@@ -1,6 +1,61 @@
 use super::*;
 use capstone::prelude::*;
 
+pub struct SegmentTracker {
+    segments: Vec<Segment>,
+    base: usize,
+    page_size: usize,
+    //blocks: Vec<Box<dyn ElfBlock>>
+}
+
+impl SegmentTracker {
+    pub fn new(base: usize) -> Self {
+        Self {
+            segments: vec![],
+            base,
+            page_size: 0x1000,
+        }
+    }
+
+    pub fn current(&self) -> &Segment {
+        self.segments.last().unwrap()
+    }
+
+    pub fn current_mut(&mut self) -> &mut Segment {
+        self.segments.last_mut().unwrap()
+    }
+
+    // add non-section data
+    pub fn add_data(&mut self, alloc: AllocSegment, size: usize) {
+        if self.segments.len() == 0 {
+            self.segments.push(Segment::new(alloc));
+        }
+
+        let c = self.current();
+        if alloc != c.alloc {
+            let base = size_align(self.base + c.size(), self.page_size) as u64;
+            let mut segment = Segment::new(alloc);
+            segment.base = base;
+            self.segments.push(segment);
+        }
+        self.current_mut().add_data(size, alloc.align());
+    }
+
+    pub fn write_symbols(&self, w: &mut Writer) {
+        for s in self.segments.iter() {
+            s.write_symbols(w);
+        }
+    }
+
+    //pub fn add_block(&mut self, block: Box<dyn ElfBlock>) {
+    //self.blocks.push(block);
+    //}
+}
+
+pub fn update_blocks(tracker: &mut SegmentTracker, blocks: &mut Vec<Box<dyn ElfBlock>>) {
+    for block in blocks {}
+}
+
 pub struct Segments {
     pub ro: Segment,
     pub rx: Segment,
@@ -11,9 +66,9 @@ pub struct Segments {
 impl Default for Segments {
     fn default() -> Self {
         Self {
-            ro: Segment::new_ro(),
-            rw: Segment::new_rw(),
-            rx: Segment::new_rx(),
+            ro: Segment::new(AllocSegment::RO),
+            rw: Segment::new(AllocSegment::RW),
+            rx: Segment::new(AllocSegment::RX),
             addr_start: 0,
             file_offset: 0,
         }
@@ -27,6 +82,12 @@ impl Segments {
 
     pub fn file_offset(&self) -> u64 {
         self.file_offset
+    }
+
+    pub fn write_symbols(&self, w: &mut Writer) {
+        self.ro.write_symbols(w);
+        self.rx.write_symbols(w);
+        self.rw.write_symbols(w);
     }
 
     pub fn load<'a>(&mut self, link: &'a Link, w: &mut Writer<'a>) {
@@ -128,59 +189,31 @@ pub struct Segment {
     pub base: u64,
     pub addr: u64,
     pub offset: u64,
-    //size: usize,
     segment_size: usize,
     pub align: u32,
     pub alloc: AllocSegment,
-    //pub bytes: Vec<u8>,
-    //pub relocations: Vec<CodeRelocation>,
     pub section: ProgSection,
+    pub sections: Vec<ProgSection>,
 }
 
 impl Segment {
-    pub fn new_ro() -> Self {
+    pub fn new(alloc: AllocSegment) -> Self {
         Self {
             base: 0,
             addr: 0,
             offset: 0,
-            //size: 0,
             segment_size: 0,
-            alloc: AllocSegment::RO,
+            alloc,
             align: 0x1000,
-            //bytes: vec![],
-            //relocations: vec![],
-            section: ProgSection::new(AllocSegment::RO, None),
+            section: ProgSection::new(alloc, None, 1, 0),
+            sections: vec![],
         }
     }
 
-    pub fn new_rw() -> Self {
-        Self {
-            base: 0,
-            addr: 0,
-            offset: 0,
-            //size: 0,
-            segment_size: 0,
-            alloc: AllocSegment::RW,
-            align: 0x1000,
-            //bytes: vec![],
-            //relocations: vec![],
-            section: ProgSection::new(AllocSegment::RW, Some(".data".to_string())),
-        }
-    }
-
-    pub fn new_rx() -> Self {
-        Self {
-            base: 0,
-            addr: 0,
-            offset: 0,
-            //size: 0,
-            segment_size: 0,
-            alloc: AllocSegment::RX,
-            align: 0x1000,
-            //bytes: vec![],
-            //relocations: vec![],
-            section: ProgSection::new(AllocSegment::RX, Some(".text".to_string())),
-        }
+    pub fn add_section(&mut self, section: ProgSection) {
+        let start = size_align(self.segment_size, section.align);
+        self.segment_size = start + section.size();
+        self.sections.push(section);
     }
 
     pub fn size(&self) -> usize {
@@ -199,36 +232,6 @@ impl Segment {
         );
     }
 
-    /*
-    fn append_section<'a>(&mut self, unlinked: &'a UnlinkedCodeSegment, w: &mut Writer<'a>) {
-        //let base = self.size as u64;
-        self.bytes.extend(unlinked.bytes.clone());
-        //self.size += unlinked.bytes.len();
-        for r in &unlinked.relocations {
-            let mut r = r.clone();
-            r.offset += self.segment_size as u64;
-            self.relocations.push(r.clone());
-        }
-
-        for (name, symbol) in unlinked.defined.iter() {
-            let name_id = Some(w.add_string(name.as_bytes()));
-            let mut symbol = symbol.clone();
-            symbol.address += self.segment_size as u64;
-            let is_start = name == "_start";
-            let ps = ProgSymbol {
-                name_id,
-                is_start,
-                s: symbol,
-            };
-            self.section.symbols.insert(name.clone(), ps);
-        }
-        self.add_data(unlinked.bytes.len(), 0x1);
-        //self.segment_size += unlinked.bytes.len();
-        self.section.size += unlinked.bytes.len() as u64;
-
-    }
-    */
-
     pub fn debug(&self) {
         eprintln!(
             "Segment: {:?} base:{:#0x}, offset:{:#0x}, size:{:#0x} ({})",
@@ -240,7 +243,9 @@ impl Segment {
         );
         eprintln!(
             "Section: {:?}, size:{:#0x} ({})",
-            self.section.name, self.section.size, self.section.size
+            self.section.name,
+            self.section.bytes.len(),
+            self.section.bytes.len()
         );
 
         for (name, s) in &self.section.symbols {
@@ -250,23 +255,16 @@ impl Segment {
     }
 
     pub fn disassemble_code(&self) {
-        let buf = &self.section.bytes.as_slice()[0..self.size()];
-        let cs = capstone::Capstone::new()
-            .x86()
-            .mode(arch::x86::ArchMode::Mode64)
-            .syntax(arch::x86::ArchSyntax::Att)
-            .detail(true)
-            .build()
-            .unwrap();
-        let insts = cs.disasm_all(&buf, 0).expect("disassemble");
-        for instr in insts.as_ref() {
-            let addr = instr.address() as usize;
-            eprintln!(
-                "  {:#06x} {}\t\t{}",
-                &addr,
-                instr.mnemonic().expect("no mnmemonic found"),
-                instr.op_str().expect("no op_str found")
-            );
+        self.section.disassemble_code();
+        for s in self.sections.iter() {
+            s.disassemble_code();
+        }
+    }
+
+    pub fn write_symbols(&self, w: &mut Writer) {
+        self.section.write_symbols(self.base, w);
+        for s in self.sections.iter() {
+            s.write_symbols(self.base, w);
         }
     }
 }
