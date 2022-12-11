@@ -17,6 +17,7 @@ use blocks::*;
 use section::*;
 use segments::*;
 
+#[derive(Debug)]
 pub struct ProgramHeaderEntry {
     p_type: u32,
     p_flags: u32,
@@ -89,11 +90,18 @@ pub enum AllocSegment {
 }
 
 impl AllocSegment {
-    pub fn flags(&self) -> u32 {
+    pub fn section_header_flags(&self) -> u32 {
         match self {
             AllocSegment::RO | AllocSegment::Interp => elf::SHF_ALLOC,
             AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
             AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
+        }
+    }
+    pub fn program_header_flags(&self) -> u32 {
+        match self {
+            AllocSegment::RO | AllocSegment::Interp => elf::PF_R,
+            AllocSegment::RW => elf::PF_R | elf::PF_W,
+            AllocSegment::RX => elf::PF_R | elf::PF_X,
         }
     }
     pub fn align(&self) -> usize {
@@ -108,7 +116,7 @@ pub struct Data {
     lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
-    segments: Segments,
+    //segments: Segments,
     tracker: SegmentTracker,
     addr_dynamic: u64,
     addr_dynstr: u64,
@@ -131,7 +139,7 @@ impl Data {
             lib_names,
             libs: vec![],
             page_size: 0x1000,
-            segments: Segments::default(),
+            //segments: Segments::default(),
             tracker: SegmentTracker::new(0x80000),
             addr_dynamic: 0,
             addr_dynstr: 0,
@@ -203,11 +211,98 @@ impl Data {
         }
 
         // load bytes and relocations
-        self.segments.load(link, &mut writer);
+        //self.segments.load(link, &mut writer);
         //self.segments.load(link);
         //self.segments.read_unlinked(link, &mut writer);
 
-        self.segments.rx.debug();
+        //self.segments.rx.debug();
+    }
+}
+
+pub fn load<'a>(
+    blocks: &mut Vec<Box<dyn ElfBlock>>,
+    data: &mut Data,
+    link: &'a Link,
+    w: &mut Writer<'a>,
+) {
+    let mut ro = vec![];
+    let mut rw = vec![];
+    let mut rx = vec![];
+
+    for (_name, unlinked) in link.unlinked.iter() {
+        use object::SectionKind as K;
+        match unlinked.kind {
+            K::Data | K::UninitializedData => {
+                rw.push(unlinked);
+            }
+
+            // OtherString is usually comments, we can drop these
+            K::OtherString => (),
+            K::ReadOnlyString | K::ReadOnlyData => {
+                eprintln!("X:{:?}", (&unlinked.name, &unlinked.kind));
+                ro.push(unlinked);
+                // XXX: this can mess things up
+                // it adds things to RO before the text begins and gets confused
+            }
+            K::Text => {
+                rx.push(unlinked);
+            }
+
+            // ignore for now
+            K::Metadata => (),
+            K::Other => (),
+            K::Note => (),
+            K::Elf(_x) => {
+                // ignore
+                //unimplemented!("Elf({:#x})", x);
+            }
+            _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
+        }
+    }
+
+    if rx.len() > 0 {
+        //let name_id = Some(w.add_section_name(".text".as_bytes()));
+        let mut section = ProgSection::new(AllocSegment::RX, Some(".text".to_string()), 0);
+        for u in rx.clone() {
+            section.append(&u, w);
+        }
+        //data.tracker.
+        eprintln!("s: {:?}", &section.name);
+        //blocks.push(Box::new(section));
+        let buf = section.bytes.clone();
+        let name_id = Some(w.add_section_name(".text".as_bytes()));
+        let mut block = BufferSection::new(AllocSegment::RX, name_id, buf, section);
+        //for u in rx {
+        //block.unlinked.push(u.clone());
+        //}
+        //block.unlinked.extend(rx);
+        blocks.push(Box::new(block));
+    }
+
+    if ro.len() > 0 {
+        let mut section = ProgSection::new(AllocSegment::RO, Some(".rodata".to_string()), 0);
+        for u in ro {
+            section.append(&u, w);
+        }
+        eprintln!("s: {:?}", &section.name);
+        blocks.push(Box::new(section));
+    }
+
+    if rw.len() > 0 {
+        let mut section = ProgSection::new(AllocSegment::RW, Some(".data".to_string()), 0);
+        for u in rw.clone() {
+            section.append(&u, w);
+        }
+        eprintln!("s: {:?}", &section.name);
+        //blocks.push(Box::new(section));
+        let buf = section.bytes.clone();
+        let name_id = Some(w.add_section_name(".data".as_bytes()));
+        let mut block = BufferSection::new(AllocSegment::RW, name_id, buf, section);
+        //for u in rw {
+        //block.unlinked.push(u.clone());
+        //}
+        blocks.push(Box::new(block));
+        //blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
     }
 }
 
@@ -227,7 +322,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // load bytes and relocations
-    data.segments.load(link, &mut writer);
+    //data.segments.load(link, &mut writer);
 
     // configure blocks
     // these are used to correctly order the reservation of space
@@ -239,6 +334,34 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.push(Box::new(InterpSection::new(&data)));
     }
 
+    // relocations go here
+    if RelocationSection::has_rx_relocs(&data) {
+        blocks.push(Box::new(RelocationSection::new(AllocSegment::RX)));
+    }
+    if RelocationSection::has_rw_relocs(&data) {
+        blocks.push(Box::new(RelocationSection::new(AllocSegment::RW)));
+    }
+
+    //let mut b2 = vec![];
+
+    /*
+    if false {
+    // .text
+    // Add .text section to the text load segment
+    let buf = data.segments.rx.section.bytes.clone();
+    let name_id = Some(writer.add_section_name(".text".as_bytes()));
+    blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf)));
+
+    // .data
+    let buf = data.segments.rw.section.bytes.clone();
+    let name_id = Some(writer.add_section_name(".data".as_bytes()));
+    blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
+    } else {
+        load(&mut blocks, link, &mut writer);
+    }
+    */
+    load(&mut blocks, &mut data, link, &mut writer);
+
     if writer.dynstr_needed() {
         blocks.push(Box::new(DynStrSection::default()));
     }
@@ -247,20 +370,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.push(Box::new(DynSymSection::default()));
     }
 
-    // .text
-    // Add .text section to the text load segment
-    let buf = data.segments.rx.section.bytes.clone();
-    let name_id = Some(writer.add_section_name(".text".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf)));
-
     if data.is_dynamic() {
         blocks.push(Box::new(DynamicSection::default()));
     }
-
-    // .data
-    let buf = data.segments.rw.section.bytes.clone();
-    let name_id = Some(writer.add_section_name(".data".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
 
     if data.add_symbols {
         blocks.push(Box::new(SymTabSection::default()));
@@ -270,17 +382,17 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.push(Box::new(StrTabSection::default()));
     }
 
-    // relocations go here
-    if RelocationSection::has_rx_relocs(&data) {
-        blocks.push(Box::new(RelocationSection::new(AllocSegment::RX)));
-    }
-    if RelocationSection::has_rw_relocs(&data) {
-        blocks.push(Box::new(RelocationSection::new(AllocSegment::RW)));
-    }
-
     // shstrtab needs to be allocated last, once all headers are reserved
     if data.add_symbols {
         blocks.push(Box::new(ShStrTabSection::default()));
+    }
+
+    // build a list of sections that are loaded
+    let mut tracker = SegmentTracker::new(0);
+    for b in blocks.iter() {
+        if let Some(alloc) = b.alloc() {
+            tracker.add_data(alloc, 1, 0);
+        }
     }
 
     // RESERVE
@@ -291,6 +403,11 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut ph = vec![];
     for b in blocks.iter() {
         ph.extend(b.program_header(&data));
+    }
+    ph.extend(tracker.program_headers());
+
+    for p in ph.iter() {
+        eprintln!("P: {:?}", p);
     }
 
     // section headers are optional
@@ -310,7 +427,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // UPDATE
 
-    data.segments.update(0x80000, 0x1000);
+    //data.segments.update(0x80000, 0x1000);
+    data.tracker.update();
+    data.tracker.apply_relocations();
 
     for b in blocks.iter_mut() {
         b.update(&mut data);
@@ -323,6 +442,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut ph = vec![];
     for b in blocks.iter() {
         ph.extend(b.program_header(&data));
+    }
+    ph.extend(data.tracker.program_headers());
+    for p in ph.iter() {
+        eprintln!("P: {:?}", p);
     }
 
     for b in blocks.iter_mut() {
