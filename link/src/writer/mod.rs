@@ -121,12 +121,19 @@ pub struct Data {
     //tracker: SegmentTracker,
     addr_dynamic: u64,
     addr_dynstr: u64,
+    size_dynstr: usize,
     addr_dynsym: u64,
+    size_dynsym: usize,
+    addr_reladyn: u64,
+    size_reladyn: usize,
+    addr_hash: u64,
+
     //addr_interp: u64,
     index_strtab: Option<SectionIndex>,
     index_symtab: Option<SectionIndex>,
     index_dynstr: Option<SectionIndex>,
     index_dynsym: Option<SectionIndex>,
+    index_dynamic: Option<SectionIndex>,
     add_section_headers: bool,
     add_symbols: bool,
     debug: bool,
@@ -145,12 +152,18 @@ impl Data {
             //tracker: SegmentTracker::new(0x80000),
             addr_dynamic: 0,
             addr_dynstr: 0,
+            size_dynstr: 0,
             addr_dynsym: 0,
+            size_dynsym: 0,
+            addr_reladyn: 0,
+            size_reladyn: 0,
+            addr_hash: 0,
             //addr_interp: 0,
             index_strtab: None,
             index_symtab: None,
             index_dynstr: None,
             index_dynsym: None,
+            index_dynamic: None,
             add_section_headers: true,
             add_symbols: true,
             debug: true,
@@ -174,21 +187,40 @@ impl Data {
                 string: Some(lib.string_id),
             });
         }
-
         out.push(Dynamic {
-            tag: elf::DT_DEBUG,
-            val: 0,
+            tag: elf::DT_HASH,
+            val: self.addr_hash,
             string: None,
         });
-
+        out.push(Dynamic {
+            tag: elf::DT_STRTAB,
+            val: self.addr_dynstr,
+            string: None,
+        });
         out.push(Dynamic {
             tag: elf::DT_SYMTAB,
             val: self.addr_dynsym,
             string: None,
         });
         out.push(Dynamic {
-            tag: elf::DT_STRTAB,
-            val: self.addr_dynstr,
+            tag: elf::DT_RELA,
+            val: self.addr_reladyn,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_RELASZ,
+            val: self.size_reladyn as u64,
+            string: None,
+        });
+
+        out.push(Dynamic {
+            tag: elf::DT_STRSZ,
+            val: self.size_dynstr as u64,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_DEBUG,
+            val: 0,
             string: None,
         });
 
@@ -349,12 +381,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         }
     }
 
+    blocks.add_block(Box::new(HashSection::default()));
     if writer.dynstr_needed() {
         blocks.add_block(Box::new(DynStrSection::default()));
     }
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynSymSection::default()));
+        blocks.add_block(Box::new(RelaDynSection::default()));
     }
 
     // relocations go here
@@ -366,7 +400,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     load(&mut blocks, link, &mut writer);
-
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));

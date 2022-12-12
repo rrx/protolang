@@ -1,5 +1,5 @@
 use object::elf;
-use object::write::elf::{SectionIndex, Writer};
+use object::write::elf::{SectionIndex, Sym, Writer};
 use object::write::StringId;
 use std::collections::HashMap;
 
@@ -8,8 +8,68 @@ use super::*;
 #[derive(Debug)]
 pub struct ProgSymbol {
     pub name_id: Option<StringId>,
-    pub is_start: bool,
+    //pub is_start: bool,
     pub s: CodeSymbol,
+}
+
+impl ProgSymbol {
+    pub fn new_object(name: &str, index: SectionIndex) -> Self {
+        Self {
+            name_id: None,
+            s: CodeSymbol {
+                name: name.to_string(),
+                size: 0,
+                address: 0,
+                kind: CodeSymbolKind::Data,
+                def: CodeSymbolDefinition::Defined,
+                st_info: 0,
+                st_other: 0,
+            },
+        }
+    }
+
+    pub fn reserve(&mut self, w: &mut Writer) {
+        //self.name_id = Some(w.add_string(self.s.name.as_bytes()));//"_DYNAMIC_".as_bytes()));
+        //w.reserve_symbol_index(data.index_dynamic);
+    }
+
+    pub fn get_symbol(&self, base: usize, index: Option<SectionIndex>) -> object::write::elf::Sym {
+        let st_shndx = elf::SHN_ABS;
+        let st_size = self.s.size;
+        let addr = base as u64 + self.s.address;
+        //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
+        eprintln!("write symbol: {}, {:#0x}", &self.s.name, &addr);
+        object::write::elf::Sym {
+            name: self.name_id,
+            section: index,
+            st_info: self.s.st_info,
+            st_other: self.s.st_other,
+            st_shndx,
+            st_value: addr,
+            st_size,
+        }
+    }
+
+    pub fn write_symbol(&self, base: usize, index: Option<SectionIndex>, w: &mut Writer) {
+        let sym = self.get_symbol(base, index);
+        w.write_symbol(&sym);
+        /*
+        let st_shndx = elf::SHN_ABS;
+        let st_size = self.s.size;
+        let addr = base as u64 + self.s.address;
+        //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
+        eprintln!("write symbol: {}, {:#0x}", &self.s.name, &addr);
+        w.write_symbol(&object::write::elf::Sym {
+            name: self.name_id,
+            section: index,
+            st_info: self.s.st_info,
+            st_other: self.s.st_other,
+            st_shndx,
+            st_value: addr,
+            st_size,
+        });
+        */
+    }
 }
 
 pub struct ProgSectionBuilder {}
@@ -95,10 +155,10 @@ impl ProgSection {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
             symbol.address += self.base as u64 + self.addr as u64 + self.data_count as u64;
-            let is_start = name == "_start";
+            //let is_start = name == "_start";
             let ps = ProgSymbol {
                 name_id,
-                is_start,
+                //is_start,
                 s: symbol,
             };
             eprintln!("symbol: {}, {:#0x}", &name, &ps.s.address);
@@ -136,9 +196,19 @@ impl ProgSection {
     }
 
     //
+    pub fn get_symbols(&self, base: u64) -> Vec<Sym> {
+        self.symbols
+            .iter()
+            .map(|(_, s)| s.get_symbol(self.base + base as usize, self.index))
+            .collect()
+    }
+
     pub fn write_symbols(&self, base: u64, w: &mut Writer) {
         // write symbols out
         for (name, sym) in &self.symbols {
+            sym.write_symbol(self.base + base as usize, self.index, w);
+
+            /*
             let st_shndx = elf::SHN_ABS;
             let st_size = sym.s.size;
             let addr = self.base as u64 + sym.s.address + base;
@@ -153,22 +223,33 @@ impl ProgSection {
                 st_value: addr,
                 st_size,
             });
+            */
         }
     }
 
-    pub fn apply_relocations(&self, v_base: usize, pointers: &HashMap<String, u64>) {
+    pub fn apply_relocations(
+        &self,
+        v_base: usize,
+        pointers: &HashMap<String, u64>,
+    ) -> Vec<CodeRelocation> {
         let patch_base = self.bytes.as_ptr();
+        let mut unapplied = vec![];
         for r in self.relocations.iter() {
-            let addr = *pointers.get(&r.name).unwrap();
-            log::debug!(
-                "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                self.alloc(),
-                v_base,
-                addr as usize,
-                &r.name
-            );
-            r.patch(patch_base as *mut u8, v_base as *mut u8, addr as *const u8);
+            if let Some(addr) = pointers.get(&r.name) {
+                log::debug!(
+                    "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
+                    self.alloc(),
+                    v_base,
+                    *addr as usize,
+                    &r.name
+                );
+                r.patch(patch_base as *mut u8, v_base as *mut u8, *addr as *const u8);
+            } else {
+                unapplied.push(r.clone());
+            }
+            //.expect(&format!("Unable to locate symbol: {}", &r.name));
         }
+        unapplied
     }
 
     pub fn reserve_relocations(&mut self, w: &mut Writer) {

@@ -26,7 +26,7 @@ pub enum CodeSymbolKind {
 
 #[derive(Clone, Debug)]
 pub struct CodeSymbol {
-    name: String,
+    pub(crate) name: String,
     pub(crate) size: u64,
     pub(crate) address: u64,
     pub(crate) kind: CodeSymbolKind,

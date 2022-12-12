@@ -1,4 +1,5 @@
 use super::*;
+use object::write::elf::Sym;
 
 pub struct Blocks {
     pub blocks: Vec<Box<dyn ElfBlock>>,
@@ -90,6 +91,7 @@ pub struct SegmentTracker {
     page_size: usize,
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
+    pub symbols: Vec<object::write::elf::Sym>,
 }
 
 impl SegmentTracker {
@@ -100,6 +102,7 @@ impl SegmentTracker {
             page_size: 0x1000,
             addr_start: 0,
             ph: vec![],
+            symbols: vec![],
         }
     }
 
@@ -167,12 +170,43 @@ impl SegmentTracker {
         for s in self.segments.iter() {
             s.reserve_symbols(w);
         }
+
+        for s in self.symbols.iter() {
+            //let name_id = Some(w.add_string("_DYNAMIC_".as_bytes()));
+            w.reserve_symbol_index(s.section);
+            //w.reserve_symbol_index(s.section);
+        }
     }
 
-    pub fn write_symbols(&self, w: &mut Writer) {
-        for s in self.segments.iter() {
-            s.write_symbols(w);
-        }
+    pub fn get_symbols(&self) -> Vec<Sym> {
+        self.segments
+            .iter()
+            .map(|seg| seg.get_symbols())
+            .flatten()
+            .chain(self.symbols.iter().cloned())
+            .collect()
+    }
+
+    pub fn write_symbols(&self, w: &mut Writer) -> usize {
+        let symbols = self.get_symbols();
+        // sort them, locals first
+
+        let mut num_locals = 0;
+        symbols
+            .iter()
+            .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
+            .for_each(|s| {
+                w.write_symbol(s);
+                num_locals += 1;
+            });
+
+        symbols
+            .iter()
+            .filter(|s| s.st_info >> 4 != elf::STB_LOCAL)
+            .for_each(|s| {
+                w.write_symbol(s);
+            });
+        num_locals
     }
 
     pub fn load_segment_count(&self) -> usize {
@@ -311,6 +345,14 @@ impl Segment {
         for s in &self.sections {
             s.reserve_symbols(w);
         }
+    }
+
+    pub fn get_symbols(&self) -> Vec<Sym> {
+        self.sections
+            .iter()
+            .map(|s| s.get_symbols(self.base + self.offset))
+            .flatten()
+            .collect()
     }
 
     pub fn write_symbols(&self, w: &mut Writer) {
