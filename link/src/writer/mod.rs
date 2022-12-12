@@ -263,7 +263,6 @@ pub fn load<'a>(
     }
 
     if rx.len() > 0 {
-        //let name_id = Some(w.add_section_name(".text".as_bytes()));
         let name = ".text".to_string();
         let name_id = Some(w.add_section_name(".text".as_bytes()));
         let rel_name_id = Some(w.add_section_name(".rela.text".as_bytes()));
@@ -294,7 +293,6 @@ pub fn load<'a>(
     }
 
     if rw.len() > 0 {
-        //let name = ".data".to_string();
         let name_id = Some(w.add_section_name(".data".as_bytes()));
         let rel_name_id = Some(w.add_section_name(".rela.data".as_bytes()));
         let mut section = ProgSection::new(AllocSegment::RW, name_id, rel_name_id, 0);
@@ -337,6 +335,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     if data.is_dynamic() {
         if false {
+            // this doesn't implement the program header, we really need
+            // the dedicated interp section code to make that work
+            // interp is an exception
             let name_id = Some(writer.add_section_name(".interp".as_bytes()));
             let mut section = ProgSection::new(AllocSegment::RO, name_id, None, 0);
             let interp = data.interp.as_bytes().to_vec();
@@ -346,6 +347,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         } else {
             blocks.add_block(Box::new(InterpSection::new(&data)));
         }
+    }
+
+    if writer.dynstr_needed() {
+        blocks.add_block(Box::new(DynStrSection::default()));
+    }
+
+    if data.is_dynamic() {
+        blocks.add_block(Box::new(DynSymSection::default()));
     }
 
     // relocations go here
@@ -358,13 +367,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     load(&mut blocks, link, &mut writer);
 
-    if writer.dynstr_needed() {
-        blocks.add_block(Box::new(DynStrSection::default()));
-    }
-
-    if data.is_dynamic() {
-        blocks.add_block(Box::new(DynSymSection::default()));
-    }
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));

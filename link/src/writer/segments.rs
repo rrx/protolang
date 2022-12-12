@@ -17,7 +17,7 @@ impl Blocks {
         // build a list of sections that are loaded
         // this is a hack to get tracker to build a correct list of program headers
         // without having to go through the blocks and do reservations
-        let mut temp_tracker = SegmentTracker::new(0);
+        let mut temp_tracker = SegmentTracker::new(2);
         for b in self.blocks.iter() {
             if let Some(alloc) = b.alloc() {
                 temp_tracker.add_data(alloc, 1, 0);
@@ -88,7 +88,6 @@ pub struct SegmentTracker {
     segments: Vec<Segment>,
     base: usize,
     page_size: usize,
-    //pointers: HashMap<String, u64>,
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
 }
@@ -99,7 +98,6 @@ impl SegmentTracker {
             segments: vec![],
             base,
             page_size: 0x1000,
-            //pointers: HashMap::new(),
             addr_start: 0,
             ph: vec![],
         }

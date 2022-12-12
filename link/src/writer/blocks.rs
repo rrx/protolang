@@ -475,6 +475,7 @@ pub struct InterpSection {
     cstr: CString,
     offset: usize,
     addr: usize,
+    base: usize,
 }
 
 impl InterpSection {
@@ -487,6 +488,7 @@ impl InterpSection {
             name_id: None,
             offset: 0,
             addr: 0,
+            base: 0,
         }
     }
 
@@ -505,7 +507,8 @@ impl ElfBlock for InterpSection {
             p_type: elf::PT_INTERP,
             p_flags: self.alloc().unwrap().program_header_flags(),
             p_offset: self.offset as u64,
-            p_vaddr: self.addr as u64,
+            //p_vaddr: self.addr as u64,
+            p_vaddr: self.base as u64 + self.offset as u64,
             p_paddr: 0,
             p_filesz: buf.len() as u64,
             p_memsz: buf.len() as u64,
@@ -529,8 +532,13 @@ impl ElfBlock for InterpSection {
         w.reserve(buf.len(), align);
         let after = w.reserved_len();
         let delta = after - pos;
-        let base = tracker.add_data(self.alloc().unwrap(), delta, self.offset);
-        self.addr = base + self.offset;
+        self.base = tracker.add_data(self.alloc().unwrap(), delta, self.offset);
+        //self.addr = self.base + self.offset;
+    }
+
+    fn update(&mut self, _data: &mut Data) {
+        //data.addr_interp = self.offset as u64;
+        self.addr = self.base + self.offset;
     }
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
@@ -540,17 +548,13 @@ impl ElfBlock for InterpSection {
         w.write(self.as_slice());
     }
 
-    fn update(&mut self, data: &mut Data) {
-        //data.addr_interp = self.offset as u64;
-    }
-
     fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
         if let Some(name_id) = self.name_id {
             w.write_section_header(&object::write::elf::SectionHeader {
                 name: Some(name_id),
                 sh_type: elf::SHT_PROGBITS,
                 sh_flags: self.alloc.section_header_flags() as u64,
-                sh_addr: self.offset as u64,
+                sh_addr: self.base as u64 + self.offset as u64,
                 sh_offset: self.offset as u64,
                 sh_info: 0,
                 sh_link: 0,
