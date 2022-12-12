@@ -1,10 +1,6 @@
-use std::error::Error;
-
 use object::elf;
-use object::read::elf::FileHeader;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
-use object::Endianness;
 use std::collections::HashMap;
 
 use super::*;
@@ -137,7 +133,7 @@ impl ProgSection {
     }
 
     pub fn reserve_symbols(&self, w: &mut Writer) {
-        for (_, sym) in &self.symbols {
+        for (_, _) in &self.symbols {
             w.reserve_symbol_index(self.index);
         }
     }

@@ -14,7 +14,27 @@ impl Blocks {
     }
 
     pub fn reserve(&mut self, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
-        //self.generate_program_headers(tracker);
+        // build a list of sections that are loaded
+        // this is a hack to get tracker to build a correct list of program headers
+        // without having to go through the blocks and do reservations
+        let mut temp_tracker = SegmentTracker::new(0);
+        for b in self.blocks.iter() {
+            if let Some(alloc) = b.alloc() {
+                temp_tracker.add_data(alloc, 1, 0);
+            }
+        }
+        // get a list of program headers
+        // we really only need to know the number of headers, so we can correctly
+        // set the values in the file header
+
+        self.generate_program_headers(&mut temp_tracker);
+        // hack
+        tracker.ph = temp_tracker.ph.clone();
+
+        for p in temp_tracker.ph.iter() {
+            eprintln!("P: {:?}", p);
+        }
+
         for b in self.blocks.iter_mut() {
             b.reserve(data, tracker, w);
         }
@@ -27,10 +47,19 @@ impl Blocks {
     }
 
     pub fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        // generate the program headers, so they have update to date fields
+        // generate the program headers, so they have up to date fields
         self.generate_program_headers(tracker);
+        for p in tracker.ph.iter() {
+            eprintln!("P: {:?}", p);
+        }
         for b in self.blocks.iter() {
             b.write(&data, tracker, w);
+        }
+    }
+
+    pub fn write_section_headers(&self, data: &Data, tracker: &SegmentTracker, w: &mut Writer) {
+        for b in self.blocks.iter() {
+            b.write_section_header(&data, &tracker, w);
         }
     }
 
@@ -186,10 +215,6 @@ impl SegmentTracker {
             }
         }
     }
-}
-
-pub fn update_blocks(tracker: &mut SegmentTracker, blocks: &mut Vec<Box<dyn ElfBlock>>) {
-    for block in blocks {}
 }
 
 pub struct Segment {

@@ -198,7 +198,7 @@ impl Data {
         out
     }
 
-    pub fn debug(&mut self, link: &Link) {
+    pub fn debug(&mut self, _link: &Link) {
         let mut out_data = Vec::new();
         let endian = Endianness::Little;
         let mut writer = object::write::elf::Writer::new(endian, self.is_64, &mut out_data);
@@ -220,7 +220,7 @@ impl Data {
 }
 
 pub fn load<'a>(
-    blocks: &mut Vec<Box<dyn ElfBlock>>,
+    blocks: &mut Blocks,
     //data: &mut Data,
     link: &'a Link,
     w: &mut Writer<'a>,
@@ -270,12 +270,12 @@ pub fn load<'a>(
         //blocks.push(Box::new(section));
         let buf = section.bytes.clone();
         let name_id = Some(w.add_section_name(".text".as_bytes()));
-        let mut block = BufferSection::new(AllocSegment::RX, name_id, buf, section);
+        let block = BufferSection::new(AllocSegment::RX, name_id, buf, section);
         //for u in rx {
         //block.unlinked.push(u.clone());
         //}
         //block.unlinked.extend(rx);
-        blocks.push(Box::new(block));
+        blocks.add_block(Box::new(block));
     }
 
     if ro.len() > 0 {
@@ -296,32 +296,14 @@ pub fn load<'a>(
         //blocks.push(Box::new(section));
         let buf = section.bytes.clone();
         let name_id = Some(w.add_section_name(".data".as_bytes()));
-        let mut block = BufferSection::new(AllocSegment::RW, name_id, buf, section);
+        let block = BufferSection::new(AllocSegment::RW, name_id, buf, section);
         //for u in rw {
         //block.unlinked.push(u.clone());
         //}
-        blocks.push(Box::new(block));
+        blocks.add_block(Box::new(block));
         //blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
     }
 }
-
-/*
-fn generate_program_headers(blocks: &Blocks, tracker: &SegmentTracker) -> Vec<ProgramHeaderEntry> {
-    let mut ph = vec![];
-    for b in blocks.iter() {
-        ph.extend(b.program_header());
-    }
-    ph.extend(tracker.program_headers());
-    ph
-}
-
-pub fn blocks_reserve(blocks: &mut Vec<Box<dyn ElfBlock>>, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
-    for b in blocks.iter_mut() {
-        b.reserve(data, tracker, w);
-    }
-}
-
-*/
 
 pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     link: &Link,
@@ -358,7 +340,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(RelocationSection::new(AllocSegment::RW)));
     }
 
-    load(&mut blocks.blocks, link, &mut writer);
+    load(&mut blocks, link, &mut writer);
 
     if writer.dynstr_needed() {
         blocks.add_block(Box::new(DynStrSection::default()));
@@ -385,41 +367,16 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(ShStrTabSection::default()));
     }
 
-    // build a list of sections that are loaded
-    // this is a hack to get tracker to build a correct list of program headers
-    // without having to go through the blocks and do reservations
-    let mut temp_tracker = SegmentTracker::new(0);
-    for b in blocks.blocks.iter() {
-        if let Some(alloc) = b.alloc() {
-            temp_tracker.add_data(alloc, 1, 0);
-        }
-    }
+    let mut tracker = SegmentTracker::new(0x80000);
 
     // RESERVE
 
-    // get a list of program headers
-    // we really only need to know the number of headers, so we can correctly
-    // set the values in the file header
-    blocks.generate_program_headers(&mut temp_tracker);
-    for p in temp_tracker.ph.iter() {
-        eprintln!("P: {:?}", p);
-    }
-
     // section headers are optional
     if data.add_section_headers {
-        //tracker.reserve_section_index(&mut data, &mut writer);
-        for b in blocks.blocks.iter_mut() {
-            b.reserve_section_index(&mut data, &mut writer);
-        }
+        blocks.reserve_section_index(&mut data, &mut writer);
     }
 
-    let mut tracker = SegmentTracker::new(0x80000);
-    tracker.ph = temp_tracker.ph.clone();
-
     blocks.reserve(&mut tracker, &mut data, &mut writer);
-    //for b in blocks.blocks.iter_mut() {
-    //b.reserve(&mut data, &mut tracker, &mut writer);
-    //}
 
     if data.add_section_headers {
         writer.reserve_section_headers();
@@ -436,23 +393,11 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // WRITE
 
-    // get a list of program headers
-    // we now have the values so they will be correctly written
-    blocks.generate_program_headers(&mut tracker);
-    for p in tracker.ph.iter() {
-        eprintln!("P: {:?}", p);
-    }
-
     blocks.write(&data, &mut tracker, &mut writer);
-    //for b in blocks.blocks.iter_mut() {
-    //b.write(&data, &mut tracker, &mut writer);
-    //}
 
     // SECTION HEADERS
     if data.add_section_headers {
-        for b in blocks.blocks.iter() {
-            b.write_section_header(&data, &tracker, &mut writer);
-        }
+        blocks.write_section_headers(&data, &tracker, &mut writer);
     }
 
     data.debug(link);
