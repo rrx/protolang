@@ -1,10 +1,54 @@
 use super::*;
+
+pub struct Blocks {
+    pub blocks: Vec<Box<dyn ElfBlock>>,
+}
+
+impl Blocks {
+    pub fn new() -> Self {
+        Self { blocks: vec![] }
+    }
+
+    pub fn add_block(&mut self, block: Box<dyn ElfBlock>) {
+        self.blocks.push(block);
+    }
+
+    pub fn reserve(&mut self, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
+        //self.generate_program_headers(tracker);
+        for b in self.blocks.iter_mut() {
+            b.reserve(data, tracker, w);
+        }
+    }
+
+    pub fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+        for b in self.blocks.iter_mut() {
+            b.reserve_section_index(data, w);
+        }
+    }
+
+    pub fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        // generate the program headers, so they have update to date fields
+        self.generate_program_headers(tracker);
+        for b in self.blocks.iter() {
+            b.write(&data, tracker, w);
+        }
+    }
+
+    pub fn generate_program_headers(&self, tracker: &mut SegmentTracker) {
+        tracker.ph.clear();
+        for b in self.blocks.iter() {
+            tracker.ph.extend(b.program_header());
+        }
+        tracker.ph.extend(tracker.program_headers());
+    }
+}
+
 pub struct SegmentTracker {
     segments: Vec<Segment>,
     base: usize,
     page_size: usize,
     pointers: HashMap<String, u64>,
-    //blocks: Vec<Box<dyn ElfBlock>>
+    pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
 }
 
@@ -16,6 +60,7 @@ impl SegmentTracker {
             page_size: 0x1000,
             pointers: HashMap::new(),
             addr_start: 0,
+            ph: vec![],
         }
     }
 
@@ -120,18 +165,14 @@ impl SegmentTracker {
 
     pub fn reserve_relocations(&mut self, w: &mut Writer) {
         for seg in self.segments.iter_mut() {
-            //seg.section.reserve_relocations(w);
-            //let offset = w.reserve_relocations(seg.section.relocations.len(), true);
             for section in seg.sections.iter_mut() {
                 section.reserve_relocations(w);
-                //let offset = w.reserve_relocations(section.relocations.len(), true);
             }
         }
     }
 
     pub fn write_relocations(&self, w: &mut Writer) {
         for seg in self.segments.iter() {
-            //seg.section.write_relocations(w);
             for section in seg.sections.iter() {
                 section.write_relocations(w);
             }
@@ -140,187 +181,15 @@ impl SegmentTracker {
 
     pub fn write_relocation_section_headers(&self, w: &mut Writer, index_symtab: SectionIndex) {
         for seg in &self.segments {
-            //seg.section.write_relocation_section_headers(w, index_symtab);
             for section in &seg.sections {
                 section.write_relocation_section_headers(w, index_symtab);
             }
         }
     }
-
-    //pub fn add_block(&mut self, block: Box<dyn ElfBlock>) {
-    //self.blocks.push(block);
-    //}
 }
 
 pub fn update_blocks(tracker: &mut SegmentTracker, blocks: &mut Vec<Box<dyn ElfBlock>>) {
     for block in blocks {}
-}
-
-pub struct Segments {
-    pub ro: Segment,
-    pub rx: Segment,
-    pub rw: Segment,
-    //pub addr_start: u64,
-    file_offset: u64,
-}
-impl Default for Segments {
-    fn default() -> Self {
-        Self {
-            ro: Segment::new(AllocSegment::RO),
-            rw: Segment::new(AllocSegment::RW),
-            rx: Segment::new(AllocSegment::RX),
-            //addr_start: 0,
-            file_offset: 0,
-        }
-    }
-}
-
-impl Segments {
-    /*
-    fn add_file_offset(&mut self, offset: u64) {
-        self.file_offset += offset;
-    }
-
-    pub fn file_offset(&self) -> u64 {
-        self.file_offset
-    }
-
-    pub fn symbol_pointers2(&self) -> HashMap<String, u64> {
-        let mut pointers = HashMap::new();
-        for (name, s) in &self.rx.section.symbols {
-            let addr = self.rx.base + s.s.address;
-            pointers.insert(name.clone(), addr);
-        }
-        for (name, s) in &self.rw.section.symbols {
-            let addr = self.rw.base + s.s.address;
-            pointers.insert(name.clone(), addr);
-        }
-        pointers
-    }
-    */
-
-    /*
-    pub fn reserve_symbols(&self, w: &mut Writer) {
-        self.ro.reserve_symbols(w);
-        self.rw.reserve_symbols(w);
-        self.rx.reserve_symbols(w);
-    }
-
-    pub fn write_symbols(&self, w: &mut Writer) {
-        self.ro.write_symbols(w);
-        self.rx.write_symbols(w);
-        self.rw.write_symbols(w);
-    }
-
-    pub fn load2<'a>(&mut self, link: &'a Link, w: &mut Writer<'a>) {
-        for (_name, unlinked) in link.unlinked.iter() {
-            use object::SectionKind as K;
-            match unlinked.kind {
-                K::Data | K::UninitializedData => {
-                    self.rw.section.append(unlinked, w);
-                }
-
-                // OtherString is usually comments, we can drop these
-                K::OtherString => (),
-                K::ReadOnlyString | K::ReadOnlyData => {
-                    eprintln!("X:{:?}", (&unlinked.name, &unlinked.kind));
-                    self.ro.section.append(unlinked, w);
-                    // XXX: this can mess things up
-                    // it adds things to RO before the text begins and gets confused
-                }
-                K::Text => {
-                    self.rx.section.append(unlinked, w);
-                }
-
-                // ignore for now
-                K::Metadata => (),
-                K::Other => (),
-                K::Note => (),
-                K::Elf(_x) => {
-                    // ignore
-                    //unimplemented!("Elf({:#x})", x);
-                }
-                _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
-            }
-        }
-    }
-
-    pub fn apply_relocations(&self) {
-        self.ro.apply_relocations();
-        self.rw.apply_relocations();
-        self.rx.apply_relocations();
-    }
-
-    /// update the segments
-    pub fn update(&mut self, base: usize, page_size: usize) {
-        /*
-        let align = AllocSegment::RO.align();
-        let mut offset = 0;
-        let ro_size_elf_aligned = size_align(self.ro.size() as usize, align);
-        //self.ro.align = align as u32;
-        log::debug!(
-            "RO base:{:#0x}, offset:{:#0x}, size:{:#0x}, fo:{:#0x}",
-            base,
-            offset,
-            self.ro.size(),
-            self.file_offset()
-        );
-        offset += ro_size_elf_aligned;
-        self.add_file_offset(self.ro.size() as u64);
-
-        let align = AllocSegment::RX.align();
-        let base = size_align(base as usize + offset, page_size) as u64;
-        let rx_size_elf_aligned = size_align(self.rx.size() as usize, align);
-        //self.rx.base = base;
-        //self.rx.addr = base + offset as u64;
-        //self.rx.offset = offset as u64;
-        //self.rx.align = align as u32;
-        log::debug!(
-            "RX base:{:#0x}, offset:{:#0x}, size:{:#0x} {}, fo:{:#0x}",
-            base,
-            offset,
-            self.rx.size(),
-            rx_size_elf_aligned,
-            self.file_offset()
-        );
-        offset += rx_size_elf_aligned;
-        self.add_file_offset(self.rx.size() as u64);
-
-        let align = AllocSegment::RW.align();
-        let base = size_align(base as usize + rx_size_elf_aligned, page_size) as u64;
-        let _rw_size_elf_aligned = size_align(self.rw.size() as usize, align);
-        //self.rw.base = base;
-        //self.rw.addr = base + offset as u64;
-        //self.rw.offset = offset as u64;
-        //self.rw.align = align as u32;
-        log::debug!(
-            "RW base:{:#0x}, offset:{:#0x}, size:{:#0x}, fo:{:#0x}",
-            base,
-            offset,
-            self.rw.size(),
-            self.file_offset()
-        );
-        //self.add_file_offset(self.rw.size() as u64);
-        */
-
-        // set entry point
-        /*
-        let pointers = self.symbol_pointers();
-        for (name, p) in &pointers {
-            eprintln!("P: {}, {:#0x}", name, p);
-        }
-
-        if let Some(start) = pointers.get("_start") {
-            self.addr_start = *start;
-        }
-        */
-        //for (_name, sym) in &self.rx.section.symbols {
-            //if sym.is_start {
-                //self.addr_start = self.rx.addr + sym.s.address;
-            //}
-        //}
-    }
-    */
 }
 
 pub struct Segment {
@@ -330,7 +199,6 @@ pub struct Segment {
     segment_size: usize,
     pub align: u32,
     pub alloc: AllocSegment,
-    //pub section: ProgSection,
     pub sections: Vec<ProgSection>,
 }
 
@@ -343,7 +211,6 @@ impl Segment {
             segment_size: 0,
             alloc,
             align: 0x1000,
-            //section: ProgSection::new(alloc, None, 0),
             sections: vec![],
         }
     }
@@ -390,26 +257,22 @@ impl Segment {
                 eprintln!(" S:{} {:?}", name, s);
             }
         }
-
         //self.disassemble_code();
     }
 
     pub fn disassemble_code(&self) {
-        //self.section.disassemble_code();
         for s in self.sections.iter() {
             s.disassemble_code();
         }
     }
 
     pub fn reserve_symbols(&self, w: &mut Writer) {
-        //self.section.reserve_symbols(w);
         for s in &self.sections {
             s.reserve_symbols(w);
         }
     }
 
     pub fn write_symbols(&self, w: &mut Writer) {
-        //self.section.write_symbols(self.base, w);
         for s in self.sections.iter() {
             s.write_symbols(self.base + self.offset, w);
         }
@@ -417,7 +280,6 @@ impl Segment {
 
     pub fn apply_relocations(&self) {
         let pointers = self.symbol_pointers();
-        //self.section.apply_relocations(self.base as usize, &pointers);
         for section in &self.sections {
             section.apply_relocations(self.base as usize, &pointers);
         }

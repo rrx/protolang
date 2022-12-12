@@ -223,6 +223,8 @@ impl ElfBlock for ProgSection {
     fn alloc(&self) -> Option<AllocSegment> {
         Some(self.kind)
     }
+}
+/*
 
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         self.index = Some(w.reserve_section_index());
@@ -232,7 +234,7 @@ impl ElfBlock for ProgSection {
         //}
     }
 
-    fn reserve(&mut self, data: &mut Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.kind.align());
         w.reserve_until(align_pos);
@@ -240,22 +242,12 @@ impl ElfBlock for ProgSection {
 
         w.reserve(self.bytes.len(), self.kind.align());
         let after = w.reserved_len();
-        //self.size = self.bytes.len();
         self.file_offset = start;
 
         // this will be updated later when segments are aligned
         let delta = after - pos;
 
-        /*
-        match self.alloc().unwrap() {
-            AllocSegment::RO | AllocSegment::Interp => data.segments.ro.add_data(delta, 1),
-            AllocSegment::RW => data.segments.rw.add_data(delta, 1),
-            AllocSegment::RX => data.segments.rx.add_data(delta, 1),
-        };
-        */
-
-        self.base = data
-            .tracker
+        self.base = tracker
             .add_data(self.alloc().unwrap(), delta, self.file_offset);
         self.addr = self.base + self.file_offset;
         eprintln!(
@@ -302,3 +294,4 @@ impl ElfBlock for ProgSection {
         }
     }
 }
+*/

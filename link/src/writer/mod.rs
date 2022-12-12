@@ -17,7 +17,7 @@ use blocks::*;
 use section::*;
 use segments::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProgramHeaderEntry {
     p_type: u32,
     p_flags: u32,
@@ -117,7 +117,7 @@ pub struct Data {
     libs: Vec<Library>,
     page_size: u32,
     //segments: Segments,
-    tracker: SegmentTracker,
+    //tracker: SegmentTracker,
     addr_dynamic: u64,
     addr_dynstr: u64,
     addr_dynsym: u64,
@@ -140,7 +140,7 @@ impl Data {
             libs: vec![],
             page_size: 0x1000,
             //segments: Segments::default(),
-            tracker: SegmentTracker::new(0x80000),
+            //tracker: SegmentTracker::new(0x80000),
             addr_dynamic: 0,
             addr_dynstr: 0,
             addr_dynsym: 0,
@@ -221,7 +221,7 @@ impl Data {
 
 pub fn load<'a>(
     blocks: &mut Vec<Box<dyn ElfBlock>>,
-    data: &mut Data,
+    //data: &mut Data,
     link: &'a Link,
     w: &mut Writer<'a>,
 ) {
@@ -266,7 +266,6 @@ pub fn load<'a>(
         for u in rx.clone() {
             section.append(&u, w);
         }
-        //data.tracker.
         eprintln!("s: {:?}", &section.name);
         //blocks.push(Box::new(section));
         let buf = section.bytes.clone();
@@ -285,7 +284,7 @@ pub fn load<'a>(
             section.append(&u, w);
         }
         eprintln!("s: {:?}", &section.name);
-        blocks.push(Box::new(section));
+        //blocks.push(Box::new(section));
     }
 
     if rw.len() > 0 {
@@ -306,6 +305,24 @@ pub fn load<'a>(
     }
 }
 
+/*
+fn generate_program_headers(blocks: &Blocks, tracker: &SegmentTracker) -> Vec<ProgramHeaderEntry> {
+    let mut ph = vec![];
+    for b in blocks.iter() {
+        ph.extend(b.program_header());
+    }
+    ph.extend(tracker.program_headers());
+    ph
+}
+
+pub fn blocks_reserve(blocks: &mut Vec<Box<dyn ElfBlock>>, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
+    for b in blocks.iter_mut() {
+        b.reserve(data, tracker, w);
+    }
+}
+
+*/
+
 pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     link: &Link,
     mut data: Data,
@@ -314,6 +331,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let endian = Endianness::Little;
     let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
 
+    let mut blocks = Blocks::new();
+
     // add libraries if they are configured
     let lib_names = data.lib_names.clone();
     for lib_name in lib_names.iter() {
@@ -321,77 +340,58 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         data.add_library(string_id);
     }
 
-    // load bytes and relocations
-    //data.segments.load(link, &mut writer);
-
     // configure blocks
     // these are used to correctly order the reservation of space
     // and to write things out in the correct order
-    let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
-    blocks.push(Box::new(HeaderComponent::default()));
+    //let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
+    blocks.add_block(Box::new(HeaderComponent::default()));
 
     if data.is_dynamic() {
-        blocks.push(Box::new(InterpSection::new(&data)));
+        blocks.add_block(Box::new(InterpSection::new(&data)));
     }
 
     // relocations go here
     if RelocationSection::has_rx_relocs(&data) {
-        blocks.push(Box::new(RelocationSection::new(AllocSegment::RX)));
+        blocks.add_block(Box::new(RelocationSection::new(AllocSegment::RX)));
     }
     if RelocationSection::has_rw_relocs(&data) {
-        blocks.push(Box::new(RelocationSection::new(AllocSegment::RW)));
+        blocks.add_block(Box::new(RelocationSection::new(AllocSegment::RW)));
     }
 
-    //let mut b2 = vec![];
-
-    /*
-    if false {
-    // .text
-    // Add .text section to the text load segment
-    let buf = data.segments.rx.section.bytes.clone();
-    let name_id = Some(writer.add_section_name(".text".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(AllocSegment::RX, name_id, buf)));
-
-    // .data
-    let buf = data.segments.rw.section.bytes.clone();
-    let name_id = Some(writer.add_section_name(".data".as_bytes()));
-    blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
-    } else {
-        load(&mut blocks, link, &mut writer);
-    }
-    */
-    load(&mut blocks, &mut data, link, &mut writer);
+    load(&mut blocks.blocks, link, &mut writer);
 
     if writer.dynstr_needed() {
-        blocks.push(Box::new(DynStrSection::default()));
+        blocks.add_block(Box::new(DynStrSection::default()));
     }
 
     if data.is_dynamic() {
-        blocks.push(Box::new(DynSymSection::default()));
+        blocks.add_block(Box::new(DynSymSection::default()));
     }
 
     if data.is_dynamic() {
-        blocks.push(Box::new(DynamicSection::default()));
+        blocks.add_block(Box::new(DynamicSection::default()));
     }
 
     if data.add_symbols {
-        blocks.push(Box::new(SymTabSection::default()));
+        blocks.add_block(Box::new(SymTabSection::default()));
     }
 
     if data.add_symbols && writer.strtab_needed() {
-        blocks.push(Box::new(StrTabSection::default()));
+        blocks.add_block(Box::new(StrTabSection::default()));
     }
 
     // shstrtab needs to be allocated last, once all headers are reserved
     if data.add_symbols {
-        blocks.push(Box::new(ShStrTabSection::default()));
+        blocks.add_block(Box::new(ShStrTabSection::default()));
     }
 
     // build a list of sections that are loaded
-    let mut tracker = SegmentTracker::new(0);
-    for b in blocks.iter() {
+    // this is a hack to get tracker to build a correct list of program headers
+    // without having to go through the blocks and do reservations
+    let mut temp_tracker = SegmentTracker::new(0);
+    for b in blocks.blocks.iter() {
         if let Some(alloc) = b.alloc() {
-            tracker.add_data(alloc, 1, 0);
+            temp_tracker.add_data(alloc, 1, 0);
         }
     }
 
@@ -400,26 +400,26 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     // get a list of program headers
     // we really only need to know the number of headers, so we can correctly
     // set the values in the file header
-    let mut ph = vec![];
-    for b in blocks.iter() {
-        ph.extend(b.program_header(&data));
-    }
-    ph.extend(tracker.program_headers());
-
-    for p in ph.iter() {
+    blocks.generate_program_headers(&mut temp_tracker);
+    for p in temp_tracker.ph.iter() {
         eprintln!("P: {:?}", p);
     }
 
     // section headers are optional
     if data.add_section_headers {
-        for b in blocks.iter_mut() {
+        //tracker.reserve_section_index(&mut data, &mut writer);
+        for b in blocks.blocks.iter_mut() {
             b.reserve_section_index(&mut data, &mut writer);
         }
     }
 
-    for b in blocks.iter_mut() {
-        b.reserve(&mut data, &ph, &mut writer);
-    }
+    let mut tracker = SegmentTracker::new(0x80000);
+    tracker.ph = temp_tracker.ph.clone();
+
+    blocks.reserve(&mut tracker, &mut data, &mut writer);
+    //for b in blocks.blocks.iter_mut() {
+    //b.reserve(&mut data, &mut tracker, &mut writer);
+    //}
 
     if data.add_section_headers {
         writer.reserve_section_headers();
@@ -427,11 +427,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // UPDATE
 
-    //data.segments.update(0x80000, 0x1000);
-    data.tracker.update();
-    data.tracker.apply_relocations();
+    tracker.update();
+    tracker.apply_relocations();
 
-    for b in blocks.iter_mut() {
+    for b in blocks.blocks.iter_mut() {
         b.update(&mut data);
     }
 
@@ -439,23 +438,20 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // get a list of program headers
     // we now have the values so they will be correctly written
-    let mut ph = vec![];
-    for b in blocks.iter() {
-        ph.extend(b.program_header(&data));
-    }
-    ph.extend(data.tracker.program_headers());
-    for p in ph.iter() {
+    blocks.generate_program_headers(&mut tracker);
+    for p in tracker.ph.iter() {
         eprintln!("P: {:?}", p);
     }
 
-    for b in blocks.iter_mut() {
-        b.write(&data, &ph, &mut writer);
-    }
+    blocks.write(&data, &mut tracker, &mut writer);
+    //for b in blocks.blocks.iter_mut() {
+    //b.write(&data, &mut tracker, &mut writer);
+    //}
 
     // SECTION HEADERS
     if data.add_section_headers {
-        for b in blocks.iter() {
-            b.write_section_header(&data, &mut writer);
+        for b in blocks.blocks.iter() {
+            b.write_section_header(&data, &tracker, &mut writer);
         }
     }
 
