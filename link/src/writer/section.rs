@@ -15,9 +15,6 @@ pub struct ProgSymbol {
 pub struct ProgSectionBuilder {}
 
 pub struct ProgSection {
-    pub name: Option<String>,
-    pub rel_name: Option<String>,
-    pub rel_name_bytes: Vec<u8>,
     pub name_id: Option<StringId>,
     pub rel_name_id: Option<StringId>,
     pub index: Option<SectionIndex>,
@@ -28,28 +25,22 @@ pub struct ProgSection {
     pub data_count: usize,
     pub file_offset: usize,     // file offset
     pub rel_file_offset: usize, // file offset
-    pub mem_size: u64,          // might be different than file size
+    pub mem_size: usize,        // might be different than file size
     pub symbols: HashMap<String, ProgSymbol>,
     pub relocations: Vec<CodeRelocation>,
     pub bytes: Vec<u8>,
-    //pub align: usize,
 }
 
 impl ProgSection {
-    pub fn new(kind: AllocSegment, name: Option<String>, mem_size: u64) -> Self {
-        let mut rel_name = None;
-        let mut rel_name_bytes = vec![];
-        if let Some(n) = &name {
-            let formatted = format!(".rela{}", n.clone());
-            rel_name_bytes = formatted.as_bytes().to_vec();
-            rel_name = Some(formatted);
-        }
+    pub fn new(
+        kind: AllocSegment,
+        name_id: Option<StringId>,
+        rel_name_id: Option<StringId>,
+        mem_size: usize,
+    ) -> Self {
         Self {
-            name,
-            rel_name,
-            rel_name_bytes,
-            name_id: None,
-            rel_name_id: None,
+            name_id,
+            rel_name_id,
             index: None,
             rel_index: None,
             kind,
@@ -84,6 +75,12 @@ impl ProgSection {
             out.insert(name.clone(), addr as u64);
         }
         out
+    }
+
+    pub fn add_bytes(&mut self, bytes: &[u8]) {
+        self.file_offset += bytes.len();
+        self.mem_size += bytes.len();
+        self.bytes.extend(bytes.to_vec());
     }
 
     pub fn append<'a>(&mut self, unlinked: &'a UnlinkedCodeSegment, w: &mut Writer<'a>) {
@@ -174,11 +171,7 @@ impl ProgSection {
         }
     }
 
-    pub fn reserve_relocations<'a>(&mut self, w: &mut Writer<'a>) {
-        //let label = format!(".rela{}", self.name.clone().unwrap());
-        //let buf = label.as_bytes();
-        //let buf = self.rel_name.unwrap().as_bytes();
-        //self.rel_name_id = Some(w.add_section_name(self.rel_name_bytes.as_slice()));
+    pub fn reserve_relocations(&mut self, w: &mut Writer) {
         self.rel_index = Some(w.reserve_section_index());
         self.rel_file_offset = w.reserve_relocations(self.relocations.len(), true);
     }
@@ -219,18 +212,12 @@ impl ElfBlock for ProgSection {
     fn alloc(&self) -> Option<AllocSegment> {
         Some(self.kind)
     }
-}
-/*
 
-    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+    fn reserve_section_index(&mut self, _data: &mut Data, w: &mut Writer) {
         self.index = Some(w.reserve_section_index());
-        // reserve the symbols in the various sections
-        //for sym in &self.symbols {
-        //w.reserve_symbol_index(self.index);
-        //}
     }
 
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.kind.align());
         w.reserve_until(align_pos);
@@ -243,8 +230,7 @@ impl ElfBlock for ProgSection {
         // this will be updated later when segments are aligned
         let delta = after - pos;
 
-        self.base = tracker
-            .add_data(self.alloc().unwrap(), delta, self.file_offset);
+        self.base = tracker.add_data(self.alloc().unwrap(), delta, self.file_offset);
         self.addr = self.base + self.file_offset;
         eprintln!(
             "reserve: {:?}, {:#0x}/{:#0x}/{:#0x}",
@@ -255,9 +241,9 @@ impl ElfBlock for ProgSection {
         );
     }
 
-    fn update(&mut self, data: &mut Data) {}
+    fn update(&mut self, _data: &mut Data) {}
 
-    fn write(&self, data: &Data, ph: &Vec<ProgramHeaderEntry>, w: &mut Writer) {
+    fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.kind.align());
         w.pad_until(aligned_pos);
@@ -273,7 +259,7 @@ impl ElfBlock for ProgSection {
         );
     }
 
-    fn write_section_header(&self, data: &Data, w: &mut Writer) {
+    fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
         if let Some(name_id) = self.name_id {
             w.write_section_header(&object::write::elf::SectionHeader {
                 name: Some(name_id),
@@ -290,4 +276,3 @@ impl ElfBlock for ProgSection {
         }
     }
 }
-*/

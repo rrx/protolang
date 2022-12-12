@@ -116,12 +116,13 @@ pub struct Data {
     lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
+    base: usize,
     //segments: Segments,
     //tracker: SegmentTracker,
     addr_dynamic: u64,
     addr_dynstr: u64,
     addr_dynsym: u64,
-    addr_interp: u64,
+    //addr_interp: u64,
     index_strtab: Option<SectionIndex>,
     index_symtab: Option<SectionIndex>,
     index_dynstr: Option<SectionIndex>,
@@ -138,13 +139,14 @@ impl Data {
             ph: vec![],
             lib_names,
             libs: vec![],
+            base: 0x80000,
             page_size: 0x1000,
             //segments: Segments::default(),
             //tracker: SegmentTracker::new(0x80000),
             addr_dynamic: 0,
             addr_dynstr: 0,
             addr_dynsym: 0,
-            addr_interp: 0,
+            //addr_interp: 0,
             index_strtab: None,
             index_symtab: None,
             index_dynstr: None,
@@ -262,14 +264,16 @@ pub fn load<'a>(
 
     if rx.len() > 0 {
         //let name_id = Some(w.add_section_name(".text".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RX, Some(".text".to_string()), 0);
+        let name = ".text".to_string();
+        let name_id = Some(w.add_section_name(".text".as_bytes()));
+        let rel_name_id = Some(w.add_section_name(".rela.text".as_bytes()));
+        let mut section = ProgSection::new(AllocSegment::RX, name_id, rel_name_id, 0);
         for u in rx.clone() {
             section.append(&u, w);
         }
-        eprintln!("s: {:?}", &section.name);
+        //eprintln!("s: {:?}", &section.name);
         //blocks.push(Box::new(section));
         let buf = section.bytes.clone();
-        let name_id = Some(w.add_section_name(".text".as_bytes()));
         let block = BufferSection::new(AllocSegment::RX, name_id, buf, section);
         //for u in rx {
         //block.unlinked.push(u.clone());
@@ -279,20 +283,25 @@ pub fn load<'a>(
     }
 
     if ro.len() > 0 {
-        let mut section = ProgSection::new(AllocSegment::RO, Some(".rodata".to_string()), 0);
+        let name_id = Some(w.add_section_name(".rodata".as_bytes()));
+        let rel_name_id = Some(w.add_section_name(".rela.rodata".as_bytes()));
+        let mut section = ProgSection::new(AllocSegment::RO, name_id, rel_name_id, 0);
         for u in ro {
             section.append(&u, w);
         }
-        eprintln!("s: {:?}", &section.name);
+        //eprintln!("s: {:?}", &section.name);
         //blocks.push(Box::new(section));
     }
 
     if rw.len() > 0 {
-        let mut section = ProgSection::new(AllocSegment::RW, Some(".data".to_string()), 0);
+        //let name = ".data".to_string();
+        let name_id = Some(w.add_section_name(".data".as_bytes()));
+        let rel_name_id = Some(w.add_section_name(".rela.data".as_bytes()));
+        let mut section = ProgSection::new(AllocSegment::RW, name_id, rel_name_id, 0);
         for u in rw.clone() {
             section.append(&u, w);
         }
-        eprintln!("s: {:?}", &section.name);
+        //eprintln!("s: {:?}", &section.name);
         //blocks.push(Box::new(section));
         let buf = section.bytes.clone();
         let name_id = Some(w.add_section_name(".data".as_bytes()));
@@ -313,8 +322,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let endian = Endianness::Little;
     let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
 
-    let mut blocks = Blocks::new();
-
     // add libraries if they are configured
     let lib_names = data.lib_names.clone();
     for lib_name in lib_names.iter() {
@@ -325,11 +332,20 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     // configure blocks
     // these are used to correctly order the reservation of space
     // and to write things out in the correct order
-    //let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
+    let mut blocks = Blocks::new();
     blocks.add_block(Box::new(HeaderComponent::default()));
 
     if data.is_dynamic() {
-        blocks.add_block(Box::new(InterpSection::new(&data)));
+        if false {
+            let name_id = Some(writer.add_section_name(".interp".as_bytes()));
+            let mut section = ProgSection::new(AllocSegment::RO, name_id, None, 0);
+            let interp = data.interp.as_bytes().to_vec();
+            let cstr = std::ffi::CString::new(interp).unwrap();
+            section.add_bytes(cstr.as_bytes_with_nul());
+            blocks.add_block(Box::new(section));
+        } else {
+            blocks.add_block(Box::new(InterpSection::new(&data)));
+        }
     }
 
     // relocations go here
@@ -367,7 +383,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(ShStrTabSection::default()));
     }
 
-    let mut tracker = SegmentTracker::new(0x80000);
+    let mut tracker = SegmentTracker::new(data.base);
 
     // RESERVE
 
@@ -383,16 +399,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // UPDATE
-
-    tracker.update();
-    tracker.apply_relocations();
-
-    for b in blocks.blocks.iter_mut() {
-        b.update(&mut data);
-    }
+    tracker.update(&mut data, &mut blocks);
+    blocks.update(&mut data);
 
     // WRITE
-
     blocks.write(&data, &mut tracker, &mut writer);
 
     // SECTION HEADERS

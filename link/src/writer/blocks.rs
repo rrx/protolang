@@ -503,7 +503,7 @@ impl ElfBlock for InterpSection {
         let buf = self.as_slice();
         vec![ProgramHeaderEntry {
             p_type: elf::PT_INTERP,
-            p_flags: elf::PF_R,
+            p_flags: self.alloc().unwrap().program_header_flags(),
             p_offset: self.offset as u64,
             p_vaddr: self.addr as u64,
             p_paddr: 0,
@@ -541,7 +541,7 @@ impl ElfBlock for InterpSection {
     }
 
     fn update(&mut self, data: &mut Data) {
-        data.addr_interp = self.offset as u64;
+        //data.addr_interp = self.offset as u64;
     }
 
     fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
@@ -611,14 +611,13 @@ impl ElfBlock for BufferSection {
         w.reserve_until(align_pos);
         let start = w.reserved_len();
 
-        tracker.add_section(self.alloc, self.section.take().unwrap(), start);
-
         w.reserve(self.buf.len(), align);
         let after = w.reserved_len();
         self.size = self.buf.len();
         self.offset = start;
         let delta = after - pos;
-        self.base = tracker.add_data(self.alloc, delta, self.offset);
+        //self.base = tracker.add_data(self.alloc, delta, self.offset);
+        self.base = tracker.add_section(self.alloc, self.section.take().unwrap(), start);
     }
 
     fn update(&mut self, _data: &mut Data) {

@@ -46,12 +46,18 @@ impl Blocks {
         }
     }
 
+    pub fn update(&mut self, data: &mut Data) {
+        for b in self.blocks.iter_mut() {
+            b.update(data);
+        }
+    }
+
     pub fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         // generate the program headers, so they have up to date fields
-        self.generate_program_headers(tracker);
-        for p in tracker.ph.iter() {
-            eprintln!("P: {:?}", p);
-        }
+        //self.generate_program_headers(tracker);
+        //for p in tracker.ph.iter() {
+        //eprintln!("P: {:?}", p);
+        //}
         for b in self.blocks.iter() {
             b.write(&data, tracker, w);
         }
@@ -63,12 +69,18 @@ impl Blocks {
         }
     }
 
-    pub fn generate_program_headers(&self, tracker: &mut SegmentTracker) {
-        tracker.ph.clear();
+    pub fn program_headers(&self, tracker: &SegmentTracker) -> Vec<ProgramHeaderEntry> {
+        let mut ph = vec![];
         for b in self.blocks.iter() {
-            tracker.ph.extend(b.program_header());
+            ph.extend(b.program_header());
         }
-        tracker.ph.extend(tracker.program_headers());
+        ph.extend(tracker.program_headers());
+        ph
+    }
+
+    pub fn generate_program_headers(&self, tracker: &mut SegmentTracker) {
+        let ph = self.program_headers(tracker);
+        tracker.ph = ph;
     }
 }
 
@@ -76,7 +88,7 @@ pub struct SegmentTracker {
     segments: Vec<Segment>,
     base: usize,
     page_size: usize,
-    pointers: HashMap<String, u64>,
+    //pointers: HashMap<String, u64>,
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
 }
@@ -87,7 +99,7 @@ impl SegmentTracker {
             segments: vec![],
             base,
             page_size: 0x1000,
-            pointers: HashMap::new(),
+            //pointers: HashMap::new(),
             addr_start: 0,
             ph: vec![],
         }
@@ -179,14 +191,20 @@ impl SegmentTracker {
         out
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, _data: &mut Data, blocks: &mut Blocks) {
         let pointers = self.symbol_pointers();
         if let Some(start) = pointers.get("_start") {
             self.addr_start = *start;
         }
+        self.ph = blocks.program_headers(self);
+        for p in self.ph.iter() {
+            eprintln!("P: {:?}", p);
+        }
+
+        self.apply_relocations();
     }
 
-    pub fn apply_relocations(&self) {
+    fn apply_relocations(&self) {
         for seg in &self.segments {
             seg.apply_relocations();
         }
@@ -274,7 +292,7 @@ impl Segment {
         for section in &self.sections {
             eprintln!(
                 "Section: {:?}, size:{:#0x} ({})",
-                section.name,
+                section.name_id,
                 section.bytes.len(),
                 section.bytes.len()
             );
