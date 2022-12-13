@@ -92,6 +92,7 @@ pub struct SegmentTracker {
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
     pub symbols: Vec<object::write::elf::Sym>,
+    pub empty_symbols: Vec<Option<SectionIndex>>,
 }
 
 impl SegmentTracker {
@@ -103,6 +104,7 @@ impl SegmentTracker {
             addr_start: 0,
             ph: vec![],
             symbols: vec![],
+            empty_symbols: vec![],
         }
     }
 
@@ -166,17 +168,27 @@ impl SegmentTracker {
         pointers
     }
 
+    pub fn reserve_empty_symbol(&mut self, v: Option<SectionIndex>) {
+        self.empty_symbols.push(v);
+    }
+
     pub fn reserve_symbols(&self, w: &mut Writer) {
         for s in self.segments.iter() {
             s.reserve_symbols(w);
         }
 
         for s in self.symbols.iter() {
-            //let name_id = Some(w.add_string("_DYNAMIC_".as_bytes()));
             w.reserve_symbol_index(s.section);
-            //w.reserve_symbol_index(s.section);
+        }
+
+        for section_index in self.empty_symbols.iter() {
+            w.reserve_symbol_index(*section_index);
         }
     }
+
+    //pub fn symbol_count(&self) -> usize {
+    //self.segments.iter().fold(0, |acc, x| acc + x.symbols_count())
+    //}
 
     pub fn get_symbols(&self) -> Vec<Sym> {
         self.segments
@@ -345,6 +357,12 @@ impl Segment {
         for s in &self.sections {
             s.reserve_symbols(w);
         }
+    }
+
+    pub fn symbols_count(&self) -> usize {
+        self.sections
+            .iter()
+            .fold(0, |acc, x| acc + x.get_symbols(0).len())
     }
 
     pub fn get_symbols(&self) -> Vec<Sym> {

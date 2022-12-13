@@ -6,6 +6,7 @@ use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::Endianness;
 use std::collections::HashMap;
+use std::mem;
 
 use super::*;
 
@@ -119,7 +120,10 @@ pub struct Data {
     base: usize,
     //segments: Segments,
     //tracker: SegmentTracker,
+    addr: HashMap<String, u64>,
     addr_dynamic: u64,
+    addr_got: u64,
+    addr_gotplt: u64,
     addr_dynstr: u64,
     size_dynstr: usize,
     addr_dynsym: u64,
@@ -150,7 +154,10 @@ impl Data {
             page_size: 0x1000,
             //segments: Segments::default(),
             //tracker: SegmentTracker::new(0x80000),
+            addr: HashMap::new(),
             addr_dynamic: 0,
+            addr_got: 0,
+            addr_gotplt: 0,
             addr_dynstr: 0,
             size_dynstr: 0,
             addr_dynsym: 0,
@@ -176,6 +183,10 @@ impl Data {
 
     fn add_library(&mut self, string_id: StringId) {
         self.libs.push(Library { string_id });
+    }
+
+    fn get_addr(&self, name: &str) -> Option<u64> {
+        self.addr.get(name).cloned()
     }
 
     fn gen_dynamic(&self) -> Vec<Dynamic> {
@@ -212,10 +223,19 @@ impl Data {
             val: self.size_reladyn as u64,
             string: None,
         });
-
+        out.push(Dynamic {
+            tag: elf::DT_RELAENT,
+            val: self.rel_size(true) as u64,
+            string: None,
+        });
         out.push(Dynamic {
             tag: elf::DT_STRSZ,
             val: self.size_dynstr as u64,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_SYMENT,
+            val: self.symbol_size() as u64,
             string: None,
         });
         out.push(Dynamic {
@@ -250,6 +270,30 @@ impl Data {
         //self.segments.read_unlinked(link, &mut writer);
 
         //self.segments.rx.debug();
+    }
+
+    pub fn symbol_size(&self) -> usize {
+        if self.is_64 {
+            mem::size_of::<elf::Sym64<Endianness>>()
+        } else {
+            mem::size_of::<elf::Sym32<Endianness>>()
+        }
+    }
+
+    pub fn rel_size(&self, is_rela: bool) -> usize {
+        if self.is_64 {
+            if is_rela {
+                mem::size_of::<elf::Rela64<Endianness>>()
+            } else {
+                mem::size_of::<elf::Rel64<Endianness>>()
+            }
+        } else {
+            if is_rela {
+                mem::size_of::<elf::Rela32<Endianness>>()
+            } else {
+                mem::size_of::<elf::Rel32<Endianness>>()
+            }
+        }
     }
 }
 
@@ -305,7 +349,7 @@ pub fn load<'a>(
         //eprintln!("s: {:?}", &section.name);
         //blocks.push(Box::new(section));
         let buf = section.bytes.clone();
-        let block = BufferSection::new(AllocSegment::RX, name_id, buf, section);
+        let block = BufferSection::new(AllocSegment::RX, Some(name), name_id, buf, Some(section));
         //for u in rx {
         //block.unlinked.push(u.clone());
         //}
@@ -325,6 +369,7 @@ pub fn load<'a>(
     }
 
     if rw.len() > 0 {
+        let name = ".data".to_string();
         let name_id = Some(w.add_section_name(".data".as_bytes()));
         let rel_name_id = Some(w.add_section_name(".rela.data".as_bytes()));
         let mut section = ProgSection::new(AllocSegment::RW, name_id, rel_name_id, 0);
@@ -335,7 +380,7 @@ pub fn load<'a>(
         //blocks.push(Box::new(section));
         let buf = section.bytes.clone();
         let name_id = Some(w.add_section_name(".data".as_bytes()));
-        let block = BufferSection::new(AllocSegment::RW, name_id, buf, section);
+        let block = BufferSection::new(AllocSegment::RW, Some(name), name_id, buf, Some(section));
         //for u in rw {
         //block.unlinked.push(u.clone());
         //}
@@ -403,6 +448,20 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));
+
+        let name = ".got";
+        let name_id = Some(writer.add_section_name(name.as_bytes()));
+        let mut buf = Vec::new();
+        buf.resize(0x1000, 0);
+        let b = BufferSection::new(AllocSegment::RW, Some(name.to_string()), name_id, buf, None);
+        blocks.add_block(Box::new(b));
+
+        let name = ".got.plt";
+        let name_id = Some(writer.add_section_name(name.as_bytes()));
+        let mut buf = Vec::new();
+        buf.resize(0x1000, 0);
+        let b = BufferSection::new(AllocSegment::RW, Some(name.to_string()), name_id, buf, None);
+        blocks.add_block(Box::new(b));
     }
 
     if data.add_symbols {
@@ -427,6 +486,17 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.reserve_section_index(&mut data, &mut writer);
     }
 
+    let d_name_id = Some(writer.add_string("_DYNAMIC".as_bytes()));
+    let got_name_id = Some(writer.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes()));
+
+    if true {
+        writer.reserve_symbol_index(data.index_dynamic);
+        writer.reserve_symbol_index(data.index_dynamic);
+    } else {
+        tracker.reserve_empty_symbol(data.index_dynamic);
+        tracker.reserve_empty_symbol(data.index_dynamic);
+    }
+
     blocks.reserve(&mut tracker, &mut data, &mut writer);
 
     if data.add_section_headers {
@@ -436,6 +506,43 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     // UPDATE
     tracker.update(&mut data, &mut blocks);
     blocks.update(&mut data);
+
+    if true {
+        let w = &mut writer;
+        let addr = data.get_addr(".dynamic").unwrap();
+        // Add symbols
+        //w.reserve_symbol_index(self.index);
+        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
+        let st_other = elf::STV_DEFAULT;
+        let st_shndx = 0;
+        let st_value = addr; //(self.base + self.offset) as u64;
+        let st_size = 0;
+        tracker.symbols.push(object::write::elf::Sym {
+            name: d_name_id,
+            section: data.index_dynamic,
+            st_info,
+            st_other,
+            st_shndx,
+            st_value,
+            st_size,
+        });
+
+        let addr = data.get_addr(".got.plt").unwrap();
+        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
+        let st_other = elf::STV_DEFAULT;
+        let st_shndx = 0;
+        let st_value = addr;
+        let st_size = 0;
+        tracker.symbols.push(object::write::elf::Sym {
+            name: got_name_id,
+            section: data.index_dynamic,
+            st_info,
+            st_other,
+            st_shndx,
+            st_value,
+            st_size,
+        });
+    }
 
     // WRITE
     blocks.write(&data, &mut tracker, &mut writer);

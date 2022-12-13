@@ -122,18 +122,17 @@ pub struct DynamicSection {
     align: usize,
     size: usize,
     address: u64,
-    offset: usize,
+    file_offset: usize,
     base: usize,
 }
 impl Default for DynamicSection {
     fn default() -> Self {
         Self {
             index: None,
-            //start: 0,
             size: 0,
             align: 0x10,
             address: 0,
-            offset: 0,
+            file_offset: 0,
             base: 0,
         }
     }
@@ -143,12 +142,13 @@ impl ElfBlock for DynamicSection {
     fn alloc(&self) -> Option<AllocSegment> {
         Some(AllocSegment::RW)
     }
+
     fn program_header(&self) -> Vec<ProgramHeaderEntry> {
         //program DYNAMIC
         vec![ProgramHeaderEntry {
             p_type: elf::PT_DYNAMIC,
             p_flags: elf::PF_R | elf::PF_W,
-            p_offset: self.offset as u64,
+            p_offset: self.file_offset as u64,
             p_vaddr: self.address,
             p_paddr: 0,
             p_filesz: self.size as u64,
@@ -165,36 +165,18 @@ impl ElfBlock for DynamicSection {
     fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
         let before = w.reserved_len();
-        self.offset = size_align(before, self.align);
-        w.reserve_until(self.offset);
+        self.file_offset = size_align(before, self.align);
+        w.reserve_until(self.file_offset);
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
-        self.size = after - self.offset;
-        // allocate space in the rw segment
-        self.base = tracker.add_data(self.alloc().unwrap(), after - before, self.offset);
+        self.size = after - self.file_offset;
 
-        // Add symbols
-        let name_id = Some(w.add_string("_DYNAMIC".as_bytes()));
-        //w.reserve_symbol_index(self.index);
-        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
-        let st_other = elf::STV_DEFAULT;
-        let st_shndx = 0; //self.index.unwrap().0 as u16;
-        let st_value = (self.base + self.offset) as u64;
-        let st_size = 0;
-        tracker.symbols.push(object::write::elf::Sym {
-            name: name_id,
-            section: self.index,
-            st_info,
-            st_other,
-            st_shndx,
-            st_value,
-            st_size,
-        });
+        self.base = tracker.add_data(self.alloc().unwrap(), after - before, self.file_offset);
+        self.address = self.base as u64 + self.file_offset as u64;
+        data.addr.insert(".dynamic".to_string(), self.address);
     }
 
-    fn update(&mut self, _data: &mut Data) {
-        self.address = self.base as u64 + self.offset as u64;
-    }
+    //fn update(&mut self, _data: &mut Data) {}
 
     fn write(&self, data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
@@ -205,6 +187,8 @@ impl ElfBlock for DynamicSection {
         w.write_align_dynamic();
         let pos2 = w.len();
         eprintln!("reserve: {:#0x}, {:#0x}, {:#0x}", &pos, aligned_pos, pos2);
+
+        // write out dynamic symbols
         for d in dynamic.iter() {
             if let Some(string) = d.string {
                 w.write_dynamic_string(d.tag, string);
@@ -224,7 +208,7 @@ pub struct RelaDynSection {
     index: SectionIndex,
     align: usize,
     name_id: Option<StringId>,
-    offset: usize,
+    file_offset: usize,
     base: usize,
 }
 
@@ -234,7 +218,7 @@ impl RelaDynSection {
             index: SectionIndex::default(),
             name_id: None,
             align: 0x10,
-            offset: 0,
+            file_offset: 0,
             base: 0,
         }
     }
@@ -252,7 +236,7 @@ impl ElfBlock for RelaDynSection {
 
     fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let before = w.reserved_len();
-        self.offset = w.reserved_len();
+        self.file_offset = w.reserved_len();
         //tracker.reserve_relocations(w);
         let after = w.reserved_len();
 
@@ -260,7 +244,7 @@ impl ElfBlock for RelaDynSection {
     }
 
     fn update(&mut self, data: &mut Data) {
-        data.addr_reladyn = self.base as u64 + self.offset as u64;
+        data.addr_reladyn = self.base as u64 + self.file_offset as u64;
     }
 
     fn write(&self, _data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
@@ -269,7 +253,18 @@ impl ElfBlock for RelaDynSection {
     }
 
     fn write_section_header(&self, data: &Data, tracker: &SegmentTracker, w: &mut Writer) {
-        tracker.write_relocation_section_headers(w, data.index_dynsym.unwrap());
+        //tracker.write_relocation_section_headers(w, data.index_dynsym.unwrap());
+        w.write_relocation_section_header(
+            self.name_id.unwrap(),
+            SectionIndex::default(),
+            data.index_dynsym.unwrap(),
+            //self.index,
+            //data.index_dynsym.unwrap(),
+            self.file_offset,
+            0,
+            //self.relocations.len(),
+            true,
+        );
     }
 }
 
@@ -710,6 +705,7 @@ impl ElfBlock for InterpSection {
 
 pub struct BufferSection {
     alloc: AllocSegment,
+    name: Option<String>,
     name_id: Option<StringId>,
     addr: usize,
     offset: usize,
@@ -723,12 +719,14 @@ pub struct BufferSection {
 impl BufferSection {
     pub fn new(
         alloc: AllocSegment,
+        name: Option<String>,
         name_id: Option<StringId>,
         buf: Vec<u8>,
-        section: ProgSection,
+        section: Option<ProgSection>,
     ) -> Self {
         Self {
             alloc,
+            name,
             name_id,
             addr: 0,
             offset: 0,
@@ -736,7 +734,7 @@ impl BufferSection {
             base: 0,
             buf,
             unlinked: vec![],
-            section: Some(section),
+            section,
         }
     }
 }
@@ -748,7 +746,9 @@ impl ElfBlock for BufferSection {
 
     fn reserve_section_index(&mut self, _data: &mut Data, w: &mut Writer) {
         let index = Some(w.reserve_section_index());
-        self.section.as_mut().unwrap().index = index;
+        if let Some(section) = self.section.as_mut() {
+            section.index = index;
+        }
     }
 
     fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
@@ -763,12 +763,20 @@ impl ElfBlock for BufferSection {
         self.size = self.buf.len();
         self.offset = start;
         let delta = after - pos;
-        //self.base = tracker.add_data(self.alloc, delta, self.offset);
-        self.base = tracker.add_section(self.alloc, self.section.take().unwrap(), start);
+
+        if self.section.is_some() {
+            self.base = tracker.add_section(self.alloc, self.section.take().unwrap(), start);
+        } else {
+            self.base = tracker.add_data(self.alloc, delta, self.offset);
+        }
     }
 
-    fn update(&mut self, _data: &mut Data) {
+    fn update(&mut self, data: &mut Data) {
         self.addr = self.base as usize + self.offset;
+        data.addr.insert(
+            self.name.clone().unwrap(),
+            self.base as u64 + self.offset as u64,
+        );
     }
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
