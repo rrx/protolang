@@ -148,9 +148,12 @@ impl ProgSection {
         for r in &unlinked.relocations {
             let mut r = r.clone();
             r.offset += self.data_count as u64;
+            eprintln!("relocation: {}", &r);
             self.relocations.push(r.clone());
         }
 
+        //for (name, symbol) in unlinked.externs.iter() {
+        //}
         for (name, symbol) in unlinked.defined.iter() {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
@@ -227,6 +230,16 @@ impl ProgSection {
         }
     }
 
+    pub fn unapplied_relocations(&self, pointers: &HashMap<String, u64>) -> Vec<CodeRelocation> {
+        let mut unapplied = vec![];
+        for r in self.relocations.iter() {
+            if pointers.get(&r.name).is_none() {
+                unapplied.push(r.clone());
+            }
+        }
+        unapplied
+    }
+
     pub fn apply_relocations(
         &self,
         v_base: usize,
@@ -245,6 +258,7 @@ impl ProgSection {
                 );
                 r.patch(patch_base as *mut u8, v_base as *mut u8, *addr as *const u8);
             } else {
+                //eprintln!("unapplied: {}", &r);
                 unapplied.push(r.clone());
             }
             //.expect(&format!("Unable to locate symbol: {}", &r.name));

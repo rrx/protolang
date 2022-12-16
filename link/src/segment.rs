@@ -234,6 +234,7 @@ impl UnlinkedCodeSegmentInner {
                         SymbolKind::Unknown | SymbolKind::Tls => {
                             // external references
                             externs.insert(name.clone());
+                            eprintln!("Extern: {}, {:#0x}", &name, s.address());
                             None
                             /*
                             Some(CodeSymbol {
@@ -317,6 +318,7 @@ impl UnlinkedCodeSegmentInner {
                             // | SymbolScope::Linkage | SymbolScope::Unknown => {
                             relocations.push(CodeRelocation {
                                 name,
+                                name_id: None,
                                 offset: reloc_offset,
                                 r: r.into(),
                             });
@@ -329,6 +331,7 @@ impl UnlinkedCodeSegmentInner {
                         (SymbolKind::Data, SymbolScope::Compilation) => {
                             relocations.push(CodeRelocation {
                                 name,
+                                name_id: None,
                                 offset: reloc_offset,
                                 r: r.into(),
                             });
@@ -341,6 +344,7 @@ impl UnlinkedCodeSegmentInner {
                             let name = section.name()?.to_string();
                             relocations.push(CodeRelocation {
                                 name,
+                                name_id: None,
                                 offset: reloc_offset,
                                 r: r.into(),
                             });

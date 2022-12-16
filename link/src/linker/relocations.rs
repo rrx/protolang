@@ -3,6 +3,7 @@ use crate::SmartPointer;
 use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::fmt;
 use std::ptr::NonNull;
+use object::write::StringId;
 
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;
@@ -80,6 +81,7 @@ impl From<Relocation> for LinkRelocation {
 #[derive(Clone, Debug)]
 pub struct CodeRelocation {
     pub(crate) name: String,
+    pub(crate) name_id: Option<StringId>,
     pub(crate) offset: u64,
     pub(crate) r: LinkRelocation,
 }

@@ -185,6 +185,10 @@ impl Data {
         self.libs.push(Library { string_id });
     }
 
+    fn add_dynstr(&mut self, string_id: StringId) {
+        self.libs.push(Library { string_id });
+    }
+
     fn get_addr(&self, name: &str) -> Option<u64> {
         self.addr.get(name).cloned()
     }
@@ -256,13 +260,6 @@ impl Data {
         let mut out_data = Vec::new();
         let endian = Endianness::Little;
         let mut writer = object::write::elf::Writer::new(endian, self.is_64, &mut out_data);
-
-        // add libraries if they are configured
-        let lib_names = self.lib_names.clone();
-        for lib_name in lib_names.iter() {
-            let string_id = writer.add_dynamic_string(lib_name.as_bytes());
-            self.add_library(string_id);
-        }
 
         // load bytes and relocations
         //self.segments.load(link, &mut writer);
@@ -404,6 +401,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         data.add_library(string_id);
     }
 
+
     // configure blocks
     // these are used to correctly order the reservation of space
     // and to write things out in the correct order
@@ -427,13 +425,13 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     blocks.add_block(Box::new(HashSection::default()));
+
     if writer.dynstr_needed() {
         blocks.add_block(Box::new(DynStrSection::default()));
     }
-
     if data.is_dynamic() {
-        blocks.add_block(Box::new(DynSymSection::default()));
         blocks.add_block(Box::new(RelaDynSection::default()));
+        blocks.add_block(Box::new(DynSymSection::default()));
     }
 
     // relocations go here
@@ -448,6 +446,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));
+
 
         let name = ".got";
         let name_id = Some(writer.add_section_name(name.as_bytes()));
@@ -485,6 +484,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     if data.add_section_headers {
         blocks.reserve_section_index(&mut data, &mut writer);
     }
+
 
     let d_name_id = Some(writer.add_string("_DYNAMIC".as_bytes()));
     let got_name_id = Some(writer.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes()));

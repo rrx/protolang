@@ -32,9 +32,9 @@ impl Blocks {
         // hack
         tracker.ph = temp_tracker.ph.clone();
 
-        for p in temp_tracker.ph.iter() {
-            eprintln!("P: {:?}", p);
-        }
+        //for p in temp_tracker.ph.iter() {
+            //eprintln!("P: {:?}", p);
+        //}
 
         for b in self.blocks.iter_mut() {
             b.reserve(data, tracker, w);
@@ -92,6 +92,7 @@ pub struct SegmentTracker {
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
     pub symbols: Vec<object::write::elf::Sym>,
+    pub unapplied: Vec<CodeRelocation>,
     pub empty_symbols: Vec<Option<SectionIndex>>,
 }
 
@@ -104,6 +105,7 @@ impl SegmentTracker {
             addr_start: 0,
             ph: vec![],
             symbols: vec![],
+            unapplied: vec![],
             empty_symbols: vec![],
         }
     }
@@ -152,7 +154,7 @@ impl SegmentTracker {
             segment.base = self.base as u64;
             segment.offset = file_offset as u64;
             self.segments.push(segment);
-            eprintln!("new add: base: {:?}, {:#0x}", alloc, self.base);
+            //eprintln!("new add: base: {:?}, {:#0x}", alloc, self.base);
         }
         self.current_mut().add_data(size, alloc.align());
         self.base
@@ -241,17 +243,27 @@ impl SegmentTracker {
             self.addr_start = *start;
         }
         self.ph = blocks.program_headers(self);
-        for p in self.ph.iter() {
-            eprintln!("P: {:?}", p);
-        }
+        //for p in self.ph.iter() {
+            //eprintln!("P: {:?}", p);
+        //}
 
         self.apply_relocations();
     }
 
-    fn apply_relocations(&self) {
+    pub fn unapplied_relocations(&mut self) {
+        let mut out = vec![];
         for seg in &self.segments {
-            seg.apply_relocations();
+            out.extend(seg.unapplied_relocations());
         }
+        self.unapplied = out;
+    }
+
+    fn apply_relocations(&self) -> Vec<CodeRelocation> {
+        let mut out = vec![];
+        for seg in &self.segments {
+            out.extend(seg.apply_relocations());
+        }
+        out
     }
 
     pub fn reserve_relocations(&mut self, w: &mut Writer) {
@@ -316,12 +328,12 @@ impl Segment {
         // set size to match the offset size
         let before = self.segment_size;
         let delta = size_align(size, align);
-        eprintln!("x/{:#0x}/{:#0x}", size, delta);
+        //eprintln!("x/{:#0x}/{:#0x}", size, delta);
         self.segment_size += delta;
-        eprintln!(
-            "add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
-            self.alloc, size, before, delta, self.segment_size, align
-        );
+        //eprintln!(
+            //"add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
+            //self.alloc, size, before, delta, self.segment_size, align
+        //);
     }
 
     pub fn debug(&self) {
@@ -379,11 +391,22 @@ impl Segment {
         }
     }
 
-    pub fn apply_relocations(&self) {
+    fn unapplied_relocations(&self) -> Vec<CodeRelocation> {
+        let mut out = vec![];
         let pointers = self.symbol_pointers();
         for section in &self.sections {
-            section.apply_relocations(self.base as usize, &pointers);
+            out.extend(section.unapplied_relocations(&pointers));
         }
+        out
+    }
+
+    pub fn apply_relocations(&self) -> Vec<CodeRelocation> {
+        let mut out = vec![];
+        let pointers = self.symbol_pointers();
+        for section in &self.sections {
+            out.extend(section.apply_relocations(self.base as usize, &pointers));
+        }
+        out
     }
 
     pub fn symbol_pointers(&self) -> HashMap<String, u64> {
