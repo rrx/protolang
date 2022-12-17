@@ -1,9 +1,9 @@
 use super::*;
 use crate::SmartPointer;
+use object::write::StringId;
 use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::fmt;
 use std::ptr::NonNull;
-use object::write::StringId;
 
 const R_X86_64_GOTPCREL: u32 = 41;
 const R_X86_64_REX_GOTP: u32 = 42;

@@ -8,8 +8,10 @@ pub trait ElfBlock {
     fn program_header(&self) -> Vec<ProgramHeaderEntry> {
         vec![]
     }
+    fn reserve_strings<'a>(&self, symbols: &'a mut Vec<LocalSymbol>, _: &mut Writer<'a>) {}
     fn reserve_section_index(&mut self, _: &mut Data, _: &mut Writer) {}
     fn reserve(&mut self, _: &mut Data, _: &mut SegmentTracker, _: &mut Writer) {}
+    fn update_tracker(&mut self, _: &Data, _: &mut SegmentTracker) {}
     fn update(&mut self, _: &mut Data) {}
     fn write(&self, _: &Data, _: &mut SegmentTracker, _: &mut Writer) {}
     fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &mut Writer) {}
@@ -202,7 +204,6 @@ impl ElfBlock for DynamicSection {
     }
 }
 
-#[derive(Default)]
 pub struct RelaDynSection {
     index: SectionIndex,
     align: usize,
@@ -210,7 +211,8 @@ pub struct RelaDynSection {
     file_offset: usize,
     base: usize,
     size: usize,
-    relocation_names: HashMap<String, StringId>
+    //sections: ProgSections,
+    relocation_names: HashMap<String, StringId>,
 }
 
 impl RelaDynSection {
@@ -222,7 +224,8 @@ impl RelaDynSection {
             file_offset: 0,
             base: 0,
             size: 0,
-            relocation_names: HashMap::default()
+            //sections,
+            relocation_names: HashMap::default(),
         }
     }
 }
@@ -237,19 +240,19 @@ impl ElfBlock for RelaDynSection {
         self.index = w.reserve_section_index();
     }
 
-    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        tracker.unapplied_relocations(w);
-
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        //tracker.unapplied_relocations(w);
+        //data.sections.unapplied_relocations();
         let before = w.reserved_len();
-        self.file_offset = w.reserved_len();
+        self.file_offset = size_align(before, self.align);
+        w.reserve_until(self.file_offset);
 
-        w.reserve_relocations(tracker.unapplied.len(), true);
+        w.reserve_relocations(data.sections.unapplied.len(), true);
 
         //for r in tracker.unapplied.iter() {
-            //let name_id = w.add_dynamic_string("asdf".as_bytes());
-            //self.relocation_names.insert(r.name.clone(), name_id);
+        //let name_id = w.add_dynamic_string("asdf".as_bytes());
+        //self.relocation_names.insert(r.name.clone(), name_id);
         //}
-
 
         //tracker.reserve_relocations(w);
         let after = w.reserved_len();
@@ -262,15 +265,18 @@ impl ElfBlock for RelaDynSection {
         data.addr_reladyn = self.base as u64 + self.file_offset as u64;
     }
 
-    fn write(&self, _data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        w.write_align_relocation();
+    fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        //w.write_align_relocation();
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.align);
+        w.pad_until(aligned_pos);
 
-        for rel in tracker.unapplied.iter() {
+        for rel in data.sections.unapplied.iter() {
             eprintln!("unapplied: {}", rel);
             //let name_id = self.relocation_names.get(&rel.name).unwrap();
             let r_offset = rel.offset;
-            let r_addend = 0;//rel.r.addend;
-            let r_sym = 1;//*name_id;
+            let r_addend = 0; //rel.r.addend;
+            let r_sym = 1; //rel.name_id.unwrap();//1;//*name_id;
             let r_type = elf::R_X86_64_GLOB_DAT;
             w.write_relocation(
                 true,
@@ -288,12 +294,12 @@ impl ElfBlock for RelaDynSection {
         //tracker.write_relocation_section_headers(w, data.index_dynsym.unwrap());
         w.write_relocation_section_header(
             self.name_id.unwrap(),
+            //self.index,
             SectionIndex::default(),
             data.index_dynsym.unwrap(),
-            //self.index,
             //data.index_dynsym.unwrap(),
             self.file_offset,
-            tracker.unapplied.len(),
+            data.sections.unapplied.len(),
             //self.relocations.len(),
             true,
         );
@@ -410,7 +416,7 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         // reserve the symbols in the various sections
         tracker.reserve_symbols(w);
 
@@ -442,7 +448,7 @@ impl ElfBlock for SymTabSection {
         symbols
             .iter()
             .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
-            .for_each(|s| {
+            .for_each(|_s| {
                 num_locals += 1;
             });
         eprintln!("num_locals: {}", num_locals);
@@ -462,7 +468,6 @@ pub struct DynSymSection {
     size: usize,
     names: Vec<StringId>,
     symbol_id: Option<SymbolIndex>,
-
 }
 impl Default for DynSymSection {
     fn default() -> Self {
@@ -490,7 +495,7 @@ impl ElfBlock for DynSymSection {
     }
 
     fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        tracker.unapplied.iter().for_each(|s| {
+        tracker.unapplied.iter().for_each(|_s| {
             //let name_id = w.add_dynamic_string("asdf".as_bytes());
             //self.names.push(name_id);
         });
@@ -504,7 +509,6 @@ impl ElfBlock for DynSymSection {
         let after = w.reserved_len();
         self.base = tracker.add_data(self.alloc().unwrap(), after - pos, self.start);
         self.size = after - self.start;
-
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -512,7 +516,7 @@ impl ElfBlock for DynSymSection {
         data.size_dynsym = self.size;
     }
 
-    fn write(&self, _data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
@@ -630,7 +634,7 @@ pub struct HashSection {
     offset: usize,
     addr: usize,
     bucket_count: u32,
-    chain_count: u32
+    chain_count: u32,
 }
 impl ElfBlock for HashSection {
     fn alloc(&self) -> Option<AllocSegment> {
@@ -870,3 +874,92 @@ impl ElfBlock for BufferSection {
         }
     }
 }
+
+pub struct LocalSymbol {
+    pub(crate) section: String,
+    pub(crate) symbol: String,
+    pub(crate) offset: usize,
+    pub(crate) string_id: Option<StringId>,
+}
+impl LocalSymbol {
+    pub fn new(
+        symbol: String,
+        section: String,
+        offset: usize,
+        string_id: Option<StringId>,
+    ) -> Self {
+        Self {
+            section,
+            symbol,
+            offset,
+            string_id,
+        }
+    }
+}
+
+/*
+#[derive(Default)]
+pub struct SymbolWriter {
+    //locals: Vec<LocalSymbol>,
+}
+
+impl SymbolWriter {
+    pub fn new() -> Self {
+        /*
+        let locals = vec![
+            LocalSymbol::new("_DYNAMIC".into(), ".dynamic".into(), 0),
+            LocalSymbol::new("_GLOBAL_OFFSET_TABLE_".into(), ".got.plt".into(), 0),
+        ];
+        Self { locals }
+        */
+        Self {}
+    }
+}
+
+impl ElfBlock for SymbolWriter {
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RO)
+    }
+
+    fn reserve_strings<'a>(&self, symbols: &'a mut Vec<LocalSymbol>, w: &mut Writer<'a>) {
+        for local in symbols.iter_mut() {
+            local.string_id = Some(w.add_string(local.symbol.as_bytes()));
+        }
+    }
+
+    //fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    //}
+
+    /*
+    fn update_tracker(&mut self, data: &Data, tracker: &mut SegmentTracker) {
+        for local in self.locals.iter() {
+            let addr = data.get_addr(&local.section).unwrap() + local.offset as u64;
+            // Add symbols
+            //w.reserve_symbol_index(self.index);
+            let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
+            let st_other = elf::STV_DEFAULT;
+            let st_shndx = 0;
+            let st_value = addr; //(self.base + self.offset) as u64;
+            let st_size = 0;
+            tracker.symbols.push(object::write::elf::Sym {
+                name: local.string_id,
+                section: data.index_dynamic,
+                st_info,
+                st_other,
+                st_shndx,
+                st_value,
+                st_size,
+            });
+        }
+    }
+    */
+
+    //fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
+    //}
+
+    //fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
+    //}
+}
+
+
+*/

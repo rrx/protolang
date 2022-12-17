@@ -5,7 +5,7 @@ use object::read::elf::FileHeader;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::Endianness;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 
 use super::*;
@@ -114,12 +114,11 @@ pub struct Data {
     interp: String,
     is_64: bool,
     ph: Vec<ProgramHeaderEntry>,
+    sections: ProgSections,
     lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
     base: usize,
-    //segments: Segments,
-    //tracker: SegmentTracker,
     addr: HashMap<String, u64>,
     addr_dynamic: u64,
     addr_got: u64,
@@ -149,11 +148,10 @@ impl Data {
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             ph: vec![],
             lib_names,
+            sections: ProgSections::new(),
             libs: vec![],
             base: 0x80000,
             page_size: 0x1000,
-            //segments: Segments::default(),
-            //tracker: SegmentTracker::new(0x80000),
             addr: HashMap::new(),
             addr_dynamic: 0,
             addr_got: 0,
@@ -259,7 +257,7 @@ impl Data {
     pub fn debug(&mut self, _link: &Link) {
         let mut out_data = Vec::new();
         let endian = Endianness::Little;
-        let mut writer = object::write::elf::Writer::new(endian, self.is_64, &mut out_data);
+        let _writer = object::write::elf::Writer::new(endian, self.is_64, &mut out_data);
 
         // load bytes and relocations
         //self.segments.load(link, &mut writer);
@@ -294,12 +292,70 @@ impl Data {
     }
 }
 
-pub fn load<'a>(
-    blocks: &mut Blocks,
-    //data: &mut Data,
-    link: &'a Link,
-    w: &mut Writer<'a>,
-) {
+pub struct ProgSections {
+    sections: Vec<ProgSection>,
+    unapplied: Vec<CodeRelocation>,
+}
+impl ProgSections {
+    pub fn new() -> Self {
+        Self {
+            sections: vec![],
+            unapplied: vec![],
+        }
+    }
+    pub fn add(&mut self, section: ProgSection) {
+        self.sections.push(section);
+    }
+
+    pub fn symbol_pointers(&self) -> HashSet<String> {
+        let mut pointers = HashSet::new();
+        for section in &self.sections {
+            for (name, _s) in &section.symbols {
+                pointers.insert(name.clone());
+            }
+        }
+        pointers
+    }
+}
+
+unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
+    std::mem::transmute::<&'b [u8], &'static [u8]>(r)
+}
+
+pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
+    let mut out = vec![];
+    let symbols = sections.symbol_pointers();
+    for section in sections.sections.iter() {
+        for mut r in section.unapplied_relocations(&symbols).into_iter() {
+            let buf = r.name.as_bytes();
+            unsafe {
+                r.name_id = Some(w.add_string(extend_lifetime(buf)));
+            }
+            out.push(r);
+        }
+    }
+
+    for u in out.iter() {
+        eprintln!("R: {}", u);
+    }
+    sections.unapplied = out;
+}
+
+pub fn load_blocks<'a>(blocks: &mut Blocks, data: &mut Data) {
+    for section in data.sections.sections.drain(..) {
+        let buf = section.bytes.clone();
+        let block = BufferSection::new(
+            AllocSegment::RX,
+            section.name.clone(),
+            section.name_id,
+            buf,
+            Some(section),
+        );
+        blocks.add_block(Box::new(block));
+    }
+}
+
+pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
     let mut ro = vec![];
     let mut rw = vec![];
     let mut rx = vec![];
@@ -310,14 +366,9 @@ pub fn load<'a>(
             K::Data | K::UninitializedData => {
                 rw.push(unlinked);
             }
-
-            // OtherString is usually comments, we can drop these
-            K::OtherString => (),
             K::ReadOnlyString | K::ReadOnlyData => {
                 eprintln!("X:{:?}", (&unlinked.name, &unlinked.kind));
                 ro.push(unlinked);
-                // XXX: this can mess things up
-                // it adds things to RO before the text begins and gets confused
             }
             K::Text => {
                 rx.push(unlinked);
@@ -327,6 +378,8 @@ pub fn load<'a>(
             K::Metadata => (),
             K::Other => (),
             K::Note => (),
+            // OtherString is usually comments, we can drop these
+            K::OtherString => (),
             K::Elf(_x) => {
                 // ignore
                 //unimplemented!("Elf({:#x})", x);
@@ -335,54 +388,61 @@ pub fn load<'a>(
         }
     }
 
+    //let mut out = ProgSections::new();//vec![];
     if rx.len() > 0 {
         let name = ".text".to_string();
         let name_id = Some(w.add_section_name(".text".as_bytes()));
         let rel_name_id = Some(w.add_section_name(".rela.text".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RX, name_id, rel_name_id, 0);
-        for u in rx.clone() {
+        let mut section = ProgSection::new(AllocSegment::RX, Some(name), name_id, rel_name_id, 0);
+        for u in rx.into_iter() {
             section.append(&u, w);
         }
-        //eprintln!("s: {:?}", &section.name);
-        //blocks.push(Box::new(section));
-        let buf = section.bytes.clone();
-        let block = BufferSection::new(AllocSegment::RX, Some(name), name_id, buf, Some(section));
-        //for u in rx {
-        //block.unlinked.push(u.clone());
-        //}
-        //block.unlinked.extend(rx);
-        blocks.add_block(Box::new(block));
+        data.sections.add(section);
     }
 
     if ro.len() > 0 {
+        let name = ".rodata".to_string();
         let name_id = Some(w.add_section_name(".rodata".as_bytes()));
         let rel_name_id = Some(w.add_section_name(".rela.rodata".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RO, name_id, rel_name_id, 0);
-        for u in ro {
+        let mut section = ProgSection::new(AllocSegment::RO, Some(name), name_id, rel_name_id, 0);
+        for u in ro.into_iter() {
             section.append(&u, w);
         }
-        //eprintln!("s: {:?}", &section.name);
-        //blocks.push(Box::new(section));
+        data.sections.add(section);
     }
 
     if rw.len() > 0 {
         let name = ".data".to_string();
         let name_id = Some(w.add_section_name(".data".as_bytes()));
         let rel_name_id = Some(w.add_section_name(".rela.data".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RW, name_id, rel_name_id, 0);
-        for u in rw.clone() {
+        let mut section = ProgSection::new(AllocSegment::RW, Some(name), name_id, rel_name_id, 0);
+        for u in rw.into_iter() {
             section.append(&u, w);
         }
-        //eprintln!("s: {:?}", &section.name);
-        //blocks.push(Box::new(section));
-        let buf = section.bytes.clone();
-        let name_id = Some(w.add_section_name(".data".as_bytes()));
-        let block = BufferSection::new(AllocSegment::RW, Some(name), name_id, buf, Some(section));
-        //for u in rw {
-        //block.unlinked.push(u.clone());
-        //}
-        blocks.add_block(Box::new(block));
-        //blocks.push(Box::new(BufferSection::new(AllocSegment::RW, name_id, buf)));
+        data.sections.add(section);
+    }
+
+    unapplied_relocations(&mut data.sections, w);
+}
+
+fn update_symbols(locals: &Vec<LocalSymbol>, data: &Data, tracker: &mut SegmentTracker) {
+    for local in locals.iter() {
+        let addr = data.get_addr(&local.section).unwrap() + local.offset as u64;
+        // Add symbol
+        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
+        let st_other = elf::STV_DEFAULT;
+        let st_shndx = 0;
+        let st_value = addr; //(self.base + self.offset) as u64;
+        let st_size = 0;
+        tracker.symbols.push(object::write::elf::Sym {
+            name: local.string_id,
+            section: data.index_dynamic,
+            st_info,
+            st_other,
+            st_shndx,
+            st_value,
+            st_size,
+        });
     }
 }
 
@@ -401,6 +461,22 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         data.add_library(string_id);
     }
 
+    load_sections(&mut data, link, &mut writer);
+
+    let locals = vec![
+        LocalSymbol::new(
+            "_DYNAMIC".into(),
+            ".dynamic".into(),
+            0,
+            Some(writer.add_string("_DYNAMIC".as_bytes())),
+        ),
+        LocalSymbol::new(
+            "_GLOBAL_OFFSET_TABLE_".into(),
+            ".got.plt".into(),
+            0,
+            Some(writer.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
+        ),
+    ];
 
     // configure blocks
     // these are used to correctly order the reservation of space
@@ -413,8 +489,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             // this doesn't implement the program header, we really need
             // the dedicated interp section code to make that work
             // interp is an exception
+            let name = ".interp".to_string();
             let name_id = Some(writer.add_section_name(".interp".as_bytes()));
-            let mut section = ProgSection::new(AllocSegment::RO, name_id, None, 0);
+            let mut section = ProgSection::new(AllocSegment::RO, Some(name), name_id, None, 0);
             let interp = data.interp.as_bytes().to_vec();
             let cstr = std::ffi::CString::new(interp).unwrap();
             section.add_bytes(cstr.as_bytes_with_nul());
@@ -430,7 +507,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(DynStrSection::default()));
     }
     if data.is_dynamic() {
-        blocks.add_block(Box::new(RelaDynSection::default()));
+        blocks.add_block(Box::new(RelaDynSection::new()));
         blocks.add_block(Box::new(DynSymSection::default()));
     }
 
@@ -442,11 +519,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(RelocationSection::new(AllocSegment::RW)));
     }
 
-    load(&mut blocks, link, &mut writer);
+    load_blocks(&mut blocks, &mut data);
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));
-
 
         let name = ".got";
         let name_id = Some(writer.add_section_name(name.as_bytes()));
@@ -479,15 +555,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let mut tracker = SegmentTracker::new(data.base);
 
     // RESERVE
-
     // section headers are optional
     if data.add_section_headers {
         blocks.reserve_section_index(&mut data, &mut writer);
     }
-
-
-    let d_name_id = Some(writer.add_string("_DYNAMIC".as_bytes()));
-    let got_name_id = Some(writer.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes()));
 
     if true {
         writer.reserve_symbol_index(data.index_dynamic);
@@ -504,45 +575,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // UPDATE
-    tracker.update(&mut data, &mut blocks);
+    tracker.update(&mut data, &blocks);
     blocks.update(&mut data);
 
-    if true {
-        let w = &mut writer;
-        let addr = data.get_addr(".dynamic").unwrap();
-        // Add symbols
-        //w.reserve_symbol_index(self.index);
-        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
-        let st_other = elf::STV_DEFAULT;
-        let st_shndx = 0;
-        let st_value = addr; //(self.base + self.offset) as u64;
-        let st_size = 0;
-        tracker.symbols.push(object::write::elf::Sym {
-            name: d_name_id,
-            section: data.index_dynamic,
-            st_info,
-            st_other,
-            st_shndx,
-            st_value,
-            st_size,
-        });
-
-        let addr = data.get_addr(".got.plt").unwrap();
-        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
-        let st_other = elf::STV_DEFAULT;
-        let st_shndx = 0;
-        let st_value = addr;
-        let st_size = 0;
-        tracker.symbols.push(object::write::elf::Sym {
-            name: got_name_id,
-            section: data.index_dynamic,
-            st_info,
-            st_other,
-            st_shndx,
-            st_value,
-            st_size,
-        });
-    }
+    update_symbols(&locals, &data, &mut tracker);
 
     // WRITE
     blocks.write(&data, &mut tracker, &mut writer);

@@ -1,7 +1,7 @@
 use object::elf;
 use object::write::elf::{SectionIndex, Sym, Writer};
 use object::write::StringId;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 
@@ -75,6 +75,7 @@ impl ProgSymbol {
 pub struct ProgSectionBuilder {}
 
 pub struct ProgSection {
+    pub name: Option<String>,
     pub name_id: Option<StringId>,
     pub rel_name_id: Option<StringId>,
     pub index: Option<SectionIndex>,
@@ -94,11 +95,13 @@ pub struct ProgSection {
 impl ProgSection {
     pub fn new(
         kind: AllocSegment,
+        name: Option<String>,
         name_id: Option<StringId>,
         rel_name_id: Option<StringId>,
         mem_size: usize,
     ) -> Self {
         Self {
+            name,
             name_id,
             rel_name_id,
             index: None,
@@ -230,10 +233,10 @@ impl ProgSection {
         }
     }
 
-    pub fn unapplied_relocations(&self, pointers: &HashMap<String, u64>) -> Vec<CodeRelocation> {
+    pub fn unapplied_relocations(&self, symbols: &HashSet<String>) -> Vec<CodeRelocation> {
         let mut unapplied = vec![];
         for r in self.relocations.iter() {
-            if pointers.get(&r.name).is_none() {
+            if !symbols.contains(&r.name) {
                 unapplied.push(r.clone());
             }
         }

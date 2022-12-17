@@ -14,6 +14,14 @@ impl Blocks {
         self.blocks.push(block);
     }
 
+    /*
+    pub fn reserve_strings<'a>(&self, symbols: &'a mut Vec<LocalSymbol>, w: &mut Writer<'a>) {
+        for b in self.blocks.iter() {
+            //b.reserve_strings(symbols, w);
+        }
+    }
+    */
+
     pub fn reserve(&mut self, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
         // build a list of sections that are loaded
         // this is a hack to get tracker to build a correct list of program headers
@@ -33,7 +41,7 @@ impl Blocks {
         tracker.ph = temp_tracker.ph.clone();
 
         //for p in temp_tracker.ph.iter() {
-            //eprintln!("P: {:?}", p);
+        //eprintln!("P: {:?}", p);
         //}
 
         for b in self.blocks.iter_mut() {
@@ -237,24 +245,80 @@ impl SegmentTracker {
         out
     }
 
-    pub fn update(&mut self, _data: &mut Data, blocks: &mut Blocks) {
+    pub fn update(&mut self, _data: &mut Data, blocks: &Blocks) {
         let pointers = self.symbol_pointers();
         if let Some(start) = pointers.get("_start") {
             self.addr_start = *start;
         }
         self.ph = blocks.program_headers(self);
         //for p in self.ph.iter() {
-            //eprintln!("P: {:?}", p);
+        //eprintln!("P: {:?}", p);
         //}
 
         self.apply_relocations();
     }
 
-    pub fn unapplied_relocations(&mut self) {
+    //pub fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
+    //let d_name_id = Some(w.add_string("_DYNAMIC".as_bytes()));
+    //let got_name_id = Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes()));
+    //}
+
+    /*
+    pub fn update_symbols(&mut self, data: &mut Data, w: &mut Writer) {
+        let addr = data.get_addr(".dynamic").unwrap();
+        // Add symbols
+        //w.reserve_symbol_index(self.index);
+        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
+        let st_other = elf::STV_DEFAULT;
+        let st_shndx = 0;
+        let st_value = addr; //(self.base + self.offset) as u64;
+        let st_size = 0;
+        self.symbols.push(object::write::elf::Sym {
+            name: d_name_id,
+            section: data.index_dynamic,
+            st_info,
+            st_other,
+            st_shndx,
+            st_value,
+            st_size,
+        });
+
+        let addr = data.get_addr(".got.plt").unwrap();
+        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
+        let st_other = elf::STV_DEFAULT;
+        let st_shndx = 0;
+        let st_value = addr;
+        let st_size = 0;
+        self.symbols.push(object::write::elf::Sym {
+            name: got_name_id,
+            section: data.index_dynamic,
+            st_info,
+            st_other,
+            st_shndx,
+            st_value,
+            st_size,
+        });
+    }
+    */
+
+    pub fn unapplied_relocations<'a>(&mut self, w: &mut Writer<'a>) {
         let mut out = vec![];
-        for seg in &self.segments {
-            out.extend(seg.unapplied_relocations());
+        for r in self
+            .segments
+            .iter_mut()
+            .map(|seg| seg.unapplied_relocations())
+            .flatten()
+        {
+            out.push(r);
         }
+
+        /*
+        let mut out2 = vec![];
+        for mut r in out.into_iter() {
+            //r.name_id = Some(w.add_dynamic_string(r.name.as_bytes()));
+            out2.push(r.clone());
+        }
+        */
         self.unapplied = out;
     }
 
@@ -331,8 +395,8 @@ impl Segment {
         //eprintln!("x/{:#0x}/{:#0x}", size, delta);
         self.segment_size += delta;
         //eprintln!(
-            //"add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
-            //self.alloc, size, before, delta, self.segment_size, align
+        //"add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
+        //self.alloc, size, before, delta, self.segment_size, align
         //);
     }
 
@@ -393,7 +457,7 @@ impl Segment {
 
     fn unapplied_relocations(&self) -> Vec<CodeRelocation> {
         let mut out = vec![];
-        let pointers = self.symbol_pointers();
+        let pointers = self.symbol_set();
         for section in &self.sections {
             out.extend(section.unapplied_relocations(&pointers));
         }
@@ -407,6 +471,17 @@ impl Segment {
             out.extend(section.apply_relocations(self.base as usize, &pointers));
         }
         out
+    }
+
+    pub fn symbol_set(&self) -> HashSet<String> {
+        let mut pointers = HashSet::new();
+        for section in &self.sections {
+            for (name, s) in &section.symbols {
+                //let addr = self.base + self.offset + s.s.address;
+                pointers.insert(name.clone());
+            }
+        }
+        pointers
     }
 
     pub fn symbol_pointers(&self) -> HashMap<String, u64> {
