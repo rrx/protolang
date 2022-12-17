@@ -29,7 +29,7 @@ pub struct PatchBlock {
     pub(crate) kind: PatchBlockKind,
     pub(crate) name: String,
     pub(crate) block: Block,
-    pub(crate) externs: HashSet<String>,
+    pub(crate) externs: HashMap<String, RelocationPointer>,
     pub(crate) symbols: HashMap<String, RelocationPointer>,
     pub(crate) internal: HashMap<String, RelocationPointer>,
     pub(crate) relocations: Vec<CodeRelocation>,

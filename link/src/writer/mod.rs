@@ -295,8 +295,8 @@ impl Data {
 
 pub struct ProgSections {
     sections: Vec<ProgSection>,
-    unapplied: Vec<CodeRelocation>,
-    unapplied_symbols: Vec<Sym>,
+    unapplied: Vec<(Sym, CodeRelocation)>,
+    //unapplied_symbols: Vec<Sym>,
     dynsymbols: Vec<SymbolIndex>,
 }
 impl ProgSections {
@@ -304,7 +304,7 @@ impl ProgSections {
         Self {
             sections: vec![],
             unapplied: vec![],
-            unapplied_symbols: vec![],
+            //unapplied_symbols: vec![],
             dynsymbols: vec![],
         }
     }
@@ -312,11 +312,21 @@ impl ProgSections {
         self.sections.push(section);
     }
 
-    pub fn symbol_pointers(&self) -> HashSet<String> {
-        let mut pointers = HashSet::new();
+    pub fn extern_symbol_pointers(&self) -> HashMap<String, ProgSymbol> {
+        let mut pointers = HashMap::new();
         for section in &self.sections {
-            for (name, _s) in &section.symbols {
-                pointers.insert(name.clone());
+            for (name, s) in &section.externs {
+                pointers.insert(name.clone(), s.clone());
+            }
+        }
+        pointers
+    }
+
+    pub fn symbol_pointers(&self) -> HashMap<String, ProgSymbol> {
+        let mut pointers = HashMap::new();
+        for section in &self.sections {
+            for (name, s) in &section.symbols {
+                pointers.insert(name.clone(), s.clone());
             }
         }
         pointers
@@ -328,31 +338,37 @@ unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
 }
 
 pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
-    let mut out = vec![];
     let symbols = sections.symbol_pointers();
+    let externs = sections.extern_symbol_pointers();
     for section in sections.sections.iter() {
-        for mut r in section.unapplied_relocations(&symbols).into_iter() {
+        for (symbol, mut r) in section
+            .unapplied_relocations(&symbols, &externs)
+            .into_iter()
+        {
             let buf = r.name.as_bytes();
             unsafe {
                 r.name_id = Some(w.add_dynamic_string(extend_lifetime(buf)));
             }
-            sections.unapplied_symbols.push(Sym {
+            let sym = Sym {
                 name: r.name_id,
                 section: None,
-                st_info: 0,
-                st_other: 0,
+                st_info: symbol.s.st_info,
+                st_other: symbol.s.st_other,
                 st_shndx: 0,
                 st_value: 0,
                 st_size: 0,
-            });
-            out.push(r);
+            };
+            eprintln!("s: {:?}", &symbol);
+            eprintln!("unapp: {:?}", &sym);
+            //sections.unapplied_symbols.push(sym);
+            sections.unapplied.push((sym, r));
         }
     }
 
-    for u in out.iter() {
-        eprintln!("R: {}", u);
+    for (sym, u) in sections.unapplied.iter() {
+        eprintln!("R: {:?}", (sym, u));
     }
-    sections.unapplied = out;
+    //sections.unapplied = out;
 }
 
 pub fn load_blocks<'a>(blocks: &mut Blocks, data: &mut Data) {

@@ -100,7 +100,7 @@ pub struct SegmentTracker {
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
     pub symbols: Vec<object::write::elf::Sym>,
-    pub unapplied: Vec<CodeRelocation>,
+    pub unapplied: Vec<(ProgSymbol, CodeRelocation)>,
     pub empty_symbols: Vec<Option<SectionIndex>>,
 }
 
@@ -301,7 +301,7 @@ impl SegmentTracker {
     }
     */
 
-    pub fn unapplied_relocations<'a>(&mut self, w: &mut Writer<'a>) {
+    pub fn unapplied_relocations<'a>(&mut self, _w: &mut Writer<'a>) {
         let mut out = vec![];
         for r in self
             .segments
@@ -311,14 +311,6 @@ impl SegmentTracker {
         {
             out.push(r);
         }
-
-        /*
-        let mut out2 = vec![];
-        for mut r in out.into_iter() {
-            //r.name_id = Some(w.add_dynamic_string(r.name.as_bytes()));
-            out2.push(r.clone());
-        }
-        */
         self.unapplied = out;
     }
 
@@ -390,7 +382,7 @@ impl Segment {
 
     pub fn add_data(&mut self, size: usize, align: usize) {
         // set size to match the offset size
-        let before = self.segment_size;
+        let _before = self.segment_size;
         let delta = size_align(size, align);
         //eprintln!("x/{:#0x}/{:#0x}", size, delta);
         self.segment_size += delta;
@@ -455,11 +447,12 @@ impl Segment {
         }
     }
 
-    fn unapplied_relocations(&self) -> Vec<CodeRelocation> {
+    fn unapplied_relocations(&self) -> Vec<(ProgSymbol, CodeRelocation)> {
         let mut out = vec![];
-        let pointers = self.symbol_set();
+        let externs = self.extern_symbol_set();
+        let symbols = self.symbol_set();
         for section in &self.sections {
-            out.extend(section.unapplied_relocations(&pointers));
+            out.extend(section.unapplied_relocations(&symbols, &externs));
         }
         out
     }
@@ -473,12 +466,23 @@ impl Segment {
         out
     }
 
-    pub fn symbol_set(&self) -> HashSet<String> {
-        let mut pointers = HashSet::new();
+    pub fn extern_symbol_set(&self) -> HashMap<String, ProgSymbol> {
+        let mut pointers = HashMap::new();
+        for section in &self.sections {
+            for (name, s) in &section.externs {
+                //let addr = self.base + self.offset + s.s.address;
+                pointers.insert(name.clone(), s.clone());
+            }
+        }
+        pointers
+    }
+
+    pub fn symbol_set(&self) -> HashMap<String, ProgSymbol> {
+        let mut pointers = HashMap::new();
         for section in &self.sections {
             for (name, s) in &section.symbols {
                 //let addr = self.base + self.offset + s.s.address;
-                pointers.insert(name.clone());
+                pointers.insert(name.clone(), s.clone());
             }
         }
         pointers

@@ -112,7 +112,7 @@ impl DynamicLink {
             let mut children = HashSet::new();
             //log::debug!("checking: {}", name);
             // ensure all relocations map somewhere
-            for extern_symbol in &unlinked.externs {
+            for (extern_symbol, _s) in &unlinked.externs {
                 if pointers.contains_key(extern_symbol) {
                 } else if self.libraries.search_dynamic(&extern_symbol).is_some() {
                     log::debug!(" Symbol {} found in shared library", &extern_symbol);
@@ -178,7 +178,7 @@ impl Link {
         self.unlinked.remove(&name.to_string());
     }
 
-    pub fn add_library(&mut self, name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
+    pub fn add_library(&mut self, _name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
         self.libs.insert(path.to_string_lossy().to_string());
         Ok(())
     }
@@ -210,7 +210,7 @@ impl Link {
     pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         use object::elf;
         use object::Endianness;
-        let mut data = crate::writer::Data::new(self.libs.iter().cloned().collect());
+        let data = crate::writer::Data::new(self.libs.iter().cloned().collect());
         //data.add_section_headers = true;
         //data.add_symbols = true;
 

@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use super::*;
 
@@ -22,6 +22,7 @@ pub enum CodeSymbolKind {
     Text,
     Data,
     Section,
+    Unknown,
 }
 
 #[derive(Clone, Debug)]
@@ -58,7 +59,7 @@ pub struct UnlinkedCodeSegmentInner {
     pub(crate) bytes: Vec<u8>,
     pub(crate) defined: im::HashMap<String, CodeSymbol>,
     pub(crate) internal: im::HashMap<String, CodeSymbol>,
-    pub(crate) externs: HashSet<String>,
+    pub(crate) externs: im::HashMap<String, CodeSymbol>,
     pub(crate) relocations: Vec<CodeRelocation>,
 }
 
@@ -90,7 +91,7 @@ impl UnlinkedCodeSegmentInner {
         let mut symbols = HashMap::new();
         let mut symbols_by_id = HashMap::new();
         let mut segments = vec![];
-        let mut externs = HashSet::new();
+        let mut externs = im::HashMap::new();
         let mut internal = im::HashMap::new();
 
         if let Some(symbol_table) = obj_file.symbol_table() {
@@ -231,20 +232,25 @@ impl UnlinkedCodeSegmentInner {
                     }
 
                     None => match s.kind() {
-                        SymbolKind::Unknown | SymbolKind::Tls => {
+                        SymbolKind::Unknown => {
+                            //| SymbolKind::Tls => {
                             // external references
-                            externs.insert(name.clone());
-                            eprintln!("Extern: {}, {:#0x}", &name, s.address());
-                            None
-                            /*
-                            Some(CodeSymbol {
-                                name,
-                                address: s.address(),
-                                size: s.size(),
-                                kind: CodeSymbolKind::Text,
-                                def: CodeSymbolDefinition::Extern,
-                            })
-                            */
+                            if let SymbolFlags::Elf { st_info, st_other } = s.flags() {
+                                let code_symbol = CodeSymbol {
+                                    name: name.clone(),
+                                    address: s.address(),
+                                    size: s.size(),
+                                    kind: CodeSymbolKind::Unknown,
+                                    def: CodeSymbolDefinition::Extern,
+                                    st_info,
+                                    st_other,
+                                };
+                                eprintln!("Extern: {}, {:?}", &name, &code_symbol);
+                                externs.insert(name, code_symbol);
+                                None
+                            } else {
+                                unimplemented!()
+                            }
                         }
 
                         // skip these
@@ -416,6 +422,8 @@ impl UnlinkedCodeSegmentInner {
                 // for each symbol, add a reference to it's full address
                 let mut pointers = HashMap::new();
                 let mut internal = HashMap::new();
+                let mut externs = HashMap::new();
+
                 let block_ptr = RelocationPointer::Smart(block.offset(0));
                 internal.insert(self.section_name.clone(), block_ptr.clone());
                 pointers.insert(self.section_name.clone(), block_ptr);
@@ -430,11 +438,16 @@ impl UnlinkedCodeSegmentInner {
                     internal.insert(s.name.clone(), value_ptr);
                 }
 
+                for s in self.externs.values() {
+                    let value_ptr = RelocationPointer::Smart(block.offset(s.address as usize));
+                    externs.insert(s.name.clone(), value_ptr);
+                }
+
                 Ok(Some(PatchBlock {
                     kind,
                     name: code_page_name.to_string(),
                     block,
-                    externs: self.externs.clone(),
+                    externs,
                     symbols: pointers,
                     internal,
                     relocations: self.relocations.clone(),

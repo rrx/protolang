@@ -5,10 +5,9 @@ use std::collections::{HashMap, HashSet};
 
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProgSymbol {
     pub name_id: Option<StringId>,
-    //pub is_start: bool,
     pub s: CodeSymbol,
 }
 
@@ -88,6 +87,7 @@ pub struct ProgSection {
     pub rel_file_offset: usize, // file offset
     pub mem_size: usize,        // might be different than file size
     pub symbols: HashMap<String, ProgSymbol>,
+    pub externs: HashMap<String, ProgSymbol>,
     pub relocations: Vec<CodeRelocation>,
     pub bytes: Vec<u8>,
 }
@@ -114,6 +114,7 @@ impl ProgSection {
             mem_size,
             data_count: 0,
             symbols: HashMap::new(),
+            externs: HashMap::new(),
             relocations: vec![],
             bytes: vec![],
         }
@@ -155,8 +156,20 @@ impl ProgSection {
             self.relocations.push(r.clone());
         }
 
-        //for (name, symbol) in unlinked.externs.iter() {
-        //}
+        for (name, symbol) in unlinked.externs.iter() {
+            let name_id = Some(w.add_string(name.as_bytes()));
+            let mut symbol = symbol.clone();
+            symbol.address += self.base as u64 + self.addr as u64 + self.data_count as u64;
+            //let is_start = name == "_start";
+            let ps = ProgSymbol {
+                name_id,
+                //is_start,
+                s: symbol,
+            };
+            eprintln!("symbol extern: {}, {:#0x}", &name, &ps.s.address);
+            self.externs.insert(name.clone(), ps);
+        }
+
         for (name, symbol) in unlinked.defined.iter() {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
@@ -233,11 +246,17 @@ impl ProgSection {
         }
     }
 
-    pub fn unapplied_relocations(&self, symbols: &HashSet<String>) -> Vec<CodeRelocation> {
+    pub fn unapplied_relocations(
+        &self,
+        symbols: &HashMap<String, ProgSymbol>,
+        externs: &HashMap<String, ProgSymbol>,
+    ) -> Vec<(ProgSymbol, CodeRelocation)> {
         let mut unapplied = vec![];
         for r in self.relocations.iter() {
-            if !symbols.contains(&r.name) {
-                unapplied.push(r.clone());
+            if let Some(symbol) = externs.get(&r.name) {
+                if !symbols.contains_key(&r.name) && externs.contains_key(&r.name) {
+                    unapplied.push((symbol.clone(), r.clone()));
+                }
             }
         }
         unapplied

@@ -107,9 +107,9 @@ pub fn build_version(link: &mut DynamicLink) -> Result<LinkVersion, Box<dyn Erro
     for (_block_name, block) in &blocks {
         match &block.kind {
             PatchBlockKind::Code => {
-                for symbol in &block.externs {
-                    if pointers.contains_key(symbol) {
-                    } else if let Some(ptr) = link.libraries.search_dynamic(&symbol) {
+                for (symbol_name, symbol) in &block.externs {
+                    if pointers.contains_key(symbol_name) {
+                    } else if let Some(ptr) = link.libraries.search_dynamic(&symbol_name) {
                         // data pointers should already have a got in the shared library
                         unsafe {
                             let p = ptr.as_ptr() as *const usize;
@@ -121,7 +121,7 @@ pub fn build_version(link: &mut DynamicLink) -> Result<LinkVersion, Box<dyn Erro
                                 symbol
                             );
 
-                            pointers.insert(symbol.clone(), ptr);
+                            pointers.insert(symbol_name.clone(), ptr);
                         }
                     } else {
                         log::error!("Unable to resolve shared library:{}", symbol);
