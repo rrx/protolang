@@ -466,8 +466,8 @@ pub struct DynSymSection {
     start: usize,
     base: usize,
     size: usize,
-    names: Vec<StringId>,
-    symbol_id: Option<SymbolIndex>,
+    //names: Vec<StringId>,
+    //symbol_id: Option<SymbolIndex>,
 }
 impl Default for DynSymSection {
     fn default() -> Self {
@@ -477,8 +477,8 @@ impl Default for DynSymSection {
             start: 0,
             base: 0,
             size: 0,
-            names: vec![],
-            symbol_id: None,
+            //names: vec![],
+            //symbol_id: None,
         }
     }
 }
@@ -491,15 +491,12 @@ impl ElfBlock for DynSymSection {
         w.reserve_null_dynamic_symbol_index();
 
         data.index_dynsym = Some(w.reserve_dynsym_section_index());
-        self.symbol_id = Some(w.reserve_dynamic_symbol_index());
+        for _ in data.sections.unapplied_symbols.iter() {
+            let symbol_id = Some(w.reserve_dynamic_symbol_index());
+        }
     }
 
     fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        tracker.unapplied.iter().for_each(|_s| {
-            //let name_id = w.add_dynamic_string("asdf".as_bytes());
-            //self.names.push(name_id);
-        });
-
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.align);
         w.reserve_until(align_pos);
@@ -516,29 +513,22 @@ impl ElfBlock for DynSymSection {
         data.size_dynsym = self.size;
     }
 
-    fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn write(&self, data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
         w.write_null_dynamic_symbol();
 
-        w.write_dynamic_symbol(&Sym {
-            name: None,
-            section: None,
-            st_info: 0,
-            st_other: 0,
-            st_shndx: 0,
-            st_value: 0,
-            st_size: 0,
-        });
-
-        for name_id in self.names.iter() {
-            //w.write_dynamic_string(0, *name_id);
+        for sym in data.sections.unapplied_symbols.iter() {
+            w.write_dynamic_symbol(sym);
         }
     }
 
     fn write_section_header(&self, data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
-        w.write_dynsym_section_header(data.addr_dynsym, 2);
+        w.write_dynsym_section_header(
+            data.addr_dynsym,
+            data.sections.unapplied_symbols.len() as u32 + 1,
+        );
     }
 }
 
@@ -589,13 +579,6 @@ impl ElfBlock for DynStrSection {
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
         w.write_dynstr();
-        /*
-        for d in dynamic.iter() {
-            if let Some(string) = d.string {
-                //w.write_dynamic_string(d.tag, string);
-            }
-        }
-        */
     }
 
     fn write_section_header(&self, data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {

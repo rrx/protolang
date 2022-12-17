@@ -2,7 +2,8 @@ use std::error::Error;
 
 use object::elf;
 use object::read::elf::FileHeader;
-use object::write::elf::{SectionIndex, Writer};
+use object::write::elf::Sym;
+use object::write::elf::{SectionIndex, SymbolIndex, Writer};
 use object::write::StringId;
 use object::Endianness;
 use std::collections::{HashMap, HashSet};
@@ -295,12 +296,16 @@ impl Data {
 pub struct ProgSections {
     sections: Vec<ProgSection>,
     unapplied: Vec<CodeRelocation>,
+    unapplied_symbols: Vec<Sym>,
+    dynsymbols: Vec<SymbolIndex>,
 }
 impl ProgSections {
     pub fn new() -> Self {
         Self {
             sections: vec![],
             unapplied: vec![],
+            unapplied_symbols: vec![],
+            dynsymbols: vec![],
         }
     }
     pub fn add(&mut self, section: ProgSection) {
@@ -329,8 +334,17 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
         for mut r in section.unapplied_relocations(&symbols).into_iter() {
             let buf = r.name.as_bytes();
             unsafe {
-                r.name_id = Some(w.add_string(extend_lifetime(buf)));
+                r.name_id = Some(w.add_dynamic_string(extend_lifetime(buf)));
             }
+            sections.unapplied_symbols.push(Sym {
+                name: r.name_id,
+                section: None,
+                st_info: 0,
+                st_other: 0,
+                st_shndx: 0,
+                st_value: 0,
+                st_size: 0,
+            });
             out.push(r);
         }
     }
