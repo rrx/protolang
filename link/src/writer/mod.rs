@@ -132,6 +132,7 @@ pub struct Data {
     size_reladyn: usize,
     addr_hash: u64,
     pointers: HashMap<String, u64>,
+    symbols: HashMap<String, ProgSymbol>,
 
     //addr_interp: u64,
     index_strtab: Option<SectionIndex>,
@@ -143,6 +144,7 @@ pub struct Data {
     add_symbols: bool,
     debug: bool,
 }
+
 impl Data {
     pub fn new(lib_names: Vec<String>) -> Self {
         Self {
@@ -166,6 +168,8 @@ impl Data {
             size_reladyn: 0,
             addr_hash: 0,
             pointers: HashMap::new(),
+            symbols: HashMap::new(),
+
             //addr_interp: 0,
             index_strtab: None,
             index_symtab: None,
@@ -482,7 +486,7 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
     unapplied_relocations(&mut data.sections, w);
 }
 
-fn update_symbols(locals: &Vec<LocalSymbol>, data: &Data, tracker: &mut SegmentTracker) {
+fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, tracker: &mut SegmentTracker) {
     for local in locals.iter() {
         let addr = data.get_addr(&local.section).unwrap() + local.offset as u64;
         // Add symbol
@@ -491,6 +495,24 @@ fn update_symbols(locals: &Vec<LocalSymbol>, data: &Data, tracker: &mut SegmentT
         let st_shndx = 0;
         let st_value = addr; //(self.base + self.offset) as u64;
         let st_size = 0;
+
+        let p = ProgSymbol {
+            name_id: local.string_id,
+            section_index: None,
+            base: 0,
+            s: CodeSymbol {
+                name: local.symbol.clone(),
+                size: st_size,
+                address: addr,
+                kind: CodeSymbolKind::Data,
+                def: CodeSymbolDefinition::Defined,
+                st_info,
+                st_other,
+            },
+        };
+
+        data.symbols.insert(local.symbol.clone(), p);
+        /*
         tracker.symbols.push(object::write::elf::Sym {
             name: local.string_id,
             section: data.index_dynamic,
@@ -500,6 +522,7 @@ fn update_symbols(locals: &Vec<LocalSymbol>, data: &Data, tracker: &mut SegmentT
             st_value,
             st_size,
         });
+        */
     }
 }
 
@@ -625,8 +648,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         writer.reserve_symbol_index(data.index_dynamic);
         writer.reserve_symbol_index(data.index_dynamic);
     } else {
-        tracker.reserve_empty_symbol(data.index_dynamic);
-        tracker.reserve_empty_symbol(data.index_dynamic);
+        //tracker.reserve_empty_symbol(data.index_dynamic);
+        //tracker.reserve_empty_symbol(data.index_dynamic);
     }
 
     blocks.reserve(&mut tracker, &mut data, &mut writer);
@@ -643,7 +666,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     tracker.update(&mut data, &blocks);
     blocks.update(&mut data);
 
-    update_symbols(&locals, &data, &mut tracker);
+    update_symbols(&locals, &mut data, &mut tracker);
 
     // WRITE
     blocks.write(&data, &mut tracker, &mut writer);

@@ -94,15 +94,15 @@ impl Blocks {
 }
 
 pub struct SegmentTracker {
-    segments: Vec<Segment>,
+    pub segments: Vec<Segment>,
     base: usize,
     page_size: usize,
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
     addr: HashMap<String, u64>,
-    pub symbols: Vec<object::write::elf::Sym>,
+    //pub symbols: Vec<object::write::elf::Sym>,
     //pub unapplied: Vec<(ProgSymbol, CodeRelocation)>,
-    pub empty_symbols: Vec<Option<SectionIndex>>,
+    //pub empty_symbols: Vec<Option<SectionIndex>>,
 }
 
 impl SegmentTracker {
@@ -114,9 +114,9 @@ impl SegmentTracker {
             addr_start: 0,
             ph: vec![],
             addr: HashMap::new(),
-            symbols: vec![],
+            //symbols: vec![],
             //unapplied: vec![],
-            empty_symbols: vec![],
+            //empty_symbols: vec![],
         }
     }
 
@@ -190,10 +190,11 @@ impl SegmentTracker {
     }
     */
 
-    pub fn reserve_empty_symbol(&mut self, v: Option<SectionIndex>) {
-        self.empty_symbols.push(v);
-    }
+    //pub fn reserve_empty_symbol(&mut self, v: Option<SectionIndex>) {
+    //self.empty_symbols.push(v);
+    //}
 
+    /*
     pub fn reserve_symbols(&self, w: &mut Writer) {
         for s in self.segments.iter() {
             s.reserve_symbols(w);
@@ -203,9 +204,9 @@ impl SegmentTracker {
             w.reserve_symbol_index(s.section);
         }
 
-        for section_index in self.empty_symbols.iter() {
-            w.reserve_symbol_index(*section_index);
-        }
+        //for section_index in self.empty_symbols.iter() {
+        //w.reserve_symbol_index(*section_index);
+        //}
     }
 
     //pub fn symbol_count(&self) -> usize {
@@ -220,7 +221,9 @@ impl SegmentTracker {
             .chain(self.symbols.iter().cloned())
             .collect()
     }
+    */
 
+    /*
     pub fn write_symbols(&self, w: &mut Writer) -> usize {
         let symbols = self.get_symbols();
         // sort them, locals first
@@ -242,6 +245,7 @@ impl SegmentTracker {
             });
         num_locals
     }
+    */
 
     /*
     pub fn load_segment_count(&self) -> usize {
@@ -437,6 +441,7 @@ impl Segment {
         }
     }
 
+    /*
     pub fn reserve_symbols(&self, w: &mut Writer) {
         for s in &self.sections {
             s.reserve_symbols(w);
@@ -462,6 +467,7 @@ impl Segment {
             s.write_symbols(self.base + self.offset, w);
         }
     }
+    */
 
     /*
     fn unapplied_relocations(&self) -> Vec<(ProgSymbol, CodeRelocation)> {

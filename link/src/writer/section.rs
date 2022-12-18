@@ -8,13 +8,17 @@ use super::*;
 #[derive(Debug, Clone)]
 pub struct ProgSymbol {
     pub name_id: Option<StringId>,
+    pub section_index: Option<SectionIndex>,
+    pub base: usize,
     pub s: CodeSymbol,
 }
 
 impl ProgSymbol {
-    pub fn new_object(name: &str, _index: SectionIndex) -> Self {
+    pub fn new_object(name: &str, section_index: Option<SectionIndex>) -> Self {
         Self {
             name_id: None,
+            section_index,
+            base: 0,
             s: CodeSymbol {
                 name: name.to_string(),
                 size: 0,
@@ -32,7 +36,7 @@ impl ProgSymbol {
         //w.reserve_symbol_index(data.index_dynamic);
     }
 
-    pub fn get_symbol(&self, base: usize, index: Option<SectionIndex>) -> object::write::elf::Sym {
+    pub fn get_symbol(&self, base: usize) -> object::write::elf::Sym {
         let st_shndx = elf::SHN_ABS;
         let st_size = self.s.size;
         let addr = base as u64 + self.s.address;
@@ -40,7 +44,7 @@ impl ProgSymbol {
         //eprintln!("write symbol: {}, {:#0x}", &self.s.name, &addr);
         object::write::elf::Sym {
             name: self.name_id,
-            section: index,
+            section: self.section_index,
             st_info: self.s.st_info,
             st_other: self.s.st_other,
             st_shndx,
@@ -49,8 +53,8 @@ impl ProgSymbol {
         }
     }
 
-    pub fn write_symbol(&self, base: usize, index: Option<SectionIndex>, w: &mut Writer) {
-        let sym = self.get_symbol(base, index);
+    pub fn write_symbol(&self, base: usize, w: &mut Writer) {
+        let sym = self.get_symbol(base);
         w.write_symbol(&sym);
         /*
         let st_shndx = elf::SHN_ABS;
@@ -161,7 +165,12 @@ impl ProgSection {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
             symbol.address += self.base as u64 + self.addr as u64 + self.data_count as u64;
-            let ps = ProgSymbol { name_id, s: symbol };
+            let ps = ProgSymbol {
+                name_id,
+                section_index: None,
+                base: 0,
+                s: symbol,
+            };
             eprintln!("symbol extern: {}, {:#0x}", &name, &ps.s.address);
             self.externs.insert(name.clone(), ps);
         }
@@ -170,7 +179,12 @@ impl ProgSection {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
             symbol.address += self.base as u64 + self.addr as u64 + self.data_count as u64;
-            let ps = ProgSymbol { name_id, s: symbol };
+            let ps = ProgSymbol {
+                name_id,
+                section_index: None,
+                base: 0,
+                s: symbol,
+            };
             eprintln!("symbol: {}, {:#0x}", &name, &ps.s.address);
             self.symbols.insert(name.clone(), ps);
         }
@@ -209,14 +223,14 @@ impl ProgSection {
     pub fn get_symbols(&self, base: u64) -> Vec<Sym> {
         self.symbols
             .iter()
-            .map(|(_, s)| s.get_symbol(self.base + base as usize, self.index))
+            .map(|(_, s)| s.get_symbol(self.base + base as usize))
             .collect()
     }
 
     pub fn write_symbols(&self, base: u64, w: &mut Writer) {
         // write symbols out
         for (_name, sym) in &self.symbols {
-            sym.write_symbol(self.base + base as usize, self.index, w);
+            sym.write_symbol(self.base + base as usize, w);
 
             /*
             let st_shndx = elf::SHN_ABS;

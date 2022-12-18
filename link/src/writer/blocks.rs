@@ -394,9 +394,18 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         // reserve the symbols in the various sections
-        tracker.reserve_symbols(w);
+        //if false {
+        //tracker.reserve_symbols(w);
+        //} else {
+
+        for s in data.symbols.values() {
+            w.reserve_symbol_index(s.section_index);
+        }
+        let num = &data.symbols.len();
+        eprintln!("reserve num: {}", num);
+        //}
 
         w.reserve_symtab();
 
@@ -405,29 +414,66 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn write(&self, _data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         // write symbols
         w.write_null_symbol();
+        //if false {
+        //tracker.write_symbols(w);
+        //} else {
+        let mut symbols = vec![];
+        for s in data.symbols.values() {
+            symbols.push(s.get_symbol(0));
+        }
+        //let symbols = self.get_symbols();
+        // sort them, locals first
+        let num = &symbols.len();
+        eprintln!("write num: {}", num);
 
-        tracker.write_symbols(w);
+        let mut num_locals = 0;
+        symbols
+            .iter()
+            .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
+            .for_each(|s| {
+                w.write_symbol(s);
+                num_locals += 1;
+            });
+
+        symbols
+            .iter()
+            .filter(|s| s.st_info >> 4 != elf::STB_LOCAL)
+            .for_each(|s| {
+                w.write_symbol(s);
+            });
+        //num_locals
+        //}
 
         if w.symtab_shndx_needed() {
             w.write_symtab_shndx();
         }
     }
 
-    fn write_section_header(&self, _data: &Data, tracker: &SegmentTracker, w: &mut Writer) {
+    fn write_section_header(&self, data: &Data, tracker: &SegmentTracker, w: &mut Writer) {
         // one greater than the symbol table index of the last
         // local symbol (binding STB_LOCAL)
-        let symbols = tracker.get_symbols();
+
+        let mut symbols = vec![];
+        for s in data.symbols.values() {
+            symbols.push(s.get_symbol(0));
+        }
+
+        //let symbols = tracker.get_symbols();
         let mut num_locals = 0;
+
         symbols
             .iter()
             .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
             .for_each(|_s| {
                 num_locals += 1;
             });
+
         //eprintln!("num_locals: {}", num_locals);
+        let num = &symbols.len();
+        eprintln!("sh num: {}, {}", num_locals, num);
         w.write_symtab_section_header(num_locals as u32 + 1);
         if w.symtab_shndx_needed() {
             w.write_symtab_shndx_section_header();
@@ -836,6 +882,7 @@ pub struct BufferSection {
     relocations: Vec<CodeRelocation>,
     section: Option<ProgSection>,
     pointers: HashMap<String, u64>,
+    symbols: HashMap<String, ProgSymbol>,
 }
 
 impl BufferSection {
@@ -859,6 +906,7 @@ impl BufferSection {
             relocations: vec![],
             section,
             pointers: HashMap::new(),
+            symbols: HashMap::new(),
         }
     }
 
@@ -881,7 +929,7 @@ impl BufferSection {
 
         let mut symbols = vec![];
         for (name, p) in self.pointers.iter() {
-            symbols.push(Symbol::new(self.addr as u64, (*p - self.addr as u64), name));
+            symbols.push(Symbol::new(self.addr as u64, *p - self.addr as u64, name));
         }
         disassemble_code_with_symbols(self.buf.as_slice(), &symbols, &self.relocations);
     }
@@ -892,10 +940,19 @@ impl ElfBlock for BufferSection {
         Some(self.alloc)
     }
 
-    fn reserve_section_index(&mut self, _data: &mut Data, w: &mut Writer) {
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         let index = Some(w.reserve_section_index());
         if let Some(section) = self.section.as_mut() {
             section.index = index;
+        }
+
+        // add symbols
+        if self.section.is_some() && false {
+            let num = &self.section.as_ref().unwrap().symbols.len();
+            eprintln!("num: {}: {:?}", num, self.name);
+            for (name, s) in &self.section.as_ref().unwrap().symbols {
+                data.symbols.insert(name.clone(), s.clone());
+            }
         }
     }
 
@@ -916,15 +973,22 @@ impl ElfBlock for BufferSection {
             let section = self.section.take().unwrap();
             self.relocations = section.relocations.clone();
 
-            let symbols = section.symbols.clone();
+            self.symbols = section.symbols.clone();
+            let section_index = section.index.clone();
 
+            // add section to the tracker, so we have a base address
             self.base = tracker.add_section(self.alloc, section, start);
 
             // write symbols
-            for (name, s) in &symbols {
+            for (name, s) in &self.symbols {
+                let mut s = s.clone();
+                s.section_index = section_index;
+                s.base = self.base;
                 let addr = self.base + self.offset + s.s.address as usize;
+                s.s.address = addr as u64;
                 data.pointers.insert(name.clone(), addr as u64);
                 self.pointers.insert(name.clone(), addr as u64);
+                data.symbols.insert(name.clone(), s.clone());
             }
         } else {
             self.base = tracker.add_data(self.alloc, delta, self.offset);
