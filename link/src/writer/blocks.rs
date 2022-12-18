@@ -249,11 +249,11 @@ impl ElfBlock for RelaDynSection {
 
         self.size = after - self.file_offset;
         self.base = tracker.add_data(self.alloc().unwrap(), after - before, before);
-    }
-
-    fn update(&mut self, data: &mut Data) {
         data.addr_reladyn = self.base as u64 + self.file_offset as u64;
     }
+
+    //fn update(&mut self, data: &mut Data) {
+    //}
 
     fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
@@ -351,7 +351,7 @@ impl ElfBlock for RelocationSection {
         tracker.add_data(self.alloc().unwrap(), after - before, before);
     }
 
-    fn update(&mut self, _data: &mut Data) {}
+    //fn update(&mut self, _data: &mut Data) {}
 
     fn write(&self, _data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         w.write_align_relocation();
@@ -419,7 +419,7 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn update(&mut self, _data: &mut Data) {}
+    //fn update(&mut self, _data: &mut Data) {}
 
     fn write(&self, _data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         // write symbols
@@ -488,7 +488,7 @@ impl ElfBlock for DynSymSection {
         }
     }
 
-    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.align);
         w.reserve_until(align_pos);
@@ -498,12 +498,12 @@ impl ElfBlock for DynSymSection {
         let after = w.reserved_len();
         self.base = tracker.add_data(self.alloc().unwrap(), after - pos, self.start);
         self.size = after - self.start;
-    }
-
-    fn update(&mut self, data: &mut Data) {
         data.addr_dynsym = self.base as u64 + self.start as u64;
         data.size_dynsym = self.size;
     }
+
+    //fn update(&mut self, data: &mut Data) {
+    //}
 
     fn write(&self, data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
@@ -548,7 +548,7 @@ impl ElfBlock for DynStrSection {
         data.index_dynstr = Some(w.reserve_dynstr_section_index());
     }
 
-    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.align);
         w.reserve_until(align_pos);
@@ -557,12 +557,12 @@ impl ElfBlock for DynStrSection {
         let after = w.reserved_len();
         self.base = tracker.add_data(self.alloc().unwrap(), after - pos, self.start);
         self.size = after - self.start;
-    }
-
-    fn update(&mut self, data: &mut Data) {
         data.addr_dynstr = self.base as u64 + self.start as u64;
         data.size_dynstr = self.size;
     }
+
+    //fn update(&mut self, data: &mut Data) {
+    //}
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
@@ -618,7 +618,7 @@ impl ElfBlock for HashSection {
         self.index = Some(w.reserve_hash_section_index());
     }
 
-    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let align = self.alloc().unwrap().align();
         let pos = w.reserved_len();
         let align_pos = size_align(pos, align);
@@ -630,12 +630,12 @@ impl ElfBlock for HashSection {
         let after = w.reserved_len();
         let delta = after - pos;
         self.base = tracker.add_data(self.alloc().unwrap(), delta, self.offset);
-    }
-
-    fn update(&mut self, data: &mut Data) {
         self.addr = self.base + self.offset;
         data.addr_hash = self.addr as u64;
     }
+
+    //fn update(&mut self, data: &mut Data) {
+    //}
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
@@ -707,22 +707,24 @@ impl ElfBlock for GotPltSection {
         let delta = after - pos1;
         self.base = tracker.add_data(self.alloc().unwrap(), delta, self.got_offset);
 
-        for (index, (_, r)) in data.sections.unapplied.iter().enumerate() {
-            let name = &r.name;
-            let addr = self.base
-                + self.got_offset
-                + (index + self.start_index) * std::mem::size_of::<usize>();
-            data.pointers.insert(name.clone(), addr as u64);
-        }
-    }
-
-    fn update(&mut self, data: &mut Data) {
         self.got_addr = self.base + self.got_offset;
         self.plt_addr = self.base + self.plt_offset;
+
+        // add got pointers to the pointers table, so we can do relocations
+        for (index, (_, r)) in data.sections.unapplied.iter().enumerate() {
+            let name = &r.name;
+            let addr = self.got_addr + (index + self.start_index) * std::mem::size_of::<usize>();
+            data.pointers.insert(name.clone(), addr as u64);
+        }
+
+        // update section pointers
         data.addr.insert(".got".to_string(), self.got_addr as u64);
         data.addr
             .insert(".got.plt".to_string(), self.plt_addr as u64);
     }
+
+    //fn update(&mut self, _data: &mut Data) {
+    //}
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let align = self.alloc().unwrap().align();
@@ -830,12 +832,12 @@ impl ElfBlock for InterpSection {
         let delta = after - pos;
         self.base = tracker.add_data(self.alloc().unwrap(), delta, self.offset);
         //self.addr = self.base + self.offset;
-    }
-
-    fn update(&mut self, _data: &mut Data) {
-        //data.addr_interp = self.offset as u64;
         self.addr = self.base + self.offset;
     }
+
+    //fn update(&mut self, _data: &mut Data) {
+    //data.addr_interp = self.offset as u64;
+    //}
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
@@ -931,7 +933,7 @@ impl ElfBlock for BufferSection {
         }
     }
 
-    fn reserve(&mut self, _data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         let align = self.alloc.align();
         let pos = w.reserved_len();
         let align_pos = size_align(pos, align);
@@ -954,14 +956,13 @@ impl ElfBlock for BufferSection {
 
         let name = self.name.as_ref().unwrap();
         tracker.addr_set(&name, self.base as u64 + self.offset as u64);
+        self.addr = self.base as usize + self.offset;
+
+        data.addr
+            .insert(self.name.clone().unwrap(), self.addr as u64);
     }
 
     fn update(&mut self, data: &mut Data) {
-        self.addr = self.base as usize + self.offset;
-        data.addr.insert(
-            self.name.clone().unwrap(),
-            self.base as u64 + self.offset as u64,
-        );
         self.apply_relocations(self.addr, &data.pointers);
     }
 
