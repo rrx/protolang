@@ -835,6 +835,7 @@ pub struct BufferSection {
     pub unlinked: Vec<UnlinkedCodeSegment>,
     relocations: Vec<CodeRelocation>,
     section: Option<ProgSection>,
+    pointers: HashMap<String, u64>,
 }
 
 impl BufferSection {
@@ -857,6 +858,7 @@ impl BufferSection {
             unlinked: vec![],
             relocations: vec![],
             section,
+            pointers: HashMap::new(),
         }
     }
 
@@ -876,7 +878,12 @@ impl BufferSection {
                 unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
             }
         }
-        disassemble_code(self.buf.as_slice(), im::HashMap::new());
+
+        let mut symbols = vec![];
+        for (name, p) in self.pointers.iter() {
+            symbols.push(Symbol::new(self.addr as u64, (*p - self.addr as u64), name));
+        }
+        disassemble_code_with_symbols(self.buf.as_slice(), &symbols, &self.relocations);
     }
 }
 
@@ -917,6 +924,7 @@ impl ElfBlock for BufferSection {
             for (name, s) in &symbols {
                 let addr = self.base + self.offset + s.s.address as usize;
                 data.pointers.insert(name.clone(), addr as u64);
+                self.pointers.insert(name.clone(), addr as u64);
             }
         } else {
             self.base = tracker.add_data(self.alloc, delta, self.offset);

@@ -337,17 +337,18 @@ unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
+/*
 fn update_pointers(data: &mut Data, tracker: &SegmentTracker) {
     //for (k, v) in tracker.symbol_pointers() {
     //data.pointers.insert(k, v);
     //}
 
     // add in unapplied symbols, which should point to GOT
-    for (_sym, r) in data.sections.unapplied.iter() {
-        let _name = &r.name;
+    //for (_sym, r) in data.sections.unapplied.iter() {
+        //let _name = &r.name;
         //let name = &sym.name.unwrap();
         //data.pointers.insert(name.clone(), 0);
-    }
+    //}
 
     /*
     for seg in self.segments.iter() {
@@ -363,6 +364,7 @@ fn update_pointers(data: &mut Data, tracker: &SegmentTracker) {
         eprintln!("P: {}, {:#0x}", k, v);
     }
 }
+*/
 
 pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
     let symbols = sections.symbol_pointers();
@@ -633,11 +635,13 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         writer.reserve_section_headers();
     }
 
+    for (k, v) in data.pointers.iter() {
+        eprintln!("P: {}, {:#0x}", k, v);
+    }
+
     // UPDATE
     tracker.update(&mut data, &blocks);
-    update_pointers(&mut data, &tracker);
     blocks.update(&mut data);
-    //tracker.apply_relocations(&data.pointers);
 
     update_symbols(&locals, &data, &mut tracker);
 

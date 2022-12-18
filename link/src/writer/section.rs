@@ -37,7 +37,7 @@ impl ProgSymbol {
         let st_size = self.s.size;
         let addr = base as u64 + self.s.address;
         //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
-        eprintln!("write symbol: {}, {:#0x}", &self.s.name, &addr);
+        //eprintln!("write symbol: {}, {:#0x}", &self.s.name, &addr);
         object::write::elf::Sym {
             name: self.name_id,
             section: index,

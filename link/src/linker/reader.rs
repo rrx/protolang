@@ -5,81 +5,10 @@ use object::read::elf::ProgramHeader;
 use object::{Object, ObjectSection, ObjectSymbol, Relocation};
 use std::error::Error;
 
+use crate::disassemble::*;
+use crate::relocations::*;
 use binary_heap_plus::*;
 use capstone::prelude::*;
-
-struct Symbol<'a> {
-    section_addr: u64,
-    addr: u64,
-    name: &'a str,
-}
-impl<'a> Symbol<'a> {
-    fn new(section_addr: u64, addr: u64, name: &'a str) -> Self {
-        Self {
-            section_addr,
-            addr,
-            name,
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Reloc {
-    offset: u64,
-    r: Relocation,
-}
-
-fn disassemble_code(buf: &[u8], symbols: Vec<Symbol>, relocations: Vec<Reloc>) {
-    let mut heap = BinaryHeap::from_vec_cmp(symbols, |a: &Symbol, b: &Symbol| b.addr.cmp(&a.addr));
-    let mut r_heap =
-        BinaryHeap::from_vec_cmp(relocations, |a: &Reloc, b: &Reloc| b.offset.cmp(&a.offset));
-    //let mut dr_heap = BinaryHeap::from_vec_cmp(dynamic_relocations, |a: &Reloc, b: &Reloc| b.offset.cmp(&a.offset));
-    let cs = capstone::Capstone::new()
-        .x86()
-        .mode(arch::x86::ArchMode::Mode64)
-        .syntax(arch::x86::ArchSyntax::Att)
-        .detail(true)
-        .build()
-        .unwrap();
-    let insts = cs.disasm_all(&buf, 0).expect("disassemble");
-
-    for instr in insts.as_ref() {
-        let addr = instr.address();
-
-        while heap.len() > 0 {
-            let next_symbol_addr = heap.peek().unwrap().addr;
-
-            if next_symbol_addr <= addr {
-                let symbol = heap.pop().unwrap();
-                eprintln!(
-                    "{}: {:#0x} {:#0x}",
-                    symbol.name,
-                    symbol.addr,
-                    symbol.section_addr + symbol.addr
-                );
-            } else {
-                break;
-            }
-        }
-
-        while r_heap.len() > 0 {
-            let next_reloc_addr = r_heap.peek().unwrap().offset;
-            if next_reloc_addr <= addr {
-                let r = r_heap.pop().unwrap();
-                eprintln!("    Relocation: {:#0x} {:?}", r.offset, r.r);
-            } else {
-                break;
-            }
-        }
-
-        eprintln!(
-            "  {:#06x} {}\t\t{}",
-            instr.address(),
-            instr.mnemonic().expect("no mnmemonic found"),
-            instr.op_str().expect("no op_str found")
-        );
-    }
-}
 
 pub fn elf_read(buf: &[u8]) -> Result<(), Box<dyn Error>> {
     let b: elf::ElfFile<'_, FileHeader64<object::Endianness>> =
@@ -119,9 +48,11 @@ pub fn elf_read(buf: &[u8]) -> Result<(), Box<dyn Error>> {
         let mut relocations = vec![];
 
         for (r_offset, r) in section.relocations() {
-            relocations.push(Reloc {
+            relocations.push(CodeRelocation {
+                name: "".to_string(),
+                name_id: None,
                 offset: r_offset,
-                r,
+                r: r.into(),
             });
         }
 
@@ -140,15 +71,16 @@ pub fn elf_read(buf: &[u8]) -> Result<(), Box<dyn Error>> {
         let buf = section.data()?;
         if name == ".got" {
             for (offset, r) in b.dynamic_relocations().unwrap() {
-                //eprintln!("DR: {:#0x} {:?}", offset, r);
-                relocations.push(Reloc {
+                relocations.push(CodeRelocation {
+                    name: "".to_string(),
+                    name_id: None,
                     offset: offset - section_addr,
-                    r,
+                    r: r.into(),
                 });
             }
-            disassemble_code(buf, symbols, relocations);
+            disassemble_code_with_symbols(buf, &symbols, &relocations);
         } else if name == ".text" {
-            disassemble_code(buf, symbols, relocations);
+            disassemble_code_with_symbols(buf, &symbols, &relocations);
         }
     }
 
