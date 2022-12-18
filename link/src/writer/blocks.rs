@@ -156,7 +156,9 @@ impl ElfBlock for DynamicSection {
     }
 
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        data.index_dynamic = Some(w.reserve_dynamic_section_index());
+        let index = w.reserve_dynamic_section_index();
+        data.section_index.insert(".dynamic".to_string(), index);
+        data.index_dynamic = Some(index);
         self.index = data.index_dynamic;
     }
 
@@ -685,12 +687,16 @@ impl ElfBlock for GotPltSection {
         Some(AllocSegment::RW)
     }
 
-    fn reserve_section_index(&mut self, _data: &mut Data, w: &mut Writer) {
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         self.start_index = 3;
         self.got_name_id = Some(w.add_section_name(".got".as_bytes()));
         self.plt_name_id = Some(w.add_section_name(".got.plt".as_bytes()));
-        self.got_index = Some(w.reserve_section_index());
-        self.plt_index = Some(w.reserve_section_index());
+        let got_index = w.reserve_section_index();
+        let plt_index = w.reserve_section_index();
+        data.section_index.insert(".got".to_string(), got_index);
+        data.section_index.insert(".got.plt".to_string(), plt_index);
+        self.got_index = Some(got_index);
+        self.plt_index = Some(plt_index);
     }
 
     fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {

@@ -121,6 +121,7 @@ pub struct Data {
     page_size: u32,
     base: usize,
     addr: HashMap<String, u64>,
+    section_index: HashMap<String, SectionIndex>,
     addr_dynamic: u64,
     addr_got: u64,
     addr_gotplt: u64,
@@ -157,6 +158,7 @@ impl Data {
             base: 0x80000,
             page_size: 0x1000,
             addr: HashMap::new(),
+            section_index: HashMap::new(),
             addr_dynamic: 0,
             addr_got: 0,
             addr_gotplt: 0,
@@ -496,9 +498,12 @@ fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, tracker: &mut Segm
         let st_value = addr; //(self.base + self.offset) as u64;
         let st_size = 0;
 
+
+        let section_index = data.section_index.get(&local.section).cloned();
+
         let p = ProgSymbol {
             name_id: local.string_id,
-            section_index: None,
+            section_index,
             base: 0,
             s: CodeSymbol {
                 name: local.symbol.clone(),
