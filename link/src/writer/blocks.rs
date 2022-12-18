@@ -262,9 +262,10 @@ impl ElfBlock for RelaDynSection {
 
         let got_addr = data.get_addr(".got").unwrap();
         // we are writing a relocation for the GOT entries
+        let start = 3;
         for (index, (sym, rel)) in data.sections.unapplied.iter().enumerate() {
             eprintln!("unapplied: {:?}", (sym, rel));
-            let r_offset = got_addr as usize + index * std::mem::size_of::<usize>();
+            let r_offset = got_addr as usize + (index + start) * std::mem::size_of::<usize>();
             let r_addend = 0;
             // we needed to fork object in order to access .0
             let r_sym = sym.name.unwrap().0 as u32;
@@ -663,6 +664,7 @@ pub struct GotPltSection {
     plt_addr: usize,
     got_size: usize,
     plt_size: usize,
+    start_index: usize,
 }
 impl ElfBlock for GotPltSection {
     fn alloc(&self) -> Option<AllocSegment> {
@@ -670,6 +672,7 @@ impl ElfBlock for GotPltSection {
     }
 
     fn reserve_section_index(&mut self, _data: &mut Data, w: &mut Writer) {
+        self.start_index = 3;
         self.got_name_id = Some(w.add_section_name(".got".as_bytes()));
         self.plt_name_id = Some(w.add_section_name(".got.plt".as_bytes()));
         self.got_index = Some(w.reserve_section_index());
@@ -678,9 +681,10 @@ impl ElfBlock for GotPltSection {
 
     fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         // each entry in unapplied will be a GOT entry
-        let got_size = data.sections.unapplied.len() * std::mem::size_of::<usize>();
+        let len = data.sections.unapplied.len() + self.start_index;
+        let got_size = len * std::mem::size_of::<usize>();
         self.got.resize(got_size, 0);
-        let plt_size = data.sections.unapplied.len() * std::mem::size_of::<usize>() * 2;
+        let plt_size = len * std::mem::size_of::<usize>() * 2;
         self.plt.resize(plt_size, 0);
 
         let align = self.alloc().unwrap().align();
@@ -702,6 +706,14 @@ impl ElfBlock for GotPltSection {
         let after = w.reserved_len();
         let delta = after - pos1;
         self.base = tracker.add_data(self.alloc().unwrap(), delta, self.got_offset);
+
+        for (index, (_, r)) in data.sections.unapplied.iter().enumerate() {
+            let name = &r.name;
+            let addr = self.base
+                + self.got_offset
+                + (index + self.start_index) * std::mem::size_of::<usize>();
+            data.pointers.insert(name.clone(), addr as u64);
+        }
     }
 
     fn update(&mut self, data: &mut Data) {

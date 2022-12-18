@@ -337,6 +337,33 @@ unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
+fn update_pointers(data: &mut Data, tracker: &SegmentTracker) {
+    for (k, v) in tracker.symbol_pointers() {
+        data.pointers.insert(k, v);
+    }
+
+    // add in unapplied symbols, which should point to GOT
+    for (sym, r) in data.sections.unapplied.iter() {
+        let name = &r.name;
+        //let name = &sym.name.unwrap();
+        //data.pointers.insert(name.clone(), 0);
+    }
+
+    /*
+    for seg in self.segments.iter() {
+        for section in seg.sections.iter() {
+            let name = section.name.as_ref().unwrap();
+            if let Some(addr) = &self.addr_get(&name) {
+                //pointers.insert(name.clone(), *addr);
+            }
+        }
+    }
+    */
+    for (k, v) in data.pointers.iter() {
+        eprintln!("P: {}, {:#0x}", k, v);
+    }
+}
+
 pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
     let symbols = sections.symbol_pointers();
     let externs = sections.extern_symbol_pointers();
@@ -608,35 +635,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // UPDATE
     tracker.update(&mut data, &blocks);
-
-    //let mut pointers = HashMap::new();
-    for (k, v) in tracker.symbol_pointers() {
-        data.pointers.insert(k, v);
-    }
-
-    // add in unapplied symbols, which should point to GOT
-    for (sym, r) in data.sections.unapplied.iter() {
-        let name = &r.name;
-        //let name = &sym.name.unwrap();
-        data.pointers.insert(name.clone(), 0);
-    }
-
-    /*
-    for seg in self.segments.iter() {
-        for section in seg.sections.iter() {
-            let name = section.name.as_ref().unwrap();
-            if let Some(addr) = &self.addr_get(&name) {
-                //pointers.insert(name.clone(), *addr);
-            }
-        }
-    }
-    */
-    for (k, v) in data.pointers.iter() {
-        eprintln!("P: {}, {:#0x}", k, v);
-    }
-
+    //blocks.update(&mut data);
+    update_pointers(&mut data, &tracker);
     blocks.update(&mut data);
-    tracker.apply_relocations(&data.pointers);
+    //tracker.apply_relocations(&data.pointers);
 
     update_symbols(&locals, &data, &mut tracker);
 
