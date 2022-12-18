@@ -338,9 +338,9 @@ unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
 }
 
 fn update_pointers(data: &mut Data, tracker: &SegmentTracker) {
-    for (k, v) in tracker.symbol_pointers() {
-        data.pointers.insert(k, v);
-    }
+    //for (k, v) in tracker.symbol_pointers() {
+    //data.pointers.insert(k, v);
+    //}
 
     // add in unapplied symbols, which should point to GOT
     for (_sym, r) in data.sections.unapplied.iter() {

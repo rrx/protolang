@@ -178,6 +178,7 @@ impl SegmentTracker {
         self.base
     }
 
+    /*
     pub fn symbol_pointers(&self) -> HashMap<String, u64> {
         let mut pointers = HashMap::new();
         for seg in &self.segments {
@@ -187,6 +188,7 @@ impl SegmentTracker {
         }
         pointers
     }
+    */
 
     pub fn reserve_empty_symbol(&mut self, v: Option<SectionIndex>) {
         self.empty_symbols.push(v);
@@ -258,10 +260,12 @@ impl SegmentTracker {
     }
 
     pub fn update(&mut self, _data: &mut Data, blocks: &Blocks) {
+        /*
         let pointers = self.symbol_pointers();
         if let Some(start) = pointers.get("_start") {
             self.addr_start = *start;
         }
+        */
         self.ph = blocks.program_headers(self);
         //for p in self.ph.iter() {
         //eprintln!("P: {:?}", p);
@@ -503,6 +507,7 @@ impl Segment {
         pointers
     }
 
+    /*
     pub fn symbol_pointers(&self) -> HashMap<String, u64> {
         let mut pointers = HashMap::new();
         for section in &self.sections {
@@ -513,6 +518,7 @@ impl Segment {
         }
         pointers
     }
+    */
 
     pub fn program_header(&self) -> Option<ProgramHeaderEntry> {
         // add a load section for the file and program header, so it's covered

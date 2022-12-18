@@ -78,14 +78,19 @@ impl ElfBlock for HeaderComponent {
         self.base = tracker.add_data(self.alloc().unwrap(), self.size_ph, self.size_fh);
     }
 
-    fn write(&self, _data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        let mut e_entry = 0;
+        if let Some(start) = data.pointers.get("_start") {
+            e_entry = *start;
+        }
+
         w.write_file_header(&object::write::elf::FileHeader {
-            os_abi: 0x00,                // SysV
-            abi_version: 0,              // ignored on linux
-            e_type: elf::ET_EXEC,        // ET_EXEC - Executable file
-            e_machine: 0x3E,             // AMD x86-64
-            e_entry: tracker.addr_start, // e_entry, normally points to _start
-            e_flags: 0,                  // e_flags
+            os_abi: 0x00,         // SysV
+            abi_version: 0,       // ignored on linux
+            e_type: elf::ET_EXEC, // ET_EXEC - Executable file
+            e_machine: 0x3E,      // AMD x86-64
+            e_entry,              // e_entry, normally points to _start
+            e_flags: 0,           // e_flags
         })
         .unwrap();
 
@@ -903,7 +908,16 @@ impl ElfBlock for BufferSection {
         if self.section.is_some() {
             let section = self.section.take().unwrap();
             self.relocations = section.relocations.clone();
+
+            let symbols = section.symbols.clone();
+
             self.base = tracker.add_section(self.alloc, section, start);
+
+            // write symbols
+            for (name, s) in &symbols {
+                let addr = self.base + self.offset + s.s.address as usize;
+                data.pointers.insert(name.clone(), addr as u64);
+            }
         } else {
             self.base = tracker.add_data(self.alloc, delta, self.offset);
         }
