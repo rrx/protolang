@@ -15,6 +15,7 @@ linked_list_allocator = "^0.10"
 libc = "*"
 proc-maps = "^0.3"
 log = "0.4"
+binary-heap-plus = "0.5.0"
 
 [dev-dependencies]
 env_logger = "0.9"

@@ -260,16 +260,19 @@ impl ElfBlock for RelaDynSection {
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
 
-        for (sym, rel) in data.sections.unapplied.iter() {
+        let got_addr = data.get_addr(".got").unwrap();
+        // we are writing a relocation for the GOT entries
+        for (index, (sym, rel)) in data.sections.unapplied.iter().enumerate() {
             eprintln!("unapplied: {:?}", (sym, rel));
-            let r_offset = rel.offset;
-            let r_addend = 0; //rel.r.addend;
-            let r_sym = sym.name.unwrap().0 as u32; //rel.name_id.unwrap();//1;//*name_id;
+            let r_offset = got_addr as usize + index * std::mem::size_of::<usize>();
+            let r_addend = 0;
+            // we needed to fork object in order to access .0
+            let r_sym = sym.name.unwrap().0 as u32;
             let r_type = elf::R_X86_64_GLOB_DAT;
             w.write_relocation(
                 true,
                 &object::write::elf::Rel {
-                    r_offset,
+                    r_offset: r_offset as u64,
                     r_sym,
                     r_type,
                     r_addend,
@@ -642,6 +645,110 @@ impl ElfBlock for HashSection {
 
     fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
         w.write_hash_section_header(self.addr as u64);
+    }
+}
+
+#[derive(Default)]
+pub struct GotPltSection {
+    got_name_id: Option<StringId>,
+    plt_name_id: Option<StringId>,
+    got_index: Option<SectionIndex>,
+    plt_index: Option<SectionIndex>,
+    got: Vec<u8>,
+    plt: Vec<u8>,
+    base: usize,
+    got_offset: usize,
+    plt_offset: usize,
+    got_addr: usize,
+    plt_addr: usize,
+    got_size: usize,
+    plt_size: usize,
+}
+impl ElfBlock for GotPltSection {
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RW)
+    }
+
+    fn reserve_section_index(&mut self, _data: &mut Data, w: &mut Writer) {
+        self.got_name_id = Some(w.add_section_name(".got".as_bytes()));
+        self.plt_name_id = Some(w.add_section_name(".got.plt".as_bytes()));
+        self.got_index = Some(w.reserve_section_index());
+        self.plt_index = Some(w.reserve_section_index());
+    }
+
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        // each entry in unapplied will be a GOT entry
+        let got_size = data.sections.unapplied.len() * std::mem::size_of::<usize>();
+        self.got.resize(got_size, 0);
+        let plt_size = data.sections.unapplied.len() * std::mem::size_of::<usize>() * 2;
+        self.plt.resize(plt_size, 0);
+
+        let align = self.alloc().unwrap().align();
+
+        let pos1 = w.reserved_len();
+        let align_pos = size_align(pos1, align);
+        w.reserve_until(align_pos);
+        self.got_offset = w.reserved_len();
+        w.reserve(self.got.len(), align);
+        self.got_size = w.reserved_len() - self.got_offset;
+
+        let pos2 = w.reserved_len();
+        let align_pos = size_align(pos2, align);
+        w.reserve_until(align_pos);
+        self.plt_offset = w.reserved_len();
+        w.reserve(self.plt.len(), align);
+        self.plt_size = w.reserved_len() - self.plt_offset;
+
+        let after = w.reserved_len();
+        let delta = after - pos1;
+        self.base = tracker.add_data(self.alloc().unwrap(), delta, self.got_offset);
+    }
+
+    fn update(&mut self, data: &mut Data) {
+        self.got_addr = self.base + self.got_offset;
+        self.plt_addr = self.base + self.plt_offset;
+        data.addr.insert(".got".to_string(), self.got_addr as u64);
+        data.addr
+            .insert(".got.plt".to_string(), self.plt_addr as u64);
+    }
+
+    fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
+        let align = self.alloc().unwrap().align();
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.alloc().unwrap().align());
+        w.pad_until(aligned_pos);
+        w.write(self.got.as_slice());
+        w.write_align(align);
+        w.write(self.plt.as_slice());
+    }
+
+    fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
+        let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
+        let sh_addralign = self.alloc().unwrap().align() as u64;
+        w.write_section_header(&object::write::elf::SectionHeader {
+            name: self.got_name_id,
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags,
+            sh_addr: self.got_addr as u64,
+            sh_offset: self.got_offset as u64,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign,
+            sh_size: self.got_size as u64,
+        });
+        w.write_section_header(&object::write::elf::SectionHeader {
+            name: self.plt_name_id,
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags,
+            sh_addr: self.plt_addr as u64,
+            sh_offset: self.plt_offset as u64,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign,
+            sh_size: self.plt_size as u64,
+        });
     }
 }
 

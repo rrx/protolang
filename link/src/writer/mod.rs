@@ -554,6 +554,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));
 
+        /*
         let name = ".got";
         let name_id = Some(writer.add_section_name(name.as_bytes()));
         let mut buf = Vec::new();
@@ -567,6 +568,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         buf.resize(0x1000, 0);
         let b = BufferSection::new(AllocSegment::RW, Some(name.to_string()), name_id, buf, None);
         blocks.add_block(Box::new(b));
+        */
+
+        blocks.add_block(Box::new(GotPltSection::default()));
     }
 
     if data.add_symbols {
