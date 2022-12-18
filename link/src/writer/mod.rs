@@ -6,7 +6,7 @@ use object::write::elf::Sym;
 use object::write::elf::{SectionIndex, SymbolIndex, Writer};
 use object::write::StringId;
 use object::Endianness;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::mem;
 
 use super::*;
@@ -343,8 +343,8 @@ fn update_pointers(data: &mut Data, tracker: &SegmentTracker) {
     }
 
     // add in unapplied symbols, which should point to GOT
-    for (sym, r) in data.sections.unapplied.iter() {
-        let name = &r.name;
+    for (_sym, r) in data.sections.unapplied.iter() {
+        let _name = &r.name;
         //let name = &sym.name.unwrap();
         //data.pointers.insert(name.clone(), 0);
     }
@@ -635,7 +635,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // UPDATE
     tracker.update(&mut data, &blocks);
-    //blocks.update(&mut data);
     update_pointers(&mut data, &tracker);
     blocks.update(&mut data);
     //tracker.apply_relocations(&data.pointers);

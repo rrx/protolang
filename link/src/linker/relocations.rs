@@ -201,7 +201,7 @@ impl CodeRelocation {
                     let vaddr = *(addr as *const usize) as usize;
                     let adjusted = vaddr + self.r.addend as usize;
                     let patch = patch_base.offset(self.offset as isize);
-                    let v = v_base.offset(self.offset as isize);
+                    let _v = v_base.offset(self.offset as isize);
                     let before = std::ptr::read(patch);
 
                     let patch = match self.r.size {
@@ -287,8 +287,8 @@ impl CodeRelocation {
 pub fn patch_code(
     block: PatchBlock,
     pointers: PatchSymbolPointers,
-    got: TableVersion,
-    plt: TableVersion,
+    _got: TableVersion,
+    _plt: TableVersion,
 ) -> PatchBlock {
     log::debug!(
         "patching code {} at base {:#08x}",
@@ -319,7 +319,7 @@ pub fn patch_data(
     block: PatchBlock,
     pointers: PatchSymbolPointers,
     got: TableVersion,
-    plt: TableVersion,
+    _plt: TableVersion,
 ) -> PatchBlock {
     log::debug!(
         "patching data {} at base {:#08x}",

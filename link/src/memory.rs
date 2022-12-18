@@ -37,7 +37,7 @@ impl BlockFactoryInner {
         let layout = Layout::from_size_align(aligned_size, 16).unwrap();
         match self.heap.allocate_first_fit(layout) {
             Ok(p) => Some(BlockInner { layout, size, p }),
-            Err(e) => None,
+            Err(_e) => None,
         }
     }
 

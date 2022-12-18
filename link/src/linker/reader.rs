@@ -2,8 +2,7 @@
 use object::elf::FileHeader64;
 use object::read::elf;
 use object::read::elf::ProgramHeader;
-use object::{Object, ObjectSection, ObjectSymbol, Relocation, SectionKind};
-use std::collections::HashMap;
+use object::{Object, ObjectSection, ObjectSymbol, Relocation};
 use std::error::Error;
 
 use binary_heap_plus::*;
@@ -43,16 +42,6 @@ fn disassemble_code(buf: &[u8], symbols: Vec<Symbol>, relocations: Vec<Reloc>) {
         .build()
         .unwrap();
     let insts = cs.disasm_all(&buf, 0).expect("disassemble");
-
-    //while r_heap.len() > 0 {
-    //let r = r_heap.pop();
-    //eprintln!("R: {:?}", r);
-    //}
-
-    //while dr_heap.len() > 0 {
-    //let r = dr_heap.pop();
-    //eprintln!("DR: {:?}", r);
-    //}
 
     for instr in insts.as_ref() {
         let addr = instr.address();
@@ -113,8 +102,8 @@ pub fn elf_read(buf: &[u8]) -> Result<(), Box<dyn Error>> {
         eprintln!("  p_filesz: {:#0x}", seg.p_filesz(endian));
         eprintln!("  p_memsz:  {:#0x}", seg.p_memsz(endian));
         eprintln!("  p_align {:#0x}", seg.p_align(endian));
-        let offset = seg.p_offset(endian) as usize;
-        let size = seg.p_filesz(endian) as usize;
+        let _offset = seg.p_offset(endian) as usize;
+        let _size = seg.p_filesz(endian) as usize;
         //let data = &b.data()[offset..offset + size];
         //disassemble_code(data);
     }

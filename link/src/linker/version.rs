@@ -11,7 +11,7 @@ impl LinkVersionSync {
     pub fn new(version: LinkVersion) -> Self {
         Self(Arc::new(Mutex::new(version)))
     }
-    pub fn invoke<P, T>(&self, name: &str, args: P) -> Result<T, Box<dyn Error>> {
+    pub fn invoke<P, T>(&self, name: &str, _args: P) -> Result<T, Box<dyn Error>> {
         self.0.as_ref().lock().unwrap().invoke(name, ())
     }
 }
@@ -187,7 +187,7 @@ pub fn build_version(link: &mut DynamicLink) -> Result<LinkVersion, Box<dyn Erro
 
     // get tables
     let mut got = link.got.as_ref().unwrap().clone();
-    let mut plt = link.plt.as_ref().unwrap().clone();
+    let plt = link.plt.as_ref().unwrap().clone();
 
     // create a GOT entry, and add it to the mapping for patch
     for (name, direct) in add_to_got {
@@ -208,7 +208,7 @@ pub fn build_version(link: &mut DynamicLink) -> Result<LinkVersion, Box<dyn Erro
         // write usize to buffer
         let mut buf = [0u8; 5];
         buf[0] = 0xe9;
-        let p = got.create_buffer(buf.as_slice());
+        let _p = got.create_buffer(buf.as_slice());
 
         // save as direct for now
         patch_source.insert(

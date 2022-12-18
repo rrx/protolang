@@ -1,6 +1,6 @@
 use super::*;
 use crate::memory::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::io;
 use std::sync::Arc;
@@ -36,7 +36,7 @@ pub struct PatchBlock {
 }
 impl PatchBlock {
     pub fn patch(
-        mut self,
+        self,
         pointers: PatchSymbolPointers,
         got: TableVersion,
         plt: TableVersion,

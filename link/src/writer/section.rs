@@ -1,7 +1,7 @@
 use object::elf;
 use object::write::elf::{SectionIndex, Sym, Writer};
 use object::write::StringId;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use super::*;
 
@@ -12,7 +12,7 @@ pub struct ProgSymbol {
 }
 
 impl ProgSymbol {
-    pub fn new_object(name: &str, index: SectionIndex) -> Self {
+    pub fn new_object(name: &str, _index: SectionIndex) -> Self {
         Self {
             name_id: None,
             s: CodeSymbol {
@@ -27,7 +27,7 @@ impl ProgSymbol {
         }
     }
 
-    pub fn reserve(&mut self, w: &mut Writer) {
+    pub fn reserve(&mut self, _w: &mut Writer) {
         //self.name_id = Some(w.add_string(self.s.name.as_bytes()));//"_DYNAMIC_".as_bytes()));
         //w.reserve_symbol_index(data.index_dynamic);
     }
@@ -215,7 +215,7 @@ impl ProgSection {
 
     pub fn write_symbols(&self, base: u64, w: &mut Writer) {
         // write symbols out
-        for (name, sym) in &self.symbols {
+        for (_name, sym) in &self.symbols {
             sym.write_symbol(self.base + base as usize, self.index, w);
 
             /*
@@ -253,6 +253,7 @@ impl ProgSection {
         unapplied
     }
 
+    /*
     pub fn apply_relocations(
         &self,
         v_base: usize,
@@ -280,6 +281,7 @@ impl ProgSection {
         disassemble_code(self.bytes.as_slice(), im::HashMap::new());
         unapplied
     }
+    */
 
     pub fn reserve_relocations(&mut self, w: &mut Writer) {
         self.rel_index = Some(w.reserve_section_index());

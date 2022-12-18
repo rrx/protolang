@@ -20,11 +20,11 @@ impl PatchBlock {
                 }
                 let size = self.block.size;
                 let buf = &self.block.as_slice()[0..size];
-                disassemble_code(&self.block.as_slice()[0..size], pointers);
+                disassemble_code(buf, pointers);
             }
 
             PatchBlockKind::Data | PatchBlockKind::DataRO => {
-                let base = self.block.as_ptr() as usize;
+                let _base = self.block.as_ptr() as usize;
                 eprint_bytes(&self.block.as_slice()[0..self.block.size]);
                 let mut pointers = im::HashMap::new();
                 let base = self.block.as_ptr() as usize;
@@ -86,7 +86,7 @@ pub fn disassemble_code(buf: &[u8], pointers: im::HashMap<usize, String>) {
         if let Some(v) = pointers.get(&addr) {
             let display_symbol = if let Some(name) = last_name {
                 if name != v {
-                    last_name = Some(v);
+                    //last_name = Some(v);
                     Some(v)
                 } else {
                     None

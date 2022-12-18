@@ -241,9 +241,11 @@ impl SegmentTracker {
         num_locals
     }
 
+    /*
     pub fn load_segment_count(&self) -> usize {
         self.program_headers().len()
     }
+    */
 
     pub fn program_headers(&self) -> Vec<ProgramHeaderEntry> {
         let mut out = vec![];
@@ -309,6 +311,7 @@ impl SegmentTracker {
     }
     */
 
+    /*
     pub fn unapplied_relocations<'a>(&mut self, _w: &mut Writer<'a>) {
         let mut out = vec![];
         for r in self
@@ -329,6 +332,7 @@ impl SegmentTracker {
         }
         out
     }
+    */
 
     pub fn reserve_relocations(&mut self, w: &mut Writer) {
         for seg in self.segments.iter_mut() {
@@ -455,6 +459,7 @@ impl Segment {
         }
     }
 
+    /*
     fn unapplied_relocations(&self) -> Vec<(ProgSymbol, CodeRelocation)> {
         let mut out = vec![];
         let externs = self.extern_symbol_set();
@@ -474,6 +479,7 @@ impl Segment {
         }
         out
     }
+    */
 
     pub fn extern_symbol_set(&self) -> HashMap<String, ProgSymbol> {
         let mut pointers = HashMap::new();
