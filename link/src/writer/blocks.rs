@@ -860,6 +860,7 @@ pub struct BufferSection {
     base: usize,
     buf: Vec<u8>,
     pub unlinked: Vec<UnlinkedCodeSegment>,
+    relocations: Vec<CodeRelocation>,
     section: Option<ProgSection>,
 }
 
@@ -881,8 +882,28 @@ impl BufferSection {
             base: 0,
             buf,
             unlinked: vec![],
+            relocations: vec![],
             section,
         }
+    }
+
+    pub fn apply_relocations(&self, v_base: usize, pointers: &HashMap<String, u64>) {
+        let patch_base = self.buf.as_ptr();
+        for r in self.relocations.iter() {
+            if let Some(addr) = pointers.get(&r.name) {
+                log::debug!(
+                    "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
+                    self.alloc().unwrap(),
+                    v_base,
+                    *addr as usize,
+                    &r.name
+                );
+                r.patch(patch_base as *mut u8, v_base as *mut u8, *addr as *const u8);
+            } else {
+                unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
+            }
+        }
+        disassemble_code(self.buf.as_slice(), im::HashMap::new());
     }
 }
 
@@ -912,10 +933,15 @@ impl ElfBlock for BufferSection {
         let delta = after - pos;
 
         if self.section.is_some() {
-            self.base = tracker.add_section(self.alloc, self.section.take().unwrap(), start);
+            let section = self.section.take().unwrap();
+            self.relocations = section.relocations.clone();
+            self.base = tracker.add_section(self.alloc, section, start);
         } else {
             self.base = tracker.add_data(self.alloc, delta, self.offset);
         }
+
+        let name = self.name.as_ref().unwrap();
+        tracker.addr_set(&name, self.base as u64 + self.offset as u64);
     }
 
     fn update(&mut self, data: &mut Data) {
@@ -924,6 +950,7 @@ impl ElfBlock for BufferSection {
             self.name.clone().unwrap(),
             self.base as u64 + self.offset as u64,
         );
+        self.apply_relocations(self.addr, &data.pointers);
     }
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {

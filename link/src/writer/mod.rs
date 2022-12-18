@@ -131,6 +131,7 @@ pub struct Data {
     addr_reladyn: u64,
     size_reladyn: usize,
     addr_hash: u64,
+    pointers: HashMap<String, u64>,
 
     //addr_interp: u64,
     index_strtab: Option<SectionIndex>,
@@ -164,6 +165,7 @@ impl Data {
             addr_reladyn: 0,
             size_reladyn: 0,
             addr_hash: 0,
+            pointers: HashMap::new(),
             //addr_interp: 0,
             index_strtab: None,
             index_symtab: None,
@@ -296,7 +298,6 @@ impl Data {
 pub struct ProgSections {
     sections: Vec<ProgSection>,
     unapplied: Vec<(Sym, CodeRelocation)>,
-    //unapplied_symbols: Vec<Sym>,
     dynsymbols: Vec<SymbolIndex>,
 }
 impl ProgSections {
@@ -304,7 +305,6 @@ impl ProgSections {
         Self {
             sections: vec![],
             unapplied: vec![],
-            //unapplied_symbols: vec![],
             dynsymbols: vec![],
         }
     }
@@ -360,7 +360,6 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
             };
             eprintln!("s: {:?}", &symbol);
             eprintln!("unapp: {:?}", &sym);
-            //sections.unapplied_symbols.push(sym);
             sections.unapplied.push((sym, r));
         }
     }
@@ -418,7 +417,6 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
         }
     }
 
-    //let mut out = ProgSections::new();//vec![];
     if rx.len() > 0 {
         let name = ".text".to_string();
         let name_id = Some(w.add_section_name(".text".as_bytes()));
@@ -610,7 +608,35 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // UPDATE
     tracker.update(&mut data, &blocks);
+
+    //let mut pointers = HashMap::new();
+    for (k, v) in tracker.symbol_pointers() {
+        data.pointers.insert(k, v);
+    }
+
+    // add in unapplied symbols, which should point to GOT
+    for (sym, r) in data.sections.unapplied.iter() {
+        let name = &r.name;
+        //let name = &sym.name.unwrap();
+        data.pointers.insert(name.clone(), 0);
+    }
+
+    /*
+    for seg in self.segments.iter() {
+        for section in seg.sections.iter() {
+            let name = section.name.as_ref().unwrap();
+            if let Some(addr) = &self.addr_get(&name) {
+                //pointers.insert(name.clone(), *addr);
+            }
+        }
+    }
+    */
+    for (k, v) in data.pointers.iter() {
+        eprintln!("P: {}, {:#0x}", k, v);
+    }
+
     blocks.update(&mut data);
+    tracker.apply_relocations(&data.pointers);
 
     update_symbols(&locals, &data, &mut tracker);
 

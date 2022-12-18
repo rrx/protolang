@@ -151,8 +151,9 @@ impl ProgSection {
         self.bytes.extend(unlinked.bytes.clone());
         for r in &unlinked.relocations {
             let mut r = r.clone();
+            eprintln!("relocation before: {}", &r);
             r.offset += self.data_count as u64;
-            eprintln!("relocation: {}", &r);
+            eprintln!("relocation after: {}", &r);
             self.relocations.push(r.clone());
         }
 
@@ -160,12 +161,7 @@ impl ProgSection {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
             symbol.address += self.base as u64 + self.addr as u64 + self.data_count as u64;
-            //let is_start = name == "_start";
-            let ps = ProgSymbol {
-                name_id,
-                //is_start,
-                s: symbol,
-            };
+            let ps = ProgSymbol { name_id, s: symbol };
             eprintln!("symbol extern: {}, {:#0x}", &name, &ps.s.address);
             self.externs.insert(name.clone(), ps);
         }
@@ -174,12 +170,7 @@ impl ProgSection {
             let name_id = Some(w.add_string(name.as_bytes()));
             let mut symbol = symbol.clone();
             symbol.address += self.base as u64 + self.addr as u64 + self.data_count as u64;
-            //let is_start = name == "_start";
-            let ps = ProgSymbol {
-                name_id,
-                //is_start,
-                s: symbol,
-            };
+            let ps = ProgSymbol { name_id, s: symbol };
             eprintln!("symbol: {}, {:#0x}", &name, &ps.s.address);
             self.symbols.insert(name.clone(), ps);
         }
@@ -273,7 +264,7 @@ impl ProgSection {
             if let Some(addr) = pointers.get(&r.name) {
                 log::debug!(
                     "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                    self.alloc(),
+                    self.alloc().unwrap(),
                     v_base,
                     *addr as usize,
                     &r.name
@@ -281,10 +272,12 @@ impl ProgSection {
                 r.patch(patch_base as *mut u8, v_base as *mut u8, *addr as *const u8);
             } else {
                 //eprintln!("unapplied: {}", &r);
-                unapplied.push(r.clone());
+                //unapplied.push(r.clone());
+                //unreachable!();
+                unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
             }
-            //.expect(&format!("Unable to locate symbol: {}", &r.name));
         }
+        disassemble_code(self.bytes.as_slice(), im::HashMap::new());
         unapplied
     }
 

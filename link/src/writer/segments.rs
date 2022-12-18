@@ -99,8 +99,9 @@ pub struct SegmentTracker {
     page_size: usize,
     pub ph: Vec<ProgramHeaderEntry>,
     pub addr_start: u64,
+    addr: HashMap<String, u64>,
     pub symbols: Vec<object::write::elf::Sym>,
-    pub unapplied: Vec<(ProgSymbol, CodeRelocation)>,
+    //pub unapplied: Vec<(ProgSymbol, CodeRelocation)>,
     pub empty_symbols: Vec<Option<SectionIndex>>,
 }
 
@@ -112,10 +113,19 @@ impl SegmentTracker {
             page_size: 0x1000,
             addr_start: 0,
             ph: vec![],
+            addr: HashMap::new(),
             symbols: vec![],
-            unapplied: vec![],
+            //unapplied: vec![],
             empty_symbols: vec![],
         }
+    }
+
+    pub fn addr_get(&self, name: &str) -> Option<u64> {
+        self.addr.get(name).cloned()
+    }
+
+    pub fn addr_set(&mut self, name: &str, value: u64) {
+        self.addr.insert(name.to_string(), value);
     }
 
     pub fn current(&self) -> &Segment {
@@ -254,8 +264,6 @@ impl SegmentTracker {
         //for p in self.ph.iter() {
         //eprintln!("P: {:?}", p);
         //}
-
-        self.apply_relocations();
     }
 
     //pub fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
@@ -311,13 +319,13 @@ impl SegmentTracker {
         {
             out.push(r);
         }
-        self.unapplied = out;
+        //self.unapplied = out;
     }
 
-    fn apply_relocations(&self) -> Vec<CodeRelocation> {
+    pub fn apply_relocations(&self, pointers: &HashMap<String, u64>) -> Vec<CodeRelocation> {
         let mut out = vec![];
         for seg in &self.segments {
-            out.extend(seg.apply_relocations());
+            out.extend(seg.apply_relocations(&pointers));
         }
         out
     }
@@ -457,11 +465,12 @@ impl Segment {
         out
     }
 
-    pub fn apply_relocations(&self) -> Vec<CodeRelocation> {
+    pub fn apply_relocations(&self, pointers: &HashMap<String, u64>) -> Vec<CodeRelocation> {
         let mut out = vec![];
-        let pointers = self.symbol_pointers();
         for section in &self.sections {
-            out.extend(section.apply_relocations(self.base as usize, &pointers));
+            let addr = self.addr as usize;
+            let base = self.base as usize;
+            out.extend(section.apply_relocations(base, pointers));
         }
         out
     }

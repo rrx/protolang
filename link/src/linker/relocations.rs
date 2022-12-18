@@ -124,23 +124,24 @@ impl CodeRelocation {
         addr: *const u8,
     ) {
         log::debug!("{}", self);
+        log::debug!("patch_base: {:#08x}", patch_base as usize);
+        log::debug!("v_base:  {:#08x}", v_base as usize);
+        log::debug!("addr:    {:#08x}", addr as usize);
+        log::debug!("offset:  {:#08x}", self.offset);
         match self.r.kind {
             RelocationKind::Elf(R_X86_64_GOTPCREL) => {
                 unsafe {
                     let patch = patch_base.offset(self.offset as isize);
                     let v = v_base.offset(self.offset as isize);
+                    log::debug!("v: {:#08x}", v as usize);
 
                     // this works
                     let value = addr as isize + self.r.addend as isize - v as isize;
+                    log::debug!("value: {:#04x}", value as u32);
 
                     let before = std::ptr::read(patch);
                     (patch as *mut u32).replace(value as u32);
-                    log::debug!("patch_base: {:#08x}", patch_base as usize);
                     log::debug!("patch: {:#08x}", patch as usize);
-                    log::debug!("v_base: {:#08x}", v_base as usize);
-                    log::debug!("v: {:#08x}", v as usize);
-                    log::debug!("value: {:#04x}", value as u32);
-                    log::debug!("addr:  {:#08x}", addr as usize);
 
                     log::debug!(
                         "rel got {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}",
@@ -230,6 +231,7 @@ impl CodeRelocation {
             RelocationKind::Relative => {
                 unsafe {
                     // we need to dereference here, because the pointer is coming from the GOT
+                    //log::debug!("addr:  {:#08x}", addr as usize);
                     let vaddr = *(addr as *const usize) as usize;
                     let patch = patch_base.offset(self.offset as isize);
                     let v = v_base.offset(self.offset as isize);

@@ -57,7 +57,7 @@ fn disassemble_code(buf: &[u8], symbols: Vec<Symbol>, relocations: Vec<Reloc>) {
     for instr in insts.as_ref() {
         let addr = instr.address();
 
-        if heap.len() > 0 {
+        while heap.len() > 0 {
             let next_symbol_addr = heap.peek().unwrap().addr;
 
             if next_symbol_addr <= addr {
@@ -68,6 +68,18 @@ fn disassemble_code(buf: &[u8], symbols: Vec<Symbol>, relocations: Vec<Reloc>) {
                     symbol.addr,
                     symbol.section_addr + symbol.addr
                 );
+            } else {
+                break;
+            }
+        }
+
+        while r_heap.len() > 0 {
+            let next_reloc_addr = r_heap.peek().unwrap().offset;
+            if next_reloc_addr <= addr {
+                let r = r_heap.pop().unwrap();
+                eprintln!("    Relocation: {:#0x} {:?}", r.offset, r.r);
+            } else {
+                break;
             }
         }
 
@@ -77,14 +89,6 @@ fn disassemble_code(buf: &[u8], symbols: Vec<Symbol>, relocations: Vec<Reloc>) {
             instr.mnemonic().expect("no mnmemonic found"),
             instr.op_str().expect("no op_str found")
         );
-
-        if r_heap.len() > 0 {
-            let next_reloc_addr = r_heap.peek().unwrap().offset;
-            if next_reloc_addr <= addr {
-                let r = r_heap.pop().unwrap();
-                eprintln!("    Relocation: {:#0x} {:?}", r.offset, r.r);
-            }
-        }
     }
 }
 
@@ -154,7 +158,7 @@ pub fn elf_read(buf: &[u8]) -> Result<(), Box<dyn Error>> {
                 });
             }
             disassemble_code(buf, symbols, relocations);
-        } else {
+        } else if name == ".text" {
             disassemble_code(buf, symbols, relocations);
         }
     }
