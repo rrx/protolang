@@ -1,5 +1,4 @@
 use super::*;
-//use object::write::elf::Sym;
 
 pub struct Blocks {
     pub blocks: Vec<Box<dyn ElfBlock>>,
@@ -18,7 +17,7 @@ impl Blocks {
         // build a list of sections that are loaded
         // this is a hack to get tracker to build a correct list of program headers
         // without having to go through the blocks and do reservations
-        let mut temp_tracker = SegmentTracker::new(2);
+        let mut temp_tracker = SegmentTracker::new(0);
         for b in self.blocks.iter() {
             if let Some(alloc) = b.alloc() {
                 temp_tracker.add_data(alloc, 1, 0);
@@ -113,7 +112,7 @@ impl SegmentTracker {
     pub fn add_section(
         &mut self,
         alloc: AllocSegment,
-        section: ProgSection,
+        section: &ProgSection,
         file_offset: usize,
     ) -> usize {
         let size = section.size();
@@ -151,37 +150,6 @@ impl SegmentTracker {
         }
         out
     }
-
-    pub fn update(&mut self, _data: &mut Data, blocks: &Blocks) {
-        self.ph = blocks.program_headers(self);
-        //for p in self.ph.iter() {
-        //eprintln!("P: {:?}", p);
-        //}
-    }
-
-    pub fn reserve_relocations(&mut self, w: &mut Writer) {
-        for seg in self.segments.iter_mut() {
-            for section in seg.sections.iter_mut() {
-                section.reserve_relocations(w);
-            }
-        }
-    }
-
-    pub fn write_relocations(&self, w: &mut Writer) {
-        for seg in self.segments.iter() {
-            for section in seg.sections.iter() {
-                section.write_relocations(w);
-            }
-        }
-    }
-
-    pub fn write_relocation_section_headers(&self, w: &mut Writer, index_symtab: SectionIndex) {
-        for seg in &self.segments {
-            for section in &seg.sections {
-                section.write_relocation_section_headers(w, index_symtab);
-            }
-        }
-    }
 }
 
 pub struct Segment {
@@ -191,7 +159,7 @@ pub struct Segment {
     segment_size: usize,
     pub align: u32,
     pub alloc: AllocSegment,
-    pub sections: Vec<ProgSection>,
+    //pub sections: Vec<ProgSection>,
 }
 
 impl Segment {
@@ -203,14 +171,14 @@ impl Segment {
             segment_size: 0,
             alloc,
             align: 0x1000,
-            sections: vec![],
+            //sections: vec![],
         }
     }
 
-    pub fn add_section(&mut self, section: ProgSection) {
-        let start = size_align(self.segment_size, section.alloc().unwrap().align());
+    pub fn add_section(&mut self, section: &ProgSection) {
+        let start = size_align(self.segment_size, section.kind.align());
         self.segment_size = start + section.size();
-        self.sections.push(section);
+        //self.sections.push(section);
     }
 
     pub fn size(&self) -> usize {
@@ -228,59 +196,6 @@ impl Segment {
         //self.alloc, size, before, delta, self.segment_size, align
         //);
     }
-
-    /*
-    pub fn debug(&self) {
-        eprintln!(
-            "Segment: {:?} base:{:#0x}, offset:{:#0x}, size:{:#0x} ({})",
-            self.alloc,
-            self.base,
-            self.offset,
-            self.size(),
-            self.size(),
-        );
-        for section in &self.sections {
-            eprintln!(
-                "Section: {:?}, size:{:#0x} ({})",
-                section.name_id,
-                section.bytes.len(),
-                section.bytes.len()
-            );
-            for (name, s) in &section.symbols {
-                eprintln!(" S:{} {:?}", name, s);
-            }
-        }
-        //self.disassemble_code();
-    }
-
-    pub fn disassemble_code(&self) {
-        for s in self.sections.iter() {
-            s.disassemble_code();
-        }
-    }
-
-    pub fn extern_symbol_set(&self) -> HashMap<String, ProgSymbol> {
-        let mut pointers = HashMap::new();
-        for section in &self.sections {
-            for (name, s) in &section.externs {
-                //let addr = self.base + self.offset + s.s.address;
-                pointers.insert(name.clone(), s.clone());
-            }
-        }
-        pointers
-    }
-
-    pub fn symbol_set(&self) -> HashMap<String, ProgSymbol> {
-        let mut pointers = HashMap::new();
-        for section in &self.sections {
-            for (name, s) in &section.symbols {
-                //let addr = self.base + self.offset + s.s.address;
-                pointers.insert(name.clone(), s.clone());
-            }
-        }
-        pointers
-    }
-    */
 
     pub fn program_header(&self) -> Option<ProgramHeaderEntry> {
         // add a load section for the file and program header, so it's covered

@@ -1,5 +1,5 @@
 use object::elf;
-use object::write::elf::{SectionIndex, Sym, Writer};
+use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use std::collections::HashMap;
 
@@ -64,7 +64,7 @@ pub struct ProgSectionBuilder {}
 pub struct ProgSection {
     pub name: Option<String>,
     pub name_id: Option<StringId>,
-    pub rel_name_id: Option<StringId>,
+    //pub rel_name_id: Option<StringId>,
     pub index: Option<SectionIndex>,
     pub rel_index: Option<SectionIndex>,
     pub kind: AllocSegment,
@@ -85,13 +85,13 @@ impl ProgSection {
         kind: AllocSegment,
         name: Option<String>,
         name_id: Option<StringId>,
-        rel_name_id: Option<StringId>,
+        //rel_name_id: Option<StringId>,
         mem_size: usize,
     ) -> Self {
         Self {
             name,
             name_id,
-            rel_name_id,
+            //rel_name_id,
             index: None,
             rel_index: None,
             kind,
@@ -119,17 +119,6 @@ impl ProgSection {
     pub fn update_segment_base(&mut self, base: usize) {
         self.addr += base;
     }
-
-    /*
-    pub fn symbol_pointers(&self) -> HashMap<String, u64> {
-        let mut out = HashMap::new();
-        for (name, s) in &self.symbols {
-            let addr = self.base + s.s.address as usize;
-            out.insert(name.clone(), addr as u64);
-        }
-        out
-    }
-    */
 
     pub fn add_bytes(&mut self, bytes: &[u8]) {
         self.file_offset += bytes.len();
@@ -198,47 +187,7 @@ impl ProgSection {
             );
         }
     }
-    /*
 
-        pub fn reserve_symbols(&self, w: &mut Writer) {
-            for (_, _) in &self.symbols {
-                w.reserve_symbol_index(self.index);
-            }
-        }
-
-        //
-        pub fn get_symbols(&self, base: u64) -> Vec<Sym> {
-            self.symbols
-                .iter()
-                .map(|(_, s)| s.get_symbol(self.base + base as usize))
-                .collect()
-        }
-
-        pub fn write_symbols(&self, base: u64, w: &mut Writer) {
-            // write symbols out
-            for (_name, sym) in &self.symbols {
-                sym.write_symbol(self.base + base as usize, w);
-
-                /*
-                let st_shndx = elf::SHN_ABS;
-                let st_size = sym.s.size;
-                let addr = self.base as u64 + sym.s.address + base;
-                //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
-                eprintln!("write symbol: {}, {:#0x}", &name, &addr);
-                w.write_symbol(&object::write::elf::Sym {
-                    name: sym.name_id,
-                    section: self.index,
-                    st_info: sym.s.st_info,
-                    st_other: sym.s.st_other,
-                    st_shndx,
-                    st_value: addr,
-                    st_size,
-                });
-                */
-            }
-        }
-
-    */
     pub fn unapplied_relocations(
         &self,
         symbols: &HashMap<String, ProgSymbol>,
@@ -254,74 +203,9 @@ impl ProgSection {
         }
         unapplied
     }
-
-    /*
-    pub fn apply_relocations(
-        &self,
-        v_base: usize,
-        pointers: &HashMap<String, u64>,
-    ) -> Vec<CodeRelocation> {
-        let patch_base = self.bytes.as_ptr();
-        let mut unapplied = vec![];
-        for r in self.relocations.iter() {
-            if let Some(addr) = pointers.get(&r.name) {
-                log::debug!(
-                    "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                    self.alloc().unwrap(),
-                    v_base,
-                    *addr as usize,
-                    &r.name
-                );
-                r.patch(patch_base as *mut u8, v_base as *mut u8, *addr as *const u8);
-            } else {
-                //eprintln!("unapplied: {}", &r);
-                //unapplied.push(r.clone());
-                //unreachable!();
-                unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
-            }
-        }
-        disassemble_code(self.bytes.as_slice(), im::HashMap::new());
-        unapplied
-    }
-    */
-
-    pub fn reserve_relocations(&mut self, w: &mut Writer) {
-        self.rel_index = Some(w.reserve_section_index());
-        self.rel_file_offset = w.reserve_relocations(self.relocations.len(), true);
-    }
-
-    pub fn write_relocations(&self, w: &mut Writer) {
-        for rel in self.relocations.iter() {
-            let r_offset = rel.offset;
-            let r_addend = rel.r.addend;
-            let r_sym = 0;
-            let r_type = 0;
-            w.write_relocation(
-                true,
-                &object::write::elf::Rel {
-                    r_offset,
-                    r_sym,
-                    r_type,
-                    r_addend,
-                },
-            );
-        }
-    }
-
-    pub fn write_relocation_section_headers(&self, w: &mut Writer, index_symtab: SectionIndex) {
-        if false {
-            w.write_relocation_section_header(
-                self.rel_name_id.unwrap(),
-                self.rel_index.unwrap(),
-                index_symtab,
-                self.rel_file_offset,
-                self.relocations.len(),
-                true,
-            );
-        }
-    }
 }
 
+/*
 impl ElfBlock for ProgSection {
     fn alloc(&self) -> Option<AllocSegment> {
         Some(self.kind)
@@ -355,7 +239,7 @@ impl ElfBlock for ProgSection {
         );
     }
 
-    fn update(&mut self, _data: &mut Data) {}
+    //fn update(&mut self, _data: &mut Data) {}
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
@@ -390,3 +274,4 @@ impl ElfBlock for ProgSection {
         }
     }
 }
+*/

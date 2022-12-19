@@ -85,6 +85,86 @@ impl UnlinkedCodeSegmentInner {
         Ok(segments)
     }
 
+    pub fn create_segments_elf(link_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
+        use object::elf::FileHeader64;
+        use object::read::elf;
+        let b: elf::ElfFile<'_, FileHeader64<object::Endianness>> =
+            object::read::elf::ElfFile::parse(buf)?;
+
+        let symbol_table = b.symbol_table().unwrap();
+        //let mut symbols = vec![];
+        let mut relocations = vec![];
+        for section in b.sections() {
+            let section_name = section.name()?.to_string();
+            match section.kind() {
+                SectionKind::Text => {}
+                _ => unimplemented!(),
+            }
+
+            for (reloc_offset, r) in section.relocations() {
+                let symbol = if let RelocationTarget::Symbol(symbol_index) = r.target() {
+                    symbol_table.symbol_by_index(symbol_index)?
+                } else {
+                    // relocation must be associated with a symbol
+                    unimplemented!()
+                };
+                let name = symbol.name()?.to_string();
+
+                match (symbol.kind(), symbol.scope()) {
+                    (_, SymbolScope::Dynamic | SymbolScope::Unknown | SymbolScope::Linkage) => {
+                        relocations.push(CodeRelocation {
+                            name,
+                            name_id: None,
+                            offset: reloc_offset,
+                            r: r.into(),
+                        });
+                    }
+
+                    (SymbolKind::Data, SymbolScope::Compilation) => {
+                        relocations.push(CodeRelocation {
+                            name,
+                            name_id: None,
+                            offset: reloc_offset,
+                            r: r.into(),
+                        });
+                    }
+
+                    (SymbolKind::Section, SymbolScope::Compilation) => {
+                        // if the relocation references a section, then look up the section
+                        // name
+                        let section_index = symbol.section().index().unwrap();
+                        let section = b.section_by_index(section_index)?;
+                        let name = section.name()?.to_string();
+                        relocations.push(CodeRelocation {
+                            name,
+                            name_id: None,
+                            offset: reloc_offset,
+                            r: r.into(),
+                        });
+                    }
+                    _ => unimplemented!("{:?}", symbol),
+                }
+            }
+            for r in &relocations {
+                log::debug!("  {}", r);
+            }
+
+            let name = format!("{}{}", link_name, section_name);
+            let data = section.uncompressed_data()?;
+
+            // for bss, we have empty data, so we pass in a zero initialized buffer
+            // to be consistent
+            let bytes = if section.size() as usize > data.len() {
+                let mut data = Vec::new();
+                data.resize(section.size() as usize, 0);
+                data
+            } else {
+                data.to_vec()
+            };
+        }
+        Ok(vec![])
+    }
+
     pub fn create_segments(link_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
         log::debug!("Segment: {}, size: {}", link_name, buf.len());
         let obj_file = object::File::parse(buf)?;
@@ -313,6 +393,7 @@ impl UnlinkedCodeSegmentInner {
 
                 let mut relocations = vec![];
                 for (reloc_offset, r) in section.relocations() {
+                    //r.kind()
                     //log::debug!(" R:{:?}", (&reloc_offset,&r));
                     let symbol = if let RelocationTarget::Symbol(symbol_index) = r.target() {
                         symbol_table.symbol_by_index(symbol_index)?

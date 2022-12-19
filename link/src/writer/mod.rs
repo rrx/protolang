@@ -5,7 +5,7 @@ use object::read::elf::FileHeader;
 use object::write::elf::Sym;
 use object::write::elf::{SectionIndex, SymbolIndex, Writer};
 use object::write::StringId;
-use object::Endianness;
+use object::{Architecture, Endianness};
 use std::collections::HashMap;
 use std::mem;
 
@@ -112,9 +112,10 @@ impl AllocSegment {
 }
 
 pub struct Data {
+    arch: Architecture,
     interp: String,
     is_64: bool,
-    ph: Vec<ProgramHeaderEntry>,
+    //ph: Vec<ProgramHeaderEntry>,
     sections: ProgSections,
     lib_names: Vec<String>,
     libs: Vec<Library>,
@@ -122,10 +123,6 @@ pub struct Data {
     base: usize,
     addr: HashMap<String, u64>,
     section_index: HashMap<String, SectionIndex>,
-    addr_dynamic: u64,
-    addr_got: u64,
-    addr_gotplt: u64,
-    addr_dynstr: u64,
     size_dynstr: usize,
     addr_dynsym: u64,
     size_dynsym: usize,
@@ -135,12 +132,6 @@ pub struct Data {
     pointers: HashMap<String, u64>,
     symbols: HashMap<String, ProgSymbol>,
 
-    //addr_interp: u64,
-    index_strtab: Option<SectionIndex>,
-    index_symtab: Option<SectionIndex>,
-    index_dynstr: Option<SectionIndex>,
-    index_dynsym: Option<SectionIndex>,
-    index_dynamic: Option<SectionIndex>,
     add_section_headers: bool,
     add_symbols: bool,
     debug: bool,
@@ -149,9 +140,10 @@ pub struct Data {
 impl Data {
     pub fn new(lib_names: Vec<String>) -> Self {
         Self {
+            arch: Architecture::X86_64,
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
-            ph: vec![],
+            //ph: vec![],
             lib_names,
             sections: ProgSections::new(),
             libs: vec![],
@@ -159,10 +151,6 @@ impl Data {
             page_size: 0x1000,
             addr: HashMap::new(),
             section_index: HashMap::new(),
-            addr_dynamic: 0,
-            addr_got: 0,
-            addr_gotplt: 0,
-            addr_dynstr: 0,
             size_dynstr: 0,
             addr_dynsym: 0,
             size_dynsym: 0,
@@ -172,15 +160,18 @@ impl Data {
             pointers: HashMap::new(),
             symbols: HashMap::new(),
 
-            //addr_interp: 0,
-            index_strtab: None,
-            index_symtab: None,
-            index_dynstr: None,
-            index_dynsym: None,
-            index_dynamic: None,
             add_section_headers: true,
             add_symbols: true,
             debug: true,
+        }
+    }
+
+    pub fn is_64(&self) -> bool {
+        use object::AddressSize;
+        match self.arch.address_size().unwrap() {
+            AddressSize::U8 | AddressSize::U16 | AddressSize::U32 => false,
+            AddressSize::U64 => true,
+            _ => unimplemented!(),
         }
     }
 
@@ -196,16 +187,20 @@ impl Data {
         self.libs.push(Library { string_id });
     }
 
-    //fn get_addr(&self, name: &str) -> Option<u64> {
-    //self.addr.get(name).cloned()
-    //}
-
-    pub fn addr_get(&self, name: &str) -> Option<u64> {
-        self.addr.get(name).cloned()
+    pub fn addr_get(&self, name: &str) -> u64 {
+        *self.addr.get(name).unwrap()
     }
 
     pub fn addr_set(&mut self, name: &str, value: u64) {
         self.addr.insert(name.to_string(), value);
+    }
+
+    pub fn section_index_get(&self, name: &str) -> SectionIndex {
+        *self.section_index.get(name).unwrap()
+    }
+
+    pub fn section_index_set(&mut self, name: &str, section_index: SectionIndex) {
+        self.section_index.insert(name.to_string(), section_index);
     }
 
     fn gen_dynamic(&self) -> Vec<Dynamic> {
@@ -224,7 +219,7 @@ impl Data {
         });
         out.push(Dynamic {
             tag: elf::DT_STRTAB,
-            val: self.addr_dynstr,
+            val: self.addr_get(".dynstr"),
             string: None,
         });
         out.push(Dynamic {
@@ -271,6 +266,7 @@ impl Data {
         out
     }
 
+    /*
     pub fn debug(&mut self, _link: &Link) {
         let mut out_data = Vec::new();
         let endian = Endianness::Little;
@@ -282,7 +278,9 @@ impl Data {
         //self.segments.read_unlinked(link, &mut writer);
 
         //self.segments.rx.debug();
+        //
     }
+    */
 
     pub fn symbol_size(&self) -> usize {
         if self.is_64 {
@@ -386,12 +384,16 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
 pub fn load_blocks<'a>(blocks: &mut Blocks, data: &mut Data) {
     for section in data.sections.sections.drain(..) {
         let buf = section.bytes.clone();
+        if section.relocations.len() > 0 {
+            blocks.add_block(Box::new(RelocationSection::new(section.kind, &section)));
+        }
+
         let block = BufferSection::new(
             AllocSegment::RX,
             section.name.clone(),
             section.name_id,
             buf,
-            Some(section),
+            section,
         );
         blocks.add_block(Box::new(block));
     }
@@ -433,8 +435,7 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
     if rx.len() > 0 {
         let name = ".text".to_string();
         let name_id = Some(w.add_section_name(".text".as_bytes()));
-        let rel_name_id = Some(w.add_section_name(".rela.text".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RX, Some(name), name_id, rel_name_id, 0);
+        let mut section = ProgSection::new(AllocSegment::RX, Some(name), name_id, 0);
         for u in rx.into_iter() {
             section.append(&u, w);
         }
@@ -444,8 +445,7 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
     if ro.len() > 0 {
         let name = ".rodata".to_string();
         let name_id = Some(w.add_section_name(".rodata".as_bytes()));
-        let rel_name_id = Some(w.add_section_name(".rela.rodata".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RO, Some(name), name_id, rel_name_id, 0);
+        let mut section = ProgSection::new(AllocSegment::RO, Some(name), name_id, 0);
         for u in ro.into_iter() {
             section.append(&u, w);
         }
@@ -455,8 +455,7 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
     if rw.len() > 0 {
         let name = ".data".to_string();
         let name_id = Some(w.add_section_name(".data".as_bytes()));
-        let rel_name_id = Some(w.add_section_name(".rela.data".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RW, Some(name), name_id, rel_name_id, 0);
+        let mut section = ProgSection::new(AllocSegment::RW, Some(name), name_id, 0);
         for u in rw.into_iter() {
             section.append(&u, w);
         }
@@ -466,14 +465,14 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
     unapplied_relocations(&mut data.sections, w);
 }
 
-fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, tracker: &mut SegmentTracker) {
+fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, _tracker: &mut SegmentTracker) {
     for local in locals.iter() {
-        let addr = data.addr_get(&local.section).unwrap() + local.offset as u64;
+        let addr = data.addr_get(&local.section) + local.offset as u64;
         // Add symbol
         let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
         let st_other = elf::STV_DEFAULT;
-        let st_shndx = 0;
-        let st_value = addr;
+        //let st_shndx = 0;
+        //let st_value = addr;
         let st_size = 0;
 
         let section_index = data.section_index.get(&local.section).cloned();
@@ -558,14 +557,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(DynSymSection::default()));
     }
 
-    // relocations go here
-    if RelocationSection::has_rx_relocs(&data) {
-        blocks.add_block(Box::new(RelocationSection::new(AllocSegment::RX)));
-    }
-    if RelocationSection::has_rw_relocs(&data) {
-        blocks.add_block(Box::new(RelocationSection::new(AllocSegment::RW)));
-    }
-
     load_blocks(&mut blocks, &mut data);
 
     if data.is_dynamic() {
@@ -596,7 +587,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     // what are these for? reserving symbols for locals
     for _ in locals.iter() {
-        writer.reserve_symbol_index(data.index_dynamic);
+        writer.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
     }
 
     blocks.reserve(&mut tracker, &mut data, &mut writer);
@@ -610,7 +601,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // UPDATE
-    tracker.update(&mut data, &blocks);
+    tracker.ph = blocks.program_headers(&tracker);
     blocks.update(&mut data);
 
     update_symbols(&locals, &mut data, &mut tracker);
@@ -623,7 +614,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.write_section_headers(&data, &tracker, &mut writer);
     }
 
-    data.debug(link);
+    //data.debug(link);
     Ok(out_data)
 }
 
