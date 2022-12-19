@@ -196,8 +196,16 @@ impl Data {
         self.libs.push(Library { string_id });
     }
 
-    fn get_addr(&self, name: &str) -> Option<u64> {
+    //fn get_addr(&self, name: &str) -> Option<u64> {
+    //self.addr.get(name).cloned()
+    //}
+
+    pub fn addr_get(&self, name: &str) -> Option<u64> {
         self.addr.get(name).cloned()
+    }
+
+    pub fn addr_set(&mut self, name: &str, value: u64) {
+        self.addr.insert(name.to_string(), value);
     }
 
     fn gen_dynamic(&self) -> Vec<Dynamic> {
@@ -343,35 +351,6 @@ unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
-/*
-fn update_pointers(data: &mut Data, tracker: &SegmentTracker) {
-    //for (k, v) in tracker.symbol_pointers() {
-    //data.pointers.insert(k, v);
-    //}
-
-    // add in unapplied symbols, which should point to GOT
-    //for (_sym, r) in data.sections.unapplied.iter() {
-        //let _name = &r.name;
-        //let name = &sym.name.unwrap();
-        //data.pointers.insert(name.clone(), 0);
-    //}
-
-    /*
-    for seg in self.segments.iter() {
-        for section in seg.sections.iter() {
-            let name = section.name.as_ref().unwrap();
-            if let Some(addr) = &self.addr_get(&name) {
-                //pointers.insert(name.clone(), *addr);
-            }
-        }
-    }
-    */
-    for (k, v) in data.pointers.iter() {
-        eprintln!("P: {}, {:#0x}", k, v);
-    }
-}
-*/
-
 pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
     let symbols = sections.symbol_pointers();
     let externs = sections.extern_symbol_pointers();
@@ -402,7 +381,6 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
     for (sym, u) in sections.unapplied.iter() {
         eprintln!("R: {:?}", (sym, u));
     }
-    //sections.unapplied = out;
 }
 
 pub fn load_blocks<'a>(blocks: &mut Blocks, data: &mut Data) {
@@ -490,14 +468,13 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
 
 fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, tracker: &mut SegmentTracker) {
     for local in locals.iter() {
-        let addr = data.get_addr(&local.section).unwrap() + local.offset as u64;
+        let addr = data.addr_get(&local.section).unwrap() + local.offset as u64;
         // Add symbol
         let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
         let st_other = elf::STV_DEFAULT;
         let st_shndx = 0;
-        let st_value = addr; //(self.base + self.offset) as u64;
+        let st_value = addr;
         let st_size = 0;
-
 
         let section_index = data.section_index.get(&local.section).cloned();
 
@@ -517,17 +494,6 @@ fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, tracker: &mut Segm
         };
 
         data.symbols.insert(local.symbol.clone(), p);
-        /*
-        tracker.symbols.push(object::write::elf::Sym {
-            name: local.string_id,
-            section: data.index_dynamic,
-            st_info,
-            st_other,
-            st_shndx,
-            st_value,
-            st_size,
-        });
-        */
     }
 }
 
@@ -561,6 +527,12 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             0,
             Some(writer.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
         ),
+        LocalSymbol::new(
+            "ASDF".into(),
+            ".got.plt".into(),
+            0,
+            Some(writer.add_string("ASDF".as_bytes())),
+        ),
     ];
 
     // configure blocks
@@ -570,20 +542,10 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     blocks.add_block(Box::new(HeaderComponent::default()));
 
     if data.is_dynamic() {
-        if false {
-            // this doesn't implement the program header, we really need
-            // the dedicated interp section code to make that work
-            // interp is an exception
-            let name = ".interp".to_string();
-            let name_id = Some(writer.add_section_name(".interp".as_bytes()));
-            let mut section = ProgSection::new(AllocSegment::RO, Some(name), name_id, None, 0);
-            let interp = data.interp.as_bytes().to_vec();
-            let cstr = std::ffi::CString::new(interp).unwrap();
-            section.add_bytes(cstr.as_bytes_with_nul());
-            blocks.add_block(Box::new(section));
-        } else {
-            blocks.add_block(Box::new(InterpSection::new(&data)));
-        }
+        // BufferSection doesn't implement the program header, we really need
+        // the dedicated interp section code to make that work
+        // interp is an exception
+        blocks.add_block(Box::new(InterpSection::new(&data)));
     }
 
     blocks.add_block(Box::new(HashSection::default()));
@@ -608,23 +570,6 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));
-
-        /*
-        let name = ".got";
-        let name_id = Some(writer.add_section_name(name.as_bytes()));
-        let mut buf = Vec::new();
-        buf.resize(0x1000, 0);
-        let b = BufferSection::new(AllocSegment::RW, Some(name.to_string()), name_id, buf, None);
-        blocks.add_block(Box::new(b));
-
-        let name = ".got.plt";
-        let name_id = Some(writer.add_section_name(name.as_bytes()));
-        let mut buf = Vec::new();
-        buf.resize(0x1000, 0);
-        let b = BufferSection::new(AllocSegment::RW, Some(name.to_string()), name_id, buf, None);
-        blocks.add_block(Box::new(b));
-        */
-
         blocks.add_block(Box::new(GotPltSection::default()));
     }
 
@@ -649,12 +594,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.reserve_section_index(&mut data, &mut writer);
     }
 
-    if true {
+    // what are these for? reserving symbols for locals
+    for _ in locals.iter() {
         writer.reserve_symbol_index(data.index_dynamic);
-        writer.reserve_symbol_index(data.index_dynamic);
-    } else {
-        //tracker.reserve_empty_symbol(data.index_dynamic);
-        //tracker.reserve_empty_symbol(data.index_dynamic);
     }
 
     blocks.reserve(&mut tracker, &mut data, &mut writer);

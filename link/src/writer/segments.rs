@@ -1,5 +1,5 @@
 use super::*;
-use object::write::elf::Sym;
+//use object::write::elf::Sym;
 
 pub struct Blocks {
     pub blocks: Vec<Box<dyn ElfBlock>>,
@@ -13,14 +13,6 @@ impl Blocks {
     pub fn add_block(&mut self, block: Box<dyn ElfBlock>) {
         self.blocks.push(block);
     }
-
-    /*
-    pub fn reserve_strings<'a>(&self, symbols: &'a mut Vec<LocalSymbol>, w: &mut Writer<'a>) {
-        for b in self.blocks.iter() {
-            //b.reserve_strings(symbols, w);
-        }
-    }
-    */
 
     pub fn reserve(&mut self, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
         // build a list of sections that are loaded
@@ -94,15 +86,10 @@ impl Blocks {
 }
 
 pub struct SegmentTracker {
-    pub segments: Vec<Segment>,
+    segments: Vec<Segment>,
     base: usize,
     page_size: usize,
     pub ph: Vec<ProgramHeaderEntry>,
-    pub addr_start: u64,
-    addr: HashMap<String, u64>,
-    //pub symbols: Vec<object::write::elf::Sym>,
-    //pub unapplied: Vec<(ProgSymbol, CodeRelocation)>,
-    //pub empty_symbols: Vec<Option<SectionIndex>>,
 }
 
 impl SegmentTracker {
@@ -111,21 +98,8 @@ impl SegmentTracker {
             segments: vec![],
             base,
             page_size: 0x1000,
-            addr_start: 0,
             ph: vec![],
-            addr: HashMap::new(),
-            //symbols: vec![],
-            //unapplied: vec![],
-            //empty_symbols: vec![],
         }
-    }
-
-    pub fn addr_get(&self, name: &str) -> Option<u64> {
-        self.addr.get(name).cloned()
-    }
-
-    pub fn addr_set(&mut self, name: &str, value: u64) {
-        self.addr.insert(name.to_string(), value);
     }
 
     pub fn current(&self) -> &Segment {
@@ -135,15 +109,6 @@ impl SegmentTracker {
     pub fn current_mut(&mut self) -> &mut Segment {
         self.segments.last_mut().unwrap()
     }
-
-    /*
-    pub fn add_unlinked(&mut self, alloc: AllocSegment, unlinked: UnlinkedCodeSegment, file_offset: usize) -> usize {
-        let size = unlinked.bytes.len();
-        let base = self.add_data(alloc, size, file_offset);
-        //self.current().add_section(section)
-        base
-    }
-    */
 
     pub fn add_section(
         &mut self,
@@ -172,86 +137,10 @@ impl SegmentTracker {
             segment.base = self.base as u64;
             segment.offset = file_offset as u64;
             self.segments.push(segment);
-            //eprintln!("new add: base: {:?}, {:#0x}", alloc, self.base);
         }
         self.current_mut().add_data(size, alloc.align());
         self.base
     }
-
-    /*
-    pub fn symbol_pointers(&self) -> HashMap<String, u64> {
-        let mut pointers = HashMap::new();
-        for seg in &self.segments {
-            for (name, addr) in seg.symbol_pointers() {
-                pointers.insert(name.clone(), addr);
-            }
-        }
-        pointers
-    }
-    */
-
-    //pub fn reserve_empty_symbol(&mut self, v: Option<SectionIndex>) {
-    //self.empty_symbols.push(v);
-    //}
-
-    /*
-    pub fn reserve_symbols(&self, w: &mut Writer) {
-        for s in self.segments.iter() {
-            s.reserve_symbols(w);
-        }
-
-        for s in self.symbols.iter() {
-            w.reserve_symbol_index(s.section);
-        }
-
-        //for section_index in self.empty_symbols.iter() {
-        //w.reserve_symbol_index(*section_index);
-        //}
-    }
-
-    //pub fn symbol_count(&self) -> usize {
-    //self.segments.iter().fold(0, |acc, x| acc + x.symbols_count())
-    //}
-
-    pub fn get_symbols(&self) -> Vec<Sym> {
-        self.segments
-            .iter()
-            .map(|seg| seg.get_symbols())
-            .flatten()
-            .chain(self.symbols.iter().cloned())
-            .collect()
-    }
-    */
-
-    /*
-    pub fn write_symbols(&self, w: &mut Writer) -> usize {
-        let symbols = self.get_symbols();
-        // sort them, locals first
-
-        let mut num_locals = 0;
-        symbols
-            .iter()
-            .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
-            .for_each(|s| {
-                w.write_symbol(s);
-                num_locals += 1;
-            });
-
-        symbols
-            .iter()
-            .filter(|s| s.st_info >> 4 != elf::STB_LOCAL)
-            .for_each(|s| {
-                w.write_symbol(s);
-            });
-        num_locals
-    }
-    */
-
-    /*
-    pub fn load_segment_count(&self) -> usize {
-        self.program_headers().len()
-    }
-    */
 
     pub fn program_headers(&self) -> Vec<ProgramHeaderEntry> {
         let mut out = vec![];
@@ -264,83 +153,11 @@ impl SegmentTracker {
     }
 
     pub fn update(&mut self, _data: &mut Data, blocks: &Blocks) {
-        /*
-        let pointers = self.symbol_pointers();
-        if let Some(start) = pointers.get("_start") {
-            self.addr_start = *start;
-        }
-        */
         self.ph = blocks.program_headers(self);
         //for p in self.ph.iter() {
         //eprintln!("P: {:?}", p);
         //}
     }
-
-    //pub fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
-    //let d_name_id = Some(w.add_string("_DYNAMIC".as_bytes()));
-    //let got_name_id = Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes()));
-    //}
-
-    /*
-    pub fn update_symbols(&mut self, data: &mut Data, w: &mut Writer) {
-        let addr = data.get_addr(".dynamic").unwrap();
-        // Add symbols
-        //w.reserve_symbol_index(self.index);
-        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
-        let st_other = elf::STV_DEFAULT;
-        let st_shndx = 0;
-        let st_value = addr; //(self.base + self.offset) as u64;
-        let st_size = 0;
-        self.symbols.push(object::write::elf::Sym {
-            name: d_name_id,
-            section: data.index_dynamic,
-            st_info,
-            st_other,
-            st_shndx,
-            st_value,
-            st_size,
-        });
-
-        let addr = data.get_addr(".got.plt").unwrap();
-        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
-        let st_other = elf::STV_DEFAULT;
-        let st_shndx = 0;
-        let st_value = addr;
-        let st_size = 0;
-        self.symbols.push(object::write::elf::Sym {
-            name: got_name_id,
-            section: data.index_dynamic,
-            st_info,
-            st_other,
-            st_shndx,
-            st_value,
-            st_size,
-        });
-    }
-    */
-
-    /*
-    pub fn unapplied_relocations<'a>(&mut self, _w: &mut Writer<'a>) {
-        let mut out = vec![];
-        for r in self
-            .segments
-            .iter_mut()
-            .map(|seg| seg.unapplied_relocations())
-            .flatten()
-        {
-            out.push(r);
-        }
-        //self.unapplied = out;
-    }
-
-    pub fn apply_relocations(&self, pointers: &HashMap<String, u64>) -> Vec<CodeRelocation> {
-        let mut out = vec![];
-        for seg in &self.segments {
-            out.extend(seg.apply_relocations(&pointers));
-        }
-        out
-    }
-    */
 
     pub fn reserve_relocations(&mut self, w: &mut Writer) {
         for seg in self.segments.iter_mut() {
@@ -412,6 +229,7 @@ impl Segment {
         //);
     }
 
+    /*
     pub fn debug(&self) {
         eprintln!(
             "Segment: {:?} base:{:#0x}, offset:{:#0x}, size:{:#0x} ({})",
@@ -441,56 +259,6 @@ impl Segment {
         }
     }
 
-    /*
-    pub fn reserve_symbols(&self, w: &mut Writer) {
-        for s in &self.sections {
-            s.reserve_symbols(w);
-        }
-    }
-
-    pub fn symbols_count(&self) -> usize {
-        self.sections
-            .iter()
-            .fold(0, |acc, x| acc + x.get_symbols(0).len())
-    }
-
-    pub fn get_symbols(&self) -> Vec<Sym> {
-        self.sections
-            .iter()
-            .map(|s| s.get_symbols(self.base + self.offset))
-            .flatten()
-            .collect()
-    }
-
-    pub fn write_symbols(&self, w: &mut Writer) {
-        for s in self.sections.iter() {
-            s.write_symbols(self.base + self.offset, w);
-        }
-    }
-    */
-
-    /*
-    fn unapplied_relocations(&self) -> Vec<(ProgSymbol, CodeRelocation)> {
-        let mut out = vec![];
-        let externs = self.extern_symbol_set();
-        let symbols = self.symbol_set();
-        for section in &self.sections {
-            out.extend(section.unapplied_relocations(&symbols, &externs));
-        }
-        out
-    }
-
-    pub fn apply_relocations(&self, pointers: &HashMap<String, u64>) -> Vec<CodeRelocation> {
-        let mut out = vec![];
-        for section in &self.sections {
-            let addr = self.addr as usize;
-            let base = self.base as usize;
-            out.extend(section.apply_relocations(base, pointers));
-        }
-        out
-    }
-    */
-
     pub fn extern_symbol_set(&self) -> HashMap<String, ProgSymbol> {
         let mut pointers = HashMap::new();
         for section in &self.sections {
@@ -508,18 +276,6 @@ impl Segment {
             for (name, s) in &section.symbols {
                 //let addr = self.base + self.offset + s.s.address;
                 pointers.insert(name.clone(), s.clone());
-            }
-        }
-        pointers
-    }
-
-    /*
-    pub fn symbol_pointers(&self) -> HashMap<String, u64> {
-        let mut pointers = HashMap::new();
-        for section in &self.sections {
-            for (name, s) in &section.symbols {
-                let addr = self.base + self.offset + s.s.address;
-                pointers.insert(name.clone(), addr);
             }
         }
         pointers

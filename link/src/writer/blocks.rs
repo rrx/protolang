@@ -254,7 +254,7 @@ impl ElfBlock for RelaDynSection {
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
 
-        let got_addr = data.get_addr(".got").unwrap();
+        let got_addr = data.addr_get(".got").unwrap();
         // we are writing a relocation for the GOT entries
         let start = 3;
         for (index, (sym, rel)) in data.sections.unapplied.iter().enumerate() {
@@ -396,19 +396,11 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         // reserve the symbols in the various sections
-        //if false {
-        //tracker.reserve_symbols(w);
-        //} else {
-
         for s in data.symbols.values() {
             w.reserve_symbol_index(s.section_index);
         }
-        let num = &data.symbols.len();
-        eprintln!("reserve num: {}", num);
-        //}
-
         w.reserve_symtab();
 
         if w.symtab_shndx_needed() {
@@ -416,21 +408,16 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    fn write(&self, data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         // write symbols
         w.write_null_symbol();
-        //if false {
-        //tracker.write_symbols(w);
-        //} else {
+
         let mut symbols = vec![];
         for s in data.symbols.values() {
-            symbols.push(s.get_symbol(0));
+            symbols.push(s.get_symbol());
         }
-        //let symbols = self.get_symbols();
-        // sort them, locals first
-        let num = &symbols.len();
-        eprintln!("write num: {}", num);
 
+        // write them, locals first
         let mut num_locals = 0;
         symbols
             .iter()
@@ -446,24 +433,18 @@ impl ElfBlock for SymTabSection {
             .for_each(|s| {
                 w.write_symbol(s);
             });
-        //num_locals
-        //}
 
         if w.symtab_shndx_needed() {
             w.write_symtab_shndx();
         }
     }
 
-    fn write_section_header(&self, data: &Data, tracker: &SegmentTracker, w: &mut Writer) {
-        // one greater than the symbol table index of the last
-        // local symbol (binding STB_LOCAL)
-
+    fn write_section_header(&self, data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
         let mut symbols = vec![];
         for s in data.symbols.values() {
-            symbols.push(s.get_symbol(0));
+            symbols.push(s.get_symbol());
         }
 
-        //let symbols = tracker.get_symbols();
         let mut num_locals = 0;
 
         symbols
@@ -473,9 +454,8 @@ impl ElfBlock for SymTabSection {
                 num_locals += 1;
             });
 
-        //eprintln!("num_locals: {}", num_locals);
-        let num = &symbols.len();
-        eprintln!("sh num: {}, {}", num_locals, num);
+        // one greater than the symbol table index of the last
+        // local symbol (binding STB_LOCAL)
         w.write_symtab_section_header(num_locals as u32 + 1);
         if w.symtab_shndx_needed() {
             w.write_symtab_shndx_section_header();
@@ -536,7 +516,6 @@ impl ElfBlock for DynSymSection {
 
         w.write_null_dynamic_symbol();
         for (sym, _r) in data.sections.unapplied.iter() {
-            //eprintln!("dynsym write: {:?}", &sym);
             w.write_dynamic_symbol(sym);
         }
     }
@@ -1001,7 +980,7 @@ impl ElfBlock for BufferSection {
         }
 
         let name = self.name.as_ref().unwrap();
-        tracker.addr_set(&name, self.base as u64 + self.offset as u64);
+        data.addr_set(&name, self.base as u64 + self.offset as u64);
         self.addr = self.base as usize + self.offset;
 
         data.addr

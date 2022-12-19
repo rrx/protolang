@@ -31,17 +31,17 @@ impl ProgSymbol {
         }
     }
 
+    /*
     pub fn reserve(&mut self, _w: &mut Writer) {
         //self.name_id = Some(w.add_string(self.s.name.as_bytes()));//"_DYNAMIC_".as_bytes()));
         //w.reserve_symbol_index(data.index_dynamic);
     }
+    */
 
-    pub fn get_symbol(&self, base: usize) -> object::write::elf::Sym {
+    pub fn get_symbol(&self) -> object::write::elf::Sym {
         let st_shndx = elf::SHN_ABS;
         let st_size = self.s.size;
-        let addr = base as u64 + self.s.address;
-        //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
-        //eprintln!("write symbol: {}, {:#0x}", &self.s.name, &addr);
+        let addr = self.s.address;
         object::write::elf::Sym {
             name: self.name_id,
             section: self.section_index,
@@ -53,25 +53,9 @@ impl ProgSymbol {
         }
     }
 
-    pub fn write_symbol(&self, base: usize, w: &mut Writer) {
-        let sym = self.get_symbol(base);
+    pub fn write_symbol(&self, w: &mut Writer) {
+        let sym = self.get_symbol();
         w.write_symbol(&sym);
-        /*
-        let st_shndx = elf::SHN_ABS;
-        let st_size = self.s.size;
-        let addr = base as u64 + self.s.address;
-        //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
-        eprintln!("write symbol: {}, {:#0x}", &self.s.name, &addr);
-        w.write_symbol(&object::write::elf::Sym {
-            name: self.name_id,
-            section: index,
-            st_info: self.s.st_info,
-            st_other: self.s.st_other,
-            st_shndx,
-            st_value: addr,
-            st_size,
-        });
-        */
     }
 }
 
@@ -136,6 +120,7 @@ impl ProgSection {
         self.addr += base;
     }
 
+    /*
     pub fn symbol_pointers(&self) -> HashMap<String, u64> {
         let mut out = HashMap::new();
         for (name, s) in &self.symbols {
@@ -144,6 +129,7 @@ impl ProgSection {
         }
         out
     }
+    */
 
     pub fn add_bytes(&mut self, bytes: &[u8]) {
         self.file_offset += bytes.len();
@@ -212,45 +198,47 @@ impl ProgSection {
             );
         }
     }
+    /*
 
-    pub fn reserve_symbols(&self, w: &mut Writer) {
-        for (_, _) in &self.symbols {
-            w.reserve_symbol_index(self.index);
+        pub fn reserve_symbols(&self, w: &mut Writer) {
+            for (_, _) in &self.symbols {
+                w.reserve_symbol_index(self.index);
+            }
         }
-    }
 
-    //
-    pub fn get_symbols(&self, base: u64) -> Vec<Sym> {
-        self.symbols
-            .iter()
-            .map(|(_, s)| s.get_symbol(self.base + base as usize))
-            .collect()
-    }
-
-    pub fn write_symbols(&self, base: u64, w: &mut Writer) {
-        // write symbols out
-        for (_name, sym) in &self.symbols {
-            sym.write_symbol(self.base + base as usize, w);
-
-            /*
-            let st_shndx = elf::SHN_ABS;
-            let st_size = sym.s.size;
-            let addr = self.base as u64 + sym.s.address + base;
-            //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
-            eprintln!("write symbol: {}, {:#0x}", &name, &addr);
-            w.write_symbol(&object::write::elf::Sym {
-                name: sym.name_id,
-                section: self.index,
-                st_info: sym.s.st_info,
-                st_other: sym.s.st_other,
-                st_shndx,
-                st_value: addr,
-                st_size,
-            });
-            */
+        //
+        pub fn get_symbols(&self, base: u64) -> Vec<Sym> {
+            self.symbols
+                .iter()
+                .map(|(_, s)| s.get_symbol(self.base + base as usize))
+                .collect()
         }
-    }
 
+        pub fn write_symbols(&self, base: u64, w: &mut Writer) {
+            // write symbols out
+            for (_name, sym) in &self.symbols {
+                sym.write_symbol(self.base + base as usize, w);
+
+                /*
+                let st_shndx = elf::SHN_ABS;
+                let st_size = sym.s.size;
+                let addr = self.base as u64 + sym.s.address + base;
+                //eprintln!("write sym: {:?}, {:#0x}", &sym, addr);
+                eprintln!("write symbol: {}, {:#0x}", &name, &addr);
+                w.write_symbol(&object::write::elf::Sym {
+                    name: sym.name_id,
+                    section: self.index,
+                    st_info: sym.s.st_info,
+                    st_other: sym.s.st_other,
+                    st_shndx,
+                    st_value: addr,
+                    st_size,
+                });
+                */
+            }
+        }
+
+    */
     pub fn unapplied_relocations(
         &self,
         symbols: &HashMap<String, ProgSymbol>,
