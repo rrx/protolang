@@ -188,7 +188,10 @@ impl Data {
     }
 
     pub fn addr_get(&self, name: &str) -> u64 {
-        *self.addr.get(name).unwrap()
+        *self
+            .addr
+            .get(name)
+            .expect(&format!("Address not found: {}", name))
     }
 
     pub fn addr_set(&mut self, name: &str, value: u64) {
@@ -309,14 +312,16 @@ impl Data {
 
 pub struct ProgSections {
     sections: Vec<ProgSection>,
-    unapplied: Vec<(Sym, CodeRelocation)>,
+    unapplied_data: Vec<(Sym, CodeRelocation)>,
+    unapplied_text: Vec<(Sym, CodeRelocation)>,
     dynsymbols: Vec<SymbolIndex>,
 }
 impl ProgSections {
     pub fn new() -> Self {
         Self {
             sections: vec![],
-            unapplied: vec![],
+            unapplied_data: vec![],
+            unapplied_text: vec![],
             dynsymbols: vec![],
         }
     }
@@ -371,13 +376,28 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
                 st_size: 0,
             };
             eprintln!("s: {:?}", &symbol);
-            eprintln!("unapp: {:?}", &sym);
-            sections.unapplied.push((sym, r));
+            match symbol.s.get_type() {
+                SymbolType::Object => {
+                    //CodeSymbolKind::Data | CodeSymbolKind::Unknown => {
+                    eprintln!("unapp data: {:?}", &sym);
+                    sections.unapplied_data.push((sym, r));
+                }
+                SymbolType::Func | SymbolType::Notype => {
+                    //CodeSymbolKind::Text => {
+                    eprintln!("unapp text: {:?}", &sym);
+                    sections.unapplied_text.push((sym, r));
+                }
+                _ => unreachable!(),
+            }
         }
     }
 
-    for (sym, u) in sections.unapplied.iter() {
-        eprintln!("R: {:?}", (sym, u));
+    for (sym, u) in sections.unapplied_text.iter() {
+        eprintln!("R-Data: {:?}", (sym, u));
+    }
+
+    for (sym, u) in sections.unapplied_text.iter() {
+        eprintln!("R-Text: {:?}", (sym, u));
     }
 }
 
@@ -385,7 +405,7 @@ pub fn load_blocks<'a>(blocks: &mut Blocks, data: &mut Data) {
     for section in data.sections.sections.drain(..) {
         let buf = section.bytes.clone();
         if section.relocations.len() > 0 {
-            blocks.add_block(Box::new(RelocationSection::new(section.kind, &section)));
+            //blocks.add_block(Box::new(RelocationSection::new(section.kind, &section)));
         }
 
         let block = BufferSection::new(
@@ -553,7 +573,8 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(DynStrSection::default()));
     }
     if data.is_dynamic() {
-        blocks.add_block(Box::new(RelaDynSection::new()));
+        blocks.add_block(Box::new(RelaDynSection::new(GotKind::GOT)));
+        blocks.add_block(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
         blocks.add_block(Box::new(DynSymSection::default()));
     }
 
@@ -561,7 +582,9 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));
-        blocks.add_block(Box::new(GotPltSection::default()));
+        //blocks.add_block(Box::new(GotPltSection::default()));
+        blocks.add_block(Box::new(GotSection::new(GotKind::GOT)));
+        blocks.add_block(Box::new(GotSection::new(GotKind::GOTPLT)));
     }
 
     if data.add_symbols {

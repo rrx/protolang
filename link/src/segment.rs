@@ -1,3 +1,4 @@
+use object::elf;
 use object::{
     Object, ObjectSection, ObjectSymbol, ObjectSymbolTable, RelocationTarget, SectionKind,
     SymbolFlags, SymbolKind, SymbolScope, SymbolSection,
@@ -34,6 +35,24 @@ pub struct CodeSymbol {
     pub(crate) def: CodeSymbolDefinition,
     pub(crate) st_info: u8,
     pub(crate) st_other: u8,
+}
+
+pub enum SymbolType {
+    Func,
+    Object,
+    Notype,
+}
+
+impl CodeSymbol {
+    pub fn get_type(&self) -> SymbolType {
+        eprintln!("s: {:?}", self);
+        match self.st_info & 0x0f {
+            elf::STT_FUNC => SymbolType::Func,
+            elf::STT_NOTYPE => SymbolType::Notype,
+            elf::STT_OBJECT => SymbolType::Object,
+            _ => unimplemented!(),
+        }
+    }
 }
 
 impl fmt::Display for CodeSymbol {
