@@ -378,12 +378,10 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
             eprintln!("s: {:?}", &symbol);
             match symbol.s.get_type() {
                 SymbolType::Object => {
-                    //CodeSymbolKind::Data | CodeSymbolKind::Unknown => {
                     eprintln!("unapp data: {:?}", &sym);
                     sections.unapplied_data.push((sym, r));
                 }
                 SymbolType::Func | SymbolType::Notype => {
-                    //CodeSymbolKind::Text => {
                     eprintln!("unapp text: {:?}", &sym);
                     sections.unapplied_text.push((sym, r));
                 }
@@ -546,12 +544,14 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
             0,
             Some(writer.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
         ),
+        /*
         LocalSymbol::new(
             "ASDF".into(),
             ".got.plt".into(),
             0,
             Some(writer.add_string("ASDF".as_bytes())),
         ),
+        */
     ];
 
     // configure blocks
@@ -578,6 +578,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(DynSymSection::default()));
     }
 
+    blocks.add_block(Box::new(PltSection::new()));
     load_blocks(&mut blocks, &mut data);
 
     if data.is_dynamic() {

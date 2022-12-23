@@ -716,6 +716,13 @@ impl GotKind {
         }
     }
 
+    pub fn start_index(&self) -> usize {
+        match self {
+            Self::GOT => 0,
+            Self::GOTPLT => 3,
+        }
+    }
+
     pub fn unapplied<'a>(&self, data: &'a Data) -> &'a Vec<(Sym, CodeRelocation)> {
         match self {
             GotKind::GOT => &data.sections.unapplied_data,
@@ -733,7 +740,6 @@ pub struct GotSection {
     file_offset: usize,
     addr: usize,
     size: usize,
-    start_index: usize,
 }
 impl GotSection {
     pub fn new(kind: GotKind) -> Self {
@@ -746,7 +752,6 @@ impl GotSection {
             file_offset: 0,
             addr: 0,
             size: 0,
-            start_index: 0,
         }
     }
 }
@@ -757,7 +762,6 @@ impl ElfBlock for GotSection {
     }
 
     fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        self.start_index = 3;
         let name = self.kind.section_name();
         self.name_id = Some(w.add_section_name(name.as_bytes()));
         let index = w.reserve_section_index();
@@ -774,7 +778,7 @@ impl ElfBlock for GotSection {
         };
         let name = self.kind.section_name();
 
-        let len = unapplied.len() + self.start_index;
+        let len = unapplied.len() + self.kind.start_index();
         let size = len * std::mem::size_of::<usize>();
         self.bytes.resize(size, 0);
 
@@ -795,7 +799,7 @@ impl ElfBlock for GotSection {
         // add got pointers to the pointers table, so we can do relocations
         for (index, (_, r)) in unapplied.iter().enumerate() {
             let name = &r.name;
-            let addr = self.addr + (index + self.start_index) * std::mem::size_of::<usize>();
+            let addr = self.addr + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
             eprintln!("adding: {}, {:#0x}", &name, addr as u64);
             data.pointers.insert(name.clone(), addr as u64);
         }
@@ -810,6 +814,166 @@ impl ElfBlock for GotSection {
         let aligned_pos = size_align(pos, self.alloc().unwrap().align());
         w.pad_until(aligned_pos);
         w.write(self.bytes.as_slice());
+    }
+
+    fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
+        let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
+        let sh_addralign = self.alloc().unwrap().align() as u64;
+        w.write_section_header(&object::write::elf::SectionHeader {
+            name: self.name_id,
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags,
+            sh_addr: self.addr as u64,
+            sh_offset: self.file_offset as u64,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign,
+            sh_size: self.size as u64,
+        });
+    }
+}
+
+pub struct PltSection {
+    name_id: Option<StringId>,
+    index: Option<SectionIndex>,
+    bytes: Vec<u8>,
+    base: usize,
+    file_offset: usize,
+    addr: usize,
+    size: usize,
+}
+impl PltSection {
+    pub fn new() -> Self {
+        Self {
+            name_id: None,
+            index: None,
+            bytes: vec![],
+            base: 0,
+            file_offset: 0,
+            addr: 0,
+            size: 0,
+        }
+    }
+}
+
+impl PltSection {
+    pub fn get_name() -> &'static str {
+        ".plt"
+    }
+}
+
+impl ElfBlock for PltSection {
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RX)
+    }
+
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+        let name = Self::get_name();
+        self.name_id = Some(w.add_section_name(name.as_bytes()));
+        let index = w.reserve_section_index();
+        data.section_index.insert(name.to_string(), index);
+        self.index = Some(index);
+    }
+
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        let unapplied = &data.sections.unapplied_text;
+
+        // length + 1, to account for the stub.  Each entry is 0x10 in size
+        self.size = (1 + unapplied.len()) * 0x10;
+        self.bytes.resize(self.size, 0);
+        let align = self.alloc().unwrap().align();
+
+        let pos = w.reserved_len();
+        let align_pos = size_align(pos, align);
+        w.reserve_until(align_pos);
+        self.file_offset = w.reserved_len();
+        w.reserve(self.bytes.len(), align);
+        let after = w.reserved_len();
+        let delta = after - pos;
+        self.base = tracker.add_data(self.alloc().unwrap(), delta, self.file_offset);
+        self.addr = self.base + self.file_offset;
+        // update section pointers
+        data.addr
+            .insert(Self::get_name().to_string(), self.addr as u64);
+    }
+
+    fn write(&self, data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.alloc().unwrap().align());
+        w.pad_until(aligned_pos);
+
+        let got_addr = *data.addr.get(".got.plt").unwrap() as isize;
+        let vbase = self.addr as isize;
+
+        let mut stub: Vec<u8> = vec![
+            // 0x401020: push   0x2fe2(%rip)        # 404008 <_GLOBAL_OFFSET_TABLE_+0x8>
+            // got+8 - rip // (0x404000+0x8) - (0x401020 + 0x06)
+            0xff, 0x35, 0xe2, 0x2f, 0x00, 0x00,
+            // 0x401026: jump to GOT[2]
+            // jmp    *0x2fe4(%rip)        # 404010 <_GLOBAL_OFFSET_TABLE_+0x10>
+            0xff, 0x25, 0xe4, 0x2f, 0x00, 0x00,
+            // 40102c:       0f 1f 40 00             nopl   0x0(%rax)
+            0x0f, 0x1f, 0x40, 0x00,
+        ];
+
+        unsafe {
+            let patch = (stub.as_mut_ptr().offset(2)) as *mut i32;
+            let got1 = got_addr + 0x8 - (vbase + 0x06);
+            *patch = got1 as i32;
+
+            let patch = (stub.as_mut_ptr().offset(2 + 6)) as *mut i32;
+            let got2 = got_addr + 0x10 - (vbase + 0x0c);
+            *patch = got2 as i32;
+        }
+
+        let unapplied = &data.sections.unapplied_text;
+
+        for (i, _) in unapplied.iter().enumerate() {
+            let mut slot: Vec<u8> = vec![
+                // # 404018 <puts@GLIBC_2.2.5>, .got.plot 4th entry, GOT[3], jump there
+                // # got.plt[3] = 0x401036, initial value,
+                // which points to the second instruction (push) in this plt entry
+                // # the dynamic linker will update GOT[3] with the actual address, so this lookup only happens once
+                // 401030:       ff 25 e2 2f 00 00       jmp    *0x2fe2(%rip)        # 404018 <puts@GLIBC_2.2.5>
+                0xff, 0x25, 0xe2, 0x2f, 0x00, 0x00,
+                // # push plt index onto the stack
+                // # this is a reference to the entry in the relocation table defined by DT_JMPREL (.rela.plt)
+                // # that reloc will have type R_X86_64_JUMP_SLOT
+                // # the reloc will have an offset that points to GOT[3], 0x404018 = BASE + 3*0x08
+                // 401036:       68 00 00 00 00          push   $0x0
+                0x68, 0x00, 0x00, 0x00, 0x00,
+                // # jump to stub, which is (i+2)*0x10 relative to rip
+                // 40103b:       e9 e0 ff ff ff          jmp    401020 <_init+0x20>,
+                0xe9, 0xe0, 0xff, 0xff, 0xff,
+            ];
+            stub.extend(slot);
+
+            unsafe {
+                let offset = (i as isize + 1) * 0x10;
+                let patch = (stub.as_mut_ptr().offset(offset + 2)) as *mut i32;
+                let rip = vbase + offset + 6;
+                let addr = got_addr + (3 + i as isize) * 0x08 - rip;
+                *patch = addr as i32;
+
+                let patch = (stub.as_mut_ptr().offset(offset + 7)) as *mut i32;
+                *patch = i as i32;
+
+                // next instruction
+                let rip = vbase + offset + 0x10;
+                let addr = self.addr as isize - rip;
+                eprintln!("got: {}, {:#0x}, {:#0x}", i, rip, addr);
+                let patch = (stub.as_mut_ptr().offset(offset + 0x0c)) as *mut i32;
+                *patch = addr as i32;
+            }
+        }
+
+        //let mut bytes = self.bytes.clone();
+        //bytes.as_mut_slice().copy_from_slice(stub.as_slice());
+
+        // write stub
+        // for each entry, write a slot
+        w.write(stub.as_slice());
     }
 
     fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {

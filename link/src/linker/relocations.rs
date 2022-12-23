@@ -243,7 +243,12 @@ impl CodeRelocation {
                 unsafe {
                     // we need to dereference here, because the pointer is coming from the GOT
                     //log::debug!("addr:  {:#08x}", addr as usize);
-                    let vaddr = *(addr as *const usize) as usize;
+                    //let vaddr = *(addr as *const usize) as usize;
+                    //
+                    // R_X86_64_PC32
+                    // This should just be a simple offset, no need for the GOT
+                    //
+                    let vaddr = addr as *const usize;
                     let patch = patch_base.offset(self.offset as isize);
                     let v = v_base.offset(self.offset as isize);
                     let before = std::ptr::read(patch as *const usize);
