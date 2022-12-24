@@ -312,16 +312,16 @@ impl Data {
 
 pub struct ProgSections {
     sections: Vec<ProgSection>,
-    unapplied_data: Vec<(Sym, CodeRelocation)>,
-    unapplied_text: Vec<(Sym, CodeRelocation)>,
+    unapplied_got: Vec<(Sym, CodeRelocation)>,
+    unapplied_plt: Vec<(Sym, CodeRelocation)>,
     dynsymbols: Vec<SymbolIndex>,
 }
 impl ProgSections {
     pub fn new() -> Self {
         Self {
             sections: vec![],
-            unapplied_data: vec![],
-            unapplied_text: vec![],
+            unapplied_got: vec![],
+            unapplied_plt: vec![],
             dynsymbols: vec![],
         }
     }
@@ -375,27 +375,28 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
                 st_value: 0,
                 st_size: 0,
             };
-            eprintln!("s: {:?}", &symbol);
-            match symbol.s.get_type() {
-                SymbolType::Object => {
+            eprintln!("s: {:?}, {}", &symbol, r);
+            match r.effect() {
+                PatchEffect::AddToGot => {
                     eprintln!("unapp data: {:?}", &sym);
-                    sections.unapplied_data.push((sym, r));
+                    sections.unapplied_got.push((sym, r));
                 }
-                SymbolType::Func | SymbolType::Notype => {
+                PatchEffect::AddToPlt => {
                     eprintln!("unapp text: {:?}", &sym);
-                    sections.unapplied_text.push((sym, r));
+                    sections.unapplied_plt.push((sym, r));
                 }
-                _ => unreachable!(),
+                PatchEffect::DoNothing => ()
+                //_ => unreachable!(),
             }
         }
     }
 
-    for (sym, u) in sections.unapplied_text.iter() {
-        eprintln!("R-Data: {:?}", (sym, u));
+    for (sym, u) in sections.unapplied_plt.iter() {
+        eprintln!("R-PLT: {:?}", (sym, u));
     }
 
-    for (sym, u) in sections.unapplied_text.iter() {
-        eprintln!("R-Text: {:?}", (sym, u));
+    for (sym, u) in sections.unapplied_got.iter() {
+        eprintln!("R-GOT: {:?}", (sym, u));
     }
 }
 

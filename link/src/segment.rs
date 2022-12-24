@@ -80,6 +80,7 @@ pub struct UnlinkedCodeSegmentInner {
     pub(crate) internal: im::HashMap<String, CodeSymbol>,
     pub(crate) externs: im::HashMap<String, CodeSymbol>,
     pub(crate) relocations: Vec<CodeRelocation>,
+    pub(crate) symbols: Vec<CodeSymbol>,
 }
 
 impl UnlinkedCodeSegmentInner {
@@ -369,6 +370,7 @@ impl UnlinkedCodeSegmentInner {
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
                 let section_index = section.index().0;
+                let mut out_symbols = vec![];
 
                 if section_name.starts_with(".eh_frame") {
                     continue;
@@ -487,6 +489,7 @@ impl UnlinkedCodeSegmentInner {
                     externs: externs.clone(),
                     defined,
                     internal: internal.clone(),
+                    symbols: out_symbols,
                     relocations,
                 });
             }

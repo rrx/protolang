@@ -31,13 +31,6 @@ impl ProgSymbol {
         }
     }
 
-    /*
-    pub fn reserve(&mut self, _w: &mut Writer) {
-        //self.name_id = Some(w.add_string(self.s.name.as_bytes()));//"_DYNAMIC_".as_bytes()));
-        //w.reserve_symbol_index(data.index_dynamic);
-    }
-    */
-
     pub fn get_symbol(&self) -> object::write::elf::Sym {
         let st_shndx = elf::SHN_ABS;
         let st_size = self.s.size;
@@ -64,9 +57,7 @@ pub struct ProgSectionBuilder {}
 pub struct ProgSection {
     pub name: Option<String>,
     pub name_id: Option<StringId>,
-    //pub rel_name_id: Option<StringId>,
     pub index: Option<SectionIndex>,
-    pub rel_index: Option<SectionIndex>,
     pub kind: AllocSegment,
     pub base: usize,
     pub addr: usize,
@@ -85,15 +76,12 @@ impl ProgSection {
         kind: AllocSegment,
         name: Option<String>,
         name_id: Option<StringId>,
-        //rel_name_id: Option<StringId>,
         mem_size: usize,
     ) -> Self {
         Self {
             name,
             name_id,
-            //rel_name_id,
             index: None,
-            rel_index: None,
             kind,
             addr: 0,
             base: 0,

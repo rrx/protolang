@@ -5,8 +5,10 @@ use std::fs;
 use std::path::Path;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let path = env::args().nth(1).unwrap();
-    let buf = fs::read(path)?;
-    elf_read(&buf)?;
+    let mut reader = Reader::default();
+    for path in env::args().skip(1) {
+        reader.add(&Path::new(&path));
+    }
+    reader.dump();
     Ok(())
 }

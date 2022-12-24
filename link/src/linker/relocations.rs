@@ -5,8 +5,8 @@ use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::fmt;
 use std::ptr::NonNull;
 
-const R_X86_64_GOTPCREL: u32 = 41;
-const R_X86_64_REX_GOTP: u32 = 42;
+const R_X86_64_GOTPCREL: u32 = 0x29;//41;
+const R_X86_64_REX_GOTP: u32 = 0x2a;//42;
 
 #[derive(Clone, Debug)]
 pub enum RelocationPointer {
@@ -74,6 +74,17 @@ impl LinkRelocation {
     pub fn encoding(&self) -> RelocationEncoding {
         self.encoding
     }
+    pub fn effect(&self) -> PatchEffect {
+        use PatchEffect::*;
+        match self.kind {
+            RelocationKind::Elf(R_X86_64_GOTPCREL) => AddToGot,
+            RelocationKind::Elf(R_X86_64_REX_GOTP) => AddToGot,
+            RelocationKind::Absolute => DoNothing,
+            RelocationKind::Relative => DoNothing,
+            RelocationKind::PltRelative => AddToPlt,
+            _ => unimplemented!(),
+        }
+    }
 }
 
 impl From<Relocation> for LinkRelocation {
@@ -112,15 +123,7 @@ impl fmt::Display for CodeRelocation {
 
 impl CodeRelocation {
     pub fn effect(&self) -> PatchEffect {
-        use PatchEffect::*;
-        match self.r.kind {
-            RelocationKind::Elf(R_X86_64_GOTPCREL) => AddToGot,
-            RelocationKind::Elf(R_X86_64_REX_GOTP) => AddToGot,
-            RelocationKind::Absolute => DoNothing,
-            RelocationKind::Relative => DoNothing,
-            RelocationKind::PltRelative => AddToPlt,
-            _ => unimplemented!(),
-        }
+        self.r.effect()
     }
 
     pub fn patch(
@@ -259,7 +262,7 @@ impl CodeRelocation {
                     *patch = relative_address as u32;
 
                     log::debug!(
-                        "rel relative {}: patch {:#16x}:{:#16x}=>{:#16x} addend:{:#08x} addr:{:#08x}, vaddr:{:#08x}",
+                        "rel relative {}: patch {:#08x}:{:#08x}=>{:#08x} addend:{:#08x} addr:{:#08x}, vaddr:{:#08x}",
                         &self.name, patch as usize, before, relative_address as usize, self.r.addend, addr as u64, vaddr as usize
                     );
                 }

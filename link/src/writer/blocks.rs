@@ -260,15 +260,25 @@ impl ElfBlock for RelaDynSection {
         w.pad_until(aligned_pos);
 
         let got_addr = data.addr_get(".got");
+        let plt_addr = data.addr_get(".got.plt");
+
         // we are writing a relocation for the GOT entries
-        let start = 3;
         for (index, (sym, rel)) in unapplied.iter().enumerate() {
             eprintln!("unapplied: {:?}", (sym, rel));
-            let r_offset = got_addr as usize + (index + start) * std::mem::size_of::<usize>();
+            //let r_offset = got_addr as usize + (index + start) * std::mem::size_of::<usize>();
             let r_addend = 0;
             // we needed to fork object in order to access .0
             let r_sym = sym.name.unwrap().0 as u32;
-            let r_type = elf::R_X86_64_GLOB_DAT;
+            let r_type = match self.kind {
+                GotKind::GOT => elf::R_X86_64_GLOB_DAT,
+                GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
+            };
+            let start = 3;
+            let r_offset = match self.kind {
+                GotKind::GOT => got_addr as usize + index * std::mem::size_of::<usize>(),
+                GotKind::GOTPLT => plt_addr as usize + (index + start) * std::mem::size_of::<usize>(),
+            };
+
             w.write_relocation(
                 true,
                 &object::write::elf::Rel {
@@ -534,10 +544,10 @@ impl ElfBlock for DynSymSection {
         data.section_index.insert(".dynsym".to_string(), index);
 
         w.reserve_null_dynamic_symbol_index();
-        for _ in data.sections.unapplied_data.iter() {
+        for _ in data.sections.unapplied_got.iter() {
             let _symbol_id = Some(w.reserve_dynamic_symbol_index());
         }
-        for _ in data.sections.unapplied_text.iter() {
+        for _ in data.sections.unapplied_plt.iter() {
             let _symbol_id = Some(w.reserve_dynamic_symbol_index());
         }
     }
@@ -562,16 +572,18 @@ impl ElfBlock for DynSymSection {
         w.pad_until(aligned_pos);
 
         w.write_null_dynamic_symbol();
-        for (sym, _r) in data.sections.unapplied_data.iter() {
+        for (sym, _r) in data.sections.unapplied_got.iter() {
+            eprintln!("sym: {:?}", &sym);
             w.write_dynamic_symbol(sym);
         }
-        for (sym, _r) in data.sections.unapplied_text.iter() {
+        for (sym, _r) in data.sections.unapplied_plt.iter() {
+            eprintln!("sym: {:?}", &sym);
             w.write_dynamic_symbol(sym);
         }
     }
 
     fn write_section_header(&self, data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
-        let len = data.sections.unapplied_data.len() + data.sections.unapplied_text.len();
+        let len = data.sections.unapplied_got.len() + data.sections.unapplied_plt.len();
         w.write_dynsym_section_header(data.addr_dynsym, len as u32 + 1);
     }
 }
@@ -725,8 +737,8 @@ impl GotKind {
 
     pub fn unapplied<'a>(&self, data: &'a Data) -> &'a Vec<(Sym, CodeRelocation)> {
         match self {
-            GotKind::GOT => &data.sections.unapplied_data,
-            GotKind::GOTPLT => &data.sections.unapplied_text,
+            GotKind::GOT => &data.sections.unapplied_got,
+            GotKind::GOTPLT => &data.sections.unapplied_plt,
         }
     }
 }
@@ -773,8 +785,8 @@ impl ElfBlock for GotSection {
         // each entry in unapplied will be a GOT entry
         //let unapplied = self.kind.unapplied(data);
         let unapplied = match self.kind {
-            GotKind::GOT => &data.sections.unapplied_data,
-            GotKind::GOTPLT => &data.sections.unapplied_text,
+            GotKind::GOT => &data.sections.unapplied_got,
+            GotKind::GOTPLT => &data.sections.unapplied_plt,
         };
         let name = self.kind.section_name();
 
@@ -808,12 +820,38 @@ impl ElfBlock for GotSection {
         data.addr.insert(name.to_string(), self.addr as u64);
     }
 
-    fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
-        //let align = self.alloc().unwrap().align();
+    fn write(&self, data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.alloc().unwrap().align());
         w.pad_until(aligned_pos);
-        w.write(self.bytes.as_slice());
+
+        let unapplied = match self.kind {
+            GotKind::GOT => &data.sections.unapplied_got,
+            GotKind::GOTPLT => &data.sections.unapplied_plt,
+        };
+
+        match self.kind {
+            GotKind::GOT => {
+                // just empty
+                let mut bytes: Vec<u8> = vec![];
+                bytes.resize(self.size, 0);
+                w.write(bytes.as_slice());
+            }
+            GotKind::GOTPLT => {
+                // populate with predefined values
+                let mut values: Vec<u64> = vec![data.addr_get(".dynamic"), 0, 0];
+                let len = unapplied.len();
+                let plt_addr = data.addr_get(".plt") + 0x16;
+                for i in 0..len {
+                    values.push(plt_addr + i as u64 *0x10);
+                }
+                let mut bytes: Vec<u8> = vec![];
+                for v in values {
+                    bytes.extend(v.to_le_bytes().as_slice());
+                }
+                w.write(bytes.as_slice());
+            }
+        }
     }
 
     fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
@@ -877,7 +915,7 @@ impl ElfBlock for PltSection {
     }
 
     fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        let unapplied = &data.sections.unapplied_text;
+        let unapplied = &data.sections.unapplied_plt;
 
         // length + 1, to account for the stub.  Each entry is 0x10 in size
         self.size = (1 + unapplied.len()) * 0x10;
@@ -927,10 +965,10 @@ impl ElfBlock for PltSection {
             *patch = got2 as i32;
         }
 
-        let unapplied = &data.sections.unapplied_text;
+        let unapplied = &data.sections.unapplied_plt;
 
         for (i, _) in unapplied.iter().enumerate() {
-            let mut slot: Vec<u8> = vec![
+            let slot: Vec<u8> = vec![
                 // # 404018 <puts@GLIBC_2.2.5>, .got.plot 4th entry, GOT[3], jump there
                 // # got.plt[3] = 0x401036, initial value,
                 // which points to the second instruction (push) in this plt entry
@@ -962,7 +1000,7 @@ impl ElfBlock for PltSection {
                 // next instruction
                 let rip = vbase + offset + 0x10;
                 let addr = self.addr as isize - rip;
-                eprintln!("got: {}, {:#0x}, {:#0x}", i, rip, addr);
+                //eprintln!("got: {}, {:#0x}, {:#0x}", i, rip, addr);
                 let patch = (stub.as_mut_ptr().offset(offset + 0x0c)) as *mut i32;
                 *patch = addr as i32;
             }
