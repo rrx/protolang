@@ -134,6 +134,8 @@ pub struct Data {
     add_section_headers: bool,
     add_symbols: bool,
     debug: bool,
+    //unapplied_got: Vec<(Sym, CodeRelocation)>,
+    //unapplied_plt: Vec<(Sym, CodeRelocation)>,
 }
 
 impl Data {
@@ -163,6 +165,8 @@ impl Data {
             add_section_headers: true,
             add_symbols: true,
             debug: true,
+            //unapplied_got: vec![],
+            //unapplied_plt: vec![],
         }
     }
 
@@ -185,6 +189,27 @@ impl Data {
 
     fn add_dynstr(&mut self, string_id: StringId) {
         self.libs.push(Library { string_id });
+    }
+
+    pub fn pointer_set(&mut self, name: String, p: u64) {
+        self.pointers.insert(name, p);
+    }
+
+    pub fn pointer_get(&self, name: &str) -> u64 {
+        *self
+            .pointers
+            .get(name)
+            .expect(&format!("Pointer not found: {}", name))
+    }
+
+    pub fn symbol_set(&mut self, name: String, s: ProgSymbol) {
+        self.symbols.insert(name, s);
+    }
+
+    pub fn symbol_get<'a>(&'a self, name: &str) -> &'a ProgSymbol {
+        self.symbols
+            .get(name)
+            .expect(&format!("Pointer not found: {}", name))
     }
 
     pub fn addr_get(&self, name: &str) -> u64 {
@@ -350,7 +375,7 @@ impl ProgSections {
     }
 }
 
-unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
+pub unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
@@ -611,24 +636,7 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
     }
 
     let maybe_block = data.block.take();
-    let mut rx_file_offset = 0;
-    let mut ro_file_offset = 0;
-    let mut rw_file_offset = 0;
-    let mut bss_file_offset = 0;
-    let mut rx_base = 0;
-    let mut ro_base = 0;
-    let mut rw_base = 0;
-    let mut bss_base = 0;
     if let Some(block) = maybe_block.as_ref() {
-        rx_file_offset = block.rx.file_offset;
-        ro_file_offset = block.ro.file_offset;
-        rw_file_offset = block.rw.file_offset;
-        bss_file_offset = block.bss.file_offset;
-        rx_base = block.rx.base;
-        ro_base = block.ro.base;
-        rw_base = block.rw.base;
-        bss_base = block.bss.base;
-
         blocks.add_block(Box::new(block.ro.clone()));
         blocks.add_block(Box::new(block.rx.clone()));
         blocks.add_block(Box::new(PltSection::new()));
@@ -673,62 +681,54 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
     }
 
     // what are these for? reserving symbols for locals
+    // set up sections
     for _ in locals.iter() {
         w.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
     }
 
+    let mut syms = vec![];
     if let Some(block) = maybe_block.as_ref() {
-        let symbols = &block.exports;
-        // write symbols
-        for (name, s) in symbols.iter() {
-            let section_index = match s.section {
-                ReadSectionKind::RX => data.section_index_get(".text"),
-                ReadSectionKind::RW => data.section_index_get(".data"),
-                ReadSectionKind::RO => data.section_index_get(".rodata"),
-                ReadSectionKind::Bss => data.section_index_get(".bss"),
-                _ => unreachable!(),
-            };
-            let base = match s.section {
-                ReadSectionKind::RX => rx_base,
-                ReadSectionKind::RW => rw_base,
-                ReadSectionKind::RO => ro_base,
-                ReadSectionKind::Bss => bss_base,
-                _ => unreachable!(),
-            };
-            let file_offset = match s.section {
-                ReadSectionKind::RX => rx_file_offset,
-                ReadSectionKind::RW => rw_file_offset,
-                ReadSectionKind::RO => ro_file_offset,
-                ReadSectionKind::Bss => bss_file_offset,
-                _ => unreachable!(),
-            };
-            let mut s = s.clone();
-            let addr = base + file_offset + s.address as usize;
-            s.address = addr as u64;
-            data.pointers.insert(name.clone(), addr as u64);
-            unsafe {
-                let buf = extend_lifetime(name.as_bytes());
-
-                let name_id = Some(w.add_string(buf));
-                let p = ProgSymbol {
-                    name_id,
-                    section_index: Some(section_index),
-                    base,
-                    s: CodeSymbol {
-                        name: s.name.clone(),
-                        size: s.size,
-                        address: addr as u64,
-                        kind: CodeSymbolKind::Data,
-                        def: CodeSymbolDefinition::Defined,
-                        st_info: 0,
-                        st_other: 0,
-                    },
-                };
-                data.symbols.insert(name.clone(), p);
+        block.reserve_symbols(&mut data, w);
+        for r in block.rx.relocations.iter() {
+            if let Some(sym) = block.lookup_static(&r.name) {
+            } else if let Some(sym) = block.lookup_dynamic(&r.name) {
+                unsafe {
+                    let buf = extend_lifetime(sym.name.as_bytes());
+                    let name_id = Some(w.add_dynamic_string(buf));
+                    syms.push((name_id, sym, r.clone()));
+                }
             }
         }
     }
 
+    for (name_id, sym, r) in syms.iter() {
+        let name = sym.name.clone();
+        eprintln!("not found: {}: {:?}", &r.name, sym);
+        let section_index = match sym.section {
+            ReadSectionKind::RX => data.section_index_get(".text"),
+            ReadSectionKind::RW => data.section_index_get(".data"),
+            ReadSectionKind::RO => data.section_index_get(".rodata"),
+            ReadSectionKind::Bss => data.section_index_get(".bss"),
+            _ => unreachable!(),
+        };
+        let s = Sym {
+            name: name_id.clone(),
+            section: Some(section_index),
+            st_info: 0,
+            st_other: 0,
+            st_shndx: 0,
+            st_value: 0,
+            st_size: 0,
+        };
+        data.sections.unapplied_plt.push((s, r.clone()));
+    }
+
+    // setup symbols
+    for b in blocks.blocks.iter() {
+        b.reserve_symbols(&mut data, w);
+    }
+
+    // finalize the layout
     blocks.reserve(&mut tracker, &mut data, w);
 
     if data.add_section_headers {

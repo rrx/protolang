@@ -59,10 +59,10 @@ impl BlockSection {
         //let name = self.name.as_ref().unwrap();
         data.addr_set(&self.name, self.addr as u64);
         eprintln!(
-            "FO: {}, {:?}, {:#0x}, base: {:#0x}, addr: {:#0x}, delta: {:#0x}, size: {:#0x}",
+            "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, delta: {:#0x}, size: {:#0x}",
+            self.file_offset,
             self.name,
             self.alloc,
-            self.file_offset,
             self.base,
             self.addr,
             delta,
@@ -95,7 +95,11 @@ impl BlockSection {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align());
         //panic!("ASdfa");
-        eprintln!("AF: {:#0x}", aligned_pos);
+        eprintln!(
+            "AF: {:?}, {:#0x}, {:#0x}",
+            self.alloc, aligned_pos, self.file_offset
+        );
+        assert_eq!(aligned_pos, self.file_offset);
         w.pad_until(aligned_pos);
         w.write(self.bytes.as_slice());
     }

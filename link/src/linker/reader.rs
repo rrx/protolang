@@ -15,6 +15,7 @@ use super::*;
 use crate::disassemble::*;
 use crate::relocations::*;
 use crate::writer::*;
+use crate::*;
 
 pub type SymbolMap = HashMap<String, ReadSymbol>;
 
@@ -154,6 +155,59 @@ impl ReadBlock {
         }
     }
 
+    pub fn reserve_symbols(&self, data: &mut Data, w: &mut Writer) {
+        let symbols = &self.exports;
+        // write symbols
+        for (name, s) in symbols.iter() {
+            let section_index = match s.section {
+                ReadSectionKind::RX => data.section_index_get(".text"),
+                ReadSectionKind::RW => data.section_index_get(".data"),
+                ReadSectionKind::RO => data.section_index_get(".rodata"),
+                ReadSectionKind::Bss => data.section_index_get(".bss"),
+                _ => unreachable!(),
+            };
+            let base = match s.section {
+                ReadSectionKind::RX => self.rx.base,
+                ReadSectionKind::RW => self.rw.base,
+                ReadSectionKind::RO => self.ro.base,
+                ReadSectionKind::Bss => self.bss.base,
+                _ => unreachable!(),
+            };
+            let file_offset = match s.section {
+                ReadSectionKind::RX => self.rx.file_offset,
+                ReadSectionKind::RW => self.rw.file_offset,
+                ReadSectionKind::RO => self.ro.file_offset,
+                ReadSectionKind::Bss => self.bss.file_offset,
+                _ => unreachable!(),
+            };
+            let mut s = s.clone();
+            let addr = base + file_offset + s.address as usize;
+            s.address = addr as u64;
+            data.pointer_set(name.clone(), addr as u64);
+            unsafe {
+                let buf = extend_lifetime(name.as_bytes());
+
+                let name_id = Some(w.add_string(buf));
+                let p = ProgSymbol {
+                    name_id,
+                    section_index: Some(section_index),
+                    base,
+                    s: CodeSymbol {
+                        name: s.name.clone(),
+                        size: s.size,
+                        address: addr as u64,
+                        kind: CodeSymbolKind::Data,
+                        def: CodeSymbolDefinition::Defined,
+                        st_info: 0,
+                        st_other: 0,
+                    },
+                };
+                data.symbol_set(name.clone(), p);
+            }
+        }
+    }
+
+    /*
     pub fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
         /*
         self.ro.block_reserve_section_index(data, w);
@@ -205,6 +259,7 @@ impl ReadBlock {
         self.rw.block_write_section_header(data, w);
         */
     }
+    */
 
     pub fn write(mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         use object::elf;
@@ -440,12 +495,28 @@ impl ReadBlock {
         Ok(())
     }
 
-    pub fn lookup(&self, name: &str) -> Option<ReadSymbol> {
+    pub fn lookup_static(&self, name: &str) -> Option<ReadSymbol> {
         if let Some(symbol) = self.locals.get(name) {
             Some(symbol.clone())
         } else if let Some(symbol) = self.exports.get(name) {
             Some(symbol.clone())
-        } else if let Some(symbol) = self.dynamic.get(name) {
+        } else {
+            None
+        }
+    }
+
+    pub fn lookup_dynamic(&self, name: &str) -> Option<ReadSymbol> {
+        if let Some(symbol) = self.dynamic.get(name) {
+            Some(symbol.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<ReadSymbol> {
+        if let Some(symbol) = self.lookup_static(name) {
+            Some(symbol.clone())
+        } else if let Some(symbol) = self.lookup_dynamic(name) {
             Some(symbol.clone())
         } else {
             None

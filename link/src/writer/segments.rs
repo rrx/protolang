@@ -31,7 +31,7 @@ impl Blocks {
             let pos = temp_w.reserved_len();
             b.reserve(&mut d, &mut temp_tracker, &mut temp_w);
             let after = temp_w.reserved_len();
-            eprintln!("x-reserve: {:#0x}, {:#0x},  {:?}", pos, after, b.alloc());
+            //eprintln!("x-reserve: {:#0x}, {:#0x},  {:?}", pos, after, b.alloc());
             //}
         }
         // get a list of program headers
@@ -53,7 +53,13 @@ impl Blocks {
             let pos = w.reserved_len();
             b.reserve(data, tracker, w);
             let after = w.reserved_len();
-            eprintln!("reserve: {:#0x}, {:#0x},  {:?}", pos, after, b.alloc());
+            eprintln!(
+                "reserve: {}, {:#0x}, {:#0x},  {:?}",
+                b.name(),
+                pos,
+                after,
+                b.alloc()
+            );
         }
     }
 
@@ -79,7 +85,14 @@ impl Blocks {
             let pos = w.len();
             b.write(&data, tracker, w);
             let after = w.len();
-            eprintln!("write: {:#0x}, {:#0x},  {:?}", pos, after, b.alloc());
+            eprintln!(
+                "write: {}, {:?}, pos: {:#0x}, after: {:#0x}, base: {:#0x}",
+                b.name(),
+                b.alloc(),
+                pos,
+                after,
+                tracker.current().base
+            );
         }
     }
 
@@ -155,7 +168,7 @@ impl SegmentTracker {
             let mut segment = Segment::new(alloc);
             segment.base = self.base as u64;
             segment.offset = file_offset as u64;
-            eprintln!("new seg: {:?}, offset: {:#0x}", alloc, file_offset);
+            //eprintln!("new seg: {:?}, offset: {:#0x}", alloc, file_offset);
             self.segments.push(segment);
         }
         self.current_mut().add_data(size, alloc.align());
