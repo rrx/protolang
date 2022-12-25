@@ -686,41 +686,58 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
         w.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
     }
 
-    let mut syms = vec![];
+    let mut got = vec![];
+    let mut plt = vec![];
     if let Some(block) = maybe_block.as_ref() {
         block.reserve_symbols(&mut data, w);
         for r in block.rx.relocations.iter() {
             if let Some(sym) = block.lookup_static(&r.name) {
             } else if let Some(sym) = block.lookup_dynamic(&r.name) {
+                let section_index = match sym.section {
+                    ReadSectionKind::RX => data.section_index_get(".text"),
+                    ReadSectionKind::RW => data.section_index_get(".data"),
+                    ReadSectionKind::RO => data.section_index_get(".rodata"),
+                    ReadSectionKind::Bss => data.section_index_get(".bss"),
+                    _ => unreachable!(),
+                };
+                let name = sym.name.clone();
+                eprintln!("not found: {}: {:?}", &r.name, sym);
                 unsafe {
                     let buf = extend_lifetime(sym.name.as_bytes());
                     let name_id = Some(w.add_dynamic_string(buf));
-                    syms.push((name_id, sym, r.clone()));
+                    let s = Sym {
+                        name: name_id.clone(),
+                        section: Some(section_index),
+                        st_info: 0,
+                        st_other: 0,
+                        st_shndx: 0,
+                        st_value: 0,
+                        st_size: 0,
+                    };
+                    got.push((sym.clone(), s, r.clone()));
+
+                    let s = Sym {
+                        name: name_id.clone(),
+                        section: Some(section_index),
+                        st_info: 0,
+                        st_other: 0,
+                        st_shndx: 0,
+                        st_value: 0,
+                        st_size: 0,
+                    };
+                    plt.push((sym, s, r.clone()));
                 }
             }
         }
     }
 
-    for (name_id, sym, r) in syms.iter() {
-        let name = sym.name.clone();
-        eprintln!("not found: {}: {:?}", &r.name, sym);
-        let section_index = match sym.section {
-            ReadSectionKind::RX => data.section_index_get(".text"),
-            ReadSectionKind::RW => data.section_index_get(".data"),
-            ReadSectionKind::RO => data.section_index_get(".rodata"),
-            ReadSectionKind::Bss => data.section_index_get(".bss"),
-            _ => unreachable!(),
-        };
-        let s = Sym {
-            name: name_id.clone(),
-            section: Some(section_index),
-            st_info: 0,
-            st_other: 0,
-            st_shndx: 0,
-            st_value: 0,
-            st_size: 0,
-        };
-        data.sections.unapplied_plt.push((s, r.clone()));
+    // We don't know the actual address yet, but we need to know how many relocations we have
+    // but we know the name, so we can look it up when we write
+    for (sym, s, r) in plt.iter() {
+        data.sections.unapplied_plt.push((s.clone(), r.clone()));
+    }
+    for (sym, s, r) in got.iter() {
+        data.sections.unapplied_got.push((s.clone(), r.clone()));
     }
 
     // setup symbols

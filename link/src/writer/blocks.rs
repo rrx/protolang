@@ -611,7 +611,8 @@ impl ElfBlock for DynSymSection {
             eprintln!("write sym got: {:?}", &sym);
             w.write_dynamic_symbol(sym);
         }
-        for (sym, _r) in data.sections.unapplied_plt.iter() {
+        for (sym, r) in data.sections.unapplied_plt.iter() {
+            //let addr = data.pointer_get(&r.name);
             eprintln!("write sym plt: {:?}", &sym);
             w.write_dynamic_symbol(sym);
         }
