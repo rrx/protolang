@@ -385,8 +385,7 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
                     eprintln!("unapp text: {:?}", &sym);
                     sections.unapplied_plt.push((sym, r));
                 }
-                PatchEffect::DoNothing => ()
-                //_ => unreachable!(),
+                PatchEffect::DoNothing => (), //_ => unreachable!(),
             }
         }
     }

@@ -58,7 +58,7 @@ impl PatchBlock {
     }
 }
 
-fn eprint_bytes(buf: &[u8]) {
+pub fn eprint_bytes(buf: &[u8]) {
     let x = String::from_utf8(
         buf.iter()
             .flat_map(|b| std::ascii::escape_default(*b))
@@ -178,7 +178,7 @@ pub fn disassemble_code_with_symbols(
             if next_symbol_addr <= addr {
                 let symbol = heap.pop().unwrap();
                 eprintln!(
-                    "{}: {:#0x} {:#0x}",
+                    " {}: {:#0x} {:#0x}",
                     symbol.name,
                     symbol.addr,
                     symbol.section_addr + symbol.addr

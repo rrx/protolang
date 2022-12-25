@@ -5,8 +5,8 @@ use object::{Relocation, RelocationEncoding, RelocationKind, RelocationTarget};
 use std::fmt;
 use std::ptr::NonNull;
 
-const R_X86_64_GOTPCREL: u32 = 0x29;//41;
-const R_X86_64_REX_GOTP: u32 = 0x2a;//42;
+const R_X86_64_GOTPCREL: u32 = 0x29; //41;
+const R_X86_64_REX_GOTP: u32 = 0x2a; //42;
 
 #[derive(Clone, Debug)]
 pub enum RelocationPointer {

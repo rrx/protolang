@@ -276,7 +276,9 @@ impl ElfBlock for RelaDynSection {
             let start = 3;
             let r_offset = match self.kind {
                 GotKind::GOT => got_addr as usize + index * std::mem::size_of::<usize>(),
-                GotKind::GOTPLT => plt_addr as usize + (index + start) * std::mem::size_of::<usize>(),
+                GotKind::GOTPLT => {
+                    plt_addr as usize + (index + start) * std::mem::size_of::<usize>()
+                }
             };
 
             w.write_relocation(
@@ -843,7 +845,7 @@ impl ElfBlock for GotSection {
                 let len = unapplied.len();
                 let plt_addr = data.addr_get(".plt") + 0x16;
                 for i in 0..len {
-                    values.push(plt_addr + i as u64 *0x10);
+                    values.push(plt_addr + i as u64 * 0x10);
                 }
                 let mut bytes: Vec<u8> = vec![];
                 for v in values {
