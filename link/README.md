@@ -81,7 +81,7 @@ each entry in the PLT has size 0x10
 it has a size of (N+1)*0x10, the first part is the stub, which we need to refer to
 We know the _GLOBAL_OFFSET_TABLE_, refers to the .got.plt section
 write the stub, and update the offset for the gotplt to 3
-for (i, symbol) in symbol:
+for (i, symbol) in relocations:
   - gotplt[i] = plt+0x06  # gotplt points to the next instruction in the plt slot
   - increment the gotplt offset
   - write the plt slot, which references the index of the relocation and the pointer to the stub

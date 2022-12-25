@@ -21,6 +21,7 @@ pub struct HeaderComponent {
     size_fh: usize,
     size_ph: usize,
     base: usize,
+    ph_count: usize,
 }
 
 impl Default for HeaderComponent {
@@ -29,6 +30,7 @@ impl Default for HeaderComponent {
             size_fh: 0,
             size_ph: 0,
             base: 0,
+            ph_count: 0,
         }
     }
 }
@@ -67,10 +69,13 @@ impl ElfBlock for HeaderComponent {
         w.reserve_file_header();
         self.size_fh = w.reserved_len();
 
-        let ph_count = tracker.ph.len();
+        self.ph_count = tracker.ph.len();
+        for ph in tracker.ph.iter() {
+            eprintln!("ph: {:?}", ph);
+        }
 
         let before = w.reserved_len();
-        w.reserve_program_headers(ph_count as u32);
+        w.reserve_program_headers(self.ph_count as u32);
         let after = w.reserved_len();
         self.size_ph = after - before;
 
@@ -97,6 +102,7 @@ impl ElfBlock for HeaderComponent {
         w.write_align_program_headers();
 
         for ph in tracker.ph.iter() {
+            eprintln!("ph: {:?}", ph);
             w.write_program_header(&object::write::elf::ProgramHeader {
                 p_type: ph.p_type,
                 p_flags: ph.p_flags,
@@ -108,6 +114,7 @@ impl ElfBlock for HeaderComponent {
                 p_align: ph.p_align,
             });
         }
+        assert_eq!(tracker.ph.len(), self.ph_count);
     }
 
     fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
@@ -668,7 +675,7 @@ impl ElfBlock for ShStrTabSection {
 pub struct HashSection {
     index: Option<SectionIndex>,
     base: usize,
-    offset: usize,
+    file_offset: usize,
     addr: usize,
     bucket_count: u32,
     chain_count: u32,
@@ -687,21 +694,26 @@ impl ElfBlock for HashSection {
         let pos = w.reserved_len();
         let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
-        self.offset = w.reserved_len();
+        self.file_offset = w.reserved_len();
 
         w.reserve_hash(self.bucket_count, self.chain_count);
 
         let after = w.reserved_len();
         let delta = after - pos;
-        self.base = tracker.add_data(self.alloc().unwrap(), delta, self.offset);
-        self.addr = self.base + self.offset;
+        self.base = tracker.add_data(self.alloc().unwrap(), delta, self.file_offset);
+        self.addr = self.base + self.file_offset;
         data.addr_hash = self.addr as u64;
+        eprintln!(
+            "FO: {:#0x}, base: {:#0x}, addr: {:#0x}, delta: {:#0x}",
+            self.file_offset, self.base, self.addr, delta
+        );
     }
 
     fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.alloc().unwrap().align());
         w.pad_until(aligned_pos);
+        eprintln!("AF: {:#0x}", aligned_pos);
         w.write_hash(self.bucket_count, self.chain_count, |x| Some(x));
     }
 
@@ -1243,6 +1255,54 @@ impl ElfBlock for InterpSection {
                 sh_size: self.as_slice().len() as u64,
             });
         }
+    }
+}
+
+impl ElfBlock for BlockSection {
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+        self.block_reserve_section_index(data, w);
+    }
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        self.block_reserve(data, tracker, w);
+    }
+    fn write(&self, data: &Data, _: &mut SegmentTracker, w: &mut Writer) {
+        self.block_write(data, w);
+    }
+    fn write_section_header(&self, data: &Data, _: &SegmentTracker, w: &mut Writer) {
+        self.block_write_section_header(data, w);
+    }
+}
+
+impl ElfBlock for BssSection {
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RW)
+    }
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+        self.block_reserve_section_index(data, w);
+    }
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        self.block_reserve(data, tracker, w);
+    }
+    fn write(&self, data: &Data, _: &mut SegmentTracker, w: &mut Writer) {
+        self.block_write(data, w);
+    }
+    fn write_section_header(&self, data: &Data, _: &SegmentTracker, w: &mut Writer) {
+        self.block_write_section_header(data, w);
+    }
+}
+
+impl ElfBlock for ReadBlock {
+    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+        self.block_reserve_section_index(data, w);
+    }
+    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        self.block_reserve(data, tracker, w);
+    }
+    fn write(&self, data: &Data, _: &mut SegmentTracker, w: &mut Writer) {
+        self.block_write(data, w);
+    }
+    fn write_section_header(&self, data: &Data, _: &SegmentTracker, w: &mut Writer) {
+        self.block_write_section_header(data, w);
     }
 }
 

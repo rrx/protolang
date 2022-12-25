@@ -15,9 +15,9 @@ mod blocks;
 mod section;
 mod segments;
 
-use blocks::*;
-use section::*;
-use segments::*;
+pub use blocks::*;
+pub use section::*;
+pub use segments::*;
 
 #[derive(Debug, Clone)]
 pub struct ProgramHeaderEntry {
@@ -115,7 +115,6 @@ pub struct Data {
     arch: Architecture,
     interp: String,
     is_64: bool,
-    //ph: Vec<ProgramHeaderEntry>,
     sections: ProgSections,
     lib_names: Vec<String>,
     libs: Vec<Library>,
@@ -131,7 +130,7 @@ pub struct Data {
     addr_hash: u64,
     pointers: HashMap<String, u64>,
     symbols: HashMap<String, ProgSymbol>,
-
+    block: Option<ReadBlock>,
     add_section_headers: bool,
     add_symbols: bool,
     debug: bool,
@@ -145,6 +144,7 @@ impl Data {
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             //ph: vec![],
             lib_names,
+            block: None,
             sections: ProgSections::new(),
             libs: vec![],
             base: 0x80000,
@@ -399,7 +399,7 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
     }
 }
 
-pub fn load_blocks<'a>(blocks: &mut Blocks, data: &mut Data) {
+pub fn load_buffer_sections<'a>(blocks: &mut Blocks, data: &mut Data) {
     for section in data.sections.sections.drain(..) {
         let buf = section.bytes.clone();
         if section.relocations.len() > 0 {
@@ -535,7 +535,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 }
 
 pub fn write_file_block<Elf: FileHeader<Endian = Endianness>>(
-    block: &ReadBlock,
+    block: ReadBlock,
     mut data: Data,
 ) -> std::result::Result<Vec<u8>, Box<dyn Error>> {
     let mut out_data = Vec::new();
@@ -548,6 +548,11 @@ pub fn write_file_block<Elf: FileHeader<Endian = Endianness>>(
         let string_id = writer.add_dynamic_string(lib_name.as_bytes());
         data.add_library(string_id);
     }
+
+    data.block = Some(block);
+    //data.sections = block.load(&mut writer);
+    unapplied_relocations(&mut data.sections, &mut writer);
+    data.block.as_ref().unwrap().dump();
 
     write_file_main::<Elf>(data, &mut writer)?;
     Ok(out_data)
@@ -570,20 +575,20 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
             0,
             Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
         ),
-        /*
         LocalSymbol::new(
             "ASDF".into(),
             ".got.plt".into(),
             0,
-            Some(writer.add_string("ASDF".as_bytes())),
+            Some(w.add_string("ASDF".as_bytes())),
         ),
-        */
     ];
 
     // configure blocks
     // these are used to correctly order the reservation of space
     // and to write things out in the correct order
     let mut blocks = Blocks::new();
+    //let temp_block = data.block.clone().unwrap();
+
     blocks.add_block(Box::new(HeaderComponent::default()));
 
     if data.is_dynamic() {
@@ -598,20 +603,51 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
     if w.dynstr_needed() {
         blocks.add_block(Box::new(DynStrSection::default()));
     }
+
     if data.is_dynamic() {
         blocks.add_block(Box::new(RelaDynSection::new(GotKind::GOT)));
         blocks.add_block(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
         blocks.add_block(Box::new(DynSymSection::default()));
     }
 
-    blocks.add_block(Box::new(PltSection::new()));
-    load_blocks(&mut blocks, &mut data);
+    let maybe_block = data.block.take();
+    let mut rx_file_offset = 0;
+    let mut ro_file_offset = 0;
+    let mut rw_file_offset = 0;
+    let mut bss_file_offset = 0;
+    let mut rx_base = 0;
+    let mut ro_base = 0;
+    let mut rw_base = 0;
+    let mut bss_base = 0;
+    if let Some(block) = maybe_block.as_ref() {
+        rx_file_offset = block.rx.file_offset;
+        ro_file_offset = block.ro.file_offset;
+        rw_file_offset = block.rw.file_offset;
+        bss_file_offset = block.bss.file_offset;
+        rx_base = block.rx.base;
+        ro_base = block.ro.base;
+        rw_base = block.rw.base;
+        bss_base = block.bss.base;
+
+        blocks.add_block(Box::new(block.ro.clone()));
+        blocks.add_block(Box::new(block.rx.clone()));
+        blocks.add_block(Box::new(PltSection::new()));
+        blocks.add_block(Box::new(block.rw.clone()));
+    } else {
+        blocks.add_block(Box::new(PltSection::new()));
+        load_buffer_sections(&mut blocks, &mut data);
+    }
 
     if data.is_dynamic() {
         blocks.add_block(Box::new(DynamicSection::default()));
         //blocks.add_block(Box::new(GotPltSection::default()));
         blocks.add_block(Box::new(GotSection::new(GotKind::GOT)));
         blocks.add_block(Box::new(GotSection::new(GotKind::GOTPLT)));
+    }
+
+    // bss is the last alloc block
+    if let Some(block) = maybe_block.as_ref() {
+        blocks.add_block(Box::new(block.bss.clone()));
     }
 
     if data.add_symbols {
@@ -628,6 +664,7 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
     }
 
     let mut tracker = SegmentTracker::new(data.base);
+    tracker.ph = blocks.start();
 
     // RESERVE
     // section headers are optional
@@ -638,6 +675,58 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
     // what are these for? reserving symbols for locals
     for _ in locals.iter() {
         w.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
+    }
+
+    if let Some(block) = maybe_block.as_ref() {
+        let symbols = &block.exports;
+        // write symbols
+        for (name, s) in symbols.iter() {
+            let section_index = match s.section {
+                ReadSectionKind::RX => data.section_index_get(".text"),
+                ReadSectionKind::RW => data.section_index_get(".data"),
+                ReadSectionKind::RO => data.section_index_get(".rodata"),
+                ReadSectionKind::Bss => data.section_index_get(".bss"),
+                _ => unreachable!(),
+            };
+            let base = match s.section {
+                ReadSectionKind::RX => rx_base,
+                ReadSectionKind::RW => rw_base,
+                ReadSectionKind::RO => ro_base,
+                ReadSectionKind::Bss => bss_base,
+                _ => unreachable!(),
+            };
+            let file_offset = match s.section {
+                ReadSectionKind::RX => rx_file_offset,
+                ReadSectionKind::RW => rw_file_offset,
+                ReadSectionKind::RO => ro_file_offset,
+                ReadSectionKind::Bss => bss_file_offset,
+                _ => unreachable!(),
+            };
+            let mut s = s.clone();
+            let addr = base + file_offset + s.address as usize;
+            s.address = addr as u64;
+            data.pointers.insert(name.clone(), addr as u64);
+            unsafe {
+                let buf = extend_lifetime(name.as_bytes());
+
+                let name_id = Some(w.add_string(buf));
+                let p = ProgSymbol {
+                    name_id,
+                    section_index: Some(section_index),
+                    base,
+                    s: CodeSymbol {
+                        name: s.name.clone(),
+                        size: s.size,
+                        address: addr as u64,
+                        kind: CodeSymbolKind::Data,
+                        def: CodeSymbolDefinition::Defined,
+                        st_info: 0,
+                        st_other: 0,
+                    },
+                };
+                data.symbols.insert(name.clone(), p);
+            }
+        }
     }
 
     blocks.reserve(&mut tracker, &mut data, w);
@@ -667,7 +756,7 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
 }
 
 /// align size
-fn size_align(n: usize, align: usize) -> usize {
+pub fn size_align(n: usize, align: usize) -> usize {
     return (n + (align - 1)) & !(align - 1);
 }
 

@@ -13,30 +13,47 @@ impl Blocks {
         self.blocks.push(block);
     }
 
-    pub fn reserve(&mut self, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
+    pub fn start(&mut self) -> Vec<ProgramHeaderEntry> {
         // build a list of sections that are loaded
         // this is a hack to get tracker to build a correct list of program headers
         // without having to go through the blocks and do reservations
         let mut temp_tracker = SegmentTracker::new(0);
-        for b in self.blocks.iter() {
-            if let Some(alloc) = b.alloc() {
-                temp_tracker.add_data(alloc, 1, 0);
-            }
+        let mut d = Data::new(vec![]);
+        //d.block = Some(block);
+        let mut out_data = Vec::new();
+        let endian = Endianness::Little;
+        let mut temp_w = object::write::elf::Writer::new(endian, d.is_64, &mut out_data);
+
+        for b in self.blocks.iter_mut() {
+            //if let Some(alloc) = b.alloc() {
+            //eprintln!("asdf");
+            //temp_tracker.add_data(alloc, 1, 0);
+            let pos = temp_w.reserved_len();
+            b.reserve(&mut d, &mut temp_tracker, &mut temp_w);
+            let after = temp_w.reserved_len();
+            eprintln!("x-reserve: {:#0x}, {:#0x},  {:?}", pos, after, b.alloc());
+            //}
         }
         // get a list of program headers
         // we really only need to know the number of headers, so we can correctly
         // set the values in the file header
 
         self.generate_program_headers(&mut temp_tracker);
+        temp_tracker.ph
         // hack
-        tracker.ph = temp_tracker.ph.clone();
+        //tracker.ph = temp_tracker.ph.clone();
 
         //for p in temp_tracker.ph.iter() {
         //eprintln!("P: {:?}", p);
         //}
+    }
 
+    pub fn reserve(&mut self, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
         for b in self.blocks.iter_mut() {
+            let pos = w.reserved_len();
             b.reserve(data, tracker, w);
+            let after = w.reserved_len();
+            eprintln!("reserve: {:#0x}, {:#0x},  {:?}", pos, after, b.alloc());
         }
     }
 
@@ -59,7 +76,10 @@ impl Blocks {
         //eprintln!("P: {:?}", p);
         //}
         for b in self.blocks.iter() {
+            let pos = w.len();
             b.write(&data, tracker, w);
+            let after = w.len();
+            eprintln!("write: {:#0x}, {:#0x},  {:?}", pos, after, b.alloc());
         }
     }
 
@@ -135,6 +155,7 @@ impl SegmentTracker {
             let mut segment = Segment::new(alloc);
             segment.base = self.base as u64;
             segment.offset = file_offset as u64;
+            eprintln!("new seg: {:?}, offset: {:#0x}", alloc, file_offset);
             self.segments.push(segment);
         }
         self.current_mut().add_data(size, alloc.align());
