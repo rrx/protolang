@@ -530,19 +530,45 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     }
 
     load_sections(&mut data, link, &mut writer);
+    write_file_main::<Elf>(data, &mut writer)?;
+    Ok(out_data)
+}
 
+pub fn write_file_block<Elf: FileHeader<Endian = Endianness>>(
+    block: &ReadBlock,
+    mut data: Data,
+) -> std::result::Result<Vec<u8>, Box<dyn Error>> {
+    let mut out_data = Vec::new();
+    let endian = Endianness::Little;
+    let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
+
+    // add libraries if they are configured
+    let lib_names = data.lib_names.clone();
+    for lib_name in lib_names.iter() {
+        let string_id = writer.add_dynamic_string(lib_name.as_bytes());
+        data.add_library(string_id);
+    }
+
+    write_file_main::<Elf>(data, &mut writer)?;
+    Ok(out_data)
+}
+
+pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
+    mut data: Data,
+    w: &mut Writer,
+) -> std::result::Result<(), Box<dyn Error>> {
     let locals = vec![
         LocalSymbol::new(
             "_DYNAMIC".into(),
             ".dynamic".into(),
             0,
-            Some(writer.add_string("_DYNAMIC".as_bytes())),
+            Some(w.add_string("_DYNAMIC".as_bytes())),
         ),
         LocalSymbol::new(
             "_GLOBAL_OFFSET_TABLE_".into(),
             ".got.plt".into(),
             0,
-            Some(writer.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
+            Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
         ),
         /*
         LocalSymbol::new(
@@ -569,7 +595,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
 
     blocks.add_block(Box::new(HashSection::default()));
 
-    if writer.dynstr_needed() {
+    if w.dynstr_needed() {
         blocks.add_block(Box::new(DynStrSection::default()));
     }
     if data.is_dynamic() {
@@ -592,7 +618,7 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(SymTabSection::default()));
     }
 
-    if data.add_symbols && writer.strtab_needed() {
+    if data.add_symbols && w.strtab_needed() {
         blocks.add_block(Box::new(StrTabSection::default()));
     }
 
@@ -606,18 +632,18 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     // RESERVE
     // section headers are optional
     if data.add_section_headers {
-        blocks.reserve_section_index(&mut data, &mut writer);
+        blocks.reserve_section_index(&mut data, w);
     }
 
     // what are these for? reserving symbols for locals
     for _ in locals.iter() {
-        writer.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
+        w.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
     }
 
-    blocks.reserve(&mut tracker, &mut data, &mut writer);
+    blocks.reserve(&mut tracker, &mut data, w);
 
     if data.add_section_headers {
-        writer.reserve_section_headers();
+        w.reserve_section_headers();
     }
 
     for (k, v) in data.pointers.iter() {
@@ -631,15 +657,13 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     update_symbols(&locals, &mut data, &mut tracker);
 
     // WRITE
-    blocks.write(&data, &mut tracker, &mut writer);
+    blocks.write(&data, &mut tracker, w);
 
     // SECTION HEADERS
     if data.add_section_headers {
-        blocks.write_section_headers(&data, &tracker, &mut writer);
+        blocks.write_section_headers(&data, &tracker, w);
     }
-
-    //data.debug(link);
-    Ok(out_data)
+    Ok(())
 }
 
 /// align size

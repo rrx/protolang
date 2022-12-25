@@ -7,6 +7,7 @@ use object::{
 };
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::path::Path;
 
 use crate::disassemble::*;
 use crate::relocations::*;
@@ -15,12 +16,6 @@ pub type SymbolMap = HashMap<String, ReadSymbol>;
 
 #[derive(Debug, Default)]
 pub struct Reader {
-    // merged symbols
-    //symbols: SymbolMap,
-
-    // symbols that have no resolution
-    //unknowns: SymbolMap,
-
     // blocks
     blocks: Vec<ReadBlock>,
 
@@ -114,6 +109,8 @@ pub struct ReadSymbol {
 #[derive(Debug, Default)]
 pub struct ReadBlock {
     name: String,
+    // dynamic libraries referenced
+    libs: HashSet<String>,
     local_index: usize,
     locals: SymbolMap,
     exports: SymbolMap,
@@ -130,6 +127,15 @@ pub struct ReadBlock {
 }
 
 impl ReadBlock {
+    pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        use object::elf;
+        use object::Endianness;
+        let data = crate::writer::Data::new(self.libs.iter().cloned().collect());
+        let out_data =
+            crate::writer::write_file_block::<elf::FileHeader64<Endianness>>(self, data)?;
+        std::fs::write(path, out_data)?;
+        Ok(())
+    }
     pub fn insert_local(&mut self, s: ReadSymbol) {
         self.locals.insert(s.name.clone(), s);
     }
@@ -336,6 +342,7 @@ impl ReadBlock {
         }
         eprintln!("RX");
 
+        /*
         for r in self.rx_relocations.iter() {
             if let Some(symbol) = dsymbols.get(&r.name) {
                 eprintln!(" R: {:?}", (r, symbol));
@@ -344,9 +351,11 @@ impl ReadBlock {
             } else if let Some(symbol) = self.exports.get(&r.name) {
                 eprintln!(" R export: {:?}", (r, symbol));
             } else {
+                //notfound.insert(&r.name);
                 //unreachable!(" Not found: {}", r.name);
             }
         }
+        */
         disassemble_code_with_symbols(self.rx.as_slice(), &rx_symbols, &self.rx_relocations);
 
         eprintln!("RO, size: {:#0x}", self.ro.len());
@@ -423,11 +432,14 @@ impl Reader {
             ObjectKind::Relocatable => {
                 let block = self.relocatable(name.to_string(), &b)?;
                 self.blocks.push(block);
-                Ok(())
             }
-            ObjectKind::Dynamic => self.dynamic(&b),
+            ObjectKind::Dynamic => {
+                self.dynamic(&b)?;
+                self.block.libs.insert(name.to_string());
+            }
             _ => unimplemented!("{:?}", b.kind()),
         }
+        Ok(())
     }
 
     fn dynamic<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
@@ -497,171 +509,38 @@ impl Reader {
         }
 
         Ok(block)
-        /*
-        for section in b.sections() {
-            let data = section.uncompressed_data()?;
-            for (offset, r) in section.relocations() {
-                let r: LinkRelocation = r.into();
-                let name = match r.target {
-                    RelocationTarget::Section(index) => {
-                        let section = b.section_by_index(index)?;
-                        section.name()?.to_string()
-                    }
-                    RelocationTarget::Symbol(index) => {
-                        let symbol = b.symbol_by_index(index)?;
-                        let name = if symbol.kind() == SymbolKind::Section {
-                            let section = b.section_by_index(symbol.section_index().unwrap())?;
-                            section.name()?.to_string()
-                        } else {
-                            symbol.name()?.to_string()
-                        };
-                        name
-                    }
-                    _ => unreachable!()
-                };
-
-                match r.effect() {
-                    PatchEffect::AddToPlt => {
-                        self.plt.insert(name.clone());
-                    }
-                    PatchEffect::AddToGot => {
-                        self.got.insert(name.clone());
-                    }
-                    PatchEffect::DoNothing => ()
-                }
-
-                eprintln!("r: {}, {:#08x}, {:?}, {:?}", &name, offset, r, r.effect());
-            }
-        }
-
-        for symbol in b.symbols() {
-            // skip the null symbol
-            if symbol.kind() == SymbolKind::Null {
-                continue;
-            }
-            if symbol.kind() == SymbolKind::File {
-                continue;
-            }
-
-
-            let mut s = read_symbol(&b, &symbol)?;
-
-            if s.bind == SymbolBind::Local {
-                block.insert_symbol(s);
-                continue;
-            }
-
-            if symbol.is_undefined() {
-                //let s = lib.get(name.as_bytes())?;
-                //let func: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(name.as_bytes())?;
-            }
-
-            // we only need one lookup, and we default to GOT
-            let lookup = if self.got.contains(&s.name) {
-                SymbolLookupTable::GOT
-            } else if self.plt.contains(&s.name) {
-                SymbolLookupTable::PLT
-            } else {
-                SymbolLookupTable::None
-            };
-            s.lookup = lookup;
-
-            if s.kind == SymbolKind::Unknown {
-                self.insert_unknown(s);
-            } else {
-                self.insert_symbol(s);
-            }
-        }
-        Ok(block)
-            */
     }
 
-    pub fn link(mut self) {
+    pub fn build(mut self) -> ReadBlock {
         self.block.name = "exe".to_string();
-        //let mut block = ReadBlock::new("exe");
         for b in self.blocks.into_iter() {
-            for (_, s) in self.block.locals.iter() {
-                //self.insert_symbol(s.clone());
-            }
             self.block.add_block(b);
         }
-        self.block.dump(); //&self.symbols);
-    }
 
-    /*
-        pub fn dump(&mut self) {
-            let mut symbols = self.block.locals.values().filter(|s| {
-                s.source == SymbolSource::Static
-            }).cloned().collect::<Vec<_>>();
+        // make sure everything resolves
+        let mut notfound = HashSet::new();
+        let iter = self
+            .block
+            .rx_relocations
+            .iter()
+            .chain(self.block.ro_relocations.iter())
+            .chain(self.block.rw_relocations.iter())
+            .chain(self.block.bss_relocations.iter());
 
-            for s in symbols.iter_mut() {
-                //if s.kind == SymbolKind::Unknown {
-                //} else {
-                eprintln!("D: {:?}", s);
-                //}
+        for r in iter {
+            if let Some(symbol) = self.block.lookup(&r.name) {
+                //eprintln!(" R: {:?}", (r, symbol));
+            } else {
+                notfound.insert(&r.name);
             }
-
-            /*
-            let mut unknowns = vec![];
-            for s in self.unknowns.values() {
-                if let Some(shared) = self.symbols.get(&s.name) {
-                    eprintln!("U: Found {:?}, {:?}", &s, &shared);
-                    //s.kind = shared.kind;
-                } else {
-                    eprintln!("U: Not Found {:?}", s);
-                }
-            }
-            */
-
-
-            let mut block = ReadBlock::default();
-
-            for b in self.blocks.iter() {
-                b.dump();//&self.symbols);
-                /*
-                eprintln!("Block: {}", &b.name);
-
-                let mut dsymbols = symbols.iter().map(|s| {
-                    Symbol::new(0, s.address, &s.name)
-                }).collect::<Vec<_>>();
-
-                for s in b.locals.values() {
-                    if s.section == ReadSectionKind::RX {
-                        dsymbols.push(Symbol::new(0, s.address, &s.name));
-                    }
-                }
-
-                eprintln!("RX");
-                let mut symbols = vec![];
-                for local in b.locals.values() {
-                    if local.section == ReadSectionKind::RX {
-                        eprintln!(" Local: {:?}", local);
-                        symbols.push(Symbol::new(0, local.address, &local.name));
-                    }
-                }
-
-                for r in b.rx_relocations.iter() {
-                    if let Some(symbol) = self.symbols.get(&r.name) {
-                        eprintln!(" R: {:?}", (r, symbol));
-                    } else if let Some(symbol) = b.locals.get(&r.name) {
-                        eprintln!(" R Local: {:?}", (r, symbol));
-                    } else {
-                        unreachable!(" Not found: {}", r.name);
-                    }
-                }
-                disassemble_code_with_symbols(b.rx.as_slice(), &symbols, &b.rx_relocations);
-
-
-                eprintln!("RO, size: {:#0x}", b.ro.len());
-                print_bytes(b.ro.as_slice(),0);
-                eprintln!("RW, size: {:#0x}", b.rw.len());
-                print_bytes(b.rw.as_slice(),0);
-                eprintln!("Bss, size: {:#0x}", b.bss);
-                */
-            }
-
         }
-    */
+
+        for s in notfound {
+            eprintln!("NotFound: {}", s);
+        }
+
+        self.block
+    }
 }
 
 fn print_bytes(buf: &[u8], base: usize) {
