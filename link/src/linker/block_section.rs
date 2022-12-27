@@ -68,27 +68,6 @@ impl BlockSection {
             delta,
             self.bytes.len()
         );
-
-        /*
-        self.symbols = self.section.symbols.clone();
-        let section_index = self.section.index.clone();
-
-        // add section to the tracker, so we have a base address
-        self.base = tracker.add_section(self.alloc, &self.section, start);
-
-        // write symbols
-        for (name, s) in &self.symbols {
-            let mut s = s.clone();
-            s.section_index = section_index;
-            s.base = self.base;
-            let addr = self.base + self.offset + s.s.address as usize;
-            s.s.address = addr as u64;
-            data.pointers.insert(name.clone(), addr as u64);
-            self.pointers.insert(name.clone(), addr as u64);
-            data.symbols.insert(name.clone(), s.clone());
-        }
-
-        */
     }
 
     pub fn block_write(&self, _data: &Data, w: &mut Writer) {
@@ -125,7 +104,7 @@ impl BlockSection {
 #[derive(Debug, Clone)]
 pub struct BssSection {
     pub(crate) alloc: AllocSegment,
-    name: &'static str,
+    pub(crate) name: &'static str,
     name_id: Option<StringId>,
     pub(crate) file_offset: usize,
     pub(crate) base: usize,
@@ -170,12 +149,28 @@ impl BssSection {
         self.base = tracker.add_data(self.alloc, delta, self.file_offset);
         self.addr = self.base + self.file_offset;
         data.addr_set(&self.name, self.addr as u64);
+
+        eprintln!(
+            "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, delta: {:#0x}, size: {:#0x}",
+            self.file_offset,
+            self.name,
+            self.alloc,
+            self.base,
+            self.addr,
+            delta,
+            self.size
+        );
     }
 
     pub fn block_write(&self, _data: &Data, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align());
         w.pad_until(aligned_pos);
+        assert_eq!(aligned_pos, self.file_offset);
+        eprintln!(
+            "AF: {:?}, {:#0x}, {:#0x}",
+            self.alloc, aligned_pos, self.file_offset
+        );
     }
 
     pub fn block_write_section_header(&self, _data: &Data, w: &mut Writer) {

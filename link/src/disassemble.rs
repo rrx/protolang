@@ -58,6 +58,32 @@ impl PatchBlock {
     }
 }
 
+pub fn print_bytes(buf: &[u8], base: usize) {
+    let N = 16;
+    let chunks = buf.chunks(N).collect::<Vec<_>>();
+    let mut offset = base;
+    for c in chunks.iter() {
+        let numbers = c
+            .iter()
+            .map(|b| format!("{:02x}", *b))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let x = c
+            .iter()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() {
+                    *b
+                } else {
+                    '.' as u8
+                }
+            })
+            .collect::<Vec<_>>();
+        let x = String::from_utf8(x).unwrap();
+        eprintln!(" {:#08x}: {}  {}", offset, numbers, x);
+        offset += N;
+    }
+}
+
 pub fn eprint_bytes(buf: &[u8]) {
     let x = String::from_utf8(
         buf.iter()

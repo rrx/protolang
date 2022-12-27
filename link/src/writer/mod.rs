@@ -115,7 +115,7 @@ pub struct Data {
     arch: Architecture,
     interp: String,
     is_64: bool,
-    sections: ProgSections,
+    pub sections: ProgSections,
     lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
@@ -134,6 +134,12 @@ pub struct Data {
     add_section_headers: bool,
     add_symbols: bool,
     debug: bool,
+
+    // store strings that we reference their bytes
+    // because Data has a long lifetime, we extend
+    // the strings bytes to static
+    strings: Vec<String>,
+
     //unapplied_got: Vec<(Sym, CodeRelocation)>,
     //unapplied_plt: Vec<(Sym, CodeRelocation)>,
 }
@@ -165,6 +171,7 @@ impl Data {
             add_section_headers: true,
             add_symbols: true,
             debug: true,
+            strings: vec![],
             //unapplied_got: vec![],
             //unapplied_plt: vec![],
         }
@@ -294,22 +301,6 @@ impl Data {
         out
     }
 
-    /*
-    pub fn debug(&mut self, _link: &Link) {
-        let mut out_data = Vec::new();
-        let endian = Endianness::Little;
-        let _writer = object::write::elf::Writer::new(endian, self.is_64, &mut out_data);
-
-        // load bytes and relocations
-        //self.segments.load(link, &mut writer);
-        //self.segments.load(link);
-        //self.segments.read_unlinked(link, &mut writer);
-
-        //self.segments.rx.debug();
-        //
-    }
-    */
-
     pub fn symbol_size(&self) -> usize {
         if self.is_64 {
             mem::size_of::<elf::Sym64<Endianness>>()
@@ -337,8 +328,8 @@ impl Data {
 
 pub struct ProgSections {
     sections: Vec<ProgSection>,
-    unapplied_got: Vec<(Sym, CodeRelocation)>,
-    unapplied_plt: Vec<(Sym, CodeRelocation)>,
+    pub unapplied_got: Vec<(Sym, CodeRelocation)>,
+    pub unapplied_plt: Vec<(Sym, CodeRelocation)>,
     dynsymbols: Vec<SymbolIndex>,
 }
 impl ProgSections {
@@ -635,12 +626,13 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
         blocks.add_block(Box::new(DynSymSection::default()));
     }
 
-    let maybe_block = data.block.take();
+    let mut maybe_block = data.block.take();
     if let Some(block) = maybe_block.as_ref() {
         blocks.add_block(Box::new(block.ro.clone()));
         blocks.add_block(Box::new(block.rx.clone()));
         blocks.add_block(Box::new(PltSection::new()));
         blocks.add_block(Box::new(block.rw.clone()));
+        //data.block = Some(block);
     } else {
         blocks.add_block(Box::new(PltSection::new()));
         load_buffer_sections(&mut blocks, &mut data);
@@ -686,67 +678,25 @@ pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
         w.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
     }
 
-    let mut got = vec![];
-    let mut plt = vec![];
-    if let Some(block) = maybe_block.as_ref() {
-        block.reserve_symbols(&mut data, w);
-        for r in block.rx.relocations.iter() {
-            if let Some(sym) = block.lookup_static(&r.name) {
-            } else if let Some(sym) = block.lookup_dynamic(&r.name) {
-                let section_index = match sym.section {
-                    ReadSectionKind::RX => data.section_index_get(".text"),
-                    ReadSectionKind::RW => data.section_index_get(".data"),
-                    ReadSectionKind::RO => data.section_index_get(".rodata"),
-                    ReadSectionKind::Bss => data.section_index_get(".bss"),
-                    _ => unreachable!(),
-                };
-                let name = sym.name.clone();
-                eprintln!("not found: {}: {:?}", &r.name, sym);
-                unsafe {
-                    let buf = extend_lifetime(sym.name.as_bytes());
-                    let name_id = Some(w.add_dynamic_string(buf));
-                    let s = Sym {
-                        name: name_id.clone(),
-                        section: Some(section_index),
-                        st_info: 0,
-                        st_other: 0,
-                        st_shndx: 0,
-                        st_value: 0,
-                        st_size: 0,
-                    };
-                    got.push((sym.clone(), s, r.clone()));
-
-                    let s = Sym {
-                        name: name_id.clone(),
-                        section: Some(section_index),
-                        st_info: 0,
-                        st_other: 0,
-                        st_shndx: 0,
-                        st_value: 0,
-                        st_size: 0,
-                    };
-                    plt.push((sym, s, r.clone()));
-                }
-            }
-        }
-    }
-
-    // We don't know the actual address yet, but we need to know how many relocations we have
-    // but we know the name, so we can look it up when we write
-    for (sym, s, r) in plt.iter() {
-        data.sections.unapplied_plt.push((s.clone(), r.clone()));
-    }
-    for (sym, s, r) in got.iter() {
-        data.sections.unapplied_got.push((s.clone(), r.clone()));
-    }
-
     // setup symbols
     for b in blocks.blocks.iter() {
         b.reserve_symbols(&mut data, w);
     }
 
+    if let Some(block) = maybe_block.as_mut() {
+        block.reserve_symbols(&mut data, w);
+    }
+
+
     // finalize the layout
     blocks.reserve(&mut tracker, &mut data, w);
+
+    // once we have the layout, we can assign the symbols
+    if let Some(block) = maybe_block.as_mut() {
+        //block.update_symbols(&mut data, w);
+        block.dump();
+        block.complete(&data);
+    }
 
     if data.add_section_headers {
         w.reserve_section_headers();

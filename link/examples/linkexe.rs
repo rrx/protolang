@@ -10,7 +10,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     for path in env::args().skip(1) {
         reader.add(&Path::new(&path));
     }
+    //reader.dump();
     let mut block = reader.build();
     block.dump();
+    block.write(Path::new("tmp/out.exe"));
     Ok(())
 }
