@@ -7,6 +7,7 @@ impl BlocksBuilder {
         Self {}
     }
 
+    /*
     fn load_buffer_sections<'a>(&mut self, data: &mut Data) -> Vec<Box<dyn ElfBlock>> {
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
         for section in data.sections.sections.drain(..) {
@@ -26,10 +27,16 @@ impl BlocksBuilder {
         }
         blocks
     }
+    */
 
-    pub fn build(mut self, data: &mut Data, w: &mut Writer) -> (Blocks, Option<ReadBlock>) {
-        let x = Some(w.add_string("_DYNAMIC".as_bytes()));
-        let x = Some(w.add_dynamic_string("_DYNAMIC".as_bytes()));
+    pub fn build(mut self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) -> Blocks {
+        //, Option<ReadBlock>) {
+        // hack to get generate_ph to work
+        //let x = Some(w.add_string("_DYNAMIC".as_bytes()));
+        //let x = Some(w.add_dynamic_string("_DYNAMIC".as_bytes()));
+
+        //self.reserve_strings(data, w, block);
+        block.reserve_strings(data, w);
 
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
         blocks.push(Box::new(HeaderComponent::default()));
@@ -52,30 +59,38 @@ impl BlocksBuilder {
             blocks.push(Box::new(DynSymSection::default()));
         }
 
-        let maybe_block = data.block.take();
-        if let Some(block) = maybe_block.as_ref() {
-            blocks.push(Box::new(block.ro.clone()));
-            blocks.push(Box::new(block.rx.clone()));
-            blocks.push(Box::new(PltSection::new()));
-            blocks.push(Box::new(block.rw.clone()));
-            //data.block = Some(block);
-        } else {
-            blocks.push(Box::new(PltSection::new()));
-            blocks.extend(self.load_buffer_sections(data));
-            //load_buffer_sections(&mut blocks, &mut data);
-        }
+        //let maybe_block = data.block.take();
+        //if let Some(block) = maybe_block.as_ref() {
+        //blocks.push(Box::new(block.ro.clone()));
+        //blocks.push(Box::new(block.rx.clone()));
+        //blocks.push(Box::new(block.rw.clone()));
+        blocks.push(ReadSectionKind::RO.block());
+        blocks.push(ReadSectionKind::RX.block());
+        blocks.push(Box::new(PltSection::new()));
+        blocks.push(ReadSectionKind::RW.block());
+        //data.block = Some(block);
+        //} else {
+        /*
+        blocks.push(Box::new(PltSection::new()));
+        blocks.extend(self.load_buffer_sections(data));
+        //load_buffer_sections(&mut blocks, &mut data);
+        */
+        //}
 
         if data.is_dynamic() {
             blocks.push(Box::new(DynamicSection::default()));
             //blocks.add_block(Box::new(GotPltSection::default()));
+            //blocks.push(Box::new(block.got.clone()));
             blocks.push(Box::new(GotSection::new(GotKind::GOT)));
             blocks.push(Box::new(GotSection::new(GotKind::GOTPLT)));
+            //blocks.push(Box::new(block.gotplt.clone()));
         }
 
         // bss is the last alloc block
-        if let Some(block) = maybe_block.as_ref() {
-            blocks.push(Box::new(block.bss.clone()));
-        }
+        //if let Some(block) = maybe_block.as_ref() {
+        //blocks.push(Box::new(block.bss.clone()));
+        //}
+        blocks.push(ReadSectionKind::Bss.block());
 
         if data.add_symbols {
             blocks.push(Box::new(SymTabSection::default()));
@@ -91,7 +106,7 @@ impl BlocksBuilder {
             blocks.push(Box::new(ShStrTabSection::default()));
         }
 
-        (Blocks { blocks }, maybe_block)
+        Blocks { blocks } //, maybe_block)
     }
 }
 
@@ -100,21 +115,39 @@ pub struct Blocks {
 }
 
 impl Blocks {
-    pub fn build(&mut self, data: &mut Data, w: &mut Writer, mut maybe_block: Option<ReadBlock>) {
+    /*
+        pub fn reserve_strings(&mut self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) {
+            // Reserve Strings
+            //if let Some(block) = maybe_block {
+                block.reserve_strings(data, w);
+            //} else {
+                /*
+                for (name, p) in data.sections.symbol_pointers().iter() {
+                    data.lookup.insert(name.clone(), p.clone());
+                }
+                for (name, p) in data.sections.extern_symbol_pointers().iter() {
+                    data.lookup.insert(name.clone(), p.clone());
+                }
+                */
+            //}
+        }
+    */
+
+    pub fn build(&mut self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) {
         let mut tracker = SegmentTracker::new(data.base);
-        tracker.ph = self.generate_ph();
+        tracker.ph = self.generate_ph(block);
 
         // RESERVE SECTION HEADERS
         // section headers are optional
         if data.add_section_headers {
-            self.reserve_section_index(data, w);
+            self.reserve_section_index(data, block, w);
         }
 
         // RESERVE SYMBOLS
-        self.reserve_symbols(data, w);
+        //self.reserve_symbols(data, w);
         // what are these for? reserving symbols for locals
         // set up sections
-        let mut locals = vec![
+        data.locals = vec![
             LocalSymbol::new(
                 "_DYNAMIC".into(),
                 ".dynamic".into(),
@@ -137,38 +170,45 @@ impl Blocks {
                 None, //Some(w.add_dynamic_string("ASDF".as_bytes())),
             ),
         ];
-        data.locals = locals;
+        //data.locals = locals;
 
         // requires dynamic addr
         //update_symbols(&locals, data, &mut tracker);
 
-        if let Some(block) = maybe_block.as_mut() {
-            for (name, s) in block.exports.iter() {
-                eprintln!("x: {:?}", s);
-                unsafe {
-                    let buf = extend_lifetime(s.name.as_bytes());
-                    let name_id = Some(w.add_string(buf));
-                    data.locals.push(LocalSymbol::new(
-                        name.clone(),
-                        s.section.section_name().to_string(),
-                        0,
-                        name_id,
-                        None,
-                    ));
-                    let name_id = Some(w.add_string(buf));
+        //if let Some(block) = maybe_block.as_mut() {
+        //for (name, s) in block.locals.iter() {
+        //let p = ProgSymbol::new_object(name, None);
+        //data.lookup.insert(name.clone(), p);
+        //}
 
-                    let name_id = Some(w.add_dynamic_string(buf));
-                    data.dynamic.push(LocalSymbol::new(
-                        name.clone(),
-                        s.section.section_name().to_string(),
-                        0,
-                        name_id,
-                        None,
-                    ));
-                }
+        for (name, s) in block.exports.iter() {
+            //eprintln!("x: {:?}", s);
+            //let p = ProgSymbol::new_object(name, None);
+            //data.lookup.insert(name.clone(), p);
+            unsafe {
+                let buf = extend_lifetime(s.name.as_bytes());
+                let name_id = Some(w.add_string(buf));
+                data.locals.push(LocalSymbol::new(
+                    name.clone(),
+                    s.section.section_name().to_string(),
+                    0,
+                    name_id,
+                    None,
+                ));
+
+                let name_id = Some(w.add_dynamic_string(buf));
+                data.dynamic.push(LocalSymbol::new(
+                    name.clone(),
+                    s.section.section_name().to_string(),
+                    0,
+                    name_id,
+                    None,
+                ));
             }
-            //block.update_symbols(data, w);
         }
+
+        //block.update_symbols(data, w);
+        //}
 
         /*
         let dynamic_section_index = data
@@ -186,50 +226,52 @@ impl Blocks {
             b.reserve_symbols(data, w);
         }
 
-        if let Some(block) = maybe_block.as_mut() {
-            block.reserve_symbols(data, w);
-        }
+        //if let Some(block) = maybe_block.as_mut() {
+        block.reserve_symbols(data, w);
+        //}
 
         // RESERVE
 
         // finalize the layout
-        self.reserve(&mut tracker, data, w);
+        self.reserve(&mut tracker, data, block, w);
 
         // once we have the layout, we can assign the symbols
-        if let Some(block) = maybe_block.as_mut() {
-            block.dump();
-            block.complete(&data);
-        }
+        //if let Some(block) = maybe_block.as_mut() {
+        //block.dump();
+        block.complete(&data);
+        //}
 
         if data.add_section_headers {
             w.reserve_section_headers();
         }
 
-        for (k, v) in data.pointers.iter() {
-            eprintln!("P: {}, {:#0x}", k, v);
-        }
+        //for (k, v) in data.pointers.iter() {
+        //eprintln!("P: {}, {:#0x}", k, v);
+        //}
 
         // UPDATE
         tracker.ph = self.program_headers(&tracker);
         self.update(data);
 
         // WRITE
-        self.write(&data, &mut tracker, w);
+        self.write(&data, &mut tracker, block, w);
 
         // SECTION HEADERS
         if data.add_section_headers {
-            self.write_section_headers(&data, &tracker, w);
+            self.write_section_headers(&data, &tracker, block, w);
         }
     }
 
+    /*
     fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
         for s in data.symbols.values() {
             //w.reserve_symbol_index(s.section_index);
         }
     }
+    */
 
     /// generate a temporary list of program headers
-    pub fn generate_ph(&mut self) -> Vec<ProgramHeaderEntry> {
+    pub fn generate_ph(&mut self, block: &mut ReadBlock) -> Vec<ProgramHeaderEntry> {
         // build a list of sections that are loaded
         // this is a hack to get tracker to build a correct list of program headers
         // without having to go through the blocks and do reservations
@@ -239,11 +281,11 @@ impl Blocks {
         let endian = Endianness::Little;
         let mut temp_w = object::write::elf::Writer::new(endian, d.is_64, &mut out_data);
         temp_w.add_string("asdf".as_bytes());
-        temp_w.reserve_symbol_index(None);
+        temp_w.add_dynamic_string("asdf".as_bytes());
 
         for b in self.blocks.iter_mut() {
             let pos = temp_w.reserved_len();
-            b.reserve(&mut d, &mut temp_tracker, &mut temp_w);
+            b.reserve(&mut d, &mut temp_tracker, block, &mut temp_w);
             let after = temp_w.reserved_len();
         }
         // get a list of program headers
@@ -253,12 +295,18 @@ impl Blocks {
         temp_tracker.ph
     }
 
-    pub fn reserve(&mut self, tracker: &mut SegmentTracker, data: &mut Data, w: &mut Writer) {
+    pub fn reserve(
+        &mut self,
+        tracker: &mut SegmentTracker,
+        data: &mut Data,
+        block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
         for b in self.blocks.iter_mut() {
             let pos = w.reserved_len();
-            b.reserve(data, tracker, w);
+            b.reserve(data, tracker, block, w);
             let after = w.reserved_len();
-            eprintln!(
+            log::debug!(
                 "reserve: {}, {:#0x}, {:#0x},  {:?}",
                 b.name(),
                 pos,
@@ -268,9 +316,14 @@ impl Blocks {
         }
     }
 
-    pub fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+    pub fn reserve_section_index(
+        &mut self,
+        data: &mut Data,
+        block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
         for b in self.blocks.iter_mut() {
-            b.reserve_section_index(data, w);
+            b.reserve_section_index(data, block, w);
         }
     }
 
@@ -280,7 +333,13 @@ impl Blocks {
         }
     }
 
-    pub fn write(&self, data: &Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    pub fn write(
+        &self,
+        data: &Data,
+        tracker: &mut SegmentTracker,
+        block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
         // generate the program headers, so they have up to date fields
         //self.generate_program_headers(tracker);
         //for p in tracker.ph.iter() {
@@ -288,9 +347,9 @@ impl Blocks {
         //}
         for b in self.blocks.iter() {
             let pos = w.len();
-            b.write(&data, tracker, w);
+            b.write(&data, tracker, block, w);
             let after = w.len();
-            eprintln!(
+            log::debug!(
                 "write: {}, {:?}, pos: {:#0x}, after: {:#0x}, base: {:#0x}",
                 b.name(),
                 b.alloc(),
@@ -301,9 +360,15 @@ impl Blocks {
         }
     }
 
-    pub fn write_section_headers(&self, data: &Data, tracker: &SegmentTracker, w: &mut Writer) {
+    pub fn write_section_headers(
+        &self,
+        data: &Data,
+        tracker: &SegmentTracker,
+        block: &ReadBlock,
+        w: &mut Writer,
+    ) {
         for b in self.blocks.iter() {
-            b.write_section_header(&data, &tracker, w);
+            b.write_section_header(&data, &tracker, block, w);
         }
     }
 

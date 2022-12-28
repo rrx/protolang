@@ -16,6 +16,7 @@ use super::*;
 pub enum CodeSymbolDefinition {
     Extern,
     Defined,
+    Local,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,7 +46,7 @@ pub enum SymbolType {
 
 impl CodeSymbol {
     pub fn get_type(&self) -> SymbolType {
-        eprintln!("s: {:?}", self);
+        //eprintln!("s: {:?}", self);
         match self.st_info & 0x0f {
             elf::STT_FUNC => SymbolType::Func,
             elf::STT_NOTYPE => SymbolType::Notype,

@@ -112,11 +112,20 @@ impl AllocSegment {
     }
 }
 
+pub enum SymbolPointer {
+    RX(usize),
+    RO(usize),
+    RW(usize),
+    Bss(usize),
+    Got(usize),
+    GotPlt(usize),
+}
+
 pub struct Data {
     arch: Architecture,
     interp: String,
     pub is_64: bool,
-    pub sections: ProgSections,
+    //pub sections: ProgSections,
 
     //lib_names: Vec<String>,
     libs: Vec<Library>,
@@ -139,13 +148,23 @@ pub struct Data {
     // store strings that we reference their bytes
     // because Data has a long lifetime, we extend
     // the strings bytes to static
-    strings: Vec<String>,
+    //strings: Vec<String>,
     //unapplied_got: Vec<(Sym, CodeRelocation)>,
     //unapplied_plt: Vec<(Sym, CodeRelocation)>,
     dyn_symbols: HashMap<String, Sym>,
     symbols: HashMap<String, ProgSymbol>,
+    pub lookup: HashMap<String, ProgSymbol>,
     locals: Vec<LocalSymbol>,
     dynamic: Vec<LocalSymbol>,
+    pub relocations_got: Vec<CodeRelocation>,
+    pub relocations_gotplt: Vec<CodeRelocation>,
+
+    pub strings: HashMap<String, (String, StringId)>,
+    pub dyn_strings: HashMap<String, (String, StringId)>,
+
+    // index of symbols in got/gotplt
+    pub got_index: HashMap<String, usize>,
+    pub gotplt_index: HashMap<String, usize>,
 }
 
 impl Data {
@@ -164,7 +183,7 @@ impl Data {
             //ph: vec![],
             //lib_names,
             block: None,
-            sections: ProgSections::new(),
+            //sections: ProgSections::new(),
             libs,
             base: 0x80000,
             page_size: 0x1000,
@@ -181,15 +200,22 @@ impl Data {
             add_section_headers: true,
             add_symbols: true,
             debug: true,
-            strings: vec![],
+            //strings: vec![],
             //unapplied_got: vec![],
             //unapplied_plt: vec![],
 
             // Tables
             dyn_symbols: HashMap::new(),
             symbols: HashMap::new(),
+            lookup: HashMap::new(),
             locals: vec![],
             dynamic: vec![],
+            relocations_got: vec![],
+            relocations_gotplt: vec![],
+            strings: HashMap::new(),
+            dyn_strings: HashMap::new(),
+            got_index: HashMap::new(),
+            gotplt_index: HashMap::new(),
         }
     }
 
@@ -206,15 +232,55 @@ impl Data {
         self.libs.len() > 0
     }
 
-    /*
-    fn add_library(&mut self, string_id: StringId) {
-        self.libs.push(Library { string_id });
+    pub fn got_index(&mut self, name: &str) -> usize {
+        if let Some(index) = self.got_index.get(name) {
+            *index
+        } else {
+            let index = self.got_index.len();
+            self.got_index.insert(name.to_string(), index);
+            index
+        }
     }
 
-    fn add_dynstr(&mut self, string_id: StringId) {
-        self.libs.push(Library { string_id });
+    pub fn gotplt_index(&mut self, name: &str) -> usize {
+        if let Some(index) = self.gotplt_index.get(name) {
+            *index
+        } else {
+            let index = self.gotplt_index.len();
+            self.gotplt_index.insert(name.to_string(), index);
+            index
+        }
     }
-    */
+
+    pub fn string(&mut self, name: &str, w: &mut Writer) -> StringId {
+        if let Some(s) = self.strings.get(name) {
+            s.1
+        } else {
+            let name = name.to_string();
+            unsafe {
+                let buf = extend_lifetime(name.as_bytes());
+                let string_id = w.add_string(buf);
+                //eprintln!("reserve str: {}, {:?}", &name, string_id);
+                self.strings.insert(name.clone(), (name, string_id));
+                string_id
+            }
+        }
+    }
+
+    pub fn dyn_string(&mut self, name: &str, w: &mut Writer) -> StringId {
+        if let Some(s) = self.dyn_strings.get(name) {
+            s.1
+        } else {
+            let name = name.to_string();
+            unsafe {
+                let buf = extend_lifetime(name.as_bytes());
+                let string_id = w.add_dynamic_string(buf);
+                //eprintln!("reserve dyn str: {}, {:?}", &name, string_id);
+                self.dyn_strings.insert(name.clone(), (name, string_id));
+                string_id
+            }
+        }
+    }
 
     pub fn pointer_set(&mut self, name: String, p: u64) {
         self.pointers.insert(name, p);
@@ -347,10 +413,11 @@ impl Data {
     }
 }
 
+/*
 pub struct ProgSections {
     sections: Vec<ProgSection>,
-    pub unapplied_got: Vec<(Sym, CodeRelocation)>,
-    pub unapplied_plt: Vec<(Sym, CodeRelocation)>,
+    pub unapplied_got: Vec<CodeRelocation>,
+    pub unapplied_plt: Vec<CodeRelocation>,
     //dyn_symbols: HashMap<String, Sym>,
 }
 impl ProgSections {
@@ -389,11 +456,13 @@ impl ProgSections {
         pointers
     }
 }
+*/
 
 pub unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
+/*
 pub fn unapplied_relocations<'a>(data: &mut Data, w: &mut Writer) {
     let symbols = data.sections.symbol_pointers();
     let externs = data.sections.extern_symbol_pointers();
@@ -420,26 +489,28 @@ pub fn unapplied_relocations<'a>(data: &mut Data, w: &mut Writer) {
             match r.effect() {
                 PatchEffect::AddToGot => {
                     eprintln!("unapp data: {:?}", &sym);
-                    data.sections.unapplied_got.push((sym, r));
+                    data.sections.unapplied_got.push(r);
                 }
                 PatchEffect::AddToPlt => {
                     eprintln!("unapp text: {:?}", &sym);
-                    data.sections.unapplied_plt.push((sym, r));
+                    data.sections.unapplied_plt.push(r);
                 }
                 PatchEffect::DoNothing => (), //_ => unreachable!(),
             }
         }
     }
 
-    for (sym, u) in data.sections.unapplied_plt.iter() {
-        eprintln!("R-PLT: {:?}", (sym, u));
+    for u in data.sections.unapplied_plt.iter() {
+        eprintln!("R-PLT: {:?}", u);
     }
 
-    for (sym, u) in data.sections.unapplied_got.iter() {
-        eprintln!("R-GOT: {:?}", (sym, u));
+    for u in data.sections.unapplied_got.iter() {
+        eprintln!("R-GOT: {:?}", u);
     }
 }
+*/
 
+/*
 pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
     let mut ro = vec![];
     let mut rw = vec![];
@@ -503,7 +574,9 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
         data.sections.add(section);
     }
 }
+*/
 
+/*
 fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, _tracker: &mut SegmentTracker) {
     for local in locals.iter() {
         let addr = data.addr_get(&local.section) + local.offset as u64;
@@ -531,10 +604,13 @@ fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, _tracker: &mut Seg
             },
         };
 
-        data.symbols.insert(local.symbol.clone(), p);
+        data.symbols.insert(local.symbol.clone(), p.clone());
+        data.lookup.insert(local.symbol.clone(), p);
     }
 }
+*/
 
+/*
 pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     link: &Link,
     mut data: Data,
@@ -548,24 +624,24 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     write_file_main::<Elf>(&mut data, &mut writer)?;
     Ok(out_data)
 }
+*/
 
 pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
     data: &mut Data,
     w: &mut Writer,
 ) -> std::result::Result<(), Box<dyn Error>> {
     // add libraries if they are configured
-    //let lib_names = data.libs.clone();
     for mut lib in data.libs.iter_mut() {
         unsafe {
             let buf = extend_lifetime(lib.name.as_bytes());
             lib.string_id = Some(w.add_dynamic_string(buf));
-            //data.add_library(string_id);
-            //let string_id = w.add_string(buf);
         }
     }
 
-    let (mut blocks, maybe_block) = BlocksBuilder::new().build(data, w);
-    blocks.build(data, w, maybe_block);
+    //let (mut blocks, maybe_block) = BlocksBuilder::new().build(data, w);
+    let mut block = data.block.take().unwrap();
+    let mut blocks = BlocksBuilder::new().build(data, w, &mut block);
+    blocks.build(data, w, &mut block);
     Ok(())
 }
 
@@ -585,6 +661,6 @@ mod tests {
         let mut b = Link::new();
         b.add_obj_file("test", Path::new("../tmp/empty_main.o"))
             .unwrap();
-        b.write(Path::new("../tmp/out.exe")).unwrap();
+        //b.write(Path::new("../tmp/out.exe")).unwrap();
     }
 }

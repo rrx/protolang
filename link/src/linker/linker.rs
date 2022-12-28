@@ -207,6 +207,7 @@ impl Link {
         Ok(())
     }
 
+    /*
     pub fn write(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         use object::elf;
         use object::Endianness;
@@ -218,6 +219,7 @@ impl Link {
         std::fs::write(path, out_data)?;
         Ok(())
     }
+    */
 }
 
 #[cfg(test)]

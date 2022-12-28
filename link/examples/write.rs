@@ -6,7 +6,7 @@ fn write_static() {
     b.add_obj_file("test", Path::new("./tmp/start.o")).unwrap();
     b.add_obj_file("globals", Path::new("./tmp/globals.o"))
         .unwrap();
-    b.write(Path::new("./tmp/static.exe")).unwrap();
+    //b.write(Path::new("./tmp/static.exe")).unwrap();
 }
 
 fn main() {

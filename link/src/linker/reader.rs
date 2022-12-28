@@ -13,7 +13,6 @@ use std::path::Path;
 
 use super::*;
 use crate::disassemble::*;
-use crate::relocations::*;
 use crate::writer::*;
 use crate::*;
 
@@ -50,6 +49,22 @@ pub enum ReadSectionKind {
     Bss,
     Undefined,
     Other,
+}
+
+impl ReadSectionKind {
+    pub fn block(&self) -> Box<dyn ElfBlock> {
+        Box::new(BlockSectionX::new(self.clone()))
+    }
+
+    pub fn section_index(&self, data: &Data) -> Option<SectionIndex> {
+        match self {
+            ReadSectionKind::RX => Some(data.section_index_get(".text")),
+            ReadSectionKind::RW => Some(data.section_index_get(".data")),
+            ReadSectionKind::RO => Some(data.section_index_get(".rodata")),
+            ReadSectionKind::Bss => Some(data.section_index_get(".bss")),
+            _ => None,
+        }
+    }
 }
 
 impl ReadSectionKind {
@@ -147,7 +162,10 @@ pub struct ReadBlock {
     pub ro: BlockSection,
     pub rw: BlockSection,
     pub rx: BlockSection,
+    pub got: BlockSection,
+    pub gotplt: BlockSection,
     pub bss: BssSection,
+    pub unresolved: HashSet<String>,
 }
 
 impl ReadBlock {
@@ -155,132 +173,169 @@ impl ReadBlock {
         Self {
             name: name.to_string(),
             ro: BlockSection::new(AllocSegment::RO, ".rodata"),
-            rw: BlockSection::new(AllocSegment::RW, ".text"),
-            rx: BlockSection::new(AllocSegment::RX, ".data"),
+            rw: BlockSection::new(AllocSegment::RW, ".data"),
+            rx: BlockSection::new(AllocSegment::RX, ".text"),
+            got: BlockSection::new(AllocSegment::RW, ".got"),
+            gotplt: BlockSection::new(AllocSegment::RW, ".got.plt"),
+            bss: BssSection::new(AllocSegment::RW, ".bss"),
             libs: HashSet::new(),
             local_index: 0,
             exports: SymbolMap::new(),
             locals: SymbolMap::new(),
             dynamic: SymbolMap::new(),
             unknown: SymbolMap::new(),
-            bss: BssSection::new(AllocSegment::RW, ".bss"),
+            unresolved: HashSet::new(),
         }
     }
 
-    pub fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
-        // assign string ids for all symbols
-        for (name, s) in self
-            .exports
-            .iter_mut()
-            //.chain(self.locals.iter_mut())
-            //.chain(self.dynamic.iter_mut())
-            .chain(self.unknown.iter_mut())
-        {
-            unsafe {
-                let buf = extend_lifetime(s.name.as_bytes());
-                let name_id = Some(w.add_dynamic_string(buf));
-                s.dyn_name_id = name_id;
-                eprintln!("reserve dynstr: {}, {:?}", &s.name, name_id);
+    pub fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {}
 
-                let name_id = Some(w.add_string(buf));
-                s.name_id = name_id;
-                eprintln!("reserve str: {}, {:?}", &s.name, name_id);
-            }
-        }
-    }
-
-    pub fn update_symbols(&mut self, data: &mut Data, w: &mut Writer) {
-        let mut got = vec![];
-        let mut plt = vec![];
-        // write symbols
-        for (name, s) in self
-            .exports
-            .iter_mut()
-            //.chain(self.locals.iter_mut())
-            //.chain(self.dynamic.iter_mut())
-            .chain(self.unknown.iter_mut())
-        {
-            let section_index = match s.section {
-                ReadSectionKind::RX => data.section_index_get(".text"),
-                ReadSectionKind::RW => data.section_index_get(".data"),
-                ReadSectionKind::RO => data.section_index_get(".rodata"),
-                ReadSectionKind::Bss => data.section_index_get(".bss"),
-                ReadSectionKind::Other => continue,
-                _ => unreachable!("{:?}", s),
-            };
-            let base = match s.section {
-                ReadSectionKind::RX => self.rx.base,
-                ReadSectionKind::RW => self.rw.base,
-                ReadSectionKind::RO => self.ro.base,
-                ReadSectionKind::Bss => self.bss.base,
-                _ => unreachable!(),
-            };
-            let file_offset = match s.section {
-                ReadSectionKind::RX => self.rx.file_offset,
-                ReadSectionKind::RW => self.rw.file_offset,
-                ReadSectionKind::RO => self.ro.file_offset,
-                ReadSectionKind::Bss => self.bss.file_offset,
-                _ => unreachable!(),
-            };
-            //let mut s = s.clone();
-            let addr = base + file_offset + s.address as usize;
-            s.address = addr as u64;
-            data.pointer_set(name.clone(), addr as u64);
-            assert!(s.name_id.is_some());
-            let p = ProgSymbol {
-                name_id: s.name_id,
-                section_index: Some(section_index),
-                base,
-                s: CodeSymbol {
-                    name: s.name.clone(),
-                    size: s.size,
-                    address: addr as u64,
-                    kind: CodeSymbolKind::Data,
-                    def: CodeSymbolDefinition::Defined,
-                    st_info: 0,
-                    st_other: 0,
-                },
-            };
-            data.symbol_set(name.clone(), p);
-        }
-
-        for r in self
-            .rx
+    pub fn reserve_strings(&mut self, data: &mut Data, w: &mut Writer) {
+        let iter = self
+            .ro
+            .section
             .relocations
             .iter()
-            .chain(self.ro.relocations.iter())
-            .chain(self.rw.relocations.iter())
-            .chain(self.bss.relocations.iter())
-        {
+            .chain(self.rw.section.relocations.iter())
+            .chain(self.rx.section.relocations.iter())
+            .chain(self.bss.relocations.iter());
+
+        // add the relocations to the sets
+        // we only want to add a relocation to either got or gotplt
+        // if it's being added to got, then only add it to got
+        // with entries in the got and gotplt, we then apply relocations
+        // to point to the appropriate got and gotplt entries
+        let mut got = HashSet::new();
+        let mut gotplt = HashSet::new();
+        for r in iter.clone() {
+            match r.effect() {
+                PatchEffect::AddToGot => {
+                    got.insert(&r.name);
+                }
+                PatchEffect::AddToPlt => {
+                    gotplt.insert(&r.name);
+                }
+                _ => (),
+            }
+        }
+
+        for r in iter {
             if let Some(s) = self.lookup(&r.name) {
-                let section_index = match s.section {
-                    ReadSectionKind::RX => data.section_index_get(".text"),
-                    ReadSectionKind::RW => data.section_index_get(".data"),
-                    ReadSectionKind::RO => data.section_index_get(".rodata"),
-                    ReadSectionKind::Bss => data.section_index_get(".bss"),
-                    ReadSectionKind::Other => continue,
-                    _ => unreachable!("{:?}", s),
+                // we don't know the section yet, we just know which kind
+                let mut p = ProgSymbol::new_object(&r.name, Some(SectionIndex(0)));
+                let def = match s.bind {
+                    SymbolBind::Local => CodeSymbolDefinition::Local,
+                    SymbolBind::Global => CodeSymbolDefinition::Defined,
+                    SymbolBind::Weak => CodeSymbolDefinition::Defined,
                 };
-                let base = match s.section {
-                    ReadSectionKind::RX => self.rx.base,
-                    ReadSectionKind::RW => self.rw.base,
-                    ReadSectionKind::RO => self.ro.base,
-                    ReadSectionKind::Bss => self.bss.base,
-                    _ => unreachable!(),
-                };
-                let file_offset = match s.section {
-                    ReadSectionKind::RX => self.rx.file_offset,
-                    ReadSectionKind::RW => self.rw.file_offset,
-                    ReadSectionKind::RO => self.ro.file_offset,
-                    ReadSectionKind::Bss => self.bss.file_offset,
-                    _ => unreachable!(),
-                };
-                let mut s = s.clone();
+                p.s.def = def;
+
+                if s.source == SymbolSource::Dynamic {
+                    //eprintln!("reloc {}", &r);
+                    //eprintln!("p {:?}", &s);
+                    let mut r = r.clone();
+                    r.name_id = Some(data.dyn_string(&r.name, w));
+                    p.name_id = r.name_id;
+
+                    if got.contains(&r.name) {
+                        let index = data.got_index(&r.name);
+                        data.relocations_got.push(r.clone());
+                        self.got.section.relocations.push(r.clone());
+                        data.lookup.insert(r.name.clone(), p.clone());
+                    } else if gotplt.contains(&r.name) {
+                        let index = data.gotplt_index(&r.name);
+                        data.relocations_gotplt.push(r.clone());
+                        self.gotplt.section.relocations.push(r.clone());
+                        data.lookup.insert(r.name.clone(), p.clone());
+                    }
+                } else if p.s.def != CodeSymbolDefinition::Local {
+                    p.name_id = Some(data.string(&r.name, w));
+                    data.lookup.insert(r.name.clone(), p.clone());
+                }
+            } else {
+                unreachable!()
+            }
+        }
+
+        /*
+         // Write relocations
+         // we need the offset is the address + offset of GOT or GOTPLT entry
+         // we need the symbol index
+         // We map the type depending got , or gotplt
+         // addend is 0
+            let r_type = match self.kind {
+                GotKind::GOT => elf::R_X86_64_GLOB_DAT,
+                GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
+            };
+        for name in got.iter() {
+            &object::write::elf::Rel {
+                r_offset: r_offset as u64,
+                r_sym,
+                r_type,
+                r_addend,
+            },
+            */
+
+        /*
+        for r in data.relocations_got.iter() {
+            eprintln!("r got: {}", r);
+        }
+        for r in data.relocations_gotplt.iter() {
+            eprintln!("r gotplt: {}", r);
+        }
+        */
+    }
+
+    /*
+    pub fn base(&self, section: ReadSectionKind) -> usize {
+        match section {
+            ReadSectionKind::RX => self.rx.base,
+            ReadSectionKind::RW => self.rw.base,
+            ReadSectionKind::RO => self.ro.base,
+            ReadSectionKind::Bss => self.bss.section.base,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn file_offset(&self, section: ReadSectionKind) -> usize {
+        match section {
+            ReadSectionKind::RX => self.rx.file_offset,
+            ReadSectionKind::RW => self.rw.file_offset,
+            ReadSectionKind::RO => self.ro.file_offset,
+            ReadSectionKind::Bss => self.bss.file_offset,
+            _ => unreachable!(),
+        }
+    }
+    */
+
+    /*
+        pub fn update_symbols(&mut self, data: &mut Data, w: &mut Writer) {
+            let mut got = vec![];
+            let mut plt = vec![];
+            // write symbols
+            for (name, s) in self
+                .exports
+                .iter_mut()
+                //.chain(self.locals.iter_mut())
+                //.chain(self.dynamic.iter_mut())
+                .chain(self.unknown.iter_mut())
+            {
+                let section_index = s.section.section_index(data);
+                if section_index.is_none() {
+                    continue;
+                }
+
+                let base = self.base(s.section);
+                let file_offset = self.file_offset(s.section);
+
+                //let mut s = s.clone();
                 let addr = base + file_offset + s.address as usize;
                 s.address = addr as u64;
+                data.pointer_set(name.clone(), addr as u64);
+                assert!(s.name_id.is_some());
                 let p = ProgSymbol {
                     name_id: s.name_id,
-                    section_index: Some(section_index),
+                    section_index,
                     base,
                     s: CodeSymbol {
                         name: s.name.clone(),
@@ -292,21 +347,73 @@ impl ReadBlock {
                         st_other: 0,
                     },
                 };
-                let s = p.get_symbol();
-                plt.push((s, r.clone()));
-                let s = p.get_symbol();
-                got.push((s, r.clone()));
+                data.symbol_set(name.clone(), p);
             }
-            //let p = data.symbol_get(&r.name);
-        }
 
-        for (s, r) in plt.iter() {
-            data.sections.unapplied_plt.push((s.clone(), r.clone()));
+            for r in self
+                .rx
+                .relocations
+                .iter()
+                .chain(self.ro.relocations.iter())
+                .chain(self.rw.relocations.iter())
+                .chain(self.bss.relocations.iter())
+            {
+                if let Some(s) = self.lookup(&r.name) {
+                    let section_index = match s.section {
+                        ReadSectionKind::RX => data.section_index_get(".text"),
+                        ReadSectionKind::RW => data.section_index_get(".data"),
+                        ReadSectionKind::RO => data.section_index_get(".rodata"),
+                        ReadSectionKind::Bss => data.section_index_get(".bss"),
+                        ReadSectionKind::Other => continue,
+                        _ => unreachable!("{:?}", s),
+                    };
+                    let base = match s.section {
+                        ReadSectionKind::RX => self.rx.base,
+                        ReadSectionKind::RW => self.rw.base,
+                        ReadSectionKind::RO => self.ro.base,
+                        ReadSectionKind::Bss => self.bss.base,
+                        _ => unreachable!(),
+                    };
+                    let file_offset = match s.section {
+                        ReadSectionKind::RX => self.rx.file_offset,
+                        ReadSectionKind::RW => self.rw.file_offset,
+                        ReadSectionKind::RO => self.ro.file_offset,
+                        ReadSectionKind::Bss => self.bss.file_offset,
+                        _ => unreachable!(),
+                    };
+                    let mut s = s.clone();
+                    let addr = base + file_offset + s.address as usize;
+                    s.address = addr as u64;
+                    let p = ProgSymbol {
+                        name_id: s.name_id,
+                        section_index: Some(section_index),
+                        base,
+                        s: CodeSymbol {
+                            name: s.name.clone(),
+                            size: s.size,
+                            address: addr as u64,
+                            kind: CodeSymbolKind::Data,
+                            def: CodeSymbolDefinition::Defined,
+                            st_info: 0,
+                            st_other: 0,
+                        },
+                    };
+                    let s = p.get_symbol();
+                    plt.push(r.clone());
+                    let s = p.get_symbol();
+                    got.push(r.clone());
+                }
+                //let p = data.symbol_get(&r.name);
+            }
+
+            for r in plt.iter() {
+                data.sections.unapplied_plt.push(r.clone());
+            }
+            for r in got.iter() {
+                data.sections.unapplied_got.push(r.clone());
+            }
         }
-        for (s, r) in got.iter() {
-            data.sections.unapplied_got.push((s.clone(), r.clone()));
-        }
-    }
+    */
 
     pub fn write<Elf: object::read::elf::FileHeader<Endian = object::Endianness>>(
         self,
@@ -317,9 +424,6 @@ impl ReadBlock {
         let endian = object::Endianness::Little;
         let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
         data.block = Some(self);
-        //data.sections = block.load(&mut writer);
-        unapplied_relocations(&mut data, &mut writer);
-        data.block.as_ref().unwrap().dump();
         write_file_main::<Elf>(&mut data, &mut writer)?;
         std::fs::write(path, out_data)?;
         Ok(())
@@ -401,13 +505,26 @@ impl ReadBlock {
     fn relocate_symbol(&self, s: &mut ReadSymbol) {
         use ReadSectionKind::*;
         let addr = match s.section {
-            RX => s.address + self.rx.bytes.len() as u64,
-            RO => s.address + self.ro.bytes.len() as u64,
-            RW => s.address + self.rw.bytes.len() as u64,
-            Bss => s.address + self.bss.size as u64,
+            RX => s.address + self.rx.section.bytes.len() as u64,
+            RO => s.address + self.ro.section.bytes.len() as u64,
+            RW => s.address + self.rw.section.bytes.len() as u64,
+            Bss => s.address + self.bss.section.size as u64,
             _ => 0,
         };
         s.address = addr;
+    }
+
+    pub fn merge(renames: &HashMap<String, String>, src: &BlockSection, dst: &mut BlockSection) {
+        let base_offset = dst.section.size;
+        dst.section.size += src.section.size;
+        for r in src.section.relocations.iter() {
+            let mut r = r.clone();
+            r.offset += base_offset as u64;
+            if let Some(name) = renames.get(&r.name) {
+                r.name = name.clone();
+            }
+            dst.section.relocations.push(r);
+        }
     }
 
     pub fn add_block(&mut self, block: ReadBlock) {
@@ -426,13 +543,13 @@ impl ReadBlock {
         // exports
         for (_name, mut s) in block.exports.into_iter() {
             self.relocate_symbol(&mut s);
-            eprintln!("E: {:?}", &s);
+            //eprintln!("E: {:?}", &s);
             self.insert_export(s);
         }
 
         // update BSS
-        let base_offset = self.bss.size;
-        self.bss.size += block.bss.size;
+        let base_offset = self.bss.section.size;
+        self.bss.section.size += block.bss.section.size;
         for mut r in block.bss.relocations.into_iter() {
             r.offset += base_offset as u64;
             if let Some(name) = renames.get(&r.name) {
@@ -442,8 +559,10 @@ impl ReadBlock {
         }
 
         // update RX
-        let base_offset = self.rx.bytes.len();
-        self.rx.bytes.extend(block.rx.bytes);
+        Self::merge(&renames, &block.rx, &mut self.rx);
+        /*
+        let base_offset = self.rx.section.bytes.len();
+        self.rx.section.bytes.extend(block.rx.section.bytes);
         for mut r in block.rx.relocations.into_iter() {
             r.offset += base_offset as u64;
             if let Some(name) = renames.get(&r.name) {
@@ -451,28 +570,35 @@ impl ReadBlock {
             }
             self.rx.relocations.push(r);
         }
+        */
 
         // update RO
-        let base_offset = self.ro.bytes.len();
-        self.ro.bytes.extend(block.ro.bytes);
-        for mut r in block.ro.relocations.into_iter() {
+        Self::merge(&renames, &block.ro, &mut self.ro);
+        /*
+        let base_offset = self.ro.section.bytes.len();
+        self.ro.section.bytes.extend(block.ro.section.bytes);
+        for mut r in block.ro.section.relocations.into_iter() {
             r.offset += base_offset as u64;
             if let Some(name) = renames.get(&r.name) {
                 r.name = name.clone();
             }
-            self.ro.relocations.push(r);
+            self.ro.section.relocations.push(r);
         }
+        */
 
         // update RW
-        let base_offset = self.rw.bytes.len();
-        self.rw.bytes.extend(block.rw.bytes);
-        for mut r in block.rw.relocations.into_iter() {
+        Self::merge(&renames, &block.rw, &mut self.rw);
+        /*
+        let base_offset = self.rw.section.bytes.len();
+        self.rw.section.bytes.extend(block.rw.section.bytes);
+        for mut r in block.rw.section.relocations.into_iter() {
             r.offset += base_offset as u64;
             if let Some(name) = renames.get(&r.name) {
                 r.name = name.clone();
             }
-            self.rw.relocations.push(r);
+            self.rw.section.relocations.push(r);
         }
+        */
     }
 
     pub fn from_section<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
@@ -481,81 +607,56 @@ impl ReadBlock {
         section: &elf::ElfSection<'a, 'b, A, B>,
     ) -> Result<(), Box<dyn Error>> {
         let kind = ReadSectionKind::new_section_kind(section.kind());
-
-        /*
-        for symbol in b.symbols() {
-            // skip the null symbol
-            if symbol.kind() == SymbolKind::Null {
-                continue;
-            }
-            if symbol.kind() == SymbolKind::File {
-                continue;
-            }
-
-            let s = read_symbol(&b, &symbol)?;
-
-            if s.section == kind {
-                eprintln!("Read: {:?}", &s);
-                if s.kind == SymbolKind::Unknown {
-                    self.insert_unknown(s);
-                } else {
-                    match s.bind {
-                        SymbolBind::Local => self.insert_local(s),
-                        _ => self.insert_export(s),
-                    }
-                }
-            }
-        }
-        */
-
-        //let mut s = ReadSection::new(kind);
         match kind {
             ReadSectionKind::Bss => {
-                let base_offset = self.bss.size;
-                self.bss.size += section.size() as usize;
+                self.bss.from_section(b, section)?;
+                /*
+                let base_offset = self.bss.section.size;
+                self.bss.section.extend_size(section.size() as usize);
                 for (offset, r) in section.relocations() {
                     let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
                     self.bss.relocations.push(r);
                 }
+                */
             }
             ReadSectionKind::RX => {
+                self.rx.from_section(b, section);
+                /*
                 let data = section.uncompressed_data()?;
-                let base_offset = self.rx.bytes.len();
-                self.rx.bytes.extend(data.iter());
+                let base_offset = self.rx.section.size;
+                self.rx.section.extend_bytes(&data);
                 for (offset, r) in section.relocations() {
                     let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
                     self.rx.relocations.push(r);
                 }
+                */
             }
             ReadSectionKind::RO => {
+                self.rx.from_section(b, section);
+                /*
                 let data = section.uncompressed_data()?;
-                let base_offset = self.ro.bytes.len();
-                self.ro.bytes.extend(data.iter());
+                let base_offset = self.ro.section.size;
+                self.ro.section.extend_bytes(&data);
                 for (offset, r) in section.relocations() {
                     let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
                     self.ro.relocations.push(r);
                 }
+                */
             }
             ReadSectionKind::RW => {
+                self.rw.from_section(b, section);
+                /*
                 let data = section.uncompressed_data()?;
-                let base_offset = self.rw.bytes.len();
-                self.rw.bytes.extend(data.iter());
+                let base_offset = self.rw.section.size;
+                self.rw.section.extend_bytes(&data);
                 for (offset, r) in section.relocations() {
                     let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
                     self.rw.relocations.push(r);
                 }
+                */
             }
             _ => unimplemented!(),
         }
-
-        /*
-        if kind == ReadSectionKind::Bss {
-            s.bss = section.size() as usize;
-        } else {
-            let data = section.uncompressed_data()?;
-            s.bytes.extend(data.iter());
-        }
-        */
         Ok(())
     }
 
@@ -588,7 +689,7 @@ impl ReadBlock {
     }
 
     pub fn complete(&self, data: &Data) {
-        eprintln!("Block: {}", &self.name);
+        //eprintln!("Block: {}", &self.name);
 
         let mut dsymbols = HashMap::new();
         let mut rx_symbols = vec![];
@@ -609,6 +710,7 @@ impl ReadBlock {
             }
         }
 
+        /*
         for r in self
             .rx
             .relocations
@@ -625,9 +727,10 @@ impl ReadBlock {
                     ReadSectionKind::Bss => self.bss.addr,
                     _ => unreachable!(),
                 };
-                eprintln!(" R: {}, addr, {:#0x}, {:?}", r, addr, s);
+                //eprintln!(" R: {}, addr, {:#0x}, {:?}", r, addr, s);
             }
         }
+        */
     }
 
     pub fn dump(&self) {
@@ -651,34 +754,38 @@ impl ReadBlock {
                 _ => other_symbols.push(sym),
             }
         }
-        eprintln!("RX, size: {:#0x}", self.rx.bytes.len());
+        eprintln!("RX, size: {:#0x}", self.rx.section.bytes.len());
         for local in rx_symbols.iter() {
             eprintln!(" S: {:?}", local);
         }
-        for r in self.rx.relocations.iter() {
+        for r in self.rx.section.relocations.iter() {
             eprintln!(" R: {}, {:?}", r, self.lookup(&r.name));
         }
-        disassemble_code_with_symbols(self.rx.bytes.as_slice(), &rx_symbols, &self.rx.relocations);
+        disassemble_code_with_symbols(
+            self.rx.section.bytes.as_slice(),
+            &rx_symbols,
+            &self.rx.section.relocations,
+        );
 
-        eprintln!("RO, size: {:#0x}", self.ro.bytes.len());
+        eprintln!("RO, size: {:#0x}", self.ro.section.bytes.len());
         for local in ro_symbols.iter() {
             eprintln!(" S: {:?}", local);
         }
-        for r in self.ro.relocations.iter() {
+        for r in self.ro.section.relocations.iter() {
             eprintln!(" R: {}, {:?}", r, self.lookup(&r.name));
         }
-        print_bytes(self.ro.bytes.as_slice(), 0);
+        print_bytes(self.ro.section.bytes.as_slice(), 0);
 
-        eprintln!("RW, size: {:#0x}", self.rw.bytes.len());
+        eprintln!("RW, size: {:#0x}", self.rw.section.bytes.len());
         for local in rw_symbols.iter() {
             eprintln!(" S: {:?}", local);
         }
-        for r in self.rw.relocations.iter() {
+        for r in self.rw.section.relocations.iter() {
             eprintln!(" R: {}, {:?}", r, self.lookup(&r.name));
         }
-        print_bytes(self.rw.bytes.as_slice(), 0);
+        print_bytes(self.rw.section.bytes.as_slice(), 0);
 
-        eprintln!("Bss, size: {:#0x}", self.bss.size);
+        eprintln!("Bss, size: {:#0x}", self.bss.section.size);
         for local in bss_symbols.iter() {
             eprintln!(" S: {:?}", local);
         }
@@ -686,10 +793,21 @@ impl ReadBlock {
             eprintln!(" R: {}, {:?}", r, self.lookup(&r.name));
         }
 
-        eprintln!("Other");
-        for local in other_symbols.iter() {
-            eprintln!(" S: {:?}", local);
+        if other_symbols.len() > 0 {
+            eprintln!("Other");
+            for local in other_symbols.iter() {
+                eprintln!(" S: {:?}", local);
+            }
         }
+
+        if self.unresolved.len() > 0 {
+            eprintln!("Unresolved: {}", self.unresolved.len());
+            for s in self.unresolved.iter() {
+                eprintln!(" {}", s);
+            }
+        }
+
+        //assert!(notfound.len() == 0);
     }
 }
 
@@ -794,7 +912,7 @@ impl Reader {
             }
 
             let s = read_symbol(&b, &symbol)?;
-            eprintln!("Read: {:?}", &s);
+            //eprintln!("Read: {:?}", &s);
 
             if s.bind == SymbolBind::Local {
                 // can't be local and unknown
@@ -831,34 +949,29 @@ impl Reader {
         }
 
         // make sure everything resolves
-        let mut notfound = HashSet::new();
         let iter = self
             .block
             .rx
+            .section
             .relocations
             .iter()
-            .chain(self.block.ro.relocations.iter())
-            .chain(self.block.rw.relocations.iter())
+            .chain(self.block.ro.section.relocations.iter())
+            .chain(self.block.rw.section.relocations.iter())
             .chain(self.block.bss.relocations.iter());
 
         for r in iter {
             if let Some(symbol) = self.block.lookup(&r.name) {
                 //eprintln!(" R: {:?}", (r, symbol));
             } else {
-                notfound.insert(&r.name);
+                self.block.unresolved.insert(r.name.clone());
             }
         }
-
-        for s in &notfound {
-            eprintln!("NotFound: {}", s);
-        }
-        assert!(notfound.len() == 0);
 
         self.block
     }
 }
 
-fn code_relocation<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
+pub fn code_relocation<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
     b: &elf::ElfFile<'a, A, B>,
     r: LinkRelocation,
     offset: usize,
