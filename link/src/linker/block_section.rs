@@ -152,13 +152,7 @@ impl BssSection {
 
         eprintln!(
             "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, delta: {:#0x}, size: {:#0x}",
-            self.file_offset,
-            self.name,
-            self.alloc,
-            self.base,
-            self.addr,
-            delta,
-            self.size
+            self.file_offset, self.name, self.alloc, self.base, self.addr, delta, self.size
         );
     }
 

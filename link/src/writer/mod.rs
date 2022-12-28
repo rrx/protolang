@@ -73,7 +73,8 @@ struct DynamicSymbol {
 */
 
 struct Library {
-    string_id: StringId,
+    name: String,
+    string_id: Option<StringId>,
 }
 
 struct Dynamic {
@@ -114,9 +115,10 @@ impl AllocSegment {
 pub struct Data {
     arch: Architecture,
     interp: String,
-    is_64: bool,
+    pub is_64: bool,
     pub sections: ProgSections,
-    lib_names: Vec<String>,
+
+    //lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
     base: usize,
@@ -129,8 +131,7 @@ pub struct Data {
     size_reladyn: usize,
     addr_hash: u64,
     pointers: HashMap<String, u64>,
-    symbols: HashMap<String, ProgSymbol>,
-    block: Option<ReadBlock>,
+    pub block: Option<ReadBlock>,
     add_section_headers: bool,
     add_symbols: bool,
     debug: bool,
@@ -139,22 +140,32 @@ pub struct Data {
     // because Data has a long lifetime, we extend
     // the strings bytes to static
     strings: Vec<String>,
-
     //unapplied_got: Vec<(Sym, CodeRelocation)>,
     //unapplied_plt: Vec<(Sym, CodeRelocation)>,
+    dyn_symbols: HashMap<String, Sym>,
+    symbols: HashMap<String, ProgSymbol>,
+    locals: Vec<LocalSymbol>,
+    dynamic: Vec<LocalSymbol>,
 }
 
 impl Data {
     pub fn new(lib_names: Vec<String>) -> Self {
+        let libs = lib_names
+            .iter()
+            .map(|name| Library {
+                name: name.clone(),
+                string_id: None,
+            })
+            .collect();
         Self {
             arch: Architecture::X86_64,
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             //ph: vec![],
-            lib_names,
+            //lib_names,
             block: None,
             sections: ProgSections::new(),
-            libs: vec![],
+            libs,
             base: 0x80000,
             page_size: 0x1000,
             addr: HashMap::new(),
@@ -166,7 +177,6 @@ impl Data {
             size_reladyn: 0,
             addr_hash: 0,
             pointers: HashMap::new(),
-            symbols: HashMap::new(),
 
             add_section_headers: true,
             add_symbols: true,
@@ -174,6 +184,12 @@ impl Data {
             strings: vec![],
             //unapplied_got: vec![],
             //unapplied_plt: vec![],
+
+            // Tables
+            dyn_symbols: HashMap::new(),
+            symbols: HashMap::new(),
+            locals: vec![],
+            dynamic: vec![],
         }
     }
 
@@ -190,6 +206,7 @@ impl Data {
         self.libs.len() > 0
     }
 
+    /*
     fn add_library(&mut self, string_id: StringId) {
         self.libs.push(Library { string_id });
     }
@@ -197,6 +214,7 @@ impl Data {
     fn add_dynstr(&mut self, string_id: StringId) {
         self.libs.push(Library { string_id });
     }
+    */
 
     pub fn pointer_set(&mut self, name: String, p: u64) {
         self.pointers.insert(name, p);
@@ -231,7 +249,10 @@ impl Data {
     }
 
     pub fn section_index_get(&self, name: &str) -> SectionIndex {
-        *self.section_index.get(name).unwrap()
+        *self
+            .section_index
+            .get(name)
+            .expect(&format!("Section Index not found: {}", name))
     }
 
     pub fn section_index_set(&mut self, name: &str, section_index: SectionIndex) {
@@ -244,7 +265,7 @@ impl Data {
             out.push(Dynamic {
                 tag: elf::DT_NEEDED,
                 val: 0,
-                string: Some(lib.string_id),
+                string: lib.string_id,
             });
         }
         out.push(Dynamic {
@@ -330,7 +351,7 @@ pub struct ProgSections {
     sections: Vec<ProgSection>,
     pub unapplied_got: Vec<(Sym, CodeRelocation)>,
     pub unapplied_plt: Vec<(Sym, CodeRelocation)>,
-    dynsymbols: Vec<SymbolIndex>,
+    //dyn_symbols: HashMap<String, Sym>,
 }
 impl ProgSections {
     pub fn new() -> Self {
@@ -338,7 +359,7 @@ impl ProgSections {
             sections: vec![],
             unapplied_got: vec![],
             unapplied_plt: vec![],
-            dynsymbols: vec![],
+            //dyn_symbols: HashMap::new(),
         }
     }
     pub fn add(&mut self, section: ProgSection) {
@@ -357,6 +378,9 @@ impl ProgSections {
 
     pub fn symbol_pointers(&self) -> HashMap<String, ProgSymbol> {
         let mut pointers = HashMap::new();
+        //for (name, s) in &self.dyn_symbols {
+        //pointers.insert(name.clone(), s.clone());
+        //}
         for section in &self.sections {
             for (name, s) in &section.symbols {
                 pointers.insert(name.clone(), s.clone());
@@ -370,10 +394,10 @@ pub unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
-pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
-    let symbols = sections.symbol_pointers();
-    let externs = sections.extern_symbol_pointers();
-    for section in sections.sections.iter() {
+pub fn unapplied_relocations<'a>(data: &mut Data, w: &mut Writer) {
+    let symbols = data.sections.symbol_pointers();
+    let externs = data.sections.extern_symbol_pointers();
+    for section in data.sections.sections.iter() {
         for (symbol, mut r) in section
             .unapplied_relocations(&symbols, &externs)
             .into_iter()
@@ -392,44 +416,27 @@ pub fn unapplied_relocations<'a>(sections: &mut ProgSections, w: &mut Writer) {
                 st_size: 0,
             };
             eprintln!("s: {:?}, {}", &symbol, r);
+            data.dyn_symbols.insert(r.name.clone(), sym.clone());
             match r.effect() {
                 PatchEffect::AddToGot => {
                     eprintln!("unapp data: {:?}", &sym);
-                    sections.unapplied_got.push((sym, r));
+                    data.sections.unapplied_got.push((sym, r));
                 }
                 PatchEffect::AddToPlt => {
                     eprintln!("unapp text: {:?}", &sym);
-                    sections.unapplied_plt.push((sym, r));
+                    data.sections.unapplied_plt.push((sym, r));
                 }
                 PatchEffect::DoNothing => (), //_ => unreachable!(),
             }
         }
     }
 
-    for (sym, u) in sections.unapplied_plt.iter() {
+    for (sym, u) in data.sections.unapplied_plt.iter() {
         eprintln!("R-PLT: {:?}", (sym, u));
     }
 
-    for (sym, u) in sections.unapplied_got.iter() {
+    for (sym, u) in data.sections.unapplied_got.iter() {
         eprintln!("R-GOT: {:?}", (sym, u));
-    }
-}
-
-pub fn load_buffer_sections<'a>(blocks: &mut Blocks, data: &mut Data) {
-    for section in data.sections.sections.drain(..) {
-        let buf = section.bytes.clone();
-        if section.relocations.len() > 0 {
-            //blocks.add_block(Box::new(RelocationSection::new(section.kind, &section)));
-        }
-
-        let block = BufferSection::new(
-            AllocSegment::RX,
-            section.name.clone(),
-            section.name_id,
-            buf,
-            section,
-        );
-        blocks.add_block(Box::new(block));
     }
 }
 
@@ -495,8 +502,6 @@ pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
         }
         data.sections.add(section);
     }
-
-    unapplied_relocations(&mut data.sections, w);
 }
 
 fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, _tracker: &mut SegmentTracker) {
@@ -538,187 +543,29 @@ pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
     let endian = Endianness::Little;
     let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
 
-    // add libraries if they are configured
-    let lib_names = data.lib_names.clone();
-    for lib_name in lib_names.iter() {
-        let string_id = writer.add_dynamic_string(lib_name.as_bytes());
-        data.add_library(string_id);
-    }
-
     load_sections(&mut data, link, &mut writer);
-    write_file_main::<Elf>(data, &mut writer)?;
+    unapplied_relocations(&mut data, &mut writer);
+    write_file_main::<Elf>(&mut data, &mut writer)?;
     Ok(out_data)
 }
 
-pub fn write_file_block<Elf: FileHeader<Endian = Endianness>>(
-    block: ReadBlock,
-    mut data: Data,
-) -> std::result::Result<Vec<u8>, Box<dyn Error>> {
-    let mut out_data = Vec::new();
-    let endian = Endianness::Little;
-    let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
-
-    // add libraries if they are configured
-    let lib_names = data.lib_names.clone();
-    for lib_name in lib_names.iter() {
-        let string_id = writer.add_dynamic_string(lib_name.as_bytes());
-        data.add_library(string_id);
-    }
-
-    data.block = Some(block);
-    //data.sections = block.load(&mut writer);
-    unapplied_relocations(&mut data.sections, &mut writer);
-    data.block.as_ref().unwrap().dump();
-
-    write_file_main::<Elf>(data, &mut writer)?;
-    Ok(out_data)
-}
-
-pub fn write_file_main<Elf: FileHeader<Endian = Endianness>>(
-    mut data: Data,
+pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
+    data: &mut Data,
     w: &mut Writer,
 ) -> std::result::Result<(), Box<dyn Error>> {
-    let locals = vec![
-        LocalSymbol::new(
-            "_DYNAMIC".into(),
-            ".dynamic".into(),
-            0,
-            Some(w.add_string("_DYNAMIC".as_bytes())),
-        ),
-        LocalSymbol::new(
-            "_GLOBAL_OFFSET_TABLE_".into(),
-            ".got.plt".into(),
-            0,
-            Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
-        ),
-        LocalSymbol::new(
-            "ASDF".into(),
-            ".got.plt".into(),
-            0,
-            Some(w.add_string("ASDF".as_bytes())),
-        ),
-    ];
-
-    // configure blocks
-    // these are used to correctly order the reservation of space
-    // and to write things out in the correct order
-    let mut blocks = Blocks::new();
-    //let temp_block = data.block.clone().unwrap();
-
-    blocks.add_block(Box::new(HeaderComponent::default()));
-
-    if data.is_dynamic() {
-        // BufferSection doesn't implement the program header, we really need
-        // the dedicated interp section code to make that work
-        // interp is an exception
-        blocks.add_block(Box::new(InterpSection::new(&data)));
+    // add libraries if they are configured
+    //let lib_names = data.libs.clone();
+    for mut lib in data.libs.iter_mut() {
+        unsafe {
+            let buf = extend_lifetime(lib.name.as_bytes());
+            lib.string_id = Some(w.add_dynamic_string(buf));
+            //data.add_library(string_id);
+            //let string_id = w.add_string(buf);
+        }
     }
 
-    blocks.add_block(Box::new(HashSection::default()));
-
-    if w.dynstr_needed() {
-        blocks.add_block(Box::new(DynStrSection::default()));
-    }
-
-    if data.is_dynamic() {
-        blocks.add_block(Box::new(RelaDynSection::new(GotKind::GOT)));
-        blocks.add_block(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
-        blocks.add_block(Box::new(DynSymSection::default()));
-    }
-
-    let mut maybe_block = data.block.take();
-    if let Some(block) = maybe_block.as_ref() {
-        blocks.add_block(Box::new(block.ro.clone()));
-        blocks.add_block(Box::new(block.rx.clone()));
-        blocks.add_block(Box::new(PltSection::new()));
-        blocks.add_block(Box::new(block.rw.clone()));
-        //data.block = Some(block);
-    } else {
-        blocks.add_block(Box::new(PltSection::new()));
-        load_buffer_sections(&mut blocks, &mut data);
-    }
-
-    if data.is_dynamic() {
-        blocks.add_block(Box::new(DynamicSection::default()));
-        //blocks.add_block(Box::new(GotPltSection::default()));
-        blocks.add_block(Box::new(GotSection::new(GotKind::GOT)));
-        blocks.add_block(Box::new(GotSection::new(GotKind::GOTPLT)));
-    }
-
-    // bss is the last alloc block
-    if let Some(block) = maybe_block.as_ref() {
-        blocks.add_block(Box::new(block.bss.clone()));
-    }
-
-    if data.add_symbols {
-        blocks.add_block(Box::new(SymTabSection::default()));
-    }
-
-    if data.add_symbols && w.strtab_needed() {
-        blocks.add_block(Box::new(StrTabSection::default()));
-    }
-
-    // shstrtab needs to be allocated last, once all headers are reserved
-    if data.add_symbols {
-        blocks.add_block(Box::new(ShStrTabSection::default()));
-    }
-
-    let mut tracker = SegmentTracker::new(data.base);
-    tracker.ph = blocks.start();
-
-    // RESERVE
-    // section headers are optional
-    if data.add_section_headers {
-        blocks.reserve_section_index(&mut data, w);
-    }
-
-    // what are these for? reserving symbols for locals
-    // set up sections
-    for _ in locals.iter() {
-        w.reserve_symbol_index(data.section_index.get(&".dynamic".to_string()).cloned());
-    }
-
-    // setup symbols
-    for b in blocks.blocks.iter() {
-        b.reserve_symbols(&mut data, w);
-    }
-
-    if let Some(block) = maybe_block.as_mut() {
-        block.reserve_symbols(&mut data, w);
-    }
-
-
-    // finalize the layout
-    blocks.reserve(&mut tracker, &mut data, w);
-
-    // once we have the layout, we can assign the symbols
-    if let Some(block) = maybe_block.as_mut() {
-        //block.update_symbols(&mut data, w);
-        block.dump();
-        block.complete(&data);
-    }
-
-    if data.add_section_headers {
-        w.reserve_section_headers();
-    }
-
-    for (k, v) in data.pointers.iter() {
-        eprintln!("P: {}, {:#0x}", k, v);
-    }
-
-    // UPDATE
-    tracker.ph = blocks.program_headers(&tracker);
-    blocks.update(&mut data);
-
-    update_symbols(&locals, &mut data, &mut tracker);
-
-    // WRITE
-    blocks.write(&data, &mut tracker, w);
-
-    // SECTION HEADERS
-    if data.add_section_headers {
-        blocks.write_section_headers(&data, &tracker, w);
-    }
+    let (mut blocks, maybe_block) = BlocksBuilder::new().build(data, w);
+    blocks.build(data, w, maybe_block);
     Ok(())
 }
 

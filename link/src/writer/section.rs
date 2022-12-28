@@ -48,7 +48,7 @@ impl ProgSymbol {
 
     pub fn write_symbol(&self, w: &mut Writer) {
         let sym = self.get_symbol();
-        w.write_symbol(&sym);
+        //w.write_symbol(&sym);
     }
 }
 
