@@ -266,10 +266,12 @@ impl BssSection {
     pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         self.section.block_reserve(data, tracker, w);
 
+        /*
         for r in self.relocations.iter() {
             data.relocations_got.push(r.clone());
             data.relocations_gotplt.push(r.clone());
         }
+        */
     }
 
     pub fn block_write(&self, data: &Data, w: &mut Writer) {

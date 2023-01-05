@@ -332,14 +332,16 @@ impl ElfBlock for RelaDynSection {
         let plt_addr = data.addr_get(".got.plt");
 
         // we are writing a relocation for the GOT entries
-        for (index, r) in unapplied.iter().enumerate() {
+        for (index, name) in unapplied.iter().enumerate() {
             //eprintln!("unapplied: {}", r);
-            let p = data.lookup.get(&r.name).unwrap();
-            let sym = p.get_symbol();
+            let p = data.lookup.get(name).unwrap();
+            //let sym = p.get_symbol();
             //let r_offset = got_addr as usize + (index + start) * std::mem::size_of::<usize>();
             let r_addend = 0;
+
+            let sym = data.dyn_symbols.get(name).unwrap();
             // we needed to fork object in order to access .0
-            let r_sym = sym.name.unwrap().0 as u32;
+            let r_sym = sym.symbol_index.0 as u32; //.name.unwrap().0 as u32;
             let r_type = match self.kind {
                 GotKind::GOT => elf::R_X86_64_GLOB_DAT,
                 GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
@@ -774,16 +776,16 @@ impl ElfBlock for DynSymSection {
     }
 
     fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
-        w.reserve_null_dynamic_symbol_index();
-        for _ in data.dyn_symbols.iter() {
-            //eprintln!("reserve sym");
-            let _symbol_id = Some(w.reserve_dynamic_symbol_index());
-        }
+        //w.reserve_null_dynamic_symbol_index();
+        //for _ in data.dyn_symbols.iter() {
+        //eprintln!("reserve sym");
+        //let _symbol_id = Some(w.reserve_dynamic_symbol_index());
+        //}
 
-        for _ in data.dynamic.iter() {
-            //eprintln!("reserve sym");
-            let _symbol_id = Some(w.reserve_dynamic_symbol_index());
-        }
+        //for _ in data.dynamic.iter() {
+        //eprintln!("reserve sym");
+        //let _symbol_id = Some(w.reserve_dynamic_symbol_index());
+        //}
     }
 
     fn reserve(
@@ -819,10 +821,11 @@ impl ElfBlock for DynSymSection {
 
         w.write_null_dynamic_symbol();
         for (_name, sym) in data.dyn_symbols.iter() {
-            //eprintln!("write sym: {:?}", &sym);
-            w.write_dynamic_symbol(&sym);
+            eprintln!("write sym: {:?}", &sym);
+            w.write_dynamic_symbol(&sym.sym);
         }
 
+        /*
         for s in data.dynamic.iter() {
             //eprintln!("write sym: {:?}", &s.symbol);
             assert!(s.string_id.is_some());
@@ -838,6 +841,7 @@ impl ElfBlock for DynSymSection {
             };
             w.write_dynamic_symbol(&sym);
         }
+        */
     }
 
     fn write_section_header(
@@ -1069,14 +1073,7 @@ impl GotKind {
         }
     }
 
-    pub fn unapplied_data(&self, data: &Data) -> Vec<CodeRelocation> {
-        /*
-        match self {
-            GotKind::GOT =>
-                data.sections.unapplied_got.iter().chain(data.relocations_got.iter()).cloned().collect(),
-            GotKind::GOTPLT => data.sections.unapplied_plt.iter().chain(data.relocations_gotplt.iter()).cloned().collect(),
-        }
-        */
+    pub fn unapplied_data(&self, data: &Data) -> Vec<String> {
         match self {
             GotKind::GOT => data.relocations_got.iter().cloned().collect(),
             GotKind::GOTPLT => data.relocations_gotplt.iter().cloned().collect(),
@@ -1155,8 +1152,8 @@ impl ElfBlock for GotSection {
         self.addr = self.base + self.file_offset;
 
         // add got pointers to the pointers table, so we can do relocations
-        for (index, r) in unapplied.iter().enumerate() {
-            let name = &r.name;
+        for (index, name) in unapplied.iter().enumerate() {
+            //let name = &r.name;
             let addr = self.addr + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
             //eprintln!("adding: {}, {:#0x}", &name, addr as u64);
             data.pointers.insert(name.clone(), addr as u64);

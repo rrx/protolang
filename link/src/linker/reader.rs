@@ -5,7 +5,8 @@ use object::read::elf::ProgramHeader;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::{
-    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationTarget, SectionKind, SymbolKind,
+    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationTarget, SectionKind, SymbolIndex,
+    SymbolKind,
 };
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -231,21 +232,29 @@ impl ReadBlock {
                 p.s.def = def;
 
                 if s.source == SymbolSource::Dynamic {
-                    //eprintln!("reloc {}", &r);
                     //eprintln!("p {:?}", &s);
                     let mut r = r.clone();
-                    r.name_id = Some(data.dyn_string(&r.name, w));
                     p.name_id = r.name_id;
 
+                    eprintln!("reloc {}", &r);
                     if got.contains(&r.name) {
+                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT, w);
+                        let sym = data.dyn_symbols.get(&r.name).unwrap();
+                        r.name_id = sym.sym.name;
+                        r.r.target = RelocationTarget::Symbol(sym.symbol_index);
+
                         let index = data.got_index(&r.name);
-                        data.relocations_got.push(r.clone());
-                        self.got.section.relocations.push(r.clone());
+                        //data.relocations_got.push(r.clone());
+                        //self.got.section.relocations.push(r.clone());
                         data.lookup.insert(r.name.clone(), p.clone());
                     } else if gotplt.contains(&r.name) {
+                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOTPLT, w);
+                        let sym = data.dyn_symbols.get(&r.name).unwrap();
+                        r.name_id = sym.sym.name;
+                        r.r.target = RelocationTarget::Symbol(sym.symbol_index);
+
                         let index = data.gotplt_index(&r.name);
-                        data.relocations_gotplt.push(r.clone());
-                        self.gotplt.section.relocations.push(r.clone());
+                        //self.gotplt.section.relocations.push(r.clone());
                         data.lookup.insert(r.name.clone(), p.clone());
                     }
                 } else if p.s.def != CodeSymbolDefinition::Local {

@@ -3,8 +3,9 @@ use std::error::Error;
 use object::elf;
 use object::read::elf::FileHeader;
 use object::write::elf::Sym;
-use object::write::elf::{SectionIndex, SymbolIndex, Writer};
+use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
+use object::SymbolIndex;
 use object::{Architecture, Endianness};
 use std::collections::HashMap;
 use std::mem;
@@ -121,13 +122,16 @@ pub enum SymbolPointer {
     GotPlt(usize),
 }
 
+#[derive(Debug)]
+pub struct DynamicSymbol {
+    pub symbol_index: SymbolIndex,
+    pub sym: Sym,
+}
+
 pub struct Data {
     arch: Architecture,
     interp: String,
     pub is_64: bool,
-    //pub sections: ProgSections,
-
-    //lib_names: Vec<String>,
     libs: Vec<Library>,
     page_size: u32,
     base: usize,
@@ -149,15 +153,13 @@ pub struct Data {
     // because Data has a long lifetime, we extend
     // the strings bytes to static
     //strings: Vec<String>,
-    //unapplied_got: Vec<(Sym, CodeRelocation)>,
-    //unapplied_plt: Vec<(Sym, CodeRelocation)>,
-    dyn_symbols: HashMap<String, Sym>,
+    pub dyn_symbols: HashMap<String, DynamicSymbol>,
     symbols: HashMap<String, ProgSymbol>,
     pub lookup: HashMap<String, ProgSymbol>,
     locals: Vec<LocalSymbol>,
     dynamic: Vec<LocalSymbol>,
-    pub relocations_got: Vec<CodeRelocation>,
-    pub relocations_gotplt: Vec<CodeRelocation>,
+    pub relocations_got: Vec<String>,
+    pub relocations_gotplt: Vec<String>,
 
     pub strings: HashMap<String, (String, StringId)>,
     pub dyn_strings: HashMap<String, (String, StringId)>,
@@ -279,6 +281,33 @@ impl Data {
                 self.dyn_strings.insert(name.clone(), (name, string_id));
                 string_id
             }
+        }
+    }
+
+    pub fn dyn_relocation(&mut self, name: &str, kind: GotKind, w: &mut Writer) -> SymbolIndex {
+        if let Some(s) = self.dyn_symbols.get(name) {
+            s.symbol_index
+        } else {
+            let string_id = self.dyn_string(name, w);
+            let symbol_index = SymbolIndex(w.reserve_dynamic_symbol_index().0 as usize);
+            let sym = Sym {
+                name: Some(string_id),
+                section: None,
+                st_info: 0,
+                st_other: 0,
+                st_shndx: 0,
+                st_value: 0,
+                st_size: 0,
+            };
+
+            match kind {
+                GotKind::GOT => self.relocations_got.push(name.to_string()),
+                GotKind::GOTPLT => self.relocations_gotplt.push(name.to_string()),
+            }
+
+            self.dyn_symbols
+                .insert(name.to_string(), DynamicSymbol { symbol_index, sym });
+            symbol_index
         }
     }
 
@@ -413,51 +442,6 @@ impl Data {
     }
 }
 
-/*
-pub struct ProgSections {
-    sections: Vec<ProgSection>,
-    pub unapplied_got: Vec<CodeRelocation>,
-    pub unapplied_plt: Vec<CodeRelocation>,
-    //dyn_symbols: HashMap<String, Sym>,
-}
-impl ProgSections {
-    pub fn new() -> Self {
-        Self {
-            sections: vec![],
-            unapplied_got: vec![],
-            unapplied_plt: vec![],
-            //dyn_symbols: HashMap::new(),
-        }
-    }
-    pub fn add(&mut self, section: ProgSection) {
-        self.sections.push(section);
-    }
-
-    pub fn extern_symbol_pointers(&self) -> HashMap<String, ProgSymbol> {
-        let mut pointers = HashMap::new();
-        for section in &self.sections {
-            for (name, s) in &section.externs {
-                pointers.insert(name.clone(), s.clone());
-            }
-        }
-        pointers
-    }
-
-    pub fn symbol_pointers(&self) -> HashMap<String, ProgSymbol> {
-        let mut pointers = HashMap::new();
-        //for (name, s) in &self.dyn_symbols {
-        //pointers.insert(name.clone(), s.clone());
-        //}
-        for section in &self.sections {
-            for (name, s) in &section.symbols {
-                pointers.insert(name.clone(), s.clone());
-            }
-        }
-        pointers
-    }
-}
-*/
-
 pub unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
@@ -506,72 +490,6 @@ pub fn unapplied_relocations<'a>(data: &mut Data, w: &mut Writer) {
 
     for u in data.sections.unapplied_got.iter() {
         eprintln!("R-GOT: {:?}", u);
-    }
-}
-*/
-
-/*
-pub fn load_sections<'a>(data: &mut Data, link: &'a Link, w: &mut Writer<'a>) {
-    let mut ro = vec![];
-    let mut rw = vec![];
-    let mut rx = vec![];
-
-    for (_name, unlinked) in link.unlinked.iter() {
-        use object::SectionKind as K;
-        match unlinked.kind {
-            K::Data | K::UninitializedData => {
-                rw.push(unlinked);
-            }
-            K::ReadOnlyString | K::ReadOnlyData => {
-                eprintln!("X:{:?}", (&unlinked.name, &unlinked.kind));
-                ro.push(unlinked);
-            }
-            K::Text => {
-                rx.push(unlinked);
-            }
-
-            // ignore for now
-            K::Metadata => (),
-            K::Other => (),
-            K::Note => (),
-            // OtherString is usually comments, we can drop these
-            K::OtherString => (),
-            K::Elf(_x) => {
-                // ignore
-                //unimplemented!("Elf({:#x})", x);
-            }
-            _ => unimplemented!("Unlinked kind: {:?}", unlinked.kind),
-        }
-    }
-
-    if rx.len() > 0 {
-        let name = ".text".to_string();
-        let name_id = Some(w.add_section_name(".text".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RX, Some(name), name_id, 0);
-        for u in rx.into_iter() {
-            section.append(&u, w);
-        }
-        data.sections.add(section);
-    }
-
-    if ro.len() > 0 {
-        let name = ".rodata".to_string();
-        let name_id = Some(w.add_section_name(".rodata".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RO, Some(name), name_id, 0);
-        for u in ro.into_iter() {
-            section.append(&u, w);
-        }
-        data.sections.add(section);
-    }
-
-    if rw.len() > 0 {
-        let name = ".data".to_string();
-        let name_id = Some(w.add_section_name(".data".as_bytes()));
-        let mut section = ProgSection::new(AllocSegment::RW, Some(name), name_id, 0);
-        for u in rw.into_iter() {
-            section.append(&u, w);
-        }
-        data.sections.add(section);
     }
 }
 */
