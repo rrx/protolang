@@ -93,7 +93,16 @@ impl ReadSectionKind {
             Self::RO => ".rodata",
             Self::RW => ".data",
             Self::Bss => ".bss",
-            _ => unreachable!(),
+            _ => unreachable!("Unhandled section: {:?}", self),
+        }
+    }
+
+    pub fn pointer(&self, address: u64) -> ResolvePointer {
+        match self {
+            Self::RX | Self::RO | Self::RW | Self::Bss => {
+                ResolvePointer::Section(self.section_name().to_string(), address)
+            }
+            _ => ResolvePointer::Resolved(address),
         }
     }
 }
@@ -105,6 +114,7 @@ pub struct ReadSection {
     bytes: Vec<u8>,
     bss: usize,
 }
+
 impl ReadSection {
     pub fn new(kind: ReadSectionKind) -> Self {
         Self {
@@ -146,6 +156,7 @@ pub struct ReadSymbol {
     kind: SymbolKind,
     bind: SymbolBind,
     pub(crate) address: u64,
+    pub(crate) pointer: ResolvePointer,
     pub(crate) size: u64,
     lookup: SymbolLookupTable,
 }
@@ -267,13 +278,14 @@ impl ReadBlock {
                     eprintln!("reloc3 {}", &r);
                 }
             } else {
-                unreachable!()
+                unreachable!("Unable to find symbol for relocation: {}", &r.name)
             }
         }
 
         for (name, symbol) in self.exports.iter() {
             let section_name = symbol.section.section_name();
             // allocate string
+            eprintln!("y: {:?}", symbol);
             let string_id = data.string(name, w);
             data.pointers.insert(
                 name.to_string(),
@@ -526,21 +538,24 @@ impl ReadBlock {
         self.unknown.insert(s.name.clone(), s);
     }
 
-    fn relocate_symbol(&self, s: &mut ReadSymbol) {
+    fn relocate_symbol(&self, mut s: ReadSymbol) -> ReadSymbol {
         use ReadSectionKind::*;
-        let addr = match s.section {
-            RX => s.address + self.rx.section.bytes.len() as u64,
-            RO => s.address + self.ro.section.bytes.len() as u64,
-            RW => s.address + self.rw.section.bytes.len() as u64,
-            Bss => s.address + self.bss.section.size as u64,
+        let base = match s.section {
+            RX => self.rx.section.bytes.len() as u64,
+            RO => self.ro.section.bytes.len() as u64,
+            RW => self.rw.section.bytes.len() as u64,
+            Bss => self.bss.section.size as u64,
             _ => 0,
         };
-        s.address = addr;
+        s.address = s.address + base;
+        //eprintln!("X: {:?}", (&self.name, &s.name, s.section, base, s.address));
+        s
     }
 
     pub fn merge(renames: &HashMap<String, String>, src: &BlockSection, dst: &mut BlockSection) {
         let base_offset = dst.section.size;
         dst.section.size += src.section.size;
+        dst.section.bytes.extend(src.section.bytes.iter());
         for r in src.section.relocations.iter() {
             let mut r = r.clone();
             r.offset += base_offset as u64;
@@ -555,8 +570,8 @@ impl ReadBlock {
         let mut renames = HashMap::new();
 
         // rename local symbols so they are globally unique
-        for (name, mut s) in block.locals.into_iter() {
-            self.relocate_symbol(&mut s);
+        for (name, s) in block.locals.into_iter() {
+            let mut s = self.relocate_symbol(s);
             let unique = format!(".u.{}{}", self.local_index, name);
             s.name = unique.clone();
             self.local_index += 1;
@@ -565,9 +580,9 @@ impl ReadBlock {
         }
 
         // exports
-        for (_name, mut s) in block.exports.into_iter() {
-            self.relocate_symbol(&mut s);
-            //eprintln!("E: {:?}", &s);
+        for (name, s) in block.exports.into_iter() {
+            let s = self.relocate_symbol(s);
+            //eprintln!("E: {:?}", (&block.name, name, &s));
             self.insert_export(s);
         }
 
@@ -582,47 +597,17 @@ impl ReadBlock {
             self.bss.relocations.push(r);
         }
 
+        // update Bss
+        //Self::merge(&renames, &block.bss, &mut self.bss);
+
         // update RX
         Self::merge(&renames, &block.rx, &mut self.rx);
-        /*
-        let base_offset = self.rx.section.bytes.len();
-        self.rx.section.bytes.extend(block.rx.section.bytes);
-        for mut r in block.rx.relocations.into_iter() {
-            r.offset += base_offset as u64;
-            if let Some(name) = renames.get(&r.name) {
-                r.name = name.clone();
-            }
-            self.rx.relocations.push(r);
-        }
-        */
-
         // update RO
         Self::merge(&renames, &block.ro, &mut self.ro);
-        /*
-        let base_offset = self.ro.section.bytes.len();
-        self.ro.section.bytes.extend(block.ro.section.bytes);
-        for mut r in block.ro.section.relocations.into_iter() {
-            r.offset += base_offset as u64;
-            if let Some(name) = renames.get(&r.name) {
-                r.name = name.clone();
-            }
-            self.ro.section.relocations.push(r);
-        }
-        */
-
         // update RW
         Self::merge(&renames, &block.rw, &mut self.rw);
-        /*
-        let base_offset = self.rw.section.bytes.len();
-        self.rw.section.bytes.extend(block.rw.section.bytes);
-        for mut r in block.rw.section.relocations.into_iter() {
-            r.offset += base_offset as u64;
-            if let Some(name) = renames.get(&r.name) {
-                r.name = name.clone();
-            }
-            self.rw.section.relocations.push(r);
-        }
-        */
+
+        //eprintln!("B: {:?}", (&self.rx));
     }
 
     pub fn from_section<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
@@ -634,50 +619,15 @@ impl ReadBlock {
         match kind {
             ReadSectionKind::Bss => {
                 self.bss.from_section(b, section)?;
-                /*
-                let base_offset = self.bss.section.size;
-                self.bss.section.extend_size(section.size() as usize);
-                for (offset, r) in section.relocations() {
-                    let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
-                    self.bss.relocations.push(r);
-                }
-                */
             }
             ReadSectionKind::RX => {
-                self.rx.from_section(b, section);
-                /*
-                let data = section.uncompressed_data()?;
-                let base_offset = self.rx.section.size;
-                self.rx.section.extend_bytes(&data);
-                for (offset, r) in section.relocations() {
-                    let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
-                    self.rx.relocations.push(r);
-                }
-                */
+                self.rx.from_section(b, section)?;
             }
             ReadSectionKind::RO => {
-                self.rx.from_section(b, section);
-                /*
-                let data = section.uncompressed_data()?;
-                let base_offset = self.ro.section.size;
-                self.ro.section.extend_bytes(&data);
-                for (offset, r) in section.relocations() {
-                    let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
-                    self.ro.relocations.push(r);
-                }
-                */
+                self.rx.from_section(b, section)?;
             }
             ReadSectionKind::RW => {
-                self.rw.from_section(b, section);
-                /*
-                let data = section.uncompressed_data()?;
-                let base_offset = self.rw.section.size;
-                self.rw.section.extend_bytes(&data);
-                for (offset, r) in section.relocations() {
-                    let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
-                    self.rw.relocations.push(r);
-                }
-                */
+                self.rw.from_section(b, section)?;
             }
             _ => unimplemented!(),
         }
@@ -733,28 +683,6 @@ impl ReadBlock {
                 _ => other_symbols.push(sym),
             }
         }
-
-        /*
-        for r in self
-            .rx
-            .relocations
-            .iter()
-            .chain(self.ro.relocations.iter())
-            .chain(self.rw.relocations.iter())
-            .chain(self.bss.relocations.iter())
-        {
-            if let Some(s) = self.lookup(&r.name) {
-                let addr = match s.section {
-                    ReadSectionKind::RX => self.rx.addr,
-                    ReadSectionKind::RW => self.rw.addr,
-                    ReadSectionKind::RO => self.ro.addr,
-                    ReadSectionKind::Bss => self.bss.addr,
-                    _ => unreachable!(),
-                };
-                //eprintln!(" R: {}, addr, {:#0x}, {:?}", r, addr, s);
-            }
-        }
-        */
     }
 
     pub fn dump(&self) {
@@ -912,9 +840,7 @@ impl Reader {
             //eprintln!("s: {:#08x}, {:?}", 0, &s);
             if s.kind != SymbolKind::Unknown {
                 self.block.insert_dynamic(s);
-                //self.insert_symbol(s);
             }
-            //out.push(s);
         }
         Ok(())
     }
@@ -926,6 +852,7 @@ impl Reader {
     ) -> Result<ReadBlock, Box<dyn Error>> {
         let mut block = ReadBlock::new(&name);
 
+        eprintln!("relocatable: {}", &name);
         for symbol in b.symbols() {
             // skip the null symbol
             if symbol.kind() == SymbolKind::Null {
@@ -936,7 +863,7 @@ impl Reader {
             }
 
             let s = read_symbol(&b, &symbol)?;
-            //eprintln!("Read: {:?}", &s);
+            eprintln!("Read: {:?}", &s);
 
             if s.bind == SymbolBind::Local {
                 // can't be local and unknown
@@ -947,6 +874,7 @@ impl Reader {
             } else if s.section == ReadSectionKind::Undefined {
                 //block.insert_unknown(s);
             } else {
+                //let s = block.relocate_symbol(s);
                 self.merge_export(s.clone());
                 block.insert_export(s);
             }
@@ -959,9 +887,46 @@ impl Reader {
                 continue;
             }
 
+            /*
+            for symbol in b.symbols() {
+                // skip the null symbol
+                if symbol.kind() == SymbolKind::Null {
+                    continue;
+                }
+                if symbol.kind() == SymbolKind::File {
+                    continue;
+                }
+
+                if symbol.kind() == SymbolKind::Section {
+                    continue;
+                }
+
+                if symbol.section_index() != Some(section.index()) {
+                    continue;
+                }
+
+                let s = read_symbol(&b, &symbol)?;
+                //let s = block.relocate_symbol(s);
+                //eprintln!("Read: {:?}", &s);
+
+                if s.bind == SymbolBind::Local {
+                    // can't be local and unknown
+                    if symbol.kind() == SymbolKind::Unknown {
+                        unreachable!();
+                    }
+                    block.insert_local(s);
+                } else if s.section == ReadSectionKind::Undefined {
+                    //block.insert_unknown(s);
+                } else {
+                    self.merge_export(s.clone());
+                    block.insert_export(s);
+                }
+            }
+            */
+
             block.from_section(&b, &section)?;
-            //block.add_block(ReadBlock::from_section(&b, &section)?);
         }
+        //eprintln!("Block: {:?}", &block.rx);
 
         Ok(block)
     }
@@ -970,6 +935,27 @@ impl Reader {
         self.block.name = "exe".to_string();
         for b in self.blocks.into_iter() {
             self.block.add_block(b);
+        }
+
+        for section in [
+            ReadSectionKind::RX,
+            ReadSectionKind::RO,
+            ReadSectionKind::RW,
+        ] {
+            let name = section.section_name().to_string();
+            self.block.insert_export(ReadSymbol {
+                name: name.clone(),
+                name_id: None,
+                dyn_name_id: None,
+                section,
+                kind: SymbolKind::Section,
+                bind: SymbolBind::Global,
+                address: 0,
+                pointer: ResolvePointer::Section(name.clone(), 0),
+                size: 0,
+                source: SymbolSource::Static,
+                lookup: SymbolLookupTable::None,
+            });
         }
 
         // make sure everything resolves
@@ -1030,6 +1016,10 @@ fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
     symbol: &elf::ElfSymbol<'a, 'b, A, B>,
 ) -> Result<ReadSymbol, Box<dyn Error>> {
     let section_kind;
+
+    let address = symbol.address();
+    let size = symbol.size();
+
     let name = if symbol.kind() == SymbolKind::Section {
         let section = b.section_by_index(symbol.section_index().unwrap())?;
         section_kind = ReadSectionKind::new_section_kind(section.kind());
@@ -1044,8 +1034,7 @@ fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         symbol.name()?.to_string()
     };
 
-    let address = symbol.address();
-    let size = symbol.size();
+    let pointer = section_kind.pointer(address);
 
     let bind = if symbol.is_local() {
         SymbolBind::Local
@@ -1065,6 +1054,7 @@ fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         kind: symbol.kind(),
         bind,
         address,
+        pointer,
         size,
         source: SymbolSource::Static,
         lookup: SymbolLookupTable::None,

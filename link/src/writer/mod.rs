@@ -460,7 +460,6 @@ impl Data {
             val: self.rel_size(true) as u64,
             string: None,
         });
-
         out.push(Dynamic {
             tag: elf::DT_NULL,
             val: 0,

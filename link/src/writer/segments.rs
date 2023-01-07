@@ -96,24 +96,6 @@ pub struct Blocks {
 }
 
 impl Blocks {
-    /*
-        pub fn reserve_strings(&mut self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) {
-            // Reserve Strings
-            //if let Some(block) = maybe_block {
-                block.reserve_strings(data, w);
-            //} else {
-                /*
-                for (name, p) in data.sections.symbol_pointers().iter() {
-                    data.lookup.insert(name.clone(), p.clone());
-                }
-                for (name, p) in data.sections.extern_symbol_pointers().iter() {
-                    data.lookup.insert(name.clone(), p.clone());
-                }
-                */
-            //}
-        }
-    */
-
     pub fn build(&mut self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) {
         let mut tracker = SegmentTracker::new(data.base);
         tracker.ph = self.generate_ph(block);
@@ -125,7 +107,6 @@ impl Blocks {
         }
 
         // RESERVE SYMBOLS
-        //self.reserve_symbols(data, w);
         // what are these for? reserving symbols for locals
         // set up sections
         data.locals = vec![
@@ -143,17 +124,10 @@ impl Blocks {
                 Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
                 None, //Some(w.add_dynamic_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
             ),
-            LocalSymbol::new(
-                "ASDF".into(),
-                ".got.plt".into(),
-                ResolvePointer::Section(".got.plt".to_string(), 0),
-                Some(w.add_string("ASDF".as_bytes())),
-                None, //Some(w.add_dynamic_string("ASDF".as_bytes())),
-            ),
         ];
 
         for (name, s) in block.exports.iter() {
-            //eprintln!("x: {:?}", s);
+            eprintln!("x: {:?}", s);
             unsafe {
                 let buf = extend_lifetime(s.name.as_bytes());
                 let name_id = Some(w.add_string(buf));
@@ -161,7 +135,7 @@ impl Blocks {
                 data.locals.push(LocalSymbol::new(
                     name.clone(),
                     section_name.clone(),
-                    ResolvePointer::Section(section_name.clone(), 0),
+                    ResolvePointer::Section(section_name.clone(), s.address),
                     name_id,
                     None,
                 ));
@@ -170,7 +144,7 @@ impl Blocks {
                 data.dynamic.push(LocalSymbol::new(
                     name.clone(),
                     section_name.clone(),
-                    ResolvePointer::Section(section_name.clone(), 0),
+                    ResolvePointer::Section(section_name.clone(), s.address),
                     name_id,
                     None,
                 ));
@@ -217,14 +191,6 @@ impl Blocks {
             self.write_section_headers(&data, &tracker, block, w);
         }
     }
-
-    /*
-    fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
-        for s in data.symbols.values() {
-            //w.reserve_symbol_index(s.section_index);
-        }
-    }
-    */
 
     /// generate a temporary list of program headers
     pub fn generate_ph(&mut self, block: &mut ReadBlock) -> Vec<ProgramHeaderEntry> {

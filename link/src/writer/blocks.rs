@@ -780,28 +780,6 @@ impl ElfBlock for SymTabSection {
     ) {
         let symbols = self.gen_symbols(data, block);
         assert_eq!(symbols.len(), self.count);
-        //let mut symbols = vec![];
-        //assert_eq!(data.symbols.len() + data.locals.len() + block.exports.len(), self.count);
-        //for s in data.symbols.values() {
-        //symbols.push(s.get_symbol());
-        //}
-
-        /*
-        for local in data.locals.iter() {
-            assert!(local.string_id.is_some());
-            let section_index = data.section_index_get(&local.section);
-            let s = Sym {
-                name: local.string_id,
-                section: Some(section_index),
-                st_info: 0,
-                st_other: 0,
-                st_shndx: 0,
-                st_value: 0,
-                st_size: 0,
-            };
-            symbols.push(s);
-        }
-        */
 
         let mut num_locals = 0;
 
@@ -854,19 +832,6 @@ impl ElfBlock for DynSymSection {
         data.section_index.insert(".dynsym".to_string(), index);
     }
 
-    //fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {
-    //w.reserve_null_dynamic_symbol_index();
-    //for _ in data.dyn_symbols.iter() {
-    //eprintln!("reserve sym");
-    //let _symbol_id = Some(w.reserve_dynamic_symbol_index());
-    //}
-
-    //for _ in data.dynamic.iter() {
-    //eprintln!("reserve sym");
-    //let _symbol_id = Some(w.reserve_dynamic_symbol_index());
-    //}
-    //}
-
     fn reserve(
         &mut self,
         data: &mut Data,
@@ -903,24 +868,6 @@ impl ElfBlock for DynSymSection {
             eprintln!("write sym: {:?}", &sym);
             w.write_dynamic_symbol(&sym.sym);
         }
-
-        /*
-        for s in data.dynamic.iter() {
-            //eprintln!("write sym: {:?}", &s.symbol);
-            assert!(s.string_id.is_some());
-            let section_index = data.section_index_get(&s.section);
-            let sym = Sym {
-                name: s.string_id,
-                section: Some(section_index),
-                st_info: 0,
-                st_other: 0,
-                st_shndx: 0,
-                st_value: 0,
-                st_size: 0,
-            };
-            w.write_dynamic_symbol(&sym);
-        }
-        */
     }
 
     fn write_section_header(
@@ -1485,126 +1432,6 @@ impl ElfBlock for PltSection {
     }
 }
 
-/*
-#[derive(Default)]
-pub struct GotPltSection {
-    got_name_id: Option<StringId>,
-    plt_name_id: Option<StringId>,
-    got_index: Option<SectionIndex>,
-    plt_index: Option<SectionIndex>,
-    got: Vec<u8>,
-    plt: Vec<u8>,
-    base: usize,
-    got_offset: usize,
-    plt_offset: usize,
-    got_addr: usize,
-    plt_addr: usize,
-    got_size: usize,
-    plt_size: usize,
-    start_index: usize,
-}
-impl ElfBlock for GotPltSection {
-    fn alloc(&self) -> Option<AllocSegment> {
-        Some(AllocSegment::RW)
-    }
-
-    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        self.start_index = 3;
-        self.got_name_id = Some(w.add_section_name(".got".as_bytes()));
-        self.plt_name_id = Some(w.add_section_name(".got.plt".as_bytes()));
-        let got_index = w.reserve_section_index();
-        let plt_index = w.reserve_section_index();
-        data.section_index.insert(".got".to_string(), got_index);
-        data.section_index.insert(".got.plt".to_string(), plt_index);
-        self.got_index = Some(got_index);
-        self.plt_index = Some(plt_index);
-    }
-
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        // each entry in unapplied will be a GOT entry
-        let len = data.sections.unapplied.len() + self.start_index;
-        let got_size = len * std::mem::size_of::<usize>();
-        self.got.resize(got_size, 0);
-        let plt_size = len * std::mem::size_of::<usize>() * 2;
-        self.plt.resize(plt_size, 0);
-
-        let align = self.alloc().unwrap().align();
-
-        let pos1 = w.reserved_len();
-        let align_pos = size_align(pos1, align);
-        w.reserve_until(align_pos);
-        self.got_offset = w.reserved_len();
-        w.reserve(self.got.len(), align);
-        self.got_size = w.reserved_len() - self.got_offset;
-
-        let pos2 = w.reserved_len();
-        let align_pos = size_align(pos2, align);
-        w.reserve_until(align_pos);
-        self.plt_offset = w.reserved_len();
-        w.reserve(self.plt.len(), align);
-        self.plt_size = w.reserved_len() - self.plt_offset;
-
-        let after = w.reserved_len();
-        let delta = after - pos1;
-        self.base = tracker.add_data(self.alloc().unwrap(), delta, self.got_offset);
-
-        self.got_addr = self.base + self.got_offset;
-        self.plt_addr = self.base + self.plt_offset;
-
-        // add got pointers to the pointers table, so we can do relocations
-        for (index, (_, r)) in data.sections.unapplied.iter().enumerate() {
-            let name = &r.name;
-            let addr = self.got_addr + (index + self.start_index) * std::mem::size_of::<usize>();
-            data.pointers.insert(name.clone(), addr as u64);
-        }
-
-        // update section pointers
-        data.addr.insert(".got".to_string(), self.got_addr as u64);
-        data.addr
-            .insert(".got.plt".to_string(), self.plt_addr as u64);
-    }
-
-    fn write(&self, _data: &Data, _tracker: &mut SegmentTracker, w: &mut Writer) {
-        let align = self.alloc().unwrap().align();
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.alloc().unwrap().align());
-        w.pad_until(aligned_pos);
-        w.write(self.got.as_slice());
-        w.write_align(align);
-        w.write(self.plt.as_slice());
-    }
-
-    fn write_section_header(&self, _data: &Data, _tracker: &SegmentTracker, w: &mut Writer) {
-        let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
-        let sh_addralign = self.alloc().unwrap().align() as u64;
-        w.write_section_header(&object::write::elf::SectionHeader {
-            name: self.got_name_id,
-            sh_type: elf::SHT_PROGBITS,
-            sh_flags,
-            sh_addr: self.got_addr as u64,
-            sh_offset: self.got_offset as u64,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign,
-            sh_size: self.got_size as u64,
-        });
-        w.write_section_header(&object::write::elf::SectionHeader {
-            name: self.plt_name_id,
-            sh_type: elf::SHT_PROGBITS,
-            sh_flags,
-            sh_addr: self.plt_addr as u64,
-            sh_offset: self.plt_offset as u64,
-            sh_info: 0,
-            sh_link: 0,
-            sh_entsize: 0,
-            sh_addralign,
-            sh_size: self.plt_size as u64,
-        });
-    }
-}
-*/
-
 use std::ffi::CString;
 pub struct InterpSection {
     alloc: AllocSegment,
@@ -1718,165 +1545,6 @@ impl ElfBlock for InterpSection {
     }
 }
 
-/*
-use std::sync::Arc;
-use std::sync::Mutex;
-
-#[derive(Debug, Clone)]
-pub struct ReadBlockSync(Arc<Mutex<ReadBlock>>);
-
-#[derive(Debug, Clone)]
-pub struct ReadBlockSectionSync {
-    kind: ReadSectionKind,
-    sync: ReadBlockSync,
-}
-impl ReadBlockSectionSync {
-    pub fn new(kind: ReadSectionKind, sync: ReadBlockSync) -> Self {
-        Self { kind, sync }
-    }
-}
-
-impl ElfBlock for ReadBlockSectionSync {
-    fn name(&self) -> String {
-        return format!("block-sync:{:?}", self.kind);
-    }
-    fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
-        use ReadSectionKind::*;
-        match self.kind {
-            RX => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .rx
-                .block_reserve_section_index(data, w),
-            RO => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .ro
-                .block_reserve_section_index(data, w),
-            RW => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .rw
-                .block_reserve_section_index(data, w),
-            Bss => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .bss
-                .block_reserve_section_index(data, w),
-            _ => unreachable!(),
-        }
-    }
-
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        use ReadSectionKind::*;
-        match self.kind {
-            RX => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .rx
-                .block_reserve(data, tracker, w),
-            RO => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .ro
-                .block_reserve(data, tracker, w),
-            RW => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .rw
-                .block_reserve(data, tracker, w),
-            Bss => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .bss
-                .block_reserve(data, tracker, w),
-            _ => unreachable!(),
-        }
-    }
-
-    fn write(&self, data: &Data, _: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        use ReadSectionKind::*;
-        match self.kind {
-            RX => self.sync.0.as_ref().lock().unwrap().rx.block_write(data, w),
-            RO => self.sync.0.as_ref().lock().unwrap().ro.block_write(data, w),
-            RW => self.sync.0.as_ref().lock().unwrap().rw.block_write(data, w),
-            Bss => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .bss
-                .block_write(data, w),
-            _ => unreachable!(),
-        }
-    }
-
-    fn write_section_header(&self, data: &Data, _: &SegmentTracker, block: &ReadBlock, w: &mut Writer) {
-        use ReadSectionKind::*;
-        match self.kind {
-            RX => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .rx
-                .block_write_section_header(data, w),
-            RO => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .ro
-                .block_write_section_header(data, w),
-            RW => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .rw
-                .block_write_section_header(data, w),
-            Bss => self
-                .sync
-                .0
-                .as_ref()
-                .lock()
-                .unwrap()
-                .bss
-                .block_write_section_header(data, w),
-            _ => unreachable!(),
-        }
-    }
-}
-*/
-
 pub struct BlockSectionX {
     pub kind: ReadSectionKind,
 }
@@ -1947,89 +1615,6 @@ impl ElfBlock for BlockSectionX {
     }
 }
 
-/*
-pub struct BlockSectionRef<'a> {
-    block: &'a mut BlockSection,
-}
-
-
-impl<'a> ElfBlock for BlockSectionRef<'a> {
-    fn name(&self) -> String {
-        return format!("block:{:?}", self.block.section.alloc);
-    }
-    fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
-        self.block.block_reserve_section_index(data, w);
-    }
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        self.block.block_reserve(data, tracker, w);
-    }
-    fn write(&self, data: &Data, _: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        self.block.block_write(data, w);
-    }
-    fn write_section_header(&self, data: &Data, _: &SegmentTracker, block: &ReadBlock, w: &mut Writer) {
-        self.block.block_write_section_header(data, w);
-    }
-}
-*/
-
-/*
-impl ElfBlock for BlockSection {
-    fn name(&self) -> String {
-        return format!("block:{:?}", self.section.alloc);
-    }
-    fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
-        self.block_reserve_section_index(data, w);
-    }
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        self.block_reserve(data, tracker, w);
-    }
-    fn write(&self, data: &Data, _: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        self.block_write(data, w);
-    }
-    fn write_section_header(&self, data: &Data, _: &SegmentTracker, block: &ReadBlock, w: &mut Writer) {
-        self.block_write_section_header(data, w);
-    }
-}
-
-impl ElfBlock for BssSection {
-    fn name(&self) -> String {
-        return "bss".to_string();
-    }
-    fn alloc(&self) -> Option<AllocSegment> {
-        Some(AllocSegment::RW)
-    }
-    fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
-        self.block_reserve_section_index(data, w);
-    }
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        self.block_reserve(data, tracker, w);
-    }
-    fn write(&self, data: &Data, _: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        self.block_write(data, w);
-    }
-    fn write_section_header(&self, data: &Data, _: &SegmentTracker, block: &ReadBlock, w: &mut Writer) {
-        self.block_write_section_header(data, w);
-    }
-}
-*/
-
-/*
-impl ElfBlock for ReadBlock {
-    fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        self.block_reserve_section_index(data, w);
-    }
-    fn reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        self.block_reserve(data, tracker, w);
-    }
-    fn write(&self, data: &Data, _: &mut SegmentTracker, w: &mut Writer) {
-        self.block_write(data, w);
-    }
-    fn write_section_header(&self, data: &Data, _: &SegmentTracker, w: &mut Writer) {
-        self.block_write_section_header(data, w);
-    }
-}
-*/
-
 pub struct BufferSection {
     alloc: AllocSegment,
     name: Option<String>,
@@ -2040,7 +1625,6 @@ pub struct BufferSection {
     base: usize,
     buf: Vec<u8>,
     pub unlinked: Vec<UnlinkedCodeSegment>,
-    //relocations: Vec<CodeRelocation>,
     section: ProgSection,
     pointers: HashMap<String, u64>,
     symbols: HashMap<String, ProgSymbol>,
@@ -2064,7 +1648,6 @@ impl BufferSection {
             base: 0,
             buf,
             unlinked: vec![],
-            //relocations: vec![],
             section,
             pointers: HashMap::new(),
             symbols: HashMap::new(),
