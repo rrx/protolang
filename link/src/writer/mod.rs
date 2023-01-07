@@ -128,6 +128,27 @@ pub struct DynamicSymbol {
     pub sym: Sym,
 }
 
+#[derive(Debug, Clone)]
+pub enum ResolvePointer {
+    Resolved(u64),
+    Section(String, u64),
+}
+
+impl ResolvePointer {
+    pub fn resolve(&self, data: &Data) -> Option<u64> {
+        match self {
+            Self::Resolved(x) => Some(*x),
+            Self::Section(section_name, offset) => {
+                if let Some(base) = data.addr.get(section_name) {
+                    Some(base + offset)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
 pub struct Data {
     arch: Architecture,
     interp: String,
@@ -135,15 +156,18 @@ pub struct Data {
     libs: Vec<Library>,
     page_size: u32,
     base: usize,
+
     addr: HashMap<String, u64>,
+    pub pointers: HashMap<String, ResolvePointer>,
+
     section_index: HashMap<String, SectionIndex>,
     size_dynstr: usize,
     addr_dynsym: u64,
     size_dynsym: usize,
-    addr_reladyn: u64,
+    //addr_reladyn: u64,
     size_reladyn: usize,
+    size_relaplt: usize,
     addr_hash: u64,
-    pointers: HashMap<String, u64>,
     pub block: Option<ReadBlock>,
     add_section_headers: bool,
     add_symbols: bool,
@@ -194,8 +218,8 @@ impl Data {
             size_dynstr: 0,
             addr_dynsym: 0,
             size_dynsym: 0,
-            addr_reladyn: 0,
             size_reladyn: 0,
+            size_relaplt: 0,
             addr_hash: 0,
             pointers: HashMap::new(),
 
@@ -252,6 +276,13 @@ impl Data {
             self.gotplt_index.insert(name.to_string(), index);
             index
         }
+    }
+
+    pub fn string_get(&self, name: &str) -> StringId {
+        self.strings
+            .get(name)
+            .expect(&format!("String not found: {}", name))
+            .1
     }
 
     pub fn string(&mut self, name: &str, w: &mut Writer) -> StringId {
@@ -312,14 +343,15 @@ impl Data {
     }
 
     pub fn pointer_set(&mut self, name: String, p: u64) {
-        self.pointers.insert(name, p);
+        self.pointers.insert(name, ResolvePointer::Resolved(p));
     }
 
     pub fn pointer_get(&self, name: &str) -> u64 {
-        *self
-            .pointers
+        self.pointers
             .get(name)
             .expect(&format!("Pointer not found: {}", name))
+            .resolve(self)
+            .expect(&format!("Pointer unresolved: {}", name))
     }
 
     pub fn symbol_set(&mut self, name: String, s: ProgSymbol) {
@@ -379,21 +411,6 @@ impl Data {
             string: None,
         });
         out.push(Dynamic {
-            tag: elf::DT_RELA,
-            val: self.addr_reladyn,
-            string: None,
-        });
-        out.push(Dynamic {
-            tag: elf::DT_RELASZ,
-            val: self.size_reladyn as u64,
-            string: None,
-        });
-        out.push(Dynamic {
-            tag: elf::DT_RELAENT,
-            val: self.rel_size(true) as u64,
-            string: None,
-        });
-        out.push(Dynamic {
             tag: elf::DT_STRSZ,
             val: self.size_dynstr as u64,
             string: None,
@@ -406,6 +423,41 @@ impl Data {
         out.push(Dynamic {
             tag: elf::DT_DEBUG,
             val: 0,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_PLTGOT,
+            val: *self.addr.get(".got.plt").unwrap_or(&0),
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_PLTRELSZ,
+            val: self.size_relaplt as u64,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_PLTREL,
+            val: 7,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_JMPREL,
+            val: self.addr_get(".rela.plt"),
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_RELA,
+            val: self.addr_get(".rela.dyn"),
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_RELASZ,
+            val: self.size_reladyn as u64,
+            string: None,
+        });
+        out.push(Dynamic {
+            tag: elf::DT_RELAENT,
+            val: self.rel_size(true) as u64,
             string: None,
         });
 

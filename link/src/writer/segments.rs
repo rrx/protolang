@@ -30,12 +30,6 @@ impl BlocksBuilder {
     */
 
     pub fn build(mut self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) -> Blocks {
-        //, Option<ReadBlock>) {
-        // hack to get generate_ph to work
-        //let x = Some(w.add_string("_DYNAMIC".as_bytes()));
-        //let x = Some(w.add_dynamic_string("_DYNAMIC".as_bytes()));
-
-        //self.reserve_strings(data, w, block);
         block.reserve_strings(data, w);
 
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
@@ -59,23 +53,10 @@ impl BlocksBuilder {
             blocks.push(Box::new(DynSymSection::default()));
         }
 
-        //let maybe_block = data.block.take();
-        //if let Some(block) = maybe_block.as_ref() {
-        //blocks.push(Box::new(block.ro.clone()));
-        //blocks.push(Box::new(block.rx.clone()));
-        //blocks.push(Box::new(block.rw.clone()));
         blocks.push(ReadSectionKind::RO.block());
         blocks.push(ReadSectionKind::RX.block());
         blocks.push(Box::new(PltSection::new()));
         blocks.push(ReadSectionKind::RW.block());
-        //data.block = Some(block);
-        //} else {
-        /*
-        blocks.push(Box::new(PltSection::new()));
-        blocks.extend(self.load_buffer_sections(data));
-        //load_buffer_sections(&mut blocks, &mut data);
-        */
-        //}
 
         if data.is_dynamic() {
             blocks.push(Box::new(DynamicSection::default()));
@@ -151,25 +132,26 @@ impl Blocks {
             LocalSymbol::new(
                 "_DYNAMIC".into(),
                 ".dynamic".into(),
-                0,
+                ResolvePointer::Section(".dynamic".to_string(), 0),
                 Some(w.add_string("_DYNAMIC".as_bytes())),
                 None, //Some(w.add_dynamic_string("_DYNAMIC".as_bytes())),
             ),
             LocalSymbol::new(
                 "_GLOBAL_OFFSET_TABLE_".into(),
                 ".got.plt".into(),
-                0,
+                ResolvePointer::Section(".got.plt".to_string(), 0),
                 Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
                 None, //Some(w.add_dynamic_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
             ),
             LocalSymbol::new(
                 "ASDF".into(),
                 ".got.plt".into(),
-                0,
+                ResolvePointer::Section(".got.plt".to_string(), 0),
                 Some(w.add_string("ASDF".as_bytes())),
                 None, //Some(w.add_dynamic_string("ASDF".as_bytes())),
             ),
         ];
+
         //data.locals = locals;
 
         // requires dynamic addr
@@ -188,10 +170,11 @@ impl Blocks {
             unsafe {
                 let buf = extend_lifetime(s.name.as_bytes());
                 let name_id = Some(w.add_string(buf));
+                let section_name = s.section.section_name().to_string();
                 data.locals.push(LocalSymbol::new(
                     name.clone(),
-                    s.section.section_name().to_string(),
-                    0,
+                    section_name.clone(),
+                    ResolvePointer::Section(section_name.clone(), 0),
                     name_id,
                     None,
                 ));
@@ -199,12 +182,17 @@ impl Blocks {
                 let name_id = Some(w.add_dynamic_string(buf));
                 data.dynamic.push(LocalSymbol::new(
                     name.clone(),
-                    s.section.section_name().to_string(),
-                    0,
+                    section_name.clone(),
+                    ResolvePointer::Section(section_name.clone(), 0),
                     name_id,
                     None,
                 ));
             }
+        }
+
+        for local in data.locals.iter() {
+            data.pointers
+                .insert(local.symbol.clone(), local.pointer.clone());
         }
 
         //block.update_symbols(data, w);
@@ -223,7 +211,7 @@ impl Blocks {
 
         // setup symbols
         for b in self.blocks.iter_mut() {
-            b.reserve_symbols(data, w);
+            b.reserve_symbols(data, block, w);
         }
 
         //if let Some(block) = maybe_block.as_mut() {
@@ -277,16 +265,26 @@ impl Blocks {
         // without having to go through the blocks and do reservations
         let mut temp_tracker = SegmentTracker::new(0);
         let mut d = Data::new(vec![]);
+        d.addr_set(".got.plt", 0);
+        d.pointer_set("_start".to_string(), 0);
+        d.pointer_set("__data_start".to_string(), 0);
         let mut out_data = Vec::new();
         let endian = Endianness::Little;
         let mut temp_w = object::write::elf::Writer::new(endian, d.is_64, &mut out_data);
         temp_w.add_string("asdf".as_bytes());
         temp_w.add_dynamic_string("asdf".as_bytes());
 
+        block.reserve_strings(&mut d, &mut temp_w);
         for b in self.blocks.iter_mut() {
-            let pos = temp_w.reserved_len();
+            b.reserve_section_index(&mut d, block, &mut temp_w);
+        }
+
+        for b in self.blocks.iter_mut() {
+            b.reserve_symbols(&mut d, block, &mut temp_w);
+        }
+
+        for b in self.blocks.iter_mut() {
             b.reserve(&mut d, &mut temp_tracker, block, &mut temp_w);
-            let after = temp_w.reserved_len();
         }
         // get a list of program headers
         // we really only need to know the number of headers, so we can correctly

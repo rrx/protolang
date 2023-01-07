@@ -258,12 +258,27 @@ impl ReadBlock {
                         data.lookup.insert(r.name.clone(), p.clone());
                     }
                 } else if p.s.def != CodeSymbolDefinition::Local {
+                    eprintln!("reloc2 {}", &r);
                     p.name_id = Some(data.string(&r.name, w));
                     data.lookup.insert(r.name.clone(), p.clone());
+                    //let section_name = ".text";
+                    //data.pointers.insert(r.name.to_string(), ResolvePointer::Section(section_name.to_string(), r.offset));
+                } else {
+                    eprintln!("reloc3 {}", &r);
                 }
             } else {
                 unreachable!()
             }
+        }
+
+        for (name, symbol) in self.exports.iter() {
+            let section_name = symbol.section.section_name();
+            // allocate string
+            let string_id = data.string(name, w);
+            data.pointers.insert(
+                name.to_string(),
+                ResolvePointer::Section(section_name.to_string(), symbol.address),
+            );
         }
 
         /*

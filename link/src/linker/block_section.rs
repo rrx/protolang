@@ -169,6 +169,7 @@ impl GeneralSection {
         self.name_id = Some(w.add_section_name(self.name.as_bytes()));
         let index = w.reserve_section_index();
         self.section_index = Some(index);
+        eprintln!("section index set: {}, {:?}", self.name, index);
         data.section_index_set(&self.name, index);
     }
 
