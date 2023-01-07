@@ -57,12 +57,23 @@ impl ReadSectionKind {
         Box::new(BlockSectionX::new(self.clone()))
     }
 
+    pub fn alloc(&self) -> Option<AllocSegment> {
+        match self {
+            ReadSectionKind::RX => Some(AllocSegment::RX),
+            ReadSectionKind::RW => Some(AllocSegment::RW),
+            ReadSectionKind::RO => Some(AllocSegment::RO),
+            ReadSectionKind::Bss => Some(AllocSegment::RW),
+            _ => None,
+        }
+    }
+
     pub fn section_index(&self, data: &Data) -> Option<SectionIndex> {
         match self {
             ReadSectionKind::RX => Some(data.section_index_get(".text")),
             ReadSectionKind::RW => Some(data.section_index_get(".data")),
-            ReadSectionKind::RO => Some(data.section_index_get(".rodata")),
-            ReadSectionKind::Bss => Some(data.section_index_get(".bss")),
+            ReadSectionKind::RO => data.section_index.get(".rodata").cloned(),
+            ReadSectionKind::Bss => data.section_index.get(".bss").cloned(),
+            //ReadSectionKind::Bss => Some(data.section_index_get(".bss")),
             _ => None,
         }
     }
@@ -138,6 +149,16 @@ pub enum SymbolBind {
     Global,
     Weak,
 }
+impl SymbolBind {
+    pub fn bind(&self) -> u8 {
+        use object::elf;
+        match self {
+            Self::Local => elf::STB_LOCAL,
+            Self::Global => elf::STB_GLOBAL,
+            Self::Weak => elf::STB_WEAK,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum SymbolLookupTable {
@@ -152,13 +173,46 @@ pub struct ReadSymbol {
     pub(crate) name_id: Option<StringId>,
     pub(crate) dyn_name_id: Option<StringId>,
     pub(crate) section: ReadSectionKind,
-    source: SymbolSource,
-    kind: SymbolKind,
-    bind: SymbolBind,
+    pub(crate) source: SymbolSource,
+    pub(crate) kind: SymbolKind,
+    pub(crate) bind: SymbolBind,
     pub(crate) address: u64,
     pub(crate) pointer: ResolvePointer,
     pub(crate) size: u64,
     lookup: SymbolLookupTable,
+}
+
+impl ReadSymbol {
+    pub fn get_symbol(&self, data: &Data) -> object::write::elf::Sym {
+        let section = self.section.section_index(data);
+        let st_value = data.pointer_get(&self.name);
+
+        let st_size = self.size;
+        let name = Some(data.string_get(&self.name));
+
+        use object::elf;
+
+        let stt = match self.kind {
+            SymbolKind::Data => elf::STT_OBJECT,
+            SymbolKind::Text => elf::STT_FUNC,
+            _ => elf::STT_NOTYPE,
+        };
+
+        let stb = self.bind.bind();
+
+        let st_info = (stb << 4) + (stt & 0x0f);
+        let st_other = elf::STV_DEFAULT;
+
+        object::write::elf::Sym {
+            name,
+            section,
+            st_info,
+            st_other,
+            st_shndx: 0,
+            st_value,
+            st_size,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -942,7 +996,8 @@ impl Reader {
             ReadSectionKind::RO,
             ReadSectionKind::RW,
         ] {
-            let name = section.section_name().to_string();
+            //let name = section.section_name().to_string();
+            let name = "asdf".to_string();
             self.block.insert_export(ReadSymbol {
                 name: name.clone(),
                 name_id: None,

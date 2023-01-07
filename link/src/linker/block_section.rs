@@ -53,70 +53,14 @@ impl BlockSection {
 
     pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         self.section.block_reserve(data, tracker, w);
-        /*
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align());
-        w.reserve_until(align_pos);
-        self.file_offset = w.reserved_len();
-
-        w.reserve(self.bytes.len(), self.align());
-        let after = w.reserved_len();
-        let delta = after - pos;
-
-        self.base = tracker.add_data(self.alloc, delta, self.file_offset);
-        self.addr = self.base + self.file_offset;
-        data.addr_set(&self.name, self.addr as u64);
-
-        log::debug!(
-            "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, delta: {:#0x}, size: {:#0x}",
-            self.file_offset,
-            self.name,
-            self.alloc,
-            self.base,
-            self.addr,
-            delta,
-            self.bytes.len()
-        );
-
-        self.state = BlockSectionState::Located;
-        */
     }
 
     pub fn block_write(&self, data: &Data, w: &mut Writer) {
         self.section.block_write(data, w);
-        /*
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.align());
-        log::debug!(
-            "AF: {:?}, {:#0x}, {:#0x}",
-            self.alloc,
-            aligned_pos,
-            self.file_offset
-        );
-        assert_eq!(aligned_pos, self.file_offset);
-        w.pad_until(aligned_pos);
-        w.write(self.bytes.as_slice());
-        */
     }
 
     pub fn block_write_section_header(&self, data: &Data, w: &mut Writer) {
         self.section.block_write_section_header(w);
-        /*
-        if let Some(name_id) = self.name_id {
-            w.write_section_header(&object::write::elf::SectionHeader {
-                name: Some(name_id),
-                sh_type: elf::SHT_PROGBITS,
-                sh_flags: self.alloc.section_header_flags() as u64,
-                sh_addr: self.addr as u64,
-                sh_offset: self.file_offset as u64,
-                sh_info: 0,
-                sh_link: 0,
-                sh_entsize: 0,
-                sh_addralign: self.alloc.align() as u64,
-                sh_size: self.bytes.len() as u64,
-            });
-        }
-        */
     }
 }
 
@@ -183,19 +127,14 @@ impl GeneralSection {
         let after = w.reserved_len();
         let delta = after - pos;
 
-        self.base = tracker.add_data(self.alloc, delta, self.file_offset);
+        self.base = tracker.add_data(self.alloc, 1, delta, self.file_offset);
         self.addr = self.base + self.file_offset;
         data.addr_set(&self.name, self.addr as u64);
         self.state = BlockSectionState::Located;
 
-        log::debug!(
+        eprintln!(
             "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, size: {:#0x}",
-            self.file_offset,
-            self.name,
-            self.alloc,
-            self.base,
-            self.addr,
-            self.size
+            self.file_offset, self.name, self.alloc, self.base, self.addr, self.size
         );
     }
 

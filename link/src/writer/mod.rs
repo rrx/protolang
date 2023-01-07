@@ -109,7 +109,15 @@ impl AllocSegment {
         }
     }
     pub fn align(&self) -> usize {
-        0x10
+        match self {
+            AllocSegment::RO => 0x04,
+            AllocSegment::Interp => 0x01,
+            AllocSegment::RW => 0x04,
+            AllocSegment::RX => 0x10,
+        }
+    }
+    pub fn page_align(&self) -> usize {
+        0x1000
     }
 }
 
@@ -160,7 +168,7 @@ pub struct Data {
     addr: HashMap<String, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
 
-    section_index: HashMap<String, SectionIndex>,
+    pub section_index: HashMap<String, SectionIndex>,
     size_dynstr: usize,
     addr_dynsym: u64,
     size_dynsym: usize,
@@ -321,11 +329,21 @@ impl Data {
         } else {
             let string_id = self.dyn_string(name, w);
             let symbol_index = SymbolIndex(w.reserve_dynamic_symbol_index().0 as usize);
+
+            let stt = match kind {
+                GotKind::GOT => elf::STT_OBJECT,
+                GotKind::GOTPLT => elf::STT_FUNC,
+            };
+
+            let stb = elf::STB_GLOBAL;
+
+            let st_info = (stb << 4) + (stt & 0x0f);
+            let st_other = elf::STV_DEFAULT;
             let sym = Sym {
                 name: Some(string_id),
                 section: None,
-                st_info: 0,
-                st_other: 0,
+                st_info,
+                st_other,
                 st_shndx: 0,
                 st_value: 0,
                 st_size: 0,

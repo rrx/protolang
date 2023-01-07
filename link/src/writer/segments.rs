@@ -29,7 +29,7 @@ impl BlocksBuilder {
     }
     */
 
-    pub fn build(mut self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) -> Blocks {
+    pub fn build(self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) -> Blocks {
         block.reserve_strings(data, w);
 
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
@@ -41,16 +41,15 @@ impl BlocksBuilder {
             blocks.push(Box::new(InterpSection::new(&data)));
         }
 
-        blocks.push(Box::new(HashSection::default()));
-
-        if w.dynstr_needed() {
-            blocks.push(Box::new(DynStrSection::default()));
-        }
+        blocks.push(Box::new(HashSection::new()));
 
         if data.is_dynamic() {
+            blocks.push(Box::new(DynSymSection::default()));
+            if w.dynstr_needed() {
+                blocks.push(Box::new(DynStrSection::default()));
+            }
             blocks.push(Box::new(RelaDynSection::new(GotKind::GOT)));
             blocks.push(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
-            blocks.push(Box::new(DynSymSection::default()));
         }
 
         blocks.push(ReadSectionKind::RO.block());
@@ -60,17 +59,11 @@ impl BlocksBuilder {
 
         if data.is_dynamic() {
             blocks.push(Box::new(DynamicSection::default()));
-            //blocks.add_block(Box::new(GotPltSection::default()));
-            //blocks.push(Box::new(block.got.clone()));
             blocks.push(Box::new(GotSection::new(GotKind::GOT)));
             blocks.push(Box::new(GotSection::new(GotKind::GOTPLT)));
-            //blocks.push(Box::new(block.gotplt.clone()));
         }
 
         // bss is the last alloc block
-        //if let Some(block) = maybe_block.as_ref() {
-        //blocks.push(Box::new(block.bss.clone()));
-        //}
         blocks.push(ReadSectionKind::Bss.block());
 
         if data.add_symbols {
@@ -126,6 +119,7 @@ impl Blocks {
             ),
         ];
 
+        /*
         for (name, s) in block.exports.iter() {
             eprintln!("x: {:?}", s);
             unsafe {
@@ -150,6 +144,7 @@ impl Blocks {
                 ));
             }
         }
+        */
 
         for local in data.locals.iter() {
             data.pointers
@@ -180,7 +175,7 @@ impl Blocks {
         //}
 
         // UPDATE
-        tracker.ph = self.program_headers(&tracker);
+        tracker.ph = self.program_headers(&tracker, block);
         self.update(data);
 
         // WRITE
@@ -218,12 +213,13 @@ impl Blocks {
         }
 
         for b in self.blocks.iter_mut() {
+            eprintln!("reserve: {}", b.name());
             b.reserve(&mut d, &mut temp_tracker, block, &mut temp_w);
         }
         // get a list of program headers
         // we really only need to know the number of headers, so we can correctly
         // set the values in the file header
-        self.generate_program_headers(&mut temp_tracker);
+        self.generate_program_headers(&mut temp_tracker, block);
         temp_tracker.ph
     }
 
@@ -304,17 +300,28 @@ impl Blocks {
         }
     }
 
-    pub fn program_headers(&self, tracker: &SegmentTracker) -> Vec<ProgramHeaderEntry> {
+    pub fn program_headers(
+        &self,
+        tracker: &SegmentTracker,
+        block: &ReadBlock,
+    ) -> Vec<ProgramHeaderEntry> {
         let mut ph = vec![];
         for b in self.blocks.iter() {
-            ph.extend(b.program_header());
+            ph.extend(b.program_header(block));
         }
         ph.extend(tracker.program_headers());
-        ph
+
+        // hack to get dynamic to be the last program header
+        // may not be necessary
+        ph.iter()
+            .filter(|p| p.p_type != elf::PT_DYNAMIC)
+            .cloned()
+            .chain(ph.iter().filter(|p| p.p_type == elf::PT_DYNAMIC).cloned())
+            .collect()
     }
 
-    pub fn generate_program_headers(&self, tracker: &mut SegmentTracker) {
-        let ph = self.program_headers(tracker);
+    pub fn generate_program_headers(&self, tracker: &mut SegmentTracker, block: &ReadBlock) {
+        let ph = self.program_headers(tracker, block);
         tracker.ph = ph;
     }
 }
@@ -344,6 +351,7 @@ impl SegmentTracker {
         self.segments.last_mut().unwrap()
     }
 
+    /*
     pub fn add_section(
         &mut self,
         alloc: AllocSegment,
@@ -355,14 +363,31 @@ impl SegmentTracker {
         self.current_mut().add_section(section);
         base
     }
+    */
 
     // add non-section data
-    pub fn add_data(&mut self, alloc: AllocSegment, size: usize, file_offset: usize) -> usize {
+    pub fn add_data(
+        &mut self,
+        alloc: AllocSegment,
+        align: usize,
+        size: usize,
+        file_offset: usize,
+    ) -> usize {
         let mut current_size = 0;
+        let mut current_offset = 0;
         let mut current_alloc = alloc;
         if let Some(c) = self.segments.last() {
             current_size = c.size();
+            current_offset = c.offset;
             current_alloc = c.alloc;
+
+            if file_offset < current_offset as usize {
+                eprintln!(
+                    "fail: {:?}, file_offset: {:#0x}: current offset: {:#0x}",
+                    alloc, file_offset, current_offset
+                );
+            }
+            assert!(file_offset >= current_offset as usize);
         }
 
         if self.segments.len() == 0 || alloc != current_alloc {
@@ -370,10 +395,21 @@ impl SegmentTracker {
             let mut segment = Segment::new(alloc);
             segment.base = self.base as u64;
             segment.offset = file_offset as u64;
-            //eprintln!("new seg: {:?}, offset: {:#0x}", alloc, file_offset);
+            eprintln!(
+                "new seg: {:?}, offset: {:#0x}, last_offset: {:#0x}, last_size: {:#0x}",
+                alloc, file_offset, current_offset, current_size
+            );
             self.segments.push(segment);
+            if file_offset < (current_offset as usize + current_size) {
+                eprintln!(
+                    "fail: {:?}, file_offset: {:#0x}: current offset: {:#0x}, current size: {:#0x}",
+                    alloc, file_offset, current_offset, current_size
+                );
+            }
+            assert!(file_offset >= (current_offset as usize + current_size));
         }
-        self.current_mut().add_data(size, alloc.align());
+
+        self.current_mut().add_data(size, align); //alloc.align());
         self.base
     }
 
@@ -411,11 +447,13 @@ impl Segment {
         }
     }
 
+    /*
     pub fn add_section(&mut self, section: &ProgSection) {
         let start = size_align(self.segment_size, section.kind.align());
         self.segment_size = start + section.size();
         //self.sections.push(section);
     }
+    */
 
     pub fn size(&self) -> usize {
         self.segment_size
@@ -423,10 +461,17 @@ impl Segment {
 
     pub fn add_data(&mut self, size: usize, align: usize) {
         // set size to match the offset size
-        let _before = self.segment_size;
-        let delta = size_align(size, align);
+        //let _before = self.segment_size;
+        let before = self.segment_size;
+        self.segment_size = size_align(self.segment_size, align);
+        let aligned_size = self.segment_size;
         //eprintln!("x/{:#0x}/{:#0x}", size, delta);
-        self.segment_size += delta;
+        self.segment_size += size;
+        let after = self.segment_size;
+        eprintln!(
+            "add: {:?}, {:#0x} => {:#0x} => {:#0x}",
+            "", before, aligned_size, after
+        );
         //eprintln!(
         //"add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
         //self.alloc, size, before, delta, self.segment_size, align
@@ -435,14 +480,15 @@ impl Segment {
 
     pub fn program_header(&self) -> Option<ProgramHeaderEntry> {
         // add a load section for the file and program header, so it's covered
+        let size = self.size() as u64;
         Some(ProgramHeaderEntry {
             p_type: elf::PT_LOAD,
             p_flags: self.alloc.program_header_flags(),
             p_offset: self.offset,
             p_vaddr: self.base + self.offset,
             p_paddr: 0,
-            p_filesz: self.size() as u64,
-            p_memsz: self.size() as u64,
+            p_filesz: size,
+            p_memsz: size,
             p_align: self.align as u64,
         })
     }
