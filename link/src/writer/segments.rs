@@ -213,7 +213,7 @@ impl Blocks {
         }
 
         for b in self.blocks.iter_mut() {
-            eprintln!("reserve: {}", b.name());
+            //eprintln!("reserve: {}", b.name());
             b.reserve(&mut d, &mut temp_tracker, block, &mut temp_w);
         }
         // get a list of program headers
@@ -382,9 +382,11 @@ impl SegmentTracker {
             current_alloc = c.alloc;
 
             if file_offset < current_offset as usize {
-                eprintln!(
+                log::debug!(
                     "fail: {:?}, file_offset: {:#0x}: current offset: {:#0x}",
-                    alloc, file_offset, current_offset
+                    alloc,
+                    file_offset,
+                    current_offset
                 );
             }
             assert!(file_offset >= current_offset as usize);
@@ -395,15 +397,21 @@ impl SegmentTracker {
             let mut segment = Segment::new(alloc);
             segment.base = self.base as u64;
             segment.offset = file_offset as u64;
-            eprintln!(
+            log::debug!(
                 "new seg: {:?}, offset: {:#0x}, last_offset: {:#0x}, last_size: {:#0x}",
-                alloc, file_offset, current_offset, current_size
+                alloc,
+                file_offset,
+                current_offset,
+                current_size
             );
             self.segments.push(segment);
             if file_offset < (current_offset as usize + current_size) {
-                eprintln!(
+                log::debug!(
                     "fail: {:?}, file_offset: {:#0x}: current offset: {:#0x}, current size: {:#0x}",
-                    alloc, file_offset, current_offset, current_size
+                    alloc,
+                    file_offset,
+                    current_offset,
+                    current_size
                 );
             }
             assert!(file_offset >= (current_offset as usize + current_size));
@@ -468,10 +476,10 @@ impl Segment {
         //eprintln!("x/{:#0x}/{:#0x}", size, delta);
         self.segment_size += size;
         let after = self.segment_size;
-        eprintln!(
-            "add: {:?}, {:#0x} => {:#0x} => {:#0x}",
-            "", before, aligned_size, after
-        );
+        //eprintln!(
+        //"add: {:?}, {:#0x} => {:#0x} => {:#0x}",
+        //"", before, aligned_size, after
+        //);
         //eprintln!(
         //"add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
         //self.alloc, size, before, delta, self.segment_size, align

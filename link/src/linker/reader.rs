@@ -339,7 +339,7 @@ impl ReadBlock {
         for (name, symbol) in self.exports.iter() {
             let section_name = symbol.section.section_name();
             // allocate string
-            eprintln!("y: {:?}", symbol);
+            //eprintln!("y: {:?}", symbol);
             let string_id = data.string(name, w);
             data.pointers.insert(
                 name.to_string(),
@@ -353,10 +353,10 @@ impl ReadBlock {
          // we need the symbol index
          // We map the type depending got , or gotplt
          // addend is 0
-            let r_type = match self.kind {
-                GotKind::GOT => elf::R_X86_64_GLOB_DAT,
-                GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
-            };
+        let r_type = match self.kind {
+            GotKind::GOT => elf::R_X86_64_GLOB_DAT,
+            GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
+        };
         for name in got.iter() {
             &object::write::elf::Rel {
                 r_offset: r_offset as u64,

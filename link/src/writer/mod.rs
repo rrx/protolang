@@ -356,6 +356,7 @@ impl Data {
 
             self.dyn_symbols
                 .insert(name.to_string(), DynamicSymbol { symbol_index, sym });
+
             symbol_index
         }
     }

@@ -853,7 +853,7 @@ impl ElfBlock for DynSymSection {
 
         w.write_null_dynamic_symbol();
         for (_name, sym) in data.dyn_symbols.iter() {
-            eprintln!("write sym: {:?}", &sym);
+            //eprintln!("write sym: {:?}", &sym);
             w.write_dynamic_symbol(&sym.sym);
         }
     }

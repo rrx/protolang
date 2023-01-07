@@ -113,7 +113,7 @@ impl GeneralSection {
         self.name_id = Some(w.add_section_name(self.name.as_bytes()));
         let index = w.reserve_section_index();
         self.section_index = Some(index);
-        eprintln!("section index set: {}, {:?}", self.name, index);
+        //eprintln!("section index set: {}, {:?}", self.name, index);
         data.section_index_set(&self.name, index);
     }
 
@@ -132,9 +132,14 @@ impl GeneralSection {
         data.addr_set(&self.name, self.addr as u64);
         self.state = BlockSectionState::Located;
 
-        eprintln!(
+        log::debug!(
             "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, size: {:#0x}",
-            self.file_offset, self.name, self.alloc, self.base, self.addr, self.size
+            self.file_offset,
+            self.name,
+            self.alloc,
+            self.base,
+            self.addr,
+            self.size
         );
     }
 
