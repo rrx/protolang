@@ -152,21 +152,8 @@ impl Blocks {
             ),
         ];
 
-        //data.locals = locals;
-
-        // requires dynamic addr
-        //update_symbols(&locals, data, &mut tracker);
-
-        //if let Some(block) = maybe_block.as_mut() {
-        //for (name, s) in block.locals.iter() {
-        //let p = ProgSymbol::new_object(name, None);
-        //data.lookup.insert(name.clone(), p);
-        //}
-
         for (name, s) in block.exports.iter() {
             //eprintln!("x: {:?}", s);
-            //let p = ProgSymbol::new_object(name, None);
-            //data.lookup.insert(name.clone(), p);
             unsafe {
                 let buf = extend_lifetime(s.name.as_bytes());
                 let name_id = Some(w.add_string(buf));
@@ -195,28 +182,12 @@ impl Blocks {
                 .insert(local.symbol.clone(), local.pointer.clone());
         }
 
-        //block.update_symbols(data, w);
-        //}
-
-        /*
-        let dynamic_section_index = data
-            .section_index
-            .get(&".dynamic".to_string())
-            .cloned()
-            .unwrap();
-        //for _ in locals.iter() {
-            //w.reserve_symbol_index(Some(dynamic_section_index));
-        //}
-        */
-
         // setup symbols
         for b in self.blocks.iter_mut() {
             b.reserve_symbols(data, block, w);
         }
 
-        //if let Some(block) = maybe_block.as_mut() {
         block.reserve_symbols(data, w);
-        //}
 
         // RESERVE
 
@@ -224,10 +195,7 @@ impl Blocks {
         self.reserve(&mut tracker, data, block, w);
 
         // once we have the layout, we can assign the symbols
-        //if let Some(block) = maybe_block.as_mut() {
-        //block.dump();
         block.complete(&data);
-        //}
 
         if data.add_section_headers {
             w.reserve_section_headers();
