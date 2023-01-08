@@ -183,6 +183,22 @@ pub struct ReadSymbol {
 }
 
 impl ReadSymbol {
+    pub fn from_pointer(name: String, pointer: ResolvePointer) -> Self {
+        ReadSymbol {
+            name,
+            name_id: None,
+            dyn_name_id: None,
+            section: ReadSectionKind::Undefined,
+            source: SymbolSource::Static,
+            kind: SymbolKind::Unknown,
+            bind: SymbolBind::Local,
+            address: 0,
+            pointer,
+            size: 0,
+            lookup: SymbolLookupTable::None,
+        }
+    }
+
     pub fn get_symbol(&self, data: &Data) -> object::write::elf::Sym {
         let section = self.section.section_index(data);
         let st_value = data.pointer_get(&self.name);
@@ -283,6 +299,10 @@ impl ReadBlock {
                 }
                 _ => (),
             }
+        }
+
+        for s in self.locals.iter() {
+            eprintln!("local: {:?}", s);
         }
 
         for r in iter {
@@ -639,6 +659,7 @@ impl ReadBlock {
             Some(symbol.clone())
         } else if let Some(symbol) = self.lookup_dynamic(name) {
             Some(symbol.clone())
+        //} else if let Some(symbol) =
         } else {
             None
         }

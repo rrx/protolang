@@ -8,6 +8,33 @@ impl BlocksBuilder {
     }
 
     pub fn build(self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) -> Blocks {
+        // Setup locals
+        data.locals = vec![
+            LocalSymbol::new(
+                "_DYNAMIC".into(),
+                ".dynamic".into(),
+                ResolvePointer::Section(".dynamic".to_string(), 0),
+                Some(w.add_string("_DYNAMIC".as_bytes())),
+                None, //Some(w.add_dynamic_string("_DYNAMIC".as_bytes())),
+            ),
+            LocalSymbol::new(
+                "_GLOBAL_OFFSET_TABLE_".into(),
+                ".got.plt".into(),
+                ResolvePointer::Section(".got.plt".to_string(), 0),
+                Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
+                None, //Some(w.add_dynamic_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
+            ),
+        ];
+
+        for local in data.locals.iter() {
+            data.pointers
+                .insert(local.symbol.clone(), local.pointer.clone());
+            block.insert_local(ReadSymbol::from_pointer(
+                local.symbol.clone(),
+                local.pointer.clone(),
+            ));
+        }
+
         block.reserve_strings(data, w);
 
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
@@ -81,31 +108,6 @@ impl Blocks {
         }
 
         // RESERVE SYMBOLS
-        // what are these for? reserving symbols for locals
-        // set up sections
-        data.locals = vec![
-            LocalSymbol::new(
-                "_DYNAMIC".into(),
-                ".dynamic".into(),
-                ResolvePointer::Section(".dynamic".to_string(), 0),
-                Some(w.add_string("_DYNAMIC".as_bytes())),
-                None, //Some(w.add_dynamic_string("_DYNAMIC".as_bytes())),
-            ),
-            LocalSymbol::new(
-                "_GLOBAL_OFFSET_TABLE_".into(),
-                ".got.plt".into(),
-                ResolvePointer::Section(".got.plt".to_string(), 0),
-                Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
-                None, //Some(w.add_dynamic_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
-            ),
-        ];
-
-        for local in data.locals.iter() {
-            data.pointers
-                .insert(local.symbol.clone(), local.pointer.clone());
-        }
-
-        // setup symbols
         for b in self.blocks.iter_mut() {
             b.reserve_symbols(data, block, w);
         }
@@ -123,10 +125,6 @@ impl Blocks {
         if data.add_section_headers {
             w.reserve_section_headers();
         }
-
-        //for (k, v) in data.pointers.iter() {
-        //eprintln!("P: {}, {:#0x}", k, v);
-        //}
 
         // UPDATE
         tracker.ph = self.program_headers(&tracker, block);
@@ -234,11 +232,6 @@ impl Blocks {
         block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        // generate the program headers, so they have up to date fields
-        //self.generate_program_headers(tracker);
-        //for p in tracker.ph.iter() {
-        //eprintln!("P: {:?}", p);
-        //}
         for b in self.blocks.iter() {
             let pos = w.len();
             b.write(&data, tracker, block, w);
@@ -317,7 +310,6 @@ pub struct SegmentTracker {
     segments: Vec<Segment>,
     // track the current segment base
     start_base: u64,
-    //file_offset: u64,
     page_size: usize,
     pub ph: Vec<ProgramHeaderEntry>,
 }
@@ -327,17 +319,8 @@ impl SegmentTracker {
         Self {
             segments: vec![],
             start_base,
-            //file_offset: 0,
             page_size: 0x1000,
             ph: vec![],
-        }
-    }
-
-    pub fn current_segment_base(&self) -> u64 {
-        if let Some(c) = self.segments.last() {
-            c.base
-        } else {
-            self.start_base
         }
     }
 
@@ -349,6 +332,7 @@ impl SegmentTracker {
         self.segments.last_mut().unwrap()
     }
 
+    /*
     // add non-section data
     pub fn add_data(
         &mut self,
@@ -415,6 +399,7 @@ impl SegmentTracker {
         log::debug!("add: {:#0x}", size);
         base as usize
     }
+    */
 
     // add non-section data
     pub fn add_offsets(
@@ -556,6 +541,7 @@ impl Segment {
         eprintln!("add: {:#0x}, {:?}", size, self);
     }
 
+    /*
     pub fn add_data(&mut self, size: usize, align: usize) {
         // set size to match the offset size
         //let _before = self.segment_size;
@@ -575,6 +561,7 @@ impl Segment {
         //);
     }
 
+    */
     pub fn program_header(&self) -> Option<ProgramHeaderEntry> {
         // add a load section for the file and program header, so it's covered
         let size = self.size() as u64;

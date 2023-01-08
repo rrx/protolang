@@ -67,9 +67,6 @@ pub struct GeneralSection {
     state: BlockSectionState,
     pub(crate) name: &'static str,
     name_id: Option<StringId>,
-    //pub(crate) file_offset: usize,
-    //pub(crate) base: usize,
-    //pub(crate) addr: usize,
     pub(crate) section_index: Option<SectionIndex>,
     pub(crate) size: usize,
     pub(crate) bytes: Vec<u8>,
@@ -84,9 +81,6 @@ impl GeneralSection {
             alloc,
             name,
             name_id: None,
-            //file_offset: 0,
-            //base: 0,
-            //addr: 0,
             section_index: None,
             size: 0,
             bytes: vec![],
@@ -94,10 +88,6 @@ impl GeneralSection {
             offsets: SectionOffset::new(0x10),
         }
     }
-
-    //pub fn align(&self) -> usize {
-    //self.alloc.align()
-    //}
 
     pub fn extend_bytes(&mut self, bytes: &[u8]) {
         self.bytes.extend(bytes.iter());
@@ -113,16 +103,13 @@ impl GeneralSection {
         for r in self.relocations.iter() {
             if let Some(resolve_addr) = data.pointers.get(&r.name) {
                 if let Some(addr) = resolve_addr.resolve(data) {
-                    log::debug!(
+                    eprintln!(
                         "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                        self.alloc,
-                        self.offsets.base,
-                        addr as usize,
-                        &r.name
+                        self.alloc, self.offsets.address, addr as usize, &r.name
                     );
                     r.patch(
                         patch_base as *mut u8,
-                        self.offsets.base as *mut u8,
+                        self.offsets.address as *mut u8,
                         addr as *const u8,
                     );
                 } else {
@@ -132,7 +119,7 @@ impl GeneralSection {
                 unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
             }
         }
-        //self.disassemble(data);
+        self.disassemble(data);
     }
 
     pub fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
@@ -157,8 +144,6 @@ impl GeneralSection {
 
         eprintln!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
         tracker.add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
-        //self.base = tracker.add_data(self.alloc, 1, delta, self.file_offset);
-        //self.addr = self.base + self.file_offset;
         data.addr_set(&self.name, self.offsets.address); //self.addr as u64);
         self.state = BlockSectionState::Located;
 
@@ -189,7 +174,6 @@ impl GeneralSection {
         self.apply_relocations(data);
 
         w.write(self.bytes.as_slice());
-
         /*
         for r in self.relocations.iter() {
             eprintln!("r: {}", r);

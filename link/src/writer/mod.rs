@@ -182,7 +182,6 @@ pub struct Data {
     size_dynstr: usize,
     addr_dynsym: u64,
     size_dynsym: usize,
-    //addr_reladyn: u64,
     size_reladyn: usize,
     size_relaplt: usize,
     addr_hash: u64,
@@ -191,10 +190,6 @@ pub struct Data {
     add_symbols: bool,
     debug: bool,
 
-    // store strings that we reference their bytes
-    // because Data has a long lifetime, we extend
-    // the strings bytes to static
-    //strings: Vec<String>,
     pub dyn_symbols: HashMap<String, DynamicSymbol>,
     symbols: HashMap<String, ProgSymbol>,
     pub lookup: HashMap<String, ProgSymbol>,
@@ -203,6 +198,7 @@ pub struct Data {
     pub relocations_got: Vec<String>,
     pub relocations_gotplt: Vec<String>,
 
+    // store strings for which we have extended their lifetime
     pub strings: HashMap<String, (String, StringId)>,
     pub dyn_strings: HashMap<String, (String, StringId)>,
 
@@ -224,10 +220,7 @@ impl Data {
             arch: Architecture::X86_64,
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
-            //ph: vec![],
-            //lib_names,
             block: None,
-            //sections: ProgSections::new(),
             libs,
             base: 0x80000,
             page_size: 0x1000,
@@ -244,9 +237,6 @@ impl Data {
             add_section_headers: true,
             add_symbols: true,
             debug: true,
-            //strings: vec![],
-            //unapplied_got: vec![],
-            //unapplied_plt: vec![],
 
             // Tables
             dyn_symbols: HashMap::new(),
@@ -526,103 +516,6 @@ pub unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
     std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
-/*
-pub fn unapplied_relocations<'a>(data: &mut Data, w: &mut Writer) {
-    let symbols = data.sections.symbol_pointers();
-    let externs = data.sections.extern_symbol_pointers();
-    for section in data.sections.sections.iter() {
-        for (symbol, mut r) in section
-            .unapplied_relocations(&symbols, &externs)
-            .into_iter()
-        {
-            let buf = r.name.as_bytes();
-            unsafe {
-                r.name_id = Some(w.add_dynamic_string(extend_lifetime(buf)));
-            }
-            let sym = Sym {
-                name: r.name_id,
-                section: None,
-                st_info: symbol.s.st_info,
-                st_other: symbol.s.st_other,
-                st_shndx: 0,
-                st_value: 0,
-                st_size: 0,
-            };
-            data.dyn_symbols.insert(r.name.clone(), sym.clone());
-            match r.effect() {
-                PatchEffect::AddToGot => {
-                    eprintln!("unapp data: {:?}", &sym);
-                    data.sections.unapplied_got.push(r);
-                }
-                PatchEffect::AddToPlt => {
-                    eprintln!("unapp text: {:?}", &sym);
-                    data.sections.unapplied_plt.push(r);
-                }
-                PatchEffect::DoNothing => (), //_ => unreachable!(),
-            }
-        }
-    }
-
-    for u in data.sections.unapplied_plt.iter() {
-        eprintln!("R-PLT: {:?}", u);
-    }
-
-    for u in data.sections.unapplied_got.iter() {
-        eprintln!("R-GOT: {:?}", u);
-    }
-}
-*/
-
-/*
-fn update_symbols(locals: &Vec<LocalSymbol>, data: &mut Data, _tracker: &mut SegmentTracker) {
-    for local in locals.iter() {
-        let addr = data.addr_get(&local.section) + local.offset as u64;
-        // Add symbol
-        let st_info = (elf::STB_LOCAL << 4) + (elf::STT_OBJECT & 0x0f);
-        let st_other = elf::STV_DEFAULT;
-        //let st_shndx = 0;
-        //let st_value = addr;
-        let st_size = 0;
-
-        let section_index = data.section_index.get(&local.section).cloned();
-
-        let p = ProgSymbol {
-            name_id: local.string_id,
-            section_index,
-            base: 0,
-            s: CodeSymbol {
-                name: local.symbol.clone(),
-                size: st_size,
-                address: addr,
-                kind: CodeSymbolKind::Data,
-                def: CodeSymbolDefinition::Defined,
-                st_info,
-                st_other,
-            },
-        };
-
-        data.symbols.insert(local.symbol.clone(), p.clone());
-        data.lookup.insert(local.symbol.clone(), p);
-    }
-}
-*/
-
-/*
-pub fn write_file<Elf: FileHeader<Endian = Endianness>>(
-    link: &Link,
-    mut data: Data,
-) -> std::result::Result<Vec<u8>, Box<dyn Error>> {
-    let mut out_data = Vec::new();
-    let endian = Endianness::Little;
-    let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
-
-    load_sections(&mut data, link, &mut writer);
-    unapplied_relocations(&mut data, &mut writer);
-    write_file_main::<Elf>(&mut data, &mut writer)?;
-    Ok(out_data)
-}
-*/
-
 pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
     data: &mut Data,
     w: &mut Writer,
@@ -635,7 +528,6 @@ pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
         }
     }
 
-    //let (mut blocks, maybe_block) = BlocksBuilder::new().build(data, w);
     let mut block = data.block.take().unwrap();
     let mut blocks = BlocksBuilder::new().build(data, w, &mut block);
     blocks.build(data, w, &mut block);
