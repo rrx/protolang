@@ -60,7 +60,7 @@ impl BlocksBuilder {
             blocks.push(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
         }
 
-        blocks.push(ReadSectionKind::RO.block());
+        blocks.push(ReadSectionKind::ROData.block());
         blocks.push(ReadSectionKind::RX.block());
         blocks.push(Box::new(PltSection::new()));
         blocks.push(ReadSectionKind::RW.block());
@@ -133,6 +133,7 @@ impl Blocks {
         // WRITE
         for b in self.blocks.iter() {
             let pos = w.len();
+            eprintln!("write: {}", b.name());
             b.write(&data, &mut tracker, block, w);
             let after = w.len();
             log::debug!(
@@ -198,7 +199,7 @@ impl Blocks {
             let pos = w.reserved_len();
             b.reserve(data, tracker, block, w);
             let after = w.reserved_len();
-            log::debug!(
+            eprintln!(
                 "reserve: {}, {:#0x}, {:#0x},  {:?}",
                 b.name(),
                 pos,
@@ -236,7 +237,7 @@ impl Blocks {
             let pos = w.len();
             b.write(&data, tracker, block, w);
             let after = w.len();
-            log::debug!(
+            eprintln!(
                 "write: {}, {:?}, pos: {:#0x}, after: {:#0x}, base: {:#0x}",
                 b.name(),
                 b.alloc(),
@@ -443,7 +444,7 @@ impl SegmentTracker {
             // new segment
             let segment = Segment::new(alloc, base, file_offset as u64);
 
-            eprintln!(
+            log::debug!(
                 "new seg: {:?}, offset: {:#0x}, last_offset: {:#0x}, last_size: {:#0x}, size: {:#0x}, align: {:#0x}, base: {:#0x}",
                 alloc,
                 file_offset,
@@ -453,7 +454,7 @@ impl SegmentTracker {
                 offsets.align,
                 base,
             );
-            eprintln!("seg: {:?}", segment);
+            //eprintln!("seg: {:?}", segment);
             self.segments.push(segment);
 
             if file_offset < (current_file_offset + current_size) {
@@ -524,12 +525,12 @@ impl Segment {
         self.segment_size = aligned + size;
         self.adjusted_file_offset = self.file_offset + aligned as u64;
 
-        eprintln!("add: {:#0x}, {:?}", size, self);
-        eprintln!(
-            "x: {:#0x}, {:#0x}",
-            self.adjusted_file_offset as usize + size,
-            w.reserved_len()
-        );
+        //eprintln!("add: {:#0x}, {:?}", size, self);
+        //eprintln!(
+            //"x: {:#0x}, {:#0x}",
+            //self.adjusted_file_offset as usize + size,
+            //w.reserved_len()
+        //);
 
         assert_eq!(self.adjusted_file_offset as usize + size, w.reserved_len());
 
@@ -538,7 +539,7 @@ impl Segment {
         offsets.address = self.base + self.adjusted_file_offset;
         offsets.file_offset = self.adjusted_file_offset;
 
-        eprintln!("add: {:#0x}, {:?}", size, self);
+        //eprintln!("add: {:#0x}, {:?}", size, self);
     }
 
     /*

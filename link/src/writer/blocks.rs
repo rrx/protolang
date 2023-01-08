@@ -67,7 +67,7 @@ impl ElfBlock for FileHeader {
     fn write(
         &self,
         data: &Data,
-        tracker: &mut SegmentTracker,
+        _tracker: &mut SegmentTracker,
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
@@ -349,7 +349,9 @@ impl ElfBlock for DynamicSection {
             w,
         );
         data.addr
-            .insert(".dynamic".to_string(), self.offsets.address);
+            .insert(AddressKey::Section(".dynamic".to_string()), self.offsets.address);
+        data.addr
+            .insert(AddressKey::SectionIndex(self.index.unwrap()), self.offsets.address);
     }
 
     fn write(
@@ -478,7 +480,7 @@ impl ElfBlock for RelaDynSection {
         // we are writing a relocation for the GOT entries
         for (index, name) in unapplied.iter().enumerate() {
             //eprintln!("unapplied: {}", r);
-            let p = data.lookup.get(name).unwrap();
+            //let p = data.lookup.get(name).unwrap();
             //let sym = p.get_symbol();
             //let r_offset = got_addr as usize + (index + start) * std::mem::size_of::<usize>();
             let r_addend = 0;
@@ -1131,7 +1133,6 @@ impl ElfBlock for HashSection {
         w.reserve_hash(self.bucket_count, self.chain_count);
 
         let after = w.reserved_len();
-        let delta = after - pos;
         tracker.add_offsets(
             self.alloc().unwrap(),
             &mut self.offsets,
@@ -1400,7 +1401,6 @@ impl ElfBlock for PltSection {
         let file_offset = w.reserved_len();
         w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
-        let delta = after - pos;
         assert_eq!(size, after - file_offset);
         tracker.add_offsets(
             self.alloc().unwrap(),
@@ -1408,9 +1408,13 @@ impl ElfBlock for PltSection {
             after - file_offset,
             w,
         );
+
         // update section pointers
         data.addr
-            .insert(Self::get_name().to_string(), self.offsets.address);
+            .insert(AddressKey::Section(Self::get_name().to_string()), self.offsets.address);
+        data.addr
+            .insert(AddressKey::SectionIndex(self.index.unwrap()), self.offsets.address);
+
     }
 
     fn write(
@@ -1425,7 +1429,7 @@ impl ElfBlock for PltSection {
         let aligned_pos = size_align(pos, align);
         w.pad_until(aligned_pos);
 
-        let got_addr = *data.addr.get(".got.plt").unwrap() as isize;
+        let got_addr = data.addr_get_by_name(".got.plt").unwrap() as isize;
         let vbase = self.offsets.address as isize;
 
         let mut stub: Vec<u8> = vec![
@@ -1532,12 +1536,11 @@ impl ElfBlock for BlockSectionX {
     }
 
     fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
-        use ReadSectionKind::*;
         match self.kind {
-            RX => block.rx.block_reserve_section_index(data, w),
-            RO => block.ro.block_reserve_section_index(data, w),
-            RW => block.rw.block_reserve_section_index(data, w),
-            Bss => block.bss.block_reserve_section_index(data, w),
+            ReadSectionKind::RX => block.rx.block_reserve_section_index(data, w),
+            ReadSectionKind::ROData => block.ro.block_reserve_section_index(data, w),
+            ReadSectionKind::RW => block.rw.block_reserve_section_index(data, w),
+            ReadSectionKind::Bss => block.bss.block_reserve_section_index(data, w),
             _ => unreachable!(),
         }
     }
@@ -1549,23 +1552,21 @@ impl ElfBlock for BlockSectionX {
         block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        use ReadSectionKind::*;
         match self.kind {
-            RX => block.rx.block_reserve(data, tracker, w),
-            RO => block.ro.block_reserve(data, tracker, w),
-            RW => block.rw.block_reserve(data, tracker, w),
-            Bss => block.bss.block_reserve(data, tracker, w),
+            ReadSectionKind::RX => block.rx.block_reserve(data, tracker, w),
+            ReadSectionKind::ROData => block.ro.block_reserve(data, tracker, w),
+            ReadSectionKind::RW => block.rw.block_reserve(data, tracker, w),
+            ReadSectionKind::Bss => block.bss.block_reserve(data, tracker, w),
             _ => unreachable!(),
         }
     }
 
     fn write(&self, data: &Data, _: &mut SegmentTracker, block: &mut ReadBlock, w: &mut Writer) {
-        use ReadSectionKind::*;
         match self.kind {
-            RX => block.rx.block_write(data, w),
-            RO => block.ro.block_write(data, w),
-            RW => block.rw.block_write(data, w),
-            Bss => block.bss.block_write(data, w),
+            ReadSectionKind::RX => block.rx.block_write(data, w),
+            ReadSectionKind::ROData => block.ro.block_write(data, w),
+            ReadSectionKind::RW => block.rw.block_write(data, w),
+            ReadSectionKind::Bss => block.bss.block_write(data, w),
             _ => unreachable!(),
         }
     }
@@ -1577,12 +1578,11 @@ impl ElfBlock for BlockSectionX {
         block: &ReadBlock,
         w: &mut Writer,
     ) {
-        use ReadSectionKind::*;
         match self.kind {
-            RX => block.rx.block_write_section_header(data, w),
-            RO => block.ro.block_write_section_header(data, w),
-            RW => block.rw.block_write_section_header(data, w),
-            Bss => block.bss.block_write_section_header(data, w),
+            ReadSectionKind::RX => block.rx.block_write_section_header(data, w),
+            ReadSectionKind::ROData => block.ro.block_write_section_header(data, w),
+            ReadSectionKind::RW => block.rw.block_write_section_header(data, w),
+            ReadSectionKind::Bss => block.bss.block_write_section_header(data, w),
             _ => unreachable!(),
         }
     }

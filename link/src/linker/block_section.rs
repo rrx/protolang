@@ -140,11 +140,11 @@ impl GeneralSection {
 
         w.reserve(self.bytes.len(), 1); //align);
         let after = w.reserved_len();
-        let delta = after - pos;
+        //let delta = after - pos;
 
         eprintln!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
         tracker.add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
-        data.addr_set(&self.name, self.offsets.address); //self.addr as u64);
+        data.addr_set(&self.name, self.offsets.address);
         self.state = BlockSectionState::Located;
 
         eprintln!(
@@ -161,8 +161,8 @@ impl GeneralSection {
 
     pub fn block_write(&self, data: &Data, w: &mut Writer) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize); //align());
-        log::debug!(
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        eprintln!(
             "AF: {:?}, {:#0x}, {:#0x}",
             self.alloc,
             aligned_pos,

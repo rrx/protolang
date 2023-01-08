@@ -141,6 +141,7 @@ pub struct DynamicSymbol {
 pub enum ResolvePointer {
     Resolved(u64),
     Section(String, u64),
+    SectionIndex(SectionIndex, u64),
 }
 
 impl fmt::Display for ResolvePointer {
@@ -148,23 +149,44 @@ impl fmt::Display for ResolvePointer {
         match self {
             Self::Resolved(p) => write!(f, "Abs({:#0x})", p),
             Self::Section(name, p) => write!(f, "Section({},{:#0x})", name, p),
+            Self::SectionIndex(inx, p) => write!(f, "SectionIndex({:?},{:#0x})", inx, p),
         }
     }
 }
 
 impl ResolvePointer {
     pub fn resolve(&self, data: &Data) -> Option<u64> {
+        eprintln!("X: {:?}", self);
+        eprintln!("X: {:?}", &data.addr);
         match self {
             Self::Resolved(x) => Some(*x),
             Self::Section(section_name, offset) => {
-                if let Some(base) = data.addr.get(section_name) {
+                if let Some(base) = data.addr.get(&AddressKey::Section(section_name.to_string())) {
                     Some(base + offset)
                 } else {
                     None
                 }
             }
+            Self::SectionIndex(section_index, offset) => {
+                unimplemented!()
+                    /*
+                data.section_index.get(
+                if let Some(base) = data.addr.get(section_name) {
+                    Some(base + offset)
+                } else {
+                    None
+                }
+                */
+            }
         }
     }
+}
+
+
+#[derive(Eq, Hash, PartialEq, Debug)]
+pub enum AddressKey {
+    SectionIndex(SectionIndex),
+    Section(String)
 }
 
 pub struct Data {
@@ -175,7 +197,7 @@ pub struct Data {
     page_size: u32,
     base: usize,
 
-    pub addr: HashMap<String, u64>,
+    pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
 
     pub section_index: HashMap<String, SectionIndex>,
@@ -383,15 +405,23 @@ impl Data {
             .expect(&format!("Pointer not found: {}", name))
     }
 
+    pub fn addr_get_by_name(&self, name: &str) -> Option<u64> {
+        self.addr.get(&AddressKey::Section(name.to_string())).cloned()
+    }
+
+    pub fn addr_get_by_index(&self, index: SectionIndex) -> Option<u64> {
+        self.addr.get(&AddressKey::SectionIndex(index)).cloned()
+    }
+
     pub fn addr_get(&self, name: &str) -> u64 {
         *self
             .addr
-            .get(name)
+            .get(&AddressKey::Section(name.to_string()))
             .expect(&format!("Address not found: {}", name))
     }
 
     pub fn addr_set(&mut self, name: &str, value: u64) {
-        self.addr.insert(name.to_string(), value);
+        self.addr.insert(AddressKey::Section(name.to_string()), value);
     }
 
     pub fn section_index_get(&self, name: &str) -> SectionIndex {
@@ -446,7 +476,7 @@ impl Data {
         });
         out.push(Dynamic {
             tag: elf::DT_PLTGOT,
-            val: *self.addr.get(".got.plt").unwrap_or(&0),
+            val: *self.addr.get(&AddressKey::Section(".got.plt".to_string())).unwrap_or(&0),
             string: None,
         });
         out.push(Dynamic {
