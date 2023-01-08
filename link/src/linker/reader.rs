@@ -336,6 +336,22 @@ impl ReadBlock {
             }
         }
 
+        for (name, symbol) in self.locals.iter() {
+            match symbol.section {
+                ReadSectionKind::RX
+                | ReadSectionKind::RO
+                | ReadSectionKind::RW
+                | ReadSectionKind::Bss => {
+                    let section_name = symbol.section.section_name();
+                    data.pointers.insert(
+                        name.to_string(),
+                        ResolvePointer::Section(section_name.to_string(), symbol.address),
+                    );
+                }
+                _ => (),
+            }
+        }
+
         for (name, symbol) in self.exports.iter() {
             let section_name = symbol.section.section_name();
             // allocate string
@@ -346,34 +362,6 @@ impl ReadBlock {
                 ResolvePointer::Section(section_name.to_string(), symbol.address),
             );
         }
-
-        /*
-         // Write relocations
-         // we need the offset is the address + offset of GOT or GOTPLT entry
-         // we need the symbol index
-         // We map the type depending got , or gotplt
-         // addend is 0
-        let r_type = match self.kind {
-            GotKind::GOT => elf::R_X86_64_GLOB_DAT,
-            GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
-        };
-        for name in got.iter() {
-            &object::write::elf::Rel {
-                r_offset: r_offset as u64,
-                r_sym,
-                r_type,
-                r_addend,
-            },
-            */
-
-        /*
-        for r in data.relocations_got.iter() {
-            eprintln!("r got: {}", r);
-        }
-        for r in data.relocations_gotplt.iter() {
-            eprintln!("r gotplt: {}", r);
-        }
-        */
     }
 
     /*
@@ -519,66 +507,6 @@ impl ReadBlock {
         Ok(())
     }
 
-    /*
-    pub fn load<'a>(&self, w: &mut Writer<'a>) -> ProgSections {
-        let mut out = ProgSections::new();
-        if self.rx.bytes.len() > 0 {
-            let name = ".text";
-            let name_id = Some(w.add_section_name(name.as_bytes()));
-            let mut section =
-                ProgSection::new(AllocSegment::RX, Some(name.to_string()), name_id, 0);
-            section.add_bytes(self.rx.bytes.as_slice());
-
-            use crate::segment::*;
-            for (name, symbol) in self.locals.iter().chain(self.exports.iter()) {
-                //let name_id = Some(w.add_string(name.as_bytes()));
-                let name_id = None;
-                let mut symbol = symbol.clone();
-                //symbol.address += self.base as u64 + self.addr as u64 + self.data_count as u64;
-                let ps = ProgSymbol {
-                    name_id,
-                    section_index: None,
-                    base: 0,
-                    s: CodeSymbol {
-                        name: name.clone(),
-                        size: symbol.size,
-                        address: 0,
-                        kind: CodeSymbolKind::Text,
-                        def: CodeSymbolDefinition::Defined,
-                        st_info: 0,
-                        st_other: 0,
-                    },
-                };
-                eprintln!("symbol extern: {}, {:#0x}", &name, &ps.s.address);
-                section.symbols.insert(name.clone(), ps);
-            }
-
-            section.relocations = self.rx.relocations.clone();
-            out.add(section);
-            //data.sections.add(section);
-        }
-
-        if self.ro.bytes.len() > 0 {
-            let name = ".rodata".to_string();
-            let name_id = Some(w.add_section_name(".rodata".as_bytes()));
-            let mut section = ProgSection::new(AllocSegment::RO, Some(name), name_id, 0);
-            section.add_bytes(self.ro.bytes.as_slice());
-            out.add(section);
-            //data.sections.add(section);
-        }
-
-        if self.rw.bytes.len() > 0 {
-            let name = ".data".to_string();
-            let name_id = Some(w.add_section_name(".data".as_bytes()));
-            let mut section = ProgSection::new(AllocSegment::RW, Some(name), name_id, 0);
-            section.add_bytes(self.rw.bytes.as_slice());
-            out.add(section);
-            //data.sections.add(section);
-        }
-        out
-    }
-    */
-
     pub fn insert_local(&mut self, s: ReadSymbol) {
         self.locals.insert(s.name.clone(), s);
     }
@@ -678,6 +606,7 @@ impl ReadBlock {
                 self.rx.from_section(b, section)?;
             }
             ReadSectionKind::RO => {
+                // XXX: should be ro
                 self.rx.from_section(b, section)?;
             }
             ReadSectionKind::RW => {

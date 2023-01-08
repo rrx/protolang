@@ -1,13 +1,14 @@
 use std::error::Error;
 
 use object::elf;
-use object::read::elf::FileHeader;
+//use object::read::elf::FileHeader;
 use object::write::elf::Sym;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::SymbolIndex;
 use object::{Architecture, Endianness};
 use std::collections::HashMap;
+use std::fmt;
 use std::mem;
 
 use super::*;
@@ -112,7 +113,7 @@ impl AllocSegment {
         match self {
             AllocSegment::RO => 0x04,
             AllocSegment::Interp => 0x01,
-            AllocSegment::RW => 0x04,
+            AllocSegment::RW => 0x08,
             AllocSegment::RX => 0x10,
         }
     }
@@ -142,6 +143,15 @@ pub enum ResolvePointer {
     Section(String, u64),
 }
 
+impl fmt::Display for ResolvePointer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Resolved(p) => write!(f, "Abs({:#0x})", p),
+            Self::Section(name, p) => write!(f, "Section({},{:#0x})", name, p),
+        }
+    }
+}
+
 impl ResolvePointer {
     pub fn resolve(&self, data: &Data) -> Option<u64> {
         match self {
@@ -165,7 +175,7 @@ pub struct Data {
     page_size: u32,
     base: usize,
 
-    addr: HashMap<String, u64>,
+    pub addr: HashMap<String, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
 
     pub section_index: HashMap<String, SectionIndex>,
@@ -538,7 +548,6 @@ pub fn unapplied_relocations<'a>(data: &mut Data, w: &mut Writer) {
                 st_value: 0,
                 st_size: 0,
             };
-            eprintln!("s: {:?}, {}", &symbol, r);
             data.dyn_symbols.insert(r.name.clone(), sym.clone());
             match r.effect() {
                 PatchEffect::AddToGot => {

@@ -1,8 +1,5 @@
-use crate::relocations::*;
 use crate::writer::*;
 use crate::*;
-//use object::elf;
-use object::elf::FileHeader64;
 use object::read::elf;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
@@ -59,7 +56,7 @@ impl BlockSection {
         self.section.block_write(data, w);
     }
 
-    pub fn block_write_section_header(&self, data: &Data, w: &mut Writer) {
+    pub fn block_write_section_header(&self, _data: &Data, w: &mut Writer) {
         self.section.block_write_section_header(w);
     }
 }
@@ -70,13 +67,14 @@ pub struct GeneralSection {
     state: BlockSectionState,
     pub(crate) name: &'static str,
     name_id: Option<StringId>,
-    pub(crate) file_offset: usize,
-    pub(crate) base: usize,
-    pub(crate) addr: usize,
+    //pub(crate) file_offset: usize,
+    //pub(crate) base: usize,
+    //pub(crate) addr: usize,
     pub(crate) section_index: Option<SectionIndex>,
     pub(crate) size: usize,
     pub(crate) bytes: Vec<u8>,
     pub(crate) relocations: Vec<CodeRelocation>,
+    pub(crate) offsets: SectionOffset,
 }
 
 impl GeneralSection {
@@ -86,19 +84,20 @@ impl GeneralSection {
             alloc,
             name,
             name_id: None,
-            file_offset: 0,
-            base: 0,
-            addr: 0,
+            //file_offset: 0,
+            //base: 0,
+            //addr: 0,
             section_index: None,
             size: 0,
             bytes: vec![],
             relocations: vec![],
+            offsets: SectionOffset::new(0x10),
         }
     }
 
-    pub fn align(&self) -> usize {
-        self.alloc.align()
-    }
+    //pub fn align(&self) -> usize {
+    //self.alloc.align()
+    //}
 
     pub fn extend_bytes(&mut self, bytes: &[u8]) {
         self.bytes.extend(bytes.iter());
@@ -107,6 +106,33 @@ impl GeneralSection {
 
     pub fn extend_size(&mut self, size: usize) {
         self.size += size;
+    }
+
+    pub fn apply_relocations(&self, data: &Data) {
+        let patch_base = self.bytes.as_ptr();
+        for r in self.relocations.iter() {
+            if let Some(resolve_addr) = data.pointers.get(&r.name) {
+                if let Some(addr) = resolve_addr.resolve(data) {
+                    log::debug!(
+                        "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
+                        self.alloc,
+                        self.offsets.base,
+                        addr as usize,
+                        &r.name
+                    );
+                    r.patch(
+                        patch_base as *mut u8,
+                        self.offsets.base as *mut u8,
+                        addr as *const u8,
+                    );
+                } else {
+                    unreachable!("Unable to resolve symbol: {}, {:?}", &r.name, &resolve_addr);
+                }
+            } else {
+                unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
+            }
+        }
+        //self.disassemble(data);
     }
 
     pub fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
@@ -118,43 +144,62 @@ impl GeneralSection {
     }
 
     pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+        //let align = self.align();
+        let align = self.offsets.align as usize;
         let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align());
+        let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
-        self.file_offset = w.reserved_len();
+        let file_offset = w.reserved_len();
 
-        w.reserve(self.bytes.len(), self.align());
+        w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
         let delta = after - pos;
 
-        self.base = tracker.add_data(self.alloc, 1, delta, self.file_offset);
-        self.addr = self.base + self.file_offset;
-        data.addr_set(&self.name, self.addr as u64);
+        eprintln!("align: {:#0x}", align);
+        tracker.add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
+        //self.base = tracker.add_data(self.alloc, 1, delta, self.file_offset);
+        //self.addr = self.base + self.file_offset;
+        data.addr_set(&self.name, self.offsets.address); //self.addr as u64);
         self.state = BlockSectionState::Located;
 
-        log::debug!(
-            "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, size: {:#0x}",
-            self.file_offset,
+        eprintln!(
+            "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, size: {:#0x}, align: {:#0x}",
+            self.offsets.file_offset,
             self.name,
             self.alloc,
-            self.base,
-            self.addr,
-            self.size
+            self.offsets.base,
+            self.offsets.address,
+            self.offsets.size,
+            align,
         );
     }
 
-    pub fn block_write(&self, _data: &Data, w: &mut Writer) {
+    pub fn block_write(&self, data: &Data, w: &mut Writer) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align());
+        let aligned_pos = size_align(pos, self.offsets.align as usize); //align());
         log::debug!(
             "AF: {:?}, {:#0x}, {:#0x}",
             self.alloc,
             aligned_pos,
-            self.file_offset
+            self.offsets.file_offset
         );
-        assert_eq!(aligned_pos, self.file_offset);
+        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
         w.pad_until(aligned_pos);
+
+        self.apply_relocations(data);
+
         w.write(self.bytes.as_slice());
+
+        /*
+        for r in self.relocations.iter() {
+            eprintln!("r: {}", r);
+            let p = data.pointers.get(&r.name).unwrap();
+            eprintln!("s: {:#0x}", p.resolve(data).unwrap());
+            //if let Some(p) = data.pointers.get(&r.name) {
+            //eprintln!("s: {:?}", p.resolve(data));
+            //}
+        }
+        */
     }
 
     pub fn block_write_section_header(&self, w: &mut Writer) {
@@ -163,12 +208,12 @@ impl GeneralSection {
                 name: Some(name_id),
                 sh_type: object::elf::SHT_PROGBITS,
                 sh_flags: self.alloc.section_header_flags() as u64,
-                sh_addr: self.addr as u64,
-                sh_offset: self.file_offset as u64,
+                sh_addr: self.offsets.address, //addr as u64,
+                sh_offset: self.offsets.file_offset,
                 sh_info: 0,
                 sh_link: 0,
                 sh_entsize: 0,
-                sh_addralign: self.alloc.align() as u64,
+                sh_addralign: self.offsets.align, //alloc.align() as u64,
                 sh_size: self.size as u64,
             });
         }
@@ -210,13 +255,6 @@ impl BssSection {
 
     pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
         self.section.block_reserve(data, tracker, w);
-
-        /*
-        for r in self.relocations.iter() {
-            data.relocations_got.push(r.clone());
-            data.relocations_gotplt.push(r.clone());
-        }
-        */
     }
 
     pub fn block_write(&self, data: &Data, w: &mut Writer) {

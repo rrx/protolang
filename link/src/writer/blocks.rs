@@ -11,7 +11,6 @@ pub trait ElfBlock {
     }
     fn reserve_section_index(&mut self, _: &mut Data, _block: &mut ReadBlock, _: &mut Writer) {}
     fn reserve_symbols(&mut self, _data: &mut Data, _block: &ReadBlock, _w: &mut Writer) {}
-    //fn reserve_strings<'a>(&self, _: &'a mut Vec<LocalSymbol>, _: &mut Writer<'a>) {}
     fn reserve(&mut self, _: &mut Data, _: &mut SegmentTracker, _: &mut ReadBlock, _: &mut Writer) {
     }
     fn update_tracker(&mut self, _: &Data, _: &mut SegmentTracker) {}
@@ -20,46 +19,27 @@ pub trait ElfBlock {
     fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, _: &mut Writer) {}
 }
 
-pub struct HeaderComponent {
-    size_fh: usize,
-    size_ph: usize,
-    base: usize,
-    ph_count: usize,
+pub struct FileHeader {
+    size: usize,
+    offsets: SectionOffset,
 }
 
-impl Default for HeaderComponent {
+impl Default for FileHeader {
     fn default() -> Self {
         Self {
-            size_fh: 0,
-            size_ph: 0,
-            base: 0,
-            ph_count: 0,
+            size: 0,
+            offsets: SectionOffset::new(0x01),
         }
     }
 }
 
-impl ElfBlock for HeaderComponent {
+impl ElfBlock for FileHeader {
     fn name(&self) -> String {
-        return "header".to_string();
-    }
-    fn alloc(&self) -> Option<AllocSegment> {
-        Some(AllocSegment::RO)
+        return "fh".to_string();
     }
 
-    fn program_header(&self, block: &ReadBlock) -> Vec<ProgramHeaderEntry> {
-        vec![
-            // program header
-            ProgramHeaderEntry {
-                p_type: elf::PT_PHDR,
-                p_flags: elf::PF_R,
-                p_offset: self.size_fh as u64,
-                p_vaddr: self.base as u64 + self.size_fh as u64,
-                p_paddr: 0,
-                p_filesz: self.size_ph as u64,
-                p_memsz: self.size_ph as u64,
-                p_align: 8,
-            },
-        ]
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RO)
     }
 
     fn reserve_section_index(&mut self, _data: &mut Data, _block: &mut ReadBlock, w: &mut Writer) {
@@ -79,21 +59,9 @@ impl ElfBlock for HeaderComponent {
 
         // Start reserving file ranges.
         w.reserve_file_header();
-        self.size_fh = w.reserved_len();
-
-        self.ph_count = tracker.ph.len();
-        //for _ph in tracker.ph.iter() {
-        //eprintln!("ph: {:?}", ph);
-        //}
-
-        let before = w.reserved_len();
-        w.reserve_program_headers(self.ph_count as u32);
-        let after = w.reserved_len();
-        self.size_ph = after - before;
-
+        self.size = w.reserved_len();
         let alloc = self.alloc().unwrap();
-        tracker.add_data(alloc, alloc.align(), self.size_fh, 0);
-        self.base = tracker.add_data(alloc, alloc.align(), self.size_ph, self.size_fh);
+        tracker.add_offsets(alloc, &mut self.offsets, self.size, w);
     }
 
     fn write(
@@ -116,7 +84,86 @@ impl ElfBlock for HeaderComponent {
             e_flags: 0,           // e_flags
         })
         .unwrap();
+    }
 
+    fn write_section_header(
+        &self,
+        _data: &Data,
+        _tracker: &SegmentTracker,
+        _block: &ReadBlock,
+        w: &mut Writer,
+    ) {
+        w.write_null_section_header();
+    }
+}
+
+pub struct ProgramHeader {
+    size: usize,
+    base: usize,
+    offsets: SectionOffset,
+    ph_count: usize,
+}
+
+impl Default for ProgramHeader {
+    fn default() -> Self {
+        Self {
+            size: 0,
+            ph_count: 0,
+            base: 0,
+            offsets: SectionOffset::new(0x01),
+        }
+    }
+}
+
+impl ElfBlock for ProgramHeader {
+    fn name(&self) -> String {
+        return "ph".to_string();
+    }
+
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RO)
+    }
+
+    fn program_header(&self, _block: &ReadBlock) -> Vec<ProgramHeaderEntry> {
+        vec![
+            // program header
+            ProgramHeaderEntry {
+                p_type: elf::PT_PHDR,
+                p_flags: elf::PF_R,
+                p_offset: self.offsets.file_offset,
+                p_vaddr: self.offsets.address,
+                p_paddr: 0,
+                p_filesz: self.size as u64,
+                p_memsz: self.size as u64,
+                p_align: 8,
+            },
+        ]
+    }
+
+    fn reserve(
+        &mut self,
+        _data: &mut Data,
+        tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
+        self.ph_count = tracker.ph.len();
+        let before = w.reserved_len();
+        w.reserve_program_headers(self.ph_count as u32);
+        let after = w.reserved_len();
+        self.size = after - before;
+
+        let alloc = self.alloc().unwrap();
+        tracker.add_offsets(alloc, &mut self.offsets, self.size, w);
+    }
+
+    fn write(
+        &self,
+        _data: &Data,
+        tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
         w.write_align_program_headers();
 
         for ph in tracker.ph.iter() {
@@ -134,6 +181,87 @@ impl ElfBlock for HeaderComponent {
         }
         assert_eq!(tracker.ph.len(), self.ph_count);
     }
+}
+
+use std::ffi::CString;
+pub struct InterpSection {
+    alloc: AllocSegment,
+    name_id: Option<StringId>,
+    cstr: CString,
+    offsets: SectionOffset,
+}
+
+impl InterpSection {
+    pub fn new(data: &Data) -> Self {
+        let interp = data.interp.as_bytes().to_vec();
+        let cstr = std::ffi::CString::new(interp).unwrap();
+        Self {
+            alloc: AllocSegment::RO,
+            cstr,
+            name_id: None,
+            offsets: SectionOffset::new(0x01),
+        }
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.cstr.as_bytes_with_nul()
+    }
+}
+
+impl ElfBlock for InterpSection {
+    fn name(&self) -> String {
+        return "interp".to_string();
+    }
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RO)
+    }
+    fn program_header(&self, _block: &ReadBlock) -> Vec<ProgramHeaderEntry> {
+        let size = self.as_slice().len() as u64;
+        vec![ProgramHeaderEntry {
+            p_type: elf::PT_INTERP,
+            p_flags: self.alloc().unwrap().program_header_flags(),
+            p_offset: self.offsets.file_offset,
+            p_vaddr: self.offsets.address,
+            p_paddr: 0,
+            p_filesz: size,
+            p_memsz: size,
+            p_align: self.offsets.align as u64,
+        }]
+    }
+
+    fn reserve_section_index(&mut self, _data: &mut Data, _block: &mut ReadBlock, w: &mut Writer) {
+        self.name_id = Some(w.add_section_name(".interp".as_bytes()));
+        let _index = w.reserve_section_index();
+    }
+
+    fn reserve(
+        &mut self,
+        _data: &mut Data,
+        tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
+        let align = self.offsets.align as usize;
+        let pos = w.reserved_len();
+        let align_pos = size_align(pos, align);
+        w.reserve_until(align_pos);
+        let size = self.as_slice().len();
+        w.reserve(size, align);
+        tracker.add_offsets(self.alloc().unwrap(), &mut self.offsets, size, w);
+    }
+
+    fn write(
+        &self,
+        _data: &Data,
+        _tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        w.pad_until(aligned_pos);
+        w.write(self.as_slice());
+    }
 
     fn write_section_header(
         &self,
@@ -142,27 +270,42 @@ impl ElfBlock for HeaderComponent {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        w.write_null_section_header();
+        if let Some(name_id) = self.name_id {
+            w.write_section_header(&object::write::elf::SectionHeader {
+                name: Some(name_id),
+                sh_type: elf::SHT_PROGBITS,
+                sh_flags: self.alloc.section_header_flags() as u64,
+                sh_addr: self.offsets.address,
+                sh_offset: self.offsets.file_offset,
+                sh_info: 0,
+                sh_link: 0,
+                sh_entsize: 0,
+                sh_addralign: self.offsets.align,
+                sh_size: self.as_slice().len() as u64,
+            });
+        }
     }
 }
 
 pub struct DynamicSection {
     index: Option<SectionIndex>,
-    align: usize,
-    size: usize,
-    address: u64,
-    file_offset: usize,
-    base: usize,
+    //align: usize,
+    //size: usize,
+    //address: u64,
+    //file_offset: usize,
+    //base: usize,
+    offsets: SectionOffset,
 }
 impl Default for DynamicSection {
     fn default() -> Self {
         Self {
             index: None,
-            size: 0,
-            align: 0x10,
-            address: 0,
-            file_offset: 0,
-            base: 0,
+            //size: 0,
+            //align: 0x10,
+            //address: 0,
+            //file_offset: 0,
+            //base: 0,
+            offsets: SectionOffset::new(0x08),
         }
     }
 }
@@ -175,17 +318,17 @@ impl ElfBlock for DynamicSection {
         Some(AllocSegment::RW)
     }
 
-    fn program_header(&self, block: &ReadBlock) -> Vec<ProgramHeaderEntry> {
+    fn program_header(&self, _block: &ReadBlock) -> Vec<ProgramHeaderEntry> {
         //program DYNAMIC
         vec![ProgramHeaderEntry {
             p_type: elf::PT_DYNAMIC,
             p_flags: elf::PF_R | elf::PF_W,
-            p_offset: self.file_offset as u64,
-            p_vaddr: self.address,
+            p_offset: self.offsets.file_offset as u64,
+            p_vaddr: self.offsets.address,
             p_paddr: 0,
-            p_filesz: self.size as u64,
-            p_memsz: self.size as u64,
-            p_align: self.align as u64,
+            p_filesz: self.offsets.size as u64,
+            p_memsz: self.offsets.size as u64,
+            p_align: self.offsets.align as u64,
         }]
     }
 
@@ -204,15 +347,23 @@ impl ElfBlock for DynamicSection {
     ) {
         let dynamic = data.gen_dynamic();
         let before = w.reserved_len();
-        self.file_offset = size_align(before, self.align);
-        w.reserve_until(self.file_offset);
+        //self.offsets.file_offset = size_align(before, self.offsets.align as usize) as u64;
+        let file_offset = size_align(before, self.offsets.align as usize);
+        w.reserve_until(file_offset);
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
-        self.size = after - self.file_offset;
+        //self.offsets.size = after as u64 - self.offsets.file_offset as u64;
 
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, after - before, self.file_offset);
-        self.address = self.base as u64 + self.file_offset as u64;
-        data.addr.insert(".dynamic".to_string(), self.address);
+        tracker.add_offsets(
+            self.alloc().unwrap(),
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
+        //self.offsets.base = tracker.add_data(self.alloc().unwrap(), 1, after - before, self.offsets.file_offset as usize) as u64;
+        //self.offsets.address = self.base as u64 + self.offsets.file_offset as u64;
+        data.addr
+            .insert(".dynamic".to_string(), self.offsets.address);
     }
 
     fn write(
@@ -224,8 +375,8 @@ impl ElfBlock for DynamicSection {
     ) {
         let dynamic = data.gen_dynamic();
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align);
-        assert_eq!(aligned_pos, self.file_offset);
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
         w.pad_until(aligned_pos);
         w.write_align_dynamic();
 
@@ -246,21 +397,22 @@ impl ElfBlock for DynamicSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        w.write_dynamic_section_header(self.address);
+        w.write_dynamic_section_header(self.offsets.address);
     }
 }
 
 pub struct RelaDynSection {
     kind: GotKind,
     index: SectionIndex,
-    align: usize,
+    //align: usize,
     name_id: Option<StringId>,
-    file_offset: usize,
-    base: usize,
-    size: usize,
-    addr: usize,
+    //file_offset: usize,
+    //base: usize,
+    //size: usize,
+    //addr: usize,
     count: usize,
     relocation_names: HashMap<String, StringId>,
+    offsets: SectionOffset,
 }
 
 impl RelaDynSection {
@@ -269,13 +421,14 @@ impl RelaDynSection {
             kind,
             index: SectionIndex::default(),
             name_id: None,
-            align: 0x08,
-            file_offset: 0,
-            base: 0,
-            size: 0,
-            addr: 0,
+            //align: 0x08,
+            //file_offset: 0,
+            //base: 0,
+            //size: 0,
+            //addr: 0,
             count: 0,
             relocation_names: HashMap::default(),
+            offsets: SectionOffset::new(0x08),
         }
     }
 }
@@ -304,23 +457,29 @@ impl ElfBlock for RelaDynSection {
         let unapplied = self.kind.unapplied_data(data);
         self.count = unapplied.len();
         let before = w.reserved_len();
-        self.file_offset = size_align(before, self.align);
-        w.reserve_until(self.file_offset);
+        let file_offset = size_align(before, self.offsets.align as usize);
+        w.reserve_until(file_offset);
 
         w.reserve_relocations(unapplied.len(), true);
 
         let after = w.reserved_len();
 
-        self.size = after - self.file_offset;
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, after - before, before);
-        self.addr = self.base + self.file_offset;
+        //self.size = after - self.file_offset;
+        //self.base = tracker.add_data(self.alloc().unwrap(), 1, after - before, before);
+        tracker.add_offsets(
+            self.alloc().unwrap(),
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
+        //self.addr = self.base + self.file_offset;
         match self.kind {
             GotKind::GOT => {
-                data.addr_set(".rela.dyn", self.addr as u64);
+                data.addr_set(".rela.dyn", self.offsets.address);
                 data.size_reladyn = w.rel_size(true) * unapplied.len();
             }
             GotKind::GOTPLT => {
-                data.addr_set(".rela.plt", self.addr as u64);
+                data.addr_set(".rela.plt", self.offsets.address);
                 data.size_relaplt = w.rel_size(true) * unapplied.len();
             }
         }
@@ -335,9 +494,9 @@ impl ElfBlock for RelaDynSection {
     ) {
         let unapplied = self.kind.unapplied_data(data);
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align);
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
         assert_eq!(self.count, unapplied.len());
-        assert_eq!(aligned_pos, self.file_offset);
+        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
         w.pad_until(aligned_pos);
 
         let got_addr = data.addr_get(".got");
@@ -387,7 +546,7 @@ impl ElfBlock for RelaDynSection {
     ) {
         let unapplied = self.kind.unapplied_data(data);
 
-        let sh_addralign = self.align as u64; //self.alloc().unwrap().align() as u64;
+        let sh_addralign = self.offsets.align;
         let sh_info = SectionIndex::default().0;
         let sh_link = data.section_index.get(&".dynsym".to_string()).unwrap().0;
         let sh_entsize = w.rel_size(true) as u64;
@@ -396,37 +555,14 @@ impl ElfBlock for RelaDynSection {
             name: self.name_id,
             sh_type: elf::SHT_RELA,
             sh_flags: elf::SHF_INFO_LINK.into(),
-            sh_addr: self.addr as u64,
-            sh_offset: self.file_offset as u64,
+            sh_addr: self.offsets.address,
+            sh_offset: self.offsets.file_offset,
             sh_info,
             sh_link,
             sh_entsize,
             sh_addralign,
             sh_size: sh_entsize * unapplied.len() as u64,
         });
-
-        /*
-        w.write_section_header(&SectionHeader {
-            name: Some(name),
-            sh_type: if is_rela { elf::SHT_RELA } else { elf::SHT_REL },
-            sh_flags: elf::SHF_INFO_LINK.into(),
-            sh_addr: 0,
-            sh_offset: offset as u64,
-            sh_size: (count * self.rel_size(is_rela)) as u64,
-            sh_link: symtab.0,
-            sh_info: section.0,
-            sh_addralign: self.elf_align as u64,
-            sh_entsize: self.rel_size(is_rela) as u64,
-        });
-        w.write_relocation_section_header(
-            self.name_id.unwrap(),
-            SectionIndex::default(),
-            *data.section_index.get(&".dynsym".to_string()).unwrap(),
-            self.file_offset,
-            unapplied.len(),
-            true,
-        );
-        */
     }
 }
 
@@ -616,19 +752,21 @@ impl ElfBlock for StrTabSection {
 
 pub struct SymTabSection {
     index: Option<SectionIndex>,
-    align: usize,
+    //align: usize,
     symbols: Vec<Sym>,
-    file_offset: usize,
+    //file_offset: usize,
     count: usize,
+    offsets: SectionOffset,
 }
 impl Default for SymTabSection {
     fn default() -> Self {
         Self {
             index: None,
-            align: 0x10,
+            //align: 0x10,
             symbols: vec![],
-            file_offset: 0,
+            //file_offset: 0,
             count: 0,
+            offsets: SectionOffset::new(0x10),
         }
     }
 }
@@ -707,9 +845,9 @@ impl ElfBlock for SymTabSection {
 
         // reserve the symbols in the various sections
         let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align);
+        let align_pos = size_align(pos, self.offsets.align as usize);
         w.reserve_until(align_pos);
-        self.file_offset = w.reserved_len();
+        self.offsets.file_offset = w.reserved_len() as u64;
 
         //eprintln!("symbol count: {}", w.symbol_count());
         w.reserve_symtab();
@@ -727,11 +865,12 @@ impl ElfBlock for SymTabSection {
         w: &mut Writer,
     ) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align);
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        //let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
         let symbols = self.gen_symbols(data, block);
         assert_eq!(symbols.len(), self.count);
-        assert_eq!(aligned_pos, self.file_offset);
+        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
 
         // write symbols
         w.write_null_symbol();
@@ -789,19 +928,21 @@ impl ElfBlock for SymTabSection {
 
 pub struct DynSymSection {
     index: Option<SectionIndex>,
-    align: usize,
-    start: usize,
-    base: usize,
-    size: usize,
+    //align: usize,
+    //start: usize,
+    //base: usize,
+    //size: usize,
+    offsets: SectionOffset,
 }
 impl Default for DynSymSection {
     fn default() -> Self {
         Self {
             index: None,
-            align: 0x08,
-            start: 0,
-            base: 0,
-            size: 0,
+            //align: 0x08,
+            //start: 0,
+            //base: 0,
+            //size: 0,
+            offsets: SectionOffset::new(0x08),
         }
     }
 }
@@ -828,16 +969,17 @@ impl ElfBlock for DynSymSection {
         w: &mut Writer,
     ) {
         let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align);
+        let align_pos = size_align(pos, self.offsets.align as usize);
         w.reserve_until(align_pos);
 
-        self.start = w.reserved_len();
+        let start = w.reserved_len();
         w.reserve_dynsym();
         let after = w.reserved_len();
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, after - pos, self.start);
-        self.size = after - self.start;
-        data.addr_dynsym = self.base as u64 + self.start as u64;
-        data.size_dynsym = self.size;
+        //self.base = tracker.add_data(self.alloc().unwrap(), 1, after - pos, self.start);
+        tracker.add_offsets(self.alloc().unwrap(), &mut self.offsets, after - start, w);
+        //self.size = after - self.start;
+        data.addr_dynsym = self.offsets.address; //self.base as u64 + self.start as u64;
+        data.size_dynsym = self.offsets.size as usize;
     }
 
     fn write(
@@ -848,7 +990,7 @@ impl ElfBlock for DynSymSection {
         w: &mut Writer,
     ) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align);
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
 
         w.write_null_dynamic_symbol();
@@ -875,19 +1017,21 @@ impl ElfBlock for DynSymSection {
 
 pub struct DynStrSection {
     index: Option<SectionIndex>,
-    align: usize,
-    start: usize,
-    base: usize,
-    size: usize,
+    //align: usize,
+    //start: usize,
+    //base: usize,
+    //size: usize,
+    offsets: SectionOffset,
 }
 impl Default for DynStrSection {
     fn default() -> Self {
         Self {
             index: None,
-            align: 0x1,
-            start: 0,
-            base: 0,
-            size: 0,
+            //align: 0x1,
+            //start: 0,
+            //base: 0,
+            //size: 0,
+            offsets: SectionOffset::new(0x01),
         }
     }
 }
@@ -911,15 +1055,16 @@ impl ElfBlock for DynStrSection {
         w: &mut Writer,
     ) {
         let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align);
+        let align_pos = size_align(pos, self.offsets.align as usize);
         w.reserve_until(align_pos);
-        self.start = w.reserved_len();
+        let start = w.reserved_len();
         w.reserve_dynstr();
         let after = w.reserved_len();
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, after - pos, self.start);
-        self.size = after - self.start;
-        data.addr_set(".dynstr", self.base as u64 + self.start as u64);
-        data.size_dynstr = self.size;
+        //self.base = tracker.add_data(self.alloc().unwrap(), 1, after - pos, self.start);
+        tracker.add_offsets(self.alloc().unwrap(), &mut self.offsets, after - start, w);
+        //self.size = after - self.start;
+        data.addr_set(".dynstr", self.offsets.address); //self.base as u64 + self.start as u64);
+        data.size_dynstr = self.offsets.size as usize;
     }
 
     fn write(
@@ -930,7 +1075,7 @@ impl ElfBlock for DynStrSection {
         w: &mut Writer,
     ) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.align);
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
         w.write_dynstr();
     }
@@ -994,24 +1139,26 @@ impl ElfBlock for ShStrTabSection {
 
 pub struct HashSection {
     index: Option<SectionIndex>,
-    base: usize,
-    file_offset: usize,
-    addr: usize,
+    //base: usize,
+    //file_offset: usize,
+    //addr: usize,
     bucket_count: u32,
     chain_count: u32,
-    align: usize,
+    //align: usize,
+    offsets: SectionOffset,
 }
 
 impl HashSection {
     pub fn new() -> Self {
         Self {
             index: None,
-            base: 0,
-            file_offset: 0,
-            addr: 0,
+            //base: 0,
+            //file_offset: 0,
+            //addr: 0,
             bucket_count: 0,
             chain_count: 0,
-            align: 0x08,
+            //align: 0x08,
+            offsets: SectionOffset::new(0x08),
         }
     }
 }
@@ -1035,19 +1182,26 @@ impl ElfBlock for HashSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        let align = self.alloc().unwrap().align();
+        //let align = self.alloc().unwrap().align();
         let pos = w.reserved_len();
-        let align_pos = size_align(pos, align);
-        w.reserve_until(align_pos);
-        self.file_offset = w.reserved_len();
+        //let align_pos = size_align(pos, align);
+        let aligned_pos = size_align(pos, self.offsets.align as usize); //self.alloc().unwrap().align());
+        w.reserve_until(aligned_pos);
+        let file_offset = w.reserved_len();
 
         w.reserve_hash(self.bucket_count, self.chain_count);
 
         let after = w.reserved_len();
         let delta = after - pos;
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, delta, self.file_offset);
-        self.addr = self.base + self.file_offset;
-        data.addr_hash = self.addr as u64;
+        tracker.add_offsets(
+            self.alloc().unwrap(),
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
+        //self.base = tracker.add_data(self.alloc().unwrap(), 1, delta, self.file_offset);
+        //self.addr = self.base + self.file_offset;
+        data.addr_hash = self.offsets.address;
     }
 
     fn write(
@@ -1058,7 +1212,7 @@ impl ElfBlock for HashSection {
         w: &mut Writer,
     ) {
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.alloc().unwrap().align());
+        let aligned_pos = size_align(pos, self.offsets.align as usize); //self.alloc().unwrap().align());
         w.pad_until(aligned_pos);
         w.write_hash(self.bucket_count, self.chain_count, |x| Some(x));
     }
@@ -1070,7 +1224,7 @@ impl ElfBlock for HashSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        w.write_hash_section_header(self.addr as u64);
+        w.write_hash_section_header(self.offsets.address);
     }
 }
 
@@ -1115,11 +1269,12 @@ pub struct GotSection {
     name_id: Option<StringId>,
     index: Option<SectionIndex>,
     bytes: Vec<u8>,
-    base: usize,
-    file_offset: usize,
-    addr: usize,
-    size: usize,
-    align: usize,
+    //base: usize,
+    //file_offset: usize,
+    //addr: usize,
+    //size: usize,
+    //align: usize,
+    offsets: SectionOffset,
 }
 impl GotSection {
     pub fn new(kind: GotKind) -> Self {
@@ -1128,11 +1283,12 @@ impl GotSection {
             name_id: None,
             index: None,
             bytes: vec![],
-            base: 0,
-            file_offset: 0,
-            addr: 0,
-            size: 0,
-            align: 0x08,
+            //base: 0,
+            //file_offset: 0,
+            //addr: 0,
+            //size: 0,
+            //align: 0x08,
+            offsets: SectionOffset::new(0x08),
         }
     }
 }
@@ -1168,31 +1324,39 @@ impl ElfBlock for GotSection {
         let size = len * std::mem::size_of::<usize>();
         self.bytes.resize(size, 0);
 
-        let align = self.alloc().unwrap().align();
+        //let align = self.alloc().unwrap().align();
+        let align = self.offsets.align as usize;
 
         let pos = w.reserved_len();
         let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
-        self.file_offset = w.reserved_len();
+        let file_offset = w.reserved_len();
         w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
-        self.size = after - self.file_offset;
-        let delta = after - pos;
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, delta, self.file_offset);
+        //self.size = after - self.file_offset;
+        //let delta = after - pos;
+        //self.base = tracker.add_data(self.alloc().unwrap(), 1, delta, self.file_offset);
+        tracker.add_offsets(
+            self.alloc().unwrap(),
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
 
-        self.addr = self.base + self.file_offset;
+        //self.addr = self.base + self.file_offset;
 
         // add got pointers to the pointers table, so we can do relocations
         for (index, name) in unapplied.iter().enumerate() {
             //let name = &r.name;
-            let addr = self.addr + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
+            let addr = self.offsets.address as usize
+                + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
             //eprintln!("adding: {}, {:#0x}", &name, addr as u64);
             data.pointer_set(name.clone(), addr as u64);
         }
 
         // update section pointers
-        data.addr_set(name, self.addr as u64);
-        //data.addr.insert(name.to_string(), self.addr as u64);
+        data.addr_set(name, self.offsets.address); // as u64);
+                                                   //data.addr.insert(name.to_string(), self.addr as u64);
     }
 
     fn write(
@@ -1202,8 +1366,9 @@ impl ElfBlock for GotSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
+        let align = self.offsets.align as usize;
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.alloc().unwrap().align());
+        let aligned_pos = size_align(pos, align); // self.alloc().unwrap().align());
         w.pad_until(aligned_pos);
 
         let unapplied = self.kind.unapplied_data(data);
@@ -1212,7 +1377,7 @@ impl ElfBlock for GotSection {
             GotKind::GOT => {
                 // just empty
                 let mut bytes: Vec<u8> = vec![];
-                bytes.resize(self.size, 0);
+                bytes.resize(self.offsets.size as usize, 0);
                 w.write(bytes.as_slice());
             }
             GotKind::GOTPLT => {
@@ -1240,18 +1405,18 @@ impl ElfBlock for GotSection {
         w: &mut Writer,
     ) {
         let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
-        let sh_addralign = self.alloc().unwrap().align() as u64;
+        let sh_addralign = self.offsets.align; //self.alloc().unwrap().align() as u64;
         w.write_section_header(&object::write::elf::SectionHeader {
             name: self.name_id,
             sh_type: elf::SHT_PROGBITS,
             sh_flags,
-            sh_addr: self.addr as u64,
-            sh_offset: self.file_offset as u64,
+            sh_addr: self.offsets.address,       //addr as u64,
+            sh_offset: self.offsets.file_offset, // as u64,
             sh_info: 0,
             sh_link: 0,
             sh_entsize: 0,
             sh_addralign,
-            sh_size: self.size as u64,
+            sh_size: self.offsets.size,
         });
     }
 }
@@ -1260,11 +1425,12 @@ pub struct PltSection {
     name_id: Option<StringId>,
     index: Option<SectionIndex>,
     bytes: Vec<u8>,
-    base: usize,
-    file_offset: usize,
-    addr: usize,
-    size: usize,
-    align: usize,
+    //base: usize,
+    //file_offset: usize,
+    //addr: usize,
+    //size: usize,
+    //align: usize,
+    offsets: SectionOffset,
 }
 
 impl PltSection {
@@ -1273,11 +1439,12 @@ impl PltSection {
             name_id: None,
             index: None,
             bytes: vec![],
-            base: 0,
-            file_offset: 0,
-            addr: 0,
-            size: 0,
-            align: 0x08,
+            //base: 0,
+            //file_offset: 0,
+            //addr: 0,
+            //size: 0,
+            //align: 0x08,
+            offsets: SectionOffset::new(0x10),
         }
     }
 }
@@ -1314,22 +1481,30 @@ impl ElfBlock for PltSection {
         let unapplied = GotKind::GOTPLT.unapplied_data(data); //&data.sections.unapplied_plt;
 
         // length + 1, to account for the stub.  Each entry is 0x10 in size
-        self.size = (1 + unapplied.len()) * 0x10;
-        self.bytes.resize(self.size, 0);
-        let align = self.alloc().unwrap().align();
+        let size = (1 + unapplied.len()) * 0x10;
+        self.bytes.resize(size, 0);
+        //let align = self.alloc().unwrap().align();
+        let align = self.offsets.align as usize;
 
         let pos = w.reserved_len();
         let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
-        self.file_offset = w.reserved_len();
+        let file_offset = w.reserved_len();
         w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
         let delta = after - pos;
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, delta, self.file_offset);
-        self.addr = self.base + self.file_offset;
+        //self.base = tracker.add_data(self.alloc().unwrap(), 1, delta, self.file_offset);
+        assert_eq!(size, after - file_offset);
+        tracker.add_offsets(
+            self.alloc().unwrap(),
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
+        //self.addr = self.base + self.file_offset;
         // update section pointers
         data.addr
-            .insert(Self::get_name().to_string(), self.addr as u64);
+            .insert(Self::get_name().to_string(), self.offsets.address); //addr as u64);
     }
 
     fn write(
@@ -1339,12 +1514,13 @@ impl ElfBlock for PltSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
+        let align = self.offsets.align as usize;
         let pos = w.len();
-        let aligned_pos = size_align(pos, self.alloc().unwrap().align());
+        let aligned_pos = size_align(pos, align); //self.alloc().unwrap().align());
         w.pad_until(aligned_pos);
 
         let got_addr = *data.addr.get(".got.plt").unwrap() as isize;
-        let vbase = self.addr as isize;
+        let vbase = self.offsets.address as isize; //addr as isize;
 
         let mut stub: Vec<u8> = vec![
             // 0x401020: push   0x2fe2(%rip)        # 404008 <_GLOBAL_OFFSET_TABLE_+0x8>
@@ -1401,18 +1577,14 @@ impl ElfBlock for PltSection {
 
                 // next instruction
                 let rip = vbase + offset + 0x10;
-                let addr = self.addr as isize - rip;
+                let addr = self.offsets.address as isize - rip;
                 //eprintln!("got: {}, {:#0x}, {:#0x}", i, rip, addr);
                 let patch = (stub.as_mut_ptr().offset(offset + 0x0c)) as *mut i32;
                 *patch = addr as i32;
             }
         }
 
-        //let mut bytes = self.bytes.clone();
-        //bytes.as_mut_slice().copy_from_slice(stub.as_slice());
-
         // write stub
-        // for each entry, write a slot
         w.write(stub.as_slice());
     }
 
@@ -1424,134 +1596,19 @@ impl ElfBlock for PltSection {
         w: &mut Writer,
     ) {
         let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
-        let sh_addralign = self.alloc().unwrap().align() as u64;
+        let sh_addralign = self.offsets.align; //self.alloc().unwrap().align() as u64;
         w.write_section_header(&object::write::elf::SectionHeader {
             name: self.name_id,
             sh_type: elf::SHT_PROGBITS,
             sh_flags,
-            sh_addr: self.addr as u64,
-            sh_offset: self.file_offset as u64,
+            sh_addr: self.offsets.address,       // as u64,
+            sh_offset: self.offsets.file_offset, // as u64,
             sh_info: 0,
             sh_link: 0,
             sh_entsize: 0,
             sh_addralign,
-            sh_size: self.size as u64,
+            sh_size: self.offsets.size, // as u64,
         });
-    }
-}
-
-use std::ffi::CString;
-pub struct InterpSection {
-    alloc: AllocSegment,
-    name_id: Option<StringId>,
-    cstr: CString,
-    offset: usize,
-    addr: usize,
-    base: usize,
-    align: usize,
-}
-
-impl InterpSection {
-    pub fn new(data: &Data) -> Self {
-        let interp = data.interp.as_bytes().to_vec();
-        let cstr = std::ffi::CString::new(interp).unwrap();
-        Self {
-            alloc: AllocSegment::RO,
-            cstr,
-            name_id: None,
-            offset: 0,
-            addr: 0,
-            base: 0,
-            align: 0x01,
-        }
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        self.cstr.as_bytes_with_nul()
-    }
-}
-
-impl ElfBlock for InterpSection {
-    fn name(&self) -> String {
-        return "interp".to_string();
-    }
-    fn alloc(&self) -> Option<AllocSegment> {
-        Some(AllocSegment::RO)
-    }
-    fn program_header(&self, block: &ReadBlock) -> Vec<ProgramHeaderEntry> {
-        let buf = self.as_slice();
-        vec![ProgramHeaderEntry {
-            p_type: elf::PT_INTERP,
-            p_flags: self.alloc().unwrap().program_header_flags(),
-            p_offset: self.offset as u64,
-            p_vaddr: self.addr as u64,
-            p_paddr: 0,
-            p_filesz: buf.len() as u64,
-            p_memsz: buf.len() as u64,
-            p_align: self.align as u64, //self.alloc.align() as u64,
-        }]
-    }
-
-    fn reserve_section_index(&mut self, _data: &mut Data, _block: &mut ReadBlock, w: &mut Writer) {
-        self.name_id = Some(w.add_section_name(".interp".as_bytes()));
-        let _index = w.reserve_section_index();
-    }
-
-    fn reserve(
-        &mut self,
-        _data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
-        let align = self.align; //self.alloc.align();
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, align);
-        w.reserve_until(align_pos);
-        self.offset = w.reserved_len();
-
-        let buf = self.as_slice();
-        w.reserve(buf.len(), align);
-        let after = w.reserved_len();
-        let delta = after - pos;
-        self.base = tracker.add_data(self.alloc().unwrap(), 1, delta, self.offset);
-        self.addr = self.base + self.offset;
-    }
-
-    fn write(
-        &self,
-        _data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.align); //self.alloc.align());
-        w.pad_until(aligned_pos);
-        w.write(self.as_slice());
-    }
-
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
-        if let Some(name_id) = self.name_id {
-            w.write_section_header(&object::write::elf::SectionHeader {
-                name: Some(name_id),
-                sh_type: elf::SHT_PROGBITS,
-                sh_flags: self.alloc.section_header_flags() as u64,
-                sh_addr: self.base as u64 + self.offset as u64,
-                sh_offset: self.offset as u64,
-                sh_info: 0,
-                sh_link: 0,
-                sh_entsize: 0,
-                sh_addralign: self.align as u64, //self.alloc.align() as u64,
-                sh_size: self.as_slice().len() as u64,
-            });
-        }
     }
 }
 
@@ -1567,62 +1624,6 @@ impl ElfBlock for BlockSectionX {
     fn name(&self) -> String {
         return format!("blockx:{:?}", self.kind);
     }
-
-    /*
-    fn program_header(&self, block: &ReadBlock) -> Vec<ProgramHeaderEntry> {
-        return vec![];
-        let alloc = self.kind.alloc().unwrap();
-        let p_align = alloc.page_align() as u64;
-        use ReadSectionKind::*;
-
-        let base = match self.kind {
-            RX => block.rx.section.base,
-            RW => block.rw.section.base,
-            RO => block.ro.section.base,
-            Bss => block.bss.section.base,
-            _ => unreachable!(),
-        } as u64;
-
-        let p_offset = match self.kind {
-            RX => block.rx.section.file_offset,
-            RW => block.rw.section.file_offset,
-            RO => block.ro.section.file_offset,
-            Bss => block.bss.section.file_offset,
-            _ => unreachable!(),
-        } as u64;
-
-        let p_vaddr = p_offset + base;
-
-        let p_memsz = match self.kind {
-            RX => block.rx.section.size,
-            RW => block.rw.section.size,
-            RO => block.ro.section.size,
-            Bss => block.bss.section.size,
-            _ => unreachable!(),
-        } as u64;
-
-        let p_filesz = match self.kind {
-            RX => block.rx.section.bytes.len(),
-            RW => block.rw.section.bytes.len(),
-            RO => block.ro.section.bytes.len(),
-            Bss => 0,
-            _ => unreachable!(),
-        } as u64;
-
-        vec![
-            ProgramHeaderEntry {
-                p_type: elf::PT_LOAD,
-                p_flags: alloc.program_header_flags(),
-                p_offset,
-                p_vaddr,
-                p_paddr: 0,
-                p_filesz,
-                p_memsz,
-                p_align,
-            }
-        ]
-    }
-    */
 
     fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
         use ReadSectionKind::*;
