@@ -24,6 +24,20 @@ impl BlocksBuilder {
                 Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
                 None, //Some(w.add_dynamic_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
             ),
+            LocalSymbol::new(
+                "__bss_start".into(),
+                ".bss".into(),
+                ResolvePointer::Section(".bss".to_string(), 0),
+                Some(w.add_string("__bss_start".as_bytes())),
+                None,
+            ),
+            LocalSymbol::new(
+                "__rodata_start".into(),
+                ".rodata".into(),
+                ResolvePointer::Section(".rodata".to_string(), 0),
+                Some(w.add_string("__rodata_start".as_bytes())),
+                None,
+            ),
         ];
 
         for local in data.locals.iter() {

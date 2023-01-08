@@ -85,7 +85,7 @@ impl ReadSectionKind {
             SectionKind::Text => ReadSectionKind::RX,
             SectionKind::Data => ReadSectionKind::RW,
             SectionKind::ReadOnlyData => ReadSectionKind::ROData,
-            SectionKind::ReadOnlyString => ReadSectionKind::ROStrings,
+            SectionKind::ReadOnlyString => ReadSectionKind::ROData,
             SectionKind::UninitializedData => ReadSectionKind::Bss,
             SectionKind::Metadata => ReadSectionKind::Other,
             SectionKind::OtherString => ReadSectionKind::Other,
