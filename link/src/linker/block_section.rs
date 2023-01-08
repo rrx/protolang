@@ -151,11 +151,11 @@ impl GeneralSection {
         w.reserve_until(align_pos);
         let file_offset = w.reserved_len();
 
-        w.reserve(self.bytes.len(), align);
+        w.reserve(self.bytes.len(), 1); //align);
         let after = w.reserved_len();
         let delta = after - pos;
 
-        eprintln!("align: {:#0x}", align);
+        eprintln!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
         tracker.add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
         //self.base = tracker.add_data(self.alloc, 1, delta, self.file_offset);
         //self.addr = self.base + self.file_offset;

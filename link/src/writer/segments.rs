@@ -448,7 +448,12 @@ impl SegmentTracker {
             // calculate the base for the segment, based on page size, and the size of the previous
             // segment
             base = size_align((base + current_size) as usize, self.page_size) as u64;
-            let file_offset = current_file_offset + current_size;
+
+            // align the new file offset
+            let file_offset = size_align(
+                current_file_offset as usize + current_size as usize,
+                offsets.align as usize,
+            ) as u64;
 
             // new segment
             let segment = Segment::new(alloc, base, file_offset as u64);
@@ -533,6 +538,13 @@ impl Segment {
         let aligned = size_align(self.segment_size, offsets.align as usize);
         self.segment_size = aligned + size;
         self.adjusted_file_offset = self.file_offset + aligned as u64;
+
+        eprintln!("add: {:#0x}, {:?}", size, self);
+        eprintln!(
+            "x: {:#0x}, {:#0x}",
+            self.adjusted_file_offset as usize + size,
+            w.reserved_len()
+        );
 
         assert_eq!(self.adjusted_file_offset as usize + size, w.reserved_len());
 

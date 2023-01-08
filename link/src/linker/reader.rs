@@ -606,8 +606,7 @@ impl ReadBlock {
                 self.rx.from_section(b, section)?;
             }
             ReadSectionKind::RO => {
-                // XXX: should be ro
-                self.rx.from_section(b, section)?;
+                self.ro.from_section(b, section)?;
             }
             ReadSectionKind::RW => {
                 self.rw.from_section(b, section)?;
