@@ -313,7 +313,7 @@ impl ReadBlock {
         }
 
         for s in self.locals.iter() {
-            eprintln!("local: {:?}", s);
+            //eprintln!("local: {:?}", s);
         }
 
         for r in iter {
@@ -334,7 +334,7 @@ impl ReadBlock {
 
                     eprintln!("reloc {}", &r);
                     if got.contains(&r.name) {
-                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT, w);
+                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(false), 0, w);
                         let sym = data.dyn_symbols.get(&r.name).unwrap();
                         r.name_id = sym.sym.name;
                         r.r.target = RelocationTarget::Symbol(sym.symbol_index);
@@ -344,7 +344,7 @@ impl ReadBlock {
                         //self.got.section.relocations.push(r.clone());
                         data.lookup.insert(r.name.clone(), p.clone());
                     } else if gotplt.contains(&r.name) {
-                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOTPLT, w);
+                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOTPLT, 0, w);
                         let sym = data.dyn_symbols.get(&r.name).unwrap();
                         r.name_id = sym.sym.name;
                         r.r.target = RelocationTarget::Symbol(sym.symbol_index);
@@ -359,6 +359,12 @@ impl ReadBlock {
                     data.lookup.insert(r.name.clone(), p.clone());
                     //let section_name = ".text";
                     //data.pointers.insert(r.name.to_string(), ResolvePointer::Section(section_name.to_string(), r.offset));
+                    if got.contains(&r.name) {
+                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), 2, w);
+                    } else if gotplt.contains(&r.name) {
+                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), w);
+                    }
+
                 } else {
                     eprintln!("reloc3 {}", &r);
                 }
@@ -388,7 +394,7 @@ impl ReadBlock {
         for (name, symbol) in self.exports.iter() {
             //let section_name = symbol.section.section_name();
             // allocate string
-            eprintln!("y: {:?}", symbol);
+            //eprintln!("y: {:?}", symbol);
             let _string_id = data.string(name, w);
             data.pointers.insert(
                 name.to_string(),

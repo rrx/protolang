@@ -103,7 +103,7 @@ impl GeneralSection {
         for r in self.relocations.iter() {
             if let Some(resolve_addr) = data.pointers.get(&r.name) {
                 if let Some(addr) = resolve_addr.resolve(data) {
-                    eprintln!(
+                    log::debug!(
                         "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
                         self.alloc, self.offsets.address, addr as usize, &r.name
                     );
@@ -142,12 +142,12 @@ impl GeneralSection {
         let after = w.reserved_len();
         //let delta = after - pos;
 
-        eprintln!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
+        log::debug!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
         tracker.add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
         data.addr_set(&self.name, self.offsets.address);
         self.state = BlockSectionState::Located;
 
-        eprintln!(
+        log::debug!(
             "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, size: {:#0x}, align: {:#0x}",
             self.offsets.file_offset,
             self.name,
@@ -162,7 +162,7 @@ impl GeneralSection {
     pub fn block_write(&self, data: &Data, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
-        eprintln!(
+        log::debug!(
             "AF: {:?}, {:#0x}, {:#0x}",
             self.alloc,
             aligned_pos,

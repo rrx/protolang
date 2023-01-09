@@ -70,7 +70,7 @@ impl BlocksBuilder {
             if w.dynstr_needed() {
                 blocks.push(Box::new(DynStrSection::default()));
             }
-            blocks.push(Box::new(RelaDynSection::new(GotKind::GOT)));
+            blocks.push(Box::new(RelaDynSection::new(GotKind::GOT(false))));
             blocks.push(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
         }
 
@@ -81,7 +81,7 @@ impl BlocksBuilder {
 
         if data.is_dynamic() {
             blocks.push(Box::new(DynamicSection::default()));
-            blocks.push(Box::new(GotSection::new(GotKind::GOT)));
+            blocks.push(Box::new(GotSection::new(GotKind::GOT(false))));
             blocks.push(Box::new(GotSection::new(GotKind::GOTPLT)));
         }
 
@@ -147,7 +147,7 @@ impl Blocks {
         // WRITE
         for b in self.blocks.iter() {
             let pos = w.len();
-            eprintln!("write: {}", b.name());
+            //eprintln!("write: {}", b.name());
             b.write(&data, &mut tracker, block, w);
             let after = w.len();
             log::debug!(
@@ -192,7 +192,7 @@ impl Blocks {
         }
 
         for b in self.blocks.iter_mut() {
-            eprintln!("reserve: {}", b.name());
+            //eprintln!("reserve: {}", b.name());
             b.reserve(&mut d, &mut temp_tracker, block, &mut temp_w);
         }
         // get a list of program headers
@@ -213,7 +213,7 @@ impl Blocks {
             let pos = w.reserved_len();
             b.reserve(data, tracker, block, w);
             let after = w.reserved_len();
-            eprintln!(
+            log::debug!(
                 "reserve: {}, {:#0x}, {:#0x},  {:?}",
                 b.name(),
                 pos,
@@ -251,7 +251,7 @@ impl Blocks {
             let pos = w.len();
             b.write(&data, tracker, block, w);
             let after = w.len();
-            eprintln!(
+            log::debug!(
                 "write: {}, {:?}, pos: {:#0x}, after: {:#0x}, base: {:#0x}",
                 b.name(),
                 b.alloc(),
@@ -346,75 +346,6 @@ impl SegmentTracker {
     pub fn current_mut(&mut self) -> &mut Segment {
         self.segments.last_mut().unwrap()
     }
-
-    /*
-    // add non-section data
-    pub fn add_data(
-        &mut self,
-        alloc: AllocSegment,
-        align: usize,
-        size: usize,
-        file_offset: usize,
-    ) -> usize {
-        let file_offset = file_offset as u64;
-        let current_size;
-        let current_offset;
-        let current_alloc;
-        let mut base;
-
-        if let Some(c) = self.segments.last() {
-            current_size = c.size() as u64;
-            current_offset = c.file_offset;
-            current_alloc = c.alloc;
-            base = c.base;
-
-            if file_offset < current_offset {
-                log::debug!(
-                    "fail: {:?}, file_offset: {:#0x}: current offset: {:#0x}",
-                    alloc,
-                    file_offset,
-                    current_offset
-                );
-            }
-            assert!(file_offset >= current_offset);
-        } else {
-            base = self.start_base;
-            current_size = 0;
-            current_offset = 0;
-            current_alloc = alloc;
-        }
-
-        if self.segments.len() == 0 || alloc != current_alloc {
-            base = size_align((base + current_size) as usize, self.page_size) as u64;
-            let segment = Segment::new(alloc, base, file_offset as u64);
-
-            log::debug!(
-                "new seg: {:?}, offset: {:#0x}, last_offset: {:#0x}, last_size: {:#0x}, size: {:#0x}, align: {:#0x}",
-                alloc,
-                file_offset,
-                current_offset,
-                current_size,
-                size,
-                align
-            );
-            self.segments.push(segment);
-            if file_offset < (current_offset + current_size) {
-                log::debug!(
-                    "fail: {:?}, file_offset: {:#0x}: current offset: {:#0x}, current size: {:#0x}",
-                    alloc,
-                    file_offset,
-                    current_offset,
-                    current_size
-                );
-            }
-            assert!(file_offset >= (current_offset + current_size));
-        }
-
-        self.current_mut().add_data(size, align);
-        log::debug!("add: {:#0x}", size);
-        base as usize
-    }
-    */
 
     // add non-section data
     pub fn add_offsets(
@@ -556,27 +487,6 @@ impl Segment {
         //eprintln!("add: {:#0x}, {:?}", size, self);
     }
 
-    /*
-    pub fn add_data(&mut self, size: usize, align: usize) {
-        // set size to match the offset size
-        //let _before = self.segment_size;
-        //let before = self.segment_size;
-        self.segment_size = size_align(self.segment_size, align);
-        //let aligned_size = self.segment_size;
-        //eprintln!("x/{:#0x}/{:#0x}", size, delta);
-        self.segment_size += size;
-        //let after = self.segment_size;
-        //eprintln!(
-        //"add: {:?}, {:#0x} => {:#0x} => {:#0x}",
-        //"", before, aligned_size, after
-        //);
-        //eprintln!(
-        //"add_data/{:?}/{:#0x}, {:#0x}+{:#0x}={:#0x}/{:#0x}",
-        //self.alloc, size, before, delta, self.segment_size, align
-        //);
-    }
-
-    */
     pub fn program_header(&self) -> Option<ProgramHeaderEntry> {
         // add a load section for the file and program header, so it's covered
         let size = self.size() as u64;

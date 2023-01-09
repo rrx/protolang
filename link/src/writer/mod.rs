@@ -156,8 +156,8 @@ impl fmt::Display for ResolvePointer {
 
 impl ResolvePointer {
     pub fn resolve(&self, data: &Data) -> Option<u64> {
-        eprintln!("X: {:?}", self);
-        eprintln!("X: {:?}", &data.addr);
+        //eprintln!("X: {:?}", self);
+        //eprintln!("X: {:?}", &data.addr);
         match self {
             Self::Resolved(x) => Some(*x),
             Self::Section(section_name, offset) => {
@@ -217,8 +217,8 @@ pub struct Data {
     pub lookup: HashMap<String, ProgSymbol>,
     locals: Vec<LocalSymbol>,
     dynamic: Vec<LocalSymbol>,
-    pub relocations_got: Vec<String>,
-    pub relocations_gotplt: Vec<String>,
+    pub relocations_got: Vec<(bool, String, i64)>,
+    pub relocations_gotplt: Vec<(bool, String, i64)>,
 
     // store strings for which we have extended their lifetime
     pub strings: HashMap<String, (String, StringId)>,
@@ -345,7 +345,10 @@ impl Data {
         }
     }
 
-    pub fn dyn_relocation(&mut self, name: &str, kind: GotKind, w: &mut Writer) -> SymbolIndex {
+    //pub fn dyn_relocation_relative(&mut self, name: &str, kind: GotKind, w: &mut Writer) -> SymbolIndex {
+    //}
+
+    pub fn dyn_relocation(&mut self, name: &str, kind: GotKind, addend: i64, w: &mut Writer) -> SymbolIndex {
         if let Some(s) = self.dyn_symbols.get(name) {
             s.symbol_index
         } else {
@@ -353,7 +356,7 @@ impl Data {
             let symbol_index = SymbolIndex(w.reserve_dynamic_symbol_index().0 as usize);
 
             let stt = match kind {
-                GotKind::GOT => elf::STT_OBJECT,
+                GotKind::GOT(_) => elf::STT_OBJECT,
                 GotKind::GOTPLT => elf::STT_FUNC,
             };
 
@@ -372,8 +375,8 @@ impl Data {
             };
 
             match kind {
-                GotKind::GOT => self.relocations_got.push(name.to_string()),
-                GotKind::GOTPLT => self.relocations_gotplt.push(name.to_string()),
+                GotKind::GOT(relative) => self.relocations_got.push((relative, name.to_string(), addend)),
+                GotKind::GOTPLT => self.relocations_gotplt.push((false, name.to_string(), addend)),
             }
 
             self.dyn_symbols

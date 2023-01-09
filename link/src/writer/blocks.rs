@@ -449,7 +449,7 @@ impl ElfBlock for RelaDynSection {
             w,
         );
         match self.kind {
-            GotKind::GOT => {
+            GotKind::GOT(_) => {
                 data.addr_set(".rela.dyn", self.offsets.address);
                 data.size_reladyn = w.rel_size(true) * unapplied.len();
             }
@@ -474,27 +474,39 @@ impl ElfBlock for RelaDynSection {
         assert_eq!(aligned_pos, self.offsets.file_offset as usize);
         w.pad_until(aligned_pos);
 
-        let got_addr = data.addr_get(".got");
-        let plt_addr = data.addr_get(".got.plt");
 
         // we are writing a relocation for the GOT entries
-        for (index, name) in unapplied.iter().enumerate() {
-            //eprintln!("unapplied: {}", r);
-            //let p = data.lookup.get(name).unwrap();
-            //let sym = p.get_symbol();
-            //let r_offset = got_addr as usize + (index + start) * std::mem::size_of::<usize>();
-            let r_addend = 0;
-
+        for (index, (relative, name, addend)) in unapplied.iter().enumerate() {
+            eprintln!("unapplied: {}, {}", name, relative);
             let sym = data.dyn_symbols.get(name).unwrap();
+
+            let r_addend = *addend;
+            let r_sym;
+            if *relative {
+                //r_addend = addend;//data.pointer_get(name) as i64;
+                r_sym = 0;
+            } else {
+                //r_addend = addend;
+                r_sym = sym.symbol_index.0 as u32;
+            }
+
             // we needed to fork object in order to access .0
-            let r_sym = sym.symbol_index.0 as u32; //.name.unwrap().0 as u32;
             let r_type = match self.kind {
-                GotKind::GOT => elf::R_X86_64_GLOB_DAT,
+                GotKind::GOT(_) => {
+                    if *relative {
+                        elf::R_X86_64_RELATIVE
+                    } else {
+                        elf::R_X86_64_GLOB_DAT
+                    }
+                }
                 GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
             };
+
             let start = 3;
+            let got_addr = data.addr_get(".got");
+            let plt_addr = data.addr_get(".got.plt");
             let r_offset = match self.kind {
-                GotKind::GOT => got_addr as usize + index * std::mem::size_of::<usize>(),
+                GotKind::GOT(_) => got_addr as usize + index * std::mem::size_of::<usize>(),
                 GotKind::GOTPLT => {
                     plt_addr as usize + (index + start) * std::mem::size_of::<usize>()
                 }
@@ -968,7 +980,7 @@ impl ElfBlock for DynSymSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        let got = GotKind::GOT.unapplied_data(data);
+        let got = GotKind::GOT(true).unapplied_data(data);
         let plt = GotKind::GOTPLT.unapplied_data(data);
 
         let len = got.len() + plt.len() + data.dynamic.len();
@@ -1166,37 +1178,37 @@ impl ElfBlock for HashSection {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum GotKind {
-    GOT,
+    GOT(bool),
     GOTPLT,
 }
 
 impl GotKind {
     pub fn section_name(&self) -> &'static str {
         match self {
-            Self::GOT => ".got",
+            Self::GOT(_) => ".got",
             Self::GOTPLT => ".got.plt",
         }
     }
 
     pub fn rel_section_name(&self) -> &'static str {
         match self {
-            Self::GOT => ".rela.dyn",
+            Self::GOT(_) => ".rela.dyn",
             Self::GOTPLT => ".rela.plt",
         }
     }
 
     pub fn start_index(&self) -> usize {
         match self {
-            Self::GOT => 0,
+            Self::GOT(_) => 0,
             Self::GOTPLT => 3,
         }
     }
 
-    pub fn unapplied_data(&self, data: &Data) -> Vec<String> {
+    pub fn unapplied_data(&self, data: &Data) -> Vec<(bool, String, i64)> {
         match self {
-            GotKind::GOT => data.relocations_got.iter().cloned().collect(),
+            GotKind::GOT(_) => data.relocations_got.iter().cloned().collect(),
             GotKind::GOTPLT => data.relocations_gotplt.iter().cloned().collect(),
         }
     }
@@ -1268,7 +1280,7 @@ impl ElfBlock for GotSection {
         );
 
         // add got pointers to the pointers table, so we can do relocations
-        for (index, name) in unapplied.iter().enumerate() {
+        for (index, (relative, name, _)) in unapplied.iter().enumerate() {
             let addr = self.offsets.address as usize
                 + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
             //eprintln!("adding: {}, {:#0x}", &name, addr as u64);
@@ -1294,7 +1306,7 @@ impl ElfBlock for GotSection {
         let unapplied = self.kind.unapplied_data(data);
 
         match self.kind {
-            GotKind::GOT => {
+            GotKind::GOT(_) => {
                 // just empty
                 let mut bytes: Vec<u8> = vec![];
                 bytes.resize(self.offsets.size as usize, 0);
