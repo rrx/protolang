@@ -571,31 +571,31 @@ impl ReadBlock {
     }
 
     /*
-    pub fn complete(&self, _data: &Data) {
-        //eprintln!("Block: {}", &self.name);
+        pub fn complete(&self, _data: &Data) {
+            //eprintln!("Block: {}", &self.name);
 
-        //let mut dsymbols = HashMap::new();
-        /*
-        let mut rx_symbols = vec![];
-        let mut rw_symbols = vec![];
-        let mut ro_symbols = vec![];
-        let mut bss_symbols = vec![];
-        let mut other_symbols = vec![];
+            //let mut dsymbols = HashMap::new();
+            /*
+            let mut rx_symbols = vec![];
+            let mut rw_symbols = vec![];
+            let mut ro_symbols = vec![];
+            let mut bss_symbols = vec![];
+            let mut other_symbols = vec![];
 
-        for (_name, s) in self.locals.iter().chain(self.exports.iter()) {
-            //dsymbols.insert(name, Symbol::new(0, s.address, &s.name));
-            let sym = Symbol::new(0, s.address, &s.name);
-            match s.section {
-                ReadSectionKind::RX => rx_symbols.push(sym),
-                ReadSectionKind::RW => rw_symbols.push(sym),
-                ReadSectionKind::ROData => ro_symbols.push(sym),
-                ReadSectionKind::Bss => bss_symbols.push(sym),
-                _ => other_symbols.push(sym),
+            for (_name, s) in self.locals.iter().chain(self.exports.iter()) {
+                //dsymbols.insert(name, Symbol::new(0, s.address, &s.name));
+                let sym = Symbol::new(0, s.address, &s.name);
+                match s.section {
+                    ReadSectionKind::RX => rx_symbols.push(sym),
+                    ReadSectionKind::RW => rw_symbols.push(sym),
+                    ReadSectionKind::ROData => ro_symbols.push(sym),
+                    ReadSectionKind::Bss => bss_symbols.push(sym),
+                    _ => other_symbols.push(sym),
+                }
             }
+            */
         }
-        */
-    }
-*/
+    */
 
     pub fn dump(&self) {
         eprintln!("Block: {}", &self.name);

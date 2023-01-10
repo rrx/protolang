@@ -33,8 +33,8 @@ pub struct Dynamics {
     symbols: Vec<String>,
     symbol_hash: HashMap<String, TrackSymbolIndex>,
 
-    pub r_got: Vec<(bool, String, i64)>,
-    pub r_gotplt: Vec<(bool, String, i64)>,
+    r_got: Vec<(bool, String, i64)>,
+    r_gotplt: Vec<(bool, String, i64)>,
 
     got_index: usize,
     gotplt_index: usize,
@@ -51,6 +51,13 @@ impl Dynamics {
             r_gotplt: vec![],
             got_index: 0,
             gotplt_index: 3,
+        }
+    }
+
+    pub fn relocations(&self, kind: GotKind) -> Vec<(bool, String, i64)> {
+        match kind {
+            GotKind::GOT(_) => self.r_got.iter().cloned().collect(),
+            GotKind::GOTPLT => self.r_gotplt.iter().cloned().collect(),
         }
     }
 

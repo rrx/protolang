@@ -436,7 +436,9 @@ impl ElfBlock for RelaDynSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        let unapplied = self.kind.unapplied_data(data);
+        //let unapplied = self.kind.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(self.kind);
+
         self.count = unapplied.len();
         let before = w.reserved_len();
         let file_offset = size_align(before, self.offsets.align as usize);
@@ -471,7 +473,8 @@ impl ElfBlock for RelaDynSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        let unapplied = self.kind.unapplied_data(data);
+        //let unapplied = self.kind.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(self.kind);
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         assert_eq!(self.count, unapplied.len());
@@ -533,7 +536,8 @@ impl ElfBlock for RelaDynSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        let unapplied = self.kind.unapplied_data(data);
+        //let unapplied = self.kind.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(self.kind);
 
         let sh_addralign = self.offsets.align;
         let sh_info = SectionIndex::default().0;
@@ -990,8 +994,10 @@ impl ElfBlock for DynSymSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        let got = GotKind::GOT(true).unapplied_data(data);
-        let plt = GotKind::GOTPLT.unapplied_data(data);
+        //let got = GotKind::GOT(true).unapplied_data(data);
+        //let plt = GotKind::GOTPLT.unapplied_data(data);
+        let got = data.dynamics.relocations(GotKind::GOT(true));
+        let plt = data.dynamics.relocations(GotKind::GOTPLT);
 
         let len = got.len() + plt.len() + data.dynamic.len();
         w.write_dynsym_section_header(data.addr_dynsym, len as u32 + 1);
@@ -1218,14 +1224,14 @@ impl GotKind {
         }
     }
 
+    /*
     pub fn unapplied_data(&self, data: &Data) -> Vec<(bool, String, i64)> {
         match self {
-            //GotKind::GOT(_) => data.relocations_got.iter().cloned().collect(),
             GotKind::GOT(_) => data.dynamics.r_got.iter().cloned().collect(),
-            //GotKind::GOTPLT => data.relocations_gotplt.iter().cloned().collect(),
             GotKind::GOTPLT => data.dynamics.r_gotplt.iter().cloned().collect(),
         }
     }
+    */
 }
 
 pub struct GotSection {
@@ -1271,7 +1277,7 @@ impl ElfBlock for GotSection {
         w: &mut Writer,
     ) {
         // each entry in unapplied will be a GOT entry
-        let unapplied = self.kind.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(self.kind); //self.kind.unapplied_data(data);
         let name = self.kind.section_name();
 
         let len = unapplied.len() + self.kind.start_index();
@@ -1317,7 +1323,8 @@ impl ElfBlock for GotSection {
         let aligned_pos = size_align(pos, align);
         w.pad_until(aligned_pos);
 
-        let unapplied = self.kind.unapplied_data(data);
+        //let unapplied = self.kind.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(self.kind); //self.kind.unapplied_data(data);
 
         match self.kind {
             GotKind::GOT(_) => {
@@ -1414,7 +1421,8 @@ impl ElfBlock for PltSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        let unapplied = GotKind::GOTPLT.unapplied_data(data);
+        //let unapplied = GotKind::GOTPLT.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(GotKind::GOTPLT);
 
         // length + 1, to account for the stub.  Each entry is 0x10 in size
         let size = (1 + unapplied.len()) * 0x10;
@@ -1482,7 +1490,8 @@ impl ElfBlock for PltSection {
             *patch = got2 as i32;
         }
 
-        let unapplied = GotKind::GOTPLT.unapplied_data(data);
+        //let unapplied = GotKind::GOTPLT.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(GotKind::GOTPLT);
 
         for (i, _) in unapplied.iter().enumerate() {
             let slot: Vec<u8> = vec![
