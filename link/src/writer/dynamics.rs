@@ -121,8 +121,8 @@ impl Dynamics {
             };
 
             match kind {
-                GotKind::GOT(relative) => self.r_got.push((relative, name.to_string(), 0)),
-                GotKind::GOTPLT => self.r_gotplt.push((false, name.to_string(), 0)),
+                GotKind::GOT(relative) => self.r_got.push((relative, name.to_string(), addend)),
+                GotKind::GOTPLT => self.r_gotplt.push((false, name.to_string(), addend)),
             }
 
             let index = self.symbols.len();

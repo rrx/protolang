@@ -487,12 +487,20 @@ impl ElfBlock for RelaDynSection {
             //let sym = data.dyn_symbols.get(name).unwrap();
             let (symbol_index, sym) = data.dynamics.symbol_get(name).unwrap();
 
-            let r_addend = *addend;
+            let mut r_addend = 0;// = *addend;
             let r_sym;
             if *relative {
                 r_sym = 0;
+                if let Some(p) = data.statics.symbol_get(name) {
+                    if let Some(addr) = p.resolve(data) {
+                        r_addend = addr as i64;
+                    }
+                }
+                //r_addend = data.statics.symbol_get(name) as i64;
+                //r_addend = 1;
             } else {
                 r_sym = symbol_index.0; //sym.symbol_index.0 as u32;
+                r_addend = *addend;
             }
 
             // we needed to fork object in order to access .0

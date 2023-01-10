@@ -116,6 +116,15 @@ impl Statics {
         }
     }
 
+    pub fn symbol_get(&self, name: &str) -> Option<ResolvePointer> {
+        if let Some(track) = self.symbol_hash.get(name) {
+            Some(track.symbol.pointer.clone())
+        } else {
+            None
+        }
+    }
+
+
     pub fn symbols_write(&self, data: &Data, w: &mut Writer) {
         let symbols = self.gen_symbols(data);
         assert_eq!(symbols.len() + 1, w.symbol_count() as usize);
