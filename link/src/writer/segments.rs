@@ -122,16 +122,18 @@ impl Blocks {
         }
 
         // RESERVE SYMBOLS
+        /*
         for local in data.locals.iter() {
             let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
             data.statics
-                .symbol_add(&symbol.name, symbol.section.section_index(data), w);
+                .symbol_add(&symbol, w);//&symbol.name, symbol.section.section_index(data), w);
         }
 
         for (_, symbol) in block.exports.iter() {
             data.statics
-                .symbol_add(&symbol.name, symbol.section.section_index(data), w);
+                .symbol_add(symbol, w);//(&symbol.name, symbol.section.section_index(data), w);
         }
+        */
 
         for b in self.blocks.iter_mut() {
             b.reserve_symbols(data, block, w);

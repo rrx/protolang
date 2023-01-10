@@ -758,16 +758,6 @@ impl Default for SymTabSection {
     }
 }
 
-/*
-impl SymTabSection {
-    fn gen_symbols(&self, data: &Data, block: &ReadBlock) -> Vec<Sym> {
-        let mut symbols = data.statics.gen_symbols(data);
-
-        symbols
-    }
-}
-*/
-
 impl ElfBlock for SymTabSection {
     fn name(&self) -> String {
         return "symtab".to_string();
@@ -783,30 +773,25 @@ impl ElfBlock for SymTabSection {
     }
 
     fn reserve_symbols(&mut self, data: &mut Data, block: &ReadBlock, w: &mut Writer) {
-        //for s in data.symbols.values() {
-        //w.reserve_symbol_index(s.section_index);
-        //}
-
-        //for s in data.locals.iter() {
-        //let section_index = data.section_index_get(&s.section);
-        //w.reserve_symbol_index(Some(section_index));
-        //}
-
-        /*
-        for (_name, s) in block.exports.iter() {
-            let section_index = s.section.section_index(data);
-            w.reserve_symbol_index(section_index);
+        for local in data.locals.iter() {
+            let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
+            let section_index = symbol.section.section_index(data);
+            data.statics.symbol_add(&symbol, section_index, w);
         }
-        */
 
-        self.count = data.statics.symbol_count(); // + block.exports.len();
+        for (_, symbol) in block.exports.iter() {
+            let section_index = symbol.section.section_index(data);
+            data.statics.symbol_add(symbol, section_index, w);
+        }
+
+        self.count = data.statics.symbol_count();
     }
 
     fn reserve(
         &mut self,
         data: &mut Data,
         _tracker: &mut SegmentTracker,
-        block: &mut ReadBlock,
+        _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let symbols = data.statics.gen_symbols(data);
@@ -818,9 +803,14 @@ impl ElfBlock for SymTabSection {
         w.reserve_until(align_pos);
         self.offsets.file_offset = w.reserved_len() as u64;
 
-        //eprintln!("symbol count: {}", w.symbol_count());
         w.reserve_symtab();
 
+        eprintln!(
+            "1symbol count: {}, {}, {:#0x}",
+            symbols.len(),
+            w.symbol_count(),
+            w.reserved_len()
+        );
         if w.symtab_shndx_needed() {
             w.reserve_symtab_shndx();
         }
@@ -830,7 +820,7 @@ impl ElfBlock for SymTabSection {
         &self,
         data: &Data,
         _tracker: &mut SegmentTracker,
-        block: &mut ReadBlock,
+        _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let pos = w.len();
@@ -861,6 +851,12 @@ impl ElfBlock for SymTabSection {
                 w.write_symbol(s);
             });
 
+        eprintln!(
+            "2symbol count: {}, {}, {:#0x}",
+            symbols.len(),
+            w.symbol_count(),
+            w.len()
+        );
         if w.symtab_shndx_needed() {
             w.write_symtab_shndx();
         }
