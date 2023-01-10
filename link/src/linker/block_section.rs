@@ -105,7 +105,10 @@ impl GeneralSection {
                 if let Some(addr) = resolve_addr.resolve(data) {
                     log::debug!(
                         "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                        self.alloc, self.offsets.address, addr as usize, &r.name
+                        self.alloc,
+                        self.offsets.address,
+                        addr as usize,
+                        &r.name
                     );
                     r.patch(
                         patch_base as *mut u8,

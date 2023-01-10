@@ -3,9 +3,9 @@ use std::error::Error;
 use object::elf;
 //use object::read::elf::FileHeader;
 use object::write::elf::Sym;
-use object::write::elf::{SectionIndex, Writer};
+use object::write::elf::{SectionIndex, SymbolIndex, Writer};
 use object::write::StringId;
-use object::SymbolIndex;
+//use object::SymbolIndex;
 use object::{Architecture, Endianness};
 use std::collections::HashMap;
 use std::fmt;
@@ -14,12 +14,16 @@ use std::mem;
 use super::*;
 
 mod blocks;
+mod dynamics;
 mod section;
 mod segments;
+mod utils;
 
 pub use blocks::*;
+pub use dynamics::*;
 pub use section::*;
 pub use segments::*;
+pub use utils::*;
 
 #[derive(Debug, Clone)]
 pub struct ProgramHeaderEntry {
@@ -142,6 +146,8 @@ pub enum ResolvePointer {
     Resolved(u64),
     Section(String, u64),
     SectionIndex(SectionIndex, u64),
+    Got(usize),
+    GotPlt(usize),
 }
 
 impl fmt::Display for ResolvePointer {
@@ -150,6 +156,7 @@ impl fmt::Display for ResolvePointer {
             Self::Resolved(p) => write!(f, "Abs({:#0x})", p),
             Self::Section(name, p) => write!(f, "Section({},{:#0x})", name, p),
             Self::SectionIndex(inx, p) => write!(f, "SectionIndex({:?},{:#0x})", inx, p),
+            _ => write!(f, "{:?}", self),
         }
     }
 }
@@ -161,15 +168,19 @@ impl ResolvePointer {
         match self {
             Self::Resolved(x) => Some(*x),
             Self::Section(section_name, offset) => {
-                if let Some(base) = data.addr.get(&AddressKey::Section(section_name.to_string())) {
+                if let Some(base) = data
+                    .addr
+                    .get(&AddressKey::Section(section_name.to_string()))
+                {
                     Some(base + offset)
                 } else {
                     None
                 }
             }
+
             Self::SectionIndex(section_index, offset) => {
                 unimplemented!()
-                    /*
+                /*
                 data.section_index.get(
                 if let Some(base) = data.addr.get(section_name) {
                     Some(base + offset)
@@ -178,15 +189,32 @@ impl ResolvePointer {
                 }
                 */
             }
+
+            Self::Got(index) => {
+                if let Some(base) = data.addr_get_by_name(".got") {
+                    let size = std::mem::size_of::<usize>() as u64;
+                    Some(base + (*index as u64) * size)
+                } else {
+                    None
+                }
+            }
+
+            Self::GotPlt(index) => {
+                if let Some(base) = data.addr_get_by_name(".got.plt") {
+                    let size = std::mem::size_of::<usize>() as u64;
+                    Some(base + (*index as u64) * size)
+                } else {
+                    None
+                }
+            }
         }
     }
 }
 
-
 #[derive(Eq, Hash, PartialEq, Debug)]
 pub enum AddressKey {
     SectionIndex(SectionIndex),
-    Section(String)
+    Section(String),
 }
 
 pub struct Data {
@@ -196,6 +224,7 @@ pub struct Data {
     libs: Vec<Library>,
     page_size: u32,
     base: usize,
+    pub dynamics: Dynamics,
 
     pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
@@ -212,7 +241,7 @@ pub struct Data {
     add_symbols: bool,
     debug: bool,
 
-    pub dyn_symbols: HashMap<String, DynamicSymbol>,
+    //pub dyn_symbols: HashMap<String, DynamicSymbol>,
     symbols: HashMap<String, ProgSymbol>,
     pub lookup: HashMap<String, ProgSymbol>,
     locals: Vec<LocalSymbol>,
@@ -222,7 +251,7 @@ pub struct Data {
 
     // store strings for which we have extended their lifetime
     pub strings: HashMap<String, (String, StringId)>,
-    pub dyn_strings: HashMap<String, (String, StringId)>,
+    //pub dyn_strings: HashMap<String, (String, StringId)>,
 
     // index of symbols in got/gotplt
     pub got_index: HashMap<String, usize>,
@@ -261,7 +290,8 @@ impl Data {
             debug: true,
 
             // Tables
-            dyn_symbols: HashMap::new(),
+            dynamics: Dynamics::new(),
+            //dyn_symbols: HashMap::new(),
             symbols: HashMap::new(),
             lookup: HashMap::new(),
             locals: vec![],
@@ -269,7 +299,7 @@ impl Data {
             relocations_got: vec![],
             relocations_gotplt: vec![],
             strings: HashMap::new(),
-            dyn_strings: HashMap::new(),
+            //dyn_strings: HashMap::new(),
             got_index: HashMap::new(),
             gotplt_index: HashMap::new(),
         }
@@ -330,6 +360,7 @@ impl Data {
         }
     }
 
+    /*
     pub fn dyn_string(&mut self, name: &str, w: &mut Writer) -> StringId {
         if let Some(s) = self.dyn_strings.get(name) {
             s.1
@@ -344,16 +375,18 @@ impl Data {
             }
         }
     }
+    */
 
     //pub fn dyn_relocation_relative(&mut self, name: &str, kind: GotKind, w: &mut Writer) -> SymbolIndex {
     //}
 
+    /*
     pub fn dyn_relocation(&mut self, name: &str, kind: GotKind, addend: i64, w: &mut Writer) -> SymbolIndex {
         if let Some(s) = self.dyn_symbols.get(name) {
             s.symbol_index
         } else {
             let string_id = self.dyn_string(name, w);
-            let symbol_index = SymbolIndex(w.reserve_dynamic_symbol_index().0 as usize);
+            let symbol_index = w.reserve_dynamic_symbol_index();
 
             let stt = match kind {
                 GotKind::GOT(_) => elf::STT_OBJECT,
@@ -379,12 +412,16 @@ impl Data {
                 GotKind::GOTPLT => self.relocations_gotplt.push((false, name.to_string(), addend)),
             }
 
-            self.dyn_symbols
-                .insert(name.to_string(), DynamicSymbol { symbol_index, sym });
+            //if let GotKind::GOT(true) = kind {
+            //} else {
+                self.dyn_symbols
+                    .insert(name.to_string(), DynamicSymbol { symbol_index, sym });
+            //}
 
             symbol_index
         }
     }
+    */
 
     pub fn pointer_set(&mut self, name: String, p: u64) {
         self.pointers.insert(name, ResolvePointer::Resolved(p));
@@ -409,7 +446,9 @@ impl Data {
     }
 
     pub fn addr_get_by_name(&self, name: &str) -> Option<u64> {
-        self.addr.get(&AddressKey::Section(name.to_string())).cloned()
+        self.addr
+            .get(&AddressKey::Section(name.to_string()))
+            .cloned()
     }
 
     pub fn addr_get_by_index(&self, index: SectionIndex) -> Option<u64> {
@@ -424,7 +463,8 @@ impl Data {
     }
 
     pub fn addr_set(&mut self, name: &str, value: u64) {
-        self.addr.insert(AddressKey::Section(name.to_string()), value);
+        self.addr
+            .insert(AddressKey::Section(name.to_string()), value);
     }
 
     pub fn section_index_get(&self, name: &str) -> SectionIndex {
@@ -479,7 +519,10 @@ impl Data {
         });
         out.push(Dynamic {
             tag: elf::DT_PLTGOT,
-            val: *self.addr.get(&AddressKey::Section(".got.plt".to_string())).unwrap_or(&0),
+            val: *self
+                .addr
+                .get(&AddressKey::Section(".got.plt".to_string()))
+                .unwrap_or(&0),
             string: None,
         });
         out.push(Dynamic {
@@ -543,10 +586,6 @@ impl Data {
             }
         }
     }
-}
-
-pub unsafe fn extend_lifetime<'b>(r: &'b [u8]) -> &'static [u8] {
-    std::mem::transmute::<&'b [u8], &'static [u8]>(r)
 }
 
 pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(

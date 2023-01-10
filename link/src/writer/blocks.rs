@@ -348,10 +348,14 @@ impl ElfBlock for DynamicSection {
             after - file_offset,
             w,
         );
-        data.addr
-            .insert(AddressKey::Section(".dynamic".to_string()), self.offsets.address);
-        data.addr
-            .insert(AddressKey::SectionIndex(self.index.unwrap()), self.offsets.address);
+        data.addr.insert(
+            AddressKey::Section(".dynamic".to_string()),
+            self.offsets.address,
+        );
+        data.addr.insert(
+            AddressKey::SectionIndex(self.index.unwrap()),
+            self.offsets.address,
+        );
     }
 
     fn write(
@@ -474,20 +478,18 @@ impl ElfBlock for RelaDynSection {
         assert_eq!(aligned_pos, self.offsets.file_offset as usize);
         w.pad_until(aligned_pos);
 
-
         // we are writing a relocation for the GOT entries
         for (index, (relative, name, addend)) in unapplied.iter().enumerate() {
             eprintln!("unapplied: {}, {}", name, relative);
-            let sym = data.dyn_symbols.get(name).unwrap();
+            //let sym = data.dyn_symbols.get(name).unwrap();
+            let (symbol_index, sym) = data.dynamics.symbol_get(name).unwrap();
 
             let r_addend = *addend;
             let r_sym;
             if *relative {
-                //r_addend = addend;//data.pointer_get(name) as i64;
                 r_sym = 0;
             } else {
-                //r_addend = addend;
-                r_sym = sym.symbol_index.0 as u32;
+                r_sym = symbol_index.0; //sym.symbol_index.0 as u32;
             }
 
             // we needed to fork object in order to access .0
@@ -913,12 +915,14 @@ impl ElfBlock for SymTabSection {
 pub struct DynSymSection {
     index: Option<SectionIndex>,
     offsets: SectionOffset,
+    count: u32,
 }
 impl Default for DynSymSection {
     fn default() -> Self {
         Self {
             index: None,
             offsets: SectionOffset::new(0x08),
+            count: 0,
         }
     }
 }
@@ -944,6 +948,7 @@ impl ElfBlock for DynSymSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
+        self.count = w.dynamic_symbol_count();
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.offsets.align as usize);
         w.reserve_until(align_pos);
@@ -963,14 +968,20 @@ impl ElfBlock for DynSymSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
+        assert_eq!(self.count, w.dynamic_symbol_count());
+        //assert_eq!(self.count as usize, data.dyn_symbols.len() + 1);
+        assert_eq!(self.count as usize, data.dynamics.symbol_count() + 1);
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
 
+        data.dynamics.symbols_write(w);
+        /*
         w.write_null_dynamic_symbol();
         for (_name, sym) in data.dyn_symbols.iter() {
             w.write_dynamic_symbol(&sym.sym);
         }
+        */
     }
 
     fn write_section_header(
@@ -1004,9 +1015,11 @@ impl ElfBlock for DynStrSection {
     fn name(&self) -> String {
         return "dynstr".to_string();
     }
+
     fn alloc(&self) -> Option<AllocSegment> {
         Some(AllocSegment::RO)
     }
+
     fn reserve_section_index(&mut self, data: &mut Data, _block: &mut ReadBlock, w: &mut Writer) {
         let index = w.reserve_dynstr_section_index();
         data.section_index.insert(".dynstr".to_string(), index);
@@ -1208,8 +1221,10 @@ impl GotKind {
 
     pub fn unapplied_data(&self, data: &Data) -> Vec<(bool, String, i64)> {
         match self {
-            GotKind::GOT(_) => data.relocations_got.iter().cloned().collect(),
-            GotKind::GOTPLT => data.relocations_gotplt.iter().cloned().collect(),
+            //GotKind::GOT(_) => data.relocations_got.iter().cloned().collect(),
+            GotKind::GOT(_) => data.dynamics.r_got.iter().cloned().collect(),
+            //GotKind::GOTPLT => data.relocations_gotplt.iter().cloned().collect(),
+            GotKind::GOTPLT => data.dynamics.r_gotplt.iter().cloned().collect(),
         }
     }
 }
@@ -1422,11 +1437,14 @@ impl ElfBlock for PltSection {
         );
 
         // update section pointers
-        data.addr
-            .insert(AddressKey::Section(Self::get_name().to_string()), self.offsets.address);
-        data.addr
-            .insert(AddressKey::SectionIndex(self.index.unwrap()), self.offsets.address);
-
+        data.addr.insert(
+            AddressKey::Section(Self::get_name().to_string()),
+            self.offsets.address,
+        );
+        data.addr.insert(
+            AddressKey::SectionIndex(self.index.unwrap()),
+            self.offsets.address,
+        );
     }
 
     fn write(

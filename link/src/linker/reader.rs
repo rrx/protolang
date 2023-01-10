@@ -72,8 +72,9 @@ impl ReadSectionKind {
     pub fn section_index(&self, data: &Data) -> Option<SectionIndex> {
         use ReadSectionKind::*;
         match self {
-            RX | RW | ROStrings | ROData | Bss =>
-                data.section_index.get(self.section_name()).cloned(),
+            RX | RW | ROStrings | ROData | Bss => {
+                data.section_index.get(self.section_name()).cloned()
+            }
             _ => None,
         }
     }
@@ -281,9 +282,7 @@ impl ReadBlock {
         }
     }
 
-    pub fn reserve_symbols(&mut self, data: &mut Data, w: &mut Writer) {}
-
-    pub fn reserve_strings(&mut self, data: &mut Data, w: &mut Writer) {
+    pub fn build_strings(&mut self, data: &mut Data, w: &mut Writer) {
         let iter = self
             .ro
             .section
@@ -334,43 +333,52 @@ impl ReadBlock {
 
                     eprintln!("reloc {}", &r);
                     if got.contains(&r.name) {
-                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(false), 0, w);
+                        data.dynamics
+                            .add_relocation(&r.name, GotKind::GOT(false), 0, w);
+                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(false), 0, w);
+                        /*
                         let sym = data.dyn_symbols.get(&r.name).unwrap();
                         r.name_id = sym.sym.name;
-                        r.r.target = RelocationTarget::Symbol(sym.symbol_index);
+                        r.r.target =
+                            RelocationTarget::Symbol(object::SymbolIndex(sym.symbol_index.0 as usize));
 
                         let index = data.got_index(&r.name);
-                        //data.relocations_got.push(r.clone());
-                        //self.got.section.relocations.push(r.clone());
                         data.lookup.insert(r.name.clone(), p.clone());
+                        */
                     } else if gotplt.contains(&r.name) {
-                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOTPLT, 0, w);
+                        data.dynamics.add_relocation(&r.name, GotKind::GOTPLT, 0, w);
+                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOTPLT, 0, w);
+                        /*
                         let sym = data.dyn_symbols.get(&r.name).unwrap();
                         r.name_id = sym.sym.name;
-                        r.r.target = RelocationTarget::Symbol(sym.symbol_index);
+                        r.r.target =
+                            RelocationTarget::Symbol(object::SymbolIndex(sym.symbol_index.0 as usize));
 
                         let index = data.gotplt_index(&r.name);
-                        //self.gotplt.section.relocations.push(r.clone());
                         data.lookup.insert(r.name.clone(), p.clone());
+                        */
                     }
                 } else if p.s.def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
                     p.name_id = Some(data.string(&r.name, w));
                     data.lookup.insert(r.name.clone(), p.clone());
-                    //let section_name = ".text";
-                    //data.pointers.insert(r.name.to_string(), ResolvePointer::Section(section_name.to_string(), r.offset));
                     if got.contains(&r.name) {
-                        let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), 2, w);
+                        data.dynamics
+                            .add_relocation(&r.name, GotKind::GOT(true), 2, w);
+                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), 2, w);
                     } else if gotplt.contains(&r.name) {
                         //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), w);
                     }
-
                 } else {
                     eprintln!("reloc3 {}", &r);
                 }
             } else {
                 unreachable!("Unable to find symbol for relocation: {}", &r.name)
             }
+        }
+
+        for (name, pointer) in data.dynamics.symbols() {
+            data.pointers.insert(name, pointer);
         }
 
         for (name, symbol) in self.locals.iter() {
@@ -380,27 +388,19 @@ impl ReadBlock {
                 | ReadSectionKind::ROData
                 | ReadSectionKind::RW
                 | ReadSectionKind::Bss => {
-                    //let section_name = symbol.section.section_name();
-                    data.pointers.insert(
-                        name.to_string(),
-                        symbol.pointer.clone()
-                        //ResolvePointer::Section(section_name.to_string(), symbol.address),
-                    );
+                    data.pointers
+                        .insert(name.to_string(), symbol.pointer.clone());
                 }
                 _ => (),
             }
         }
 
         for (name, symbol) in self.exports.iter() {
-            //let section_name = symbol.section.section_name();
-            // allocate string
+            // allocate string for the symbol table
             //eprintln!("y: {:?}", symbol);
             let _string_id = data.string(name, w);
-            data.pointers.insert(
-                name.to_string(),
-                symbol.pointer.clone(),
-                //ResolvePointer::Section(section_name.to_string(), symbol.address),
-            );
+            data.pointers
+                .insert(name.to_string(), symbol.pointer.clone());
         }
     }
 
@@ -632,9 +632,10 @@ impl ReadBlock {
             eprintln!(" R: {}, {:?}", r, self.lookup(&r.name));
         }
 
-        let symbols = rx_symbols.iter().map(|s| {
-            Symbol::new(0, s.address, &s.name)
-        }).collect();
+        let symbols = rx_symbols
+            .iter()
+            .map(|s| Symbol::new(0, s.address, &s.name))
+            .collect();
         disassemble_code_with_symbols(
             self.rx.section.bytes.as_slice(),
             &symbols,
@@ -757,9 +758,9 @@ impl Reader {
         b: &elf::ElfFile<'a, A, B>,
     ) -> Result<(), Box<dyn Error>> {
         //if let Some(dr) = b.dynamic_relocations() {
-            //for (_offset, r) in dr {
-                //eprintln!("dr: {:#08x}, {:?}", offset, r);
-            //}
+        //for (_offset, r) in dr {
+        //eprintln!("dr: {:#08x}, {:?}", offset, r);
+        //}
         //}
         for symbol in b.dynamic_symbols() {
             let mut s = read_symbol(&b, &symbol)?;

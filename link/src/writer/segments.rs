@@ -49,7 +49,7 @@ impl BlocksBuilder {
             ));
         }
 
-        block.reserve_strings(data, w);
+        block.build_strings(data, w);
 
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
 
@@ -126,7 +126,7 @@ impl Blocks {
             b.reserve_symbols(data, block, w);
         }
 
-        block.reserve_symbols(data, w);
+        //block.reserve_symbols(data, w);
 
         // RESERVE
 
@@ -150,7 +150,7 @@ impl Blocks {
             //eprintln!("write: {}", b.name());
             b.write(&data, &mut tracker, block, w);
             let after = w.len();
-            log::debug!(
+            eprintln!(
                 "write: {}, {:?}, pos: {:#0x}, after: {:#0x}, base: {:#0x}",
                 b.name(),
                 b.alloc(),
@@ -182,7 +182,7 @@ impl Blocks {
         temp_w.add_string("asdf".as_bytes());
         temp_w.add_dynamic_string("asdf".as_bytes());
 
-        block.reserve_strings(&mut d, &mut temp_w);
+        block.build_strings(&mut d, &mut temp_w);
         for b in self.blocks.iter_mut() {
             b.reserve_section_index(&mut d, block, &mut temp_w);
         }
@@ -213,7 +213,7 @@ impl Blocks {
             let pos = w.reserved_len();
             b.reserve(data, tracker, block, w);
             let after = w.reserved_len();
-            log::debug!(
+            eprintln!(
                 "reserve: {}, {:#0x}, {:#0x},  {:?}",
                 b.name(),
                 pos,
@@ -237,28 +237,6 @@ impl Blocks {
     pub fn update(&mut self, data: &mut Data) {
         for b in self.blocks.iter_mut() {
             b.update(data);
-        }
-    }
-
-    pub fn write(
-        &self,
-        data: &Data,
-        tracker: &mut SegmentTracker,
-        block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
-        for b in self.blocks.iter() {
-            let pos = w.len();
-            b.write(&data, tracker, block, w);
-            let after = w.len();
-            log::debug!(
-                "write: {}, {:?}, pos: {:#0x}, after: {:#0x}, base: {:#0x}",
-                b.name(),
-                b.alloc(),
-                pos,
-                after,
-                tracker.current().base
-            );
         }
     }
 
@@ -472,9 +450,9 @@ impl Segment {
 
         //eprintln!("add: {:#0x}, {:?}", size, self);
         //eprintln!(
-            //"x: {:#0x}, {:#0x}",
-            //self.adjusted_file_offset as usize + size,
-            //w.reserved_len()
+        //"x: {:#0x}, {:#0x}",
+        //self.adjusted_file_offset as usize + size,
+        //w.reserved_len()
         //);
 
         assert_eq!(self.adjusted_file_offset as usize + size, w.reserved_len());
