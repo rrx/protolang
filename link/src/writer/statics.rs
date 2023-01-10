@@ -102,12 +102,29 @@ impl Statics {
         }
     }
 
-    /*
-    pub fn symbol_get2(&self, name: &str) -> SymbolIndex {
-        self.symbol_hash
-            .get(name)
-            .expect(&format!("Pointer not found: {}", name))
-            .symbol_index
+    pub fn symbols_write(&self, data: &Data, w: &mut Writer) {
+        let symbols = self.gen_symbols(data);
+        assert_eq!(symbols.len() + 1, w.symbol_count() as usize);
+
+        // write symbols
+        w.write_null_symbol();
+
+        // write them, locals first
+        let mut num_locals = 0;
+        symbols
+            .iter()
+            .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
+            .for_each(|s| {
+                //eprintln!("s: {:?}", s);
+                w.write_symbol(s);
+                num_locals += 1;
+            });
+
+        symbols
+            .iter()
+            .filter(|s| s.st_info >> 4 != elf::STB_LOCAL)
+            .for_each(|s| {
+                w.write_symbol(s);
+            });
     }
-    */
 }

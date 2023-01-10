@@ -796,6 +796,7 @@ impl ElfBlock for SymTabSection {
     ) {
         let symbols = data.statics.gen_symbols(data);
         assert_eq!(symbols.len(), self.count);
+        assert_eq!(symbols.len() + 1, w.symbol_count() as usize);
 
         // reserve the symbols in the various sections
         let pos = w.reserved_len();
@@ -805,12 +806,6 @@ impl ElfBlock for SymTabSection {
 
         w.reserve_symtab();
 
-        eprintln!(
-            "1symbol count: {}, {}, {:#0x}",
-            symbols.len(),
-            w.symbol_count(),
-            w.reserved_len()
-        );
         if w.symtab_shndx_needed() {
             w.reserve_symtab_shndx();
         }
@@ -826,37 +821,11 @@ impl ElfBlock for SymTabSection {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
-        let symbols = data.statics.gen_symbols(data);
-        assert_eq!(symbols.len(), self.count);
         assert_eq!(aligned_pos, self.offsets.file_offset as usize);
+        assert_eq!(self.count + 1, w.symbol_count() as usize);
 
-        // write symbols
-        w.write_null_symbol();
+        data.statics.symbols_write(data, w);
 
-        // write them, locals first
-        let mut num_locals = 0;
-        symbols
-            .iter()
-            .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
-            .for_each(|s| {
-                //eprintln!("s: {:?}", s);
-                w.write_symbol(s);
-                num_locals += 1;
-            });
-
-        symbols
-            .iter()
-            .filter(|s| s.st_info >> 4 != elf::STB_LOCAL)
-            .for_each(|s| {
-                w.write_symbol(s);
-            });
-
-        eprintln!(
-            "2symbol count: {}, {}, {:#0x}",
-            symbols.len(),
-            w.symbol_count(),
-            w.len()
-        );
         if w.symtab_shndx_needed() {
             w.write_symtab_shndx();
         }
@@ -954,12 +923,6 @@ impl ElfBlock for DynSymSection {
         w.pad_until(aligned_pos);
 
         data.dynamics.symbols_write(w);
-        /*
-        w.write_null_dynamic_symbol();
-        for (_name, sym) in data.dyn_symbols.iter() {
-            w.write_dynamic_symbol(&sym.sym);
-        }
-        */
     }
 
     fn write_section_header(
