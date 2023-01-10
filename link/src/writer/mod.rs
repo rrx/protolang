@@ -1,11 +1,9 @@
 use std::error::Error;
 
 use object::elf;
-//use object::read::elf::FileHeader;
 use object::write::elf::Sym;
 use object::write::elf::{SectionIndex, SymbolIndex, Writer};
 use object::write::StringId;
-//use object::SymbolIndex;
 use object::{Architecture, Endianness};
 use std::collections::HashMap;
 use std::fmt;
@@ -40,9 +38,6 @@ pub struct ProgramHeaderEntry {
 }
 
 /*
-enum SectionKind {
-    Interp,
-}
 
 #[derive(Debug)]
 struct Section {
@@ -164,6 +159,14 @@ impl fmt::Display for ResolvePointer {
 }
 
 impl ResolvePointer {
+    pub fn relocate(self, base: u64) -> Self {
+        match self {
+            Self::Section(section_name, offset) => Self::Section(section_name, offset + base),
+            Self::Resolved(address) => Self::Resolved(address + base),
+            _ => unimplemented!("{:?}", self),
+        }
+    }
+
     pub fn resolve(&self, data: &Data) -> Option<u64> {
         //eprintln!("X: {:?}", self);
         //eprintln!("X: {:?}", &data.addr);

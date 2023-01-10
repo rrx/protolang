@@ -177,7 +177,7 @@ pub struct ReadSymbol {
     pub(crate) source: SymbolSource,
     pub(crate) kind: SymbolKind,
     pub(crate) bind: SymbolBind,
-    pub(crate) address: u64,
+    //address: u64,
     pub(crate) pointer: ResolvePointer,
     pub(crate) size: u64,
     lookup: SymbolLookupTable,
@@ -193,22 +193,22 @@ impl ReadSymbol {
             source: SymbolSource::Static,
             kind: SymbolKind::Unknown,
             bind: SymbolBind::Local,
-            address: 0,
+            //address: 0,
             pointer,
             size: 0,
             lookup: SymbolLookupTable::None,
         }
     }
 
+    pub fn relocate(&mut self, base: u64) {
+        self.pointer = self.pointer.clone().relocate(base);
+    }
+
     pub fn get_symbol(&self, data: &Data) -> object::write::elf::Sym {
         let section = self.section.section_index(data);
         let st_value = {
-            if let Some(p) = data.pointers.get(&self.name) {
-                if let Some(addr) = p.resolve(data) {
-                    addr
-                } else {
-                    0
-                }
+            if let Some(addr) = self.pointer.resolve(data) {
+                addr
             } else {
                 0
             }
@@ -282,6 +282,22 @@ impl ReadBlock {
     }
 
     pub fn build_strings(&mut self, data: &mut Data, w: &mut Writer) {
+        // These need to be declared
+        let locals = vec![LocalSymbol::new(
+            "_DYNAMIC".into(),
+            ".dynamic".into(),
+            ResolvePointer::Section(".dynamic".to_string(), 0),
+            Some(w.add_string("_DYNAMIC".as_bytes())),
+            None,
+        )];
+
+        for local in locals.iter() {
+            data.pointers
+                .insert(local.symbol.clone(), local.pointer.clone());
+            let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
+            self.insert_local(symbol);
+        }
+
         let iter = self
             .ro
             .section
@@ -310,9 +326,9 @@ impl ReadBlock {
             }
         }
 
-        for s in self.locals.iter() {
-            //eprintln!("local: {:?}", s);
-        }
+        //for s in self.locals.iter() {
+        //eprintln!("local: {:?}", s);
+        //}
 
         for r in iter {
             if let Some(s) = self.lookup(&r.name) {
@@ -327,35 +343,14 @@ impl ReadBlock {
 
                 if s.source == SymbolSource::Dynamic {
                     //eprintln!("p {:?}", &s);
-                    let mut r = r.clone();
                     p.name_id = r.name_id;
 
                     eprintln!("reloc {}", &r);
                     if got.contains(&r.name) {
                         data.dynamics
                             .relocation_add(&r.name, GotKind::GOT(false), 0, w);
-                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(false), 0, w);
-                        /*
-                        let sym = data.dyn_symbols.get(&r.name).unwrap();
-                        r.name_id = sym.sym.name;
-                        r.r.target =
-                            RelocationTarget::Symbol(object::SymbolIndex(sym.symbol_index.0 as usize));
-
-                        let index = data.got_index(&r.name);
-                        data.lookup.insert(r.name.clone(), p.clone());
-                        */
                     } else if gotplt.contains(&r.name) {
                         data.dynamics.relocation_add(&r.name, GotKind::GOTPLT, 0, w);
-                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOTPLT, 0, w);
-                        /*
-                        let sym = data.dyn_symbols.get(&r.name).unwrap();
-                        r.name_id = sym.sym.name;
-                        r.r.target =
-                            RelocationTarget::Symbol(object::SymbolIndex(sym.symbol_index.0 as usize));
-
-                        let index = data.gotplt_index(&r.name);
-                        data.lookup.insert(r.name.clone(), p.clone());
-                        */
                     }
                 } else if p.s.def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
@@ -364,7 +359,6 @@ impl ReadBlock {
                     if got.contains(&r.name) {
                         data.dynamics
                             .relocation_add(&r.name, GotKind::GOT(true), 2, w);
-                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), 2, w);
                     } else if gotplt.contains(&r.name) {
                         //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), w);
                     }
@@ -460,7 +454,8 @@ impl ReadBlock {
             ReadSectionKind::Bss => self.bss.section.size as u64,
             _ => 0,
         };
-        s.address = s.address + base;
+        s.relocate(base);
+        //s.address = s.address + base;
         //eprintln!("X: {:?}", (&self.name, &s.name, s.section, base, s.address));
         s
     }
@@ -570,16 +565,17 @@ impl ReadBlock {
             Some(symbol.clone())
         } else if let Some(symbol) = self.lookup_dynamic(name) {
             Some(symbol.clone())
-        //} else if let Some(symbol) =
         } else {
             None
         }
     }
 
+    /*
     pub fn complete(&self, _data: &Data) {
         //eprintln!("Block: {}", &self.name);
 
         //let mut dsymbols = HashMap::new();
+        /*
         let mut rx_symbols = vec![];
         let mut rw_symbols = vec![];
         let mut ro_symbols = vec![];
@@ -597,7 +593,9 @@ impl ReadBlock {
                 _ => other_symbols.push(sym),
             }
         }
+        */
     }
+*/
 
     pub fn dump(&self) {
         eprintln!("Block: {}", &self.name);
@@ -631,8 +629,14 @@ impl ReadBlock {
         }
 
         let symbols = rx_symbols
-            .iter()
-            .map(|s| Symbol::new(0, s.address, &s.name))
+            .into_iter()
+            .map(|s| {
+                if let ResolvePointer::Section(name, address) = &s.pointer {
+                    Symbol::new(0, *address, &s.name)
+                } else {
+                    unreachable!()
+                }
+            })
             .collect();
         disassemble_code_with_symbols(
             self.rx.section.bytes.as_slice(),
@@ -944,7 +948,7 @@ fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         section: section_kind,
         kind: symbol.kind(),
         bind,
-        address,
+        //address,
         pointer,
         size,
         source: SymbolSource::Static,

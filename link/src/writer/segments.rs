@@ -9,45 +9,8 @@ impl BlocksBuilder {
 
     pub fn build(self, data: &mut Data, w: &mut Writer, block: &mut ReadBlock) -> Blocks {
         // Setup locals
-        data.locals = vec![
-            LocalSymbol::new(
-                "_DYNAMIC".into(),
-                ".dynamic".into(),
-                ResolvePointer::Section(".dynamic".to_string(), 0),
-                Some(w.add_string("_DYNAMIC".as_bytes())),
-                None, //Some(w.add_dynamic_string("_DYNAMIC".as_bytes())),
-            ),
-            LocalSymbol::new(
-                "_GLOBAL_OFFSET_TABLE_".into(),
-                ".got.plt".into(),
-                ResolvePointer::Section(".got.plt".to_string(), 0),
-                Some(w.add_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
-                None, //Some(w.add_dynamic_string("_GLOBAL_OFFSET_TABLE_".as_bytes())),
-            ),
-            LocalSymbol::new(
-                "__bss_start".into(),
-                ".bss".into(),
-                ResolvePointer::Section(".bss".to_string(), 0),
-                Some(w.add_string("__bss_start".as_bytes())),
-                None,
-            ),
-            LocalSymbol::new(
-                "__rodata_start".into(),
-                ".rodata".into(),
-                ResolvePointer::Section(".rodata".to_string(), 0),
-                Some(w.add_string("__rodata_start".as_bytes())),
-                None,
-            ),
-        ];
-
-        for local in data.locals.iter() {
-            //data.statics.symbol_add(
-            data.pointers
-                .insert(local.symbol.clone(), local.pointer.clone());
-            let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
-            //data.statics.symbol_add(&symbol.name, symbol.section.section_index(data), w);
-            block.insert_local(symbol);
-        }
+        //
+        //
 
         block.build_strings(data, w);
 
@@ -147,7 +110,7 @@ impl Blocks {
         self.reserve(&mut tracker, data, block, w);
 
         // once we have the layout, we can assign the symbols
-        block.complete(&data);
+        //block.complete(&data);
 
         if data.add_section_headers {
             w.reserve_section_headers();

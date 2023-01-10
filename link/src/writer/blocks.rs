@@ -773,6 +773,62 @@ impl ElfBlock for SymTabSection {
     }
 
     fn reserve_symbols(&mut self, data: &mut Data, block: &ReadBlock, w: &mut Writer) {
+        {
+            let name = "data_start";
+            let pointer = ResolvePointer::Section(".data".to_string(), 0);
+            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
+            symbol.bind = SymbolBind::Weak;
+            let section_index = data.section_index_get(".data");
+            data.statics.symbol_add(&symbol, Some(section_index), w);
+        }
+
+        {
+            let name = "__data_start";
+            let pointer = ResolvePointer::Section(".data".to_string(), 0);
+            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
+            symbol.bind = SymbolBind::Global;
+            let section_index = data.section_index_get(".data");
+            data.statics.symbol_add(&symbol, Some(section_index), w);
+        }
+
+        {
+            let name = "__bss_start";
+            let pointer = ResolvePointer::Section(".bss".to_string(), 0);
+            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
+            symbol.bind = SymbolBind::Global;
+            let section_index = data.section_index_get(".bss");
+            data.statics.symbol_add(&symbol, Some(section_index), w);
+        }
+
+        {
+            let name = "__rodata_start";
+            let pointer = ResolvePointer::Section(".rodata".to_string(), 0);
+            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
+            symbol.bind = SymbolBind::Global;
+            let section_index = data.section_index_get(".rodata");
+            data.statics.symbol_add(&symbol, Some(section_index), w);
+        }
+
+        {
+            let name = "_GLOBAL_OFFSET_TABLE_";
+            let pointer = ResolvePointer::Section(".got.plt".to_string(), 0);
+            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
+            symbol.bind = SymbolBind::Local;
+            symbol.kind = object::SymbolKind::Data;
+            let section_index = data.section_index_get(".got.plt");
+            data.statics.symbol_add(&symbol, Some(section_index), w);
+        }
+
+        {
+            let name = "_DYNAMIC";
+            let pointer = ResolvePointer::Section(".dynamic".to_string(), 0);
+            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
+            symbol.bind = SymbolBind::Local;
+            symbol.kind = object::SymbolKind::Data;
+            let section_index = data.section_index_get(".dynamic");
+            data.statics.symbol_add(&symbol, Some(section_index), w);
+        }
+
         for local in data.locals.iter() {
             let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
             let section_index = symbol.section.section_index(data);
@@ -781,7 +837,9 @@ impl ElfBlock for SymTabSection {
 
         for (_, symbol) in block.exports.iter() {
             let section_index = symbol.section.section_index(data);
-            data.statics.symbol_add(symbol, section_index, w);
+            let mut symbol = symbol.clone();
+            symbol.kind = object::SymbolKind::Data;
+            data.statics.symbol_add(&symbol, section_index, w);
         }
 
         self.count = data.statics.symbol_count();

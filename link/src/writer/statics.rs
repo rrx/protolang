@@ -14,6 +14,7 @@ struct StaticSymbolIndex {
     index: usize,
     string_id: StringId,
     symbol_index: Option<SymbolIndex>,
+    section_index: Option<SectionIndex>,
     symbol: ReadSymbol,
 }
 
@@ -70,9 +71,21 @@ impl Statics {
 
     pub fn gen_symbols(&self, data: &Data) -> Vec<Sym> {
         let mut symbols = vec![];
+        /*
+        for (k, v) in data.pointers.iter() {
+            eprintln!("a: {:?}, {:?}", k, v);
+        }
+        for (k, v) in data.addr.iter() {
+            eprintln!("a: {:?}, {:#0x}", k, v);
+        }
+        */
+
         for name in self.symbols.iter() {
             let track = self.symbol_hash.get(name).unwrap();
-            let s = track.symbol.get_symbol(data);
+            //eprintln!("t: {:?}", track.symbol);
+            let mut s = track.symbol.get_symbol(data);
+            s.section = track.section_index;
+            //eprintln!("s: {:?}", s);
             symbols.push(s);
         }
         symbols
@@ -95,6 +108,7 @@ impl Statics {
                 index,
                 string_id,
                 symbol_index,
+                section_index,
                 symbol: symbol.clone(),
             };
 
@@ -110,14 +124,12 @@ impl Statics {
         w.write_null_symbol();
 
         // write them, locals first
-        let mut num_locals = 0;
         symbols
             .iter()
             .filter(|s| s.st_info >> 4 == elf::STB_LOCAL)
             .for_each(|s| {
                 //eprintln!("s: {:?}", s);
                 w.write_symbol(s);
-                num_locals += 1;
             });
 
         symbols
