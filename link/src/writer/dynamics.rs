@@ -104,7 +104,7 @@ impl Dynamics {
 
             let pointer = match kind {
                 GotKind::GOT(_) => ResolvePointer::Got(self.got_index),
-                GotKind::GOTPLT => ResolvePointer::Got(self.gotplt_index),
+                GotKind::GOTPLT => ResolvePointer::GotPlt(self.gotplt_index),
             };
 
             let got_index = match kind {

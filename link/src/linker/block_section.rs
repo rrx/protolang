@@ -103,12 +103,9 @@ impl GeneralSection {
         for r in self.relocations.iter() {
             if let Some(resolve_addr) = data.pointers.get(&r.name) {
                 if let Some(addr) = resolve_addr.resolve(data) {
-                    log::debug!(
+                    eprintln!(
                         "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                        self.alloc,
-                        self.offsets.address,
-                        addr as usize,
-                        &r.name
+                        self.alloc, self.offsets.address, addr as usize, &r.name
                     );
                     r.patch(
                         patch_base as *mut u8,

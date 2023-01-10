@@ -205,9 +205,11 @@ impl ResolvePointer {
             }
 
             Self::GotPlt(index) => {
-                if let Some(base) = data.addr_get_by_name(".got.plt") {
-                    let size = std::mem::size_of::<usize>() as u64;
-                    Some(base + (*index as u64) * size)
+                if let Some(base) = data.addr_get_by_name(".plt") {
+                    // each entry in small model is 0x10 in size
+                    let size = 0x10;
+                    // skip stub + 1
+                    Some(base + (*index as u64 + 1) * size)
                 } else {
                     None
                 }

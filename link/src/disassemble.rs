@@ -247,30 +247,6 @@ impl GeneralSection {
             }
         }
 
-        /*
-        for r in self.relocations.iter() {
-            let p = data.pointer_get(&r.name);
-            eprintln!("a: {:#0x}, {:#0x}", p, self.addr);
-            symbols.push(Symbol::new(
-                self.addr as u64,
-                p,//
-                //p.resolve(data).unwrap() - self.addr as u64,
-                &r.name,
-            ));
-        }
-        */
-
-        /*
-        for (name, p) in data.pointers.iter() {
-            let addr = p.resolve(data).unwrap();
-
-            symbols.push(Symbol::new(
-                self.addr as u64,
-                p.resolve(data).unwrap() - self.addr as u64,
-                name,
-            ));
-        }
-        */
         //disassemble_code_with_symbols(self.bytes.as_slice(), &symbols, &self.relocations);
         let mut heap =
             BinaryHeap::from_vec_cmp(symbols.clone(), |a: &(&String, u64), b: &(&String, u64)| {

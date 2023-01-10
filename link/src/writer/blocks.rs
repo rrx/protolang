@@ -487,7 +487,7 @@ impl ElfBlock for RelaDynSection {
             //let sym = data.dyn_symbols.get(name).unwrap();
             let (symbol_index, sym) = data.dynamics.symbol_get(name).unwrap();
 
-            let mut r_addend = 0;// = *addend;
+            let mut r_addend = 0; // = *addend;
             let r_sym;
             if *relative {
                 r_sym = 0;
@@ -1285,7 +1285,7 @@ impl ElfBlock for GotSection {
         w: &mut Writer,
     ) {
         // each entry in unapplied will be a GOT entry
-        let unapplied = data.dynamics.relocations(self.kind); //self.kind.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(self.kind);
         let name = self.kind.section_name();
 
         let len = unapplied.len() + self.kind.start_index();
@@ -1312,7 +1312,16 @@ impl ElfBlock for GotSection {
             let addr = self.offsets.address as usize
                 + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
             //eprintln!("adding: {}, {:#0x}", &name, addr as u64);
-            data.pointer_set(name.clone(), addr as u64);
+            match self.kind {
+                GotKind::GOT(_) => {
+                    data.pointers
+                        .insert(name.clone(), ResolvePointer::Got(index));
+                }
+                GotKind::GOTPLT => {
+                    data.pointers
+                        .insert(name.clone(), ResolvePointer::GotPlt(index));
+                }
+            }
         }
 
         // update section pointers

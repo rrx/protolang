@@ -124,7 +124,6 @@ impl Statics {
         }
     }
 
-
     pub fn symbols_write(&self, data: &Data, w: &mut Writer) {
         let symbols = self.gen_symbols(data);
         assert_eq!(symbols.len() + 1, w.symbol_count() as usize);
