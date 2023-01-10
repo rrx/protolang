@@ -41,12 +41,12 @@ impl BlocksBuilder {
         ];
 
         for local in data.locals.iter() {
+            //data.statics.symbol_add(
             data.pointers
                 .insert(local.symbol.clone(), local.pointer.clone());
-            block.insert_local(ReadSymbol::from_pointer(
-                local.symbol.clone(),
-                local.pointer.clone(),
-            ));
+            let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
+            //data.statics.symbol_add(&symbol.name, symbol.section.section_index(data), w);
+            block.insert_local(symbol);
         }
 
         block.build_strings(data, w);
@@ -122,6 +122,17 @@ impl Blocks {
         }
 
         // RESERVE SYMBOLS
+        for local in data.locals.iter() {
+            let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
+            data.statics
+                .symbol_add(&symbol.name, symbol.section.section_index(data), w);
+        }
+
+        for (_, symbol) in block.exports.iter() {
+            data.statics
+                .symbol_add(&symbol.name, symbol.section.section_index(data), w);
+        }
+
         for b in self.blocks.iter_mut() {
             b.reserve_symbols(data, block, w);
         }

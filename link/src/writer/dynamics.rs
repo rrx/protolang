@@ -54,7 +54,7 @@ impl Dynamics {
         }
     }
 
-    pub fn add_string(&mut self, name: &str, w: &mut Writer) -> StringId {
+    pub fn string_add(&mut self, name: &str, w: &mut Writer) -> StringId {
         if let Some(index) = self.string_hash.get(name) {
             index.string_id
         } else {
@@ -77,7 +77,7 @@ impl Dynamics {
         self.symbols.len()
     }
 
-    pub fn add_relocation(
+    pub fn relocation_add(
         &mut self,
         name: &str,
         kind: GotKind,
@@ -87,7 +87,7 @@ impl Dynamics {
         if let Some(index) = self.symbol_hash.get(name) {
             index.symbol_index
         } else {
-            let string_id = self.add_string(name, w);
+            let string_id = self.string_add(name, w);
             let symbol_index = SymbolIndex(w.reserve_dynamic_symbol_index().0);
 
             let st_type = match kind {

@@ -5,8 +5,7 @@ use object::read::elf::ProgramHeader;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::{
-    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationTarget, SectionKind, SymbolIndex,
-    SymbolKind,
+    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationTarget, SectionKind, SymbolKind,
 };
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -216,7 +215,7 @@ impl ReadSymbol {
         };
 
         let st_size = self.size;
-        let name = Some(data.string_get(&self.name));
+        let name = Some(data.statics.string_get(&self.name));
 
         use object::elf;
 
@@ -334,7 +333,7 @@ impl ReadBlock {
                     eprintln!("reloc {}", &r);
                     if got.contains(&r.name) {
                         data.dynamics
-                            .add_relocation(&r.name, GotKind::GOT(false), 0, w);
+                            .relocation_add(&r.name, GotKind::GOT(false), 0, w);
                         //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(false), 0, w);
                         /*
                         let sym = data.dyn_symbols.get(&r.name).unwrap();
@@ -346,7 +345,7 @@ impl ReadBlock {
                         data.lookup.insert(r.name.clone(), p.clone());
                         */
                     } else if gotplt.contains(&r.name) {
-                        data.dynamics.add_relocation(&r.name, GotKind::GOTPLT, 0, w);
+                        data.dynamics.relocation_add(&r.name, GotKind::GOTPLT, 0, w);
                         //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOTPLT, 0, w);
                         /*
                         let sym = data.dyn_symbols.get(&r.name).unwrap();
@@ -360,11 +359,11 @@ impl ReadBlock {
                     }
                 } else if p.s.def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
-                    p.name_id = Some(data.string(&r.name, w));
+                    p.name_id = Some(data.statics.string_add(&r.name, w));
                     data.lookup.insert(r.name.clone(), p.clone());
                     if got.contains(&r.name) {
                         data.dynamics
-                            .add_relocation(&r.name, GotKind::GOT(true), 2, w);
+                            .relocation_add(&r.name, GotKind::GOT(true), 2, w);
                         //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), 2, w);
                     } else if gotplt.contains(&r.name) {
                         //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), w);
@@ -398,7 +397,7 @@ impl ReadBlock {
         for (name, symbol) in self.exports.iter() {
             // allocate string for the symbol table
             //eprintln!("y: {:?}", symbol);
-            let _string_id = data.string(name, w);
+            let _string_id = data.statics.string_add(name, w);
             data.pointers
                 .insert(name.to_string(), symbol.pointer.clone());
         }
@@ -454,12 +453,11 @@ impl ReadBlock {
     }
 
     fn relocate_symbol(&self, mut s: ReadSymbol) -> ReadSymbol {
-        use ReadSectionKind::*;
         let base = match s.section {
-            RX => self.rx.section.bytes.len() as u64,
-            RO => self.ro.section.bytes.len() as u64,
-            RW => self.rw.section.bytes.len() as u64,
-            Bss => self.bss.section.size as u64,
+            ReadSectionKind::RX => self.rx.section.bytes.len() as u64,
+            ReadSectionKind::ROData => self.ro.section.bytes.len() as u64,
+            ReadSectionKind::RW => self.rw.section.bytes.len() as u64,
+            ReadSectionKind::Bss => self.bss.section.size as u64,
             _ => 0,
         };
         s.address = s.address + base;
@@ -578,7 +576,7 @@ impl ReadBlock {
         }
     }
 
-    pub fn complete(&self, data: &Data) {
+    pub fn complete(&self, _data: &Data) {
         //eprintln!("Block: {}", &self.name);
 
         //let mut dsymbols = HashMap::new();
@@ -588,7 +586,7 @@ impl ReadBlock {
         let mut bss_symbols = vec![];
         let mut other_symbols = vec![];
 
-        for (name, s) in self.locals.iter().chain(self.exports.iter()) {
+        for (_name, s) in self.locals.iter().chain(self.exports.iter()) {
             //dsymbols.insert(name, Symbol::new(0, s.address, &s.name));
             let sym = Symbol::new(0, s.address, &s.name);
             match s.section {

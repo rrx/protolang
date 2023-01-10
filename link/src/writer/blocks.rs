@@ -758,36 +758,15 @@ impl Default for SymTabSection {
     }
 }
 
+/*
 impl SymTabSection {
     fn gen_symbols(&self, data: &Data, block: &ReadBlock) -> Vec<Sym> {
-        let mut symbols = vec![];
-        for s in data.symbols.values() {
-            symbols.push(s.get_symbol());
-        }
-
-        for (_, symbol) in block.exports.iter() {
-            symbols.push(symbol.get_symbol(data));
-        }
-
-        for local in data.locals.iter() {
-            assert!(local.string_id.is_some());
-            let section_index = data.section_index_get(&local.section);
-            let st_value = data.pointer_get(&local.symbol);
-            let s = Sym {
-                name: local.string_id,
-                section: Some(section_index),
-                st_info: 0,
-                st_other: 0,
-                st_shndx: 0,
-                st_value,
-                st_size: 0,
-            };
-            symbols.push(s);
-        }
+        let mut symbols = data.statics.gen_symbols(data);
 
         symbols
     }
 }
+*/
 
 impl ElfBlock for SymTabSection {
     fn name(&self) -> String {
@@ -804,20 +783,23 @@ impl ElfBlock for SymTabSection {
     }
 
     fn reserve_symbols(&mut self, data: &mut Data, block: &ReadBlock, w: &mut Writer) {
-        for s in data.symbols.values() {
-            w.reserve_symbol_index(s.section_index);
-        }
+        //for s in data.symbols.values() {
+        //w.reserve_symbol_index(s.section_index);
+        //}
 
-        for s in data.locals.iter() {
-            let section_index = data.section_index_get(&s.section);
-            w.reserve_symbol_index(Some(section_index));
-        }
+        //for s in data.locals.iter() {
+        //let section_index = data.section_index_get(&s.section);
+        //w.reserve_symbol_index(Some(section_index));
+        //}
 
+        /*
         for (_name, s) in block.exports.iter() {
             let section_index = s.section.section_index(data);
             w.reserve_symbol_index(section_index);
         }
-        self.count = data.symbols.len() + data.locals.len() + block.exports.len();
+        */
+
+        self.count = data.statics.symbol_count(); // + block.exports.len();
     }
 
     fn reserve(
@@ -827,7 +809,7 @@ impl ElfBlock for SymTabSection {
         block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        let symbols = self.gen_symbols(data, block);
+        let symbols = data.statics.gen_symbols(data);
         assert_eq!(symbols.len(), self.count);
 
         // reserve the symbols in the various sections
@@ -854,7 +836,7 @@ impl ElfBlock for SymTabSection {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
-        let symbols = self.gen_symbols(data, block);
+        let symbols = data.statics.gen_symbols(data);
         assert_eq!(symbols.len(), self.count);
         assert_eq!(aligned_pos, self.offsets.file_offset as usize);
 
@@ -891,7 +873,7 @@ impl ElfBlock for SymTabSection {
         block: &ReadBlock,
         w: &mut Writer,
     ) {
-        let symbols = self.gen_symbols(data, block);
+        let symbols = data.statics.gen_symbols(data);
         assert_eq!(symbols.len(), self.count);
 
         let mut num_locals = 0;

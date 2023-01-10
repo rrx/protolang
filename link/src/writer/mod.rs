@@ -17,12 +17,14 @@ mod blocks;
 mod dynamics;
 mod section;
 mod segments;
+mod statics;
 mod utils;
 
 pub use blocks::*;
 pub use dynamics::*;
 pub use section::*;
 pub use segments::*;
+pub use statics::*;
 pub use utils::*;
 
 #[derive(Debug, Clone)]
@@ -225,6 +227,7 @@ pub struct Data {
     page_size: u32,
     base: usize,
     pub dynamics: Dynamics,
+    pub statics: Statics,
 
     pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
@@ -242,7 +245,7 @@ pub struct Data {
     debug: bool,
 
     //pub dyn_symbols: HashMap<String, DynamicSymbol>,
-    symbols: HashMap<String, ProgSymbol>,
+    //symbols: HashMap<String, ProgSymbol>,
     pub lookup: HashMap<String, ProgSymbol>,
     locals: Vec<LocalSymbol>,
     dynamic: Vec<LocalSymbol>,
@@ -250,7 +253,7 @@ pub struct Data {
     pub relocations_gotplt: Vec<(bool, String, i64)>,
 
     // store strings for which we have extended their lifetime
-    pub strings: HashMap<String, (String, StringId)>,
+    //pub strings: HashMap<String, (String, StringId)>,
     //pub dyn_strings: HashMap<String, (String, StringId)>,
 
     // index of symbols in got/gotplt
@@ -291,14 +294,15 @@ impl Data {
 
             // Tables
             dynamics: Dynamics::new(),
+            statics: Statics::new(),
             //dyn_symbols: HashMap::new(),
-            symbols: HashMap::new(),
+            //symbols: HashMap::new(),
             lookup: HashMap::new(),
             locals: vec![],
             dynamic: vec![],
             relocations_got: vec![],
             relocations_gotplt: vec![],
-            strings: HashMap::new(),
+            //strings: HashMap::new(),
             //dyn_strings: HashMap::new(),
             got_index: HashMap::new(),
             gotplt_index: HashMap::new(),
@@ -338,6 +342,7 @@ impl Data {
         }
     }
 
+    /*
     pub fn string_get(&self, name: &str) -> StringId {
         self.strings
             .get(name)
@@ -359,6 +364,7 @@ impl Data {
             }
         }
     }
+    */
 
     /*
     pub fn dyn_string(&mut self, name: &str, w: &mut Writer) -> StringId {
@@ -435,6 +441,7 @@ impl Data {
             .expect(&format!("Pointer unresolved: {}", name))
     }
 
+    /*
     pub fn symbol_set(&mut self, name: String, s: ProgSymbol) {
         self.symbols.insert(name, s);
     }
@@ -444,6 +451,7 @@ impl Data {
             .get(name)
             .expect(&format!("Pointer not found: {}", name))
     }
+    */
 
     pub fn addr_get_by_name(&self, name: &str) -> Option<u64> {
         self.addr
