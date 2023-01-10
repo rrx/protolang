@@ -3,7 +3,7 @@ use crate::*;
 use object::read::elf;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
-use object::ObjectSection;
+use object::{ObjectSection, RelocationKind};
 use std::error::Error;
 
 #[derive(Debug, Clone, Default)]
@@ -100,8 +100,16 @@ impl GeneralSection {
 
     pub fn apply_relocations(&self, data: &Data) {
         let patch_base = self.bytes.as_ptr();
+        eprintln!("p: {:?}", data.pointers_plt);
         for r in self.relocations.iter() {
-            if let Some(resolve_addr) = data.pointers.get(&r.name) {
+            eprintln!("R: {}", r);
+            let maybe_p = if r.r.kind() == RelocationKind::PltRelative {
+                data.pointers_plt.get(&r.name)
+            } else {
+                data.pointers.get(&r.name)
+            };
+
+            if let Some(resolve_addr) = maybe_p {
                 if let Some(addr) = resolve_addr.resolve(data) {
                     eprintln!(
                         "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",

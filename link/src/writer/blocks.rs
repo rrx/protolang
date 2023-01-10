@@ -482,10 +482,10 @@ impl ElfBlock for RelaDynSection {
         w.pad_until(aligned_pos);
 
         // we are writing a relocation for the GOT entries
-        for (index, (relative, name, addend)) in unapplied.iter().enumerate() {
+        for (index, (relative, name)) in unapplied.iter().enumerate() {
             eprintln!("unapplied: {}, {}", name, relative);
             //let sym = data.dyn_symbols.get(name).unwrap();
-            let (symbol_index, sym) = data.dynamics.symbol_get(name).unwrap();
+            let (symbol_index, sym) = data.dynamics.symbol_get(name, data).unwrap();
 
             let mut r_addend = 0; // = *addend;
             let r_sym;
@@ -500,7 +500,7 @@ impl ElfBlock for RelaDynSection {
                 //r_addend = 1;
             } else {
                 r_sym = symbol_index.0; //sym.symbol_index.0 as u32;
-                r_addend = *addend;
+                r_addend = 0;//*addend;
             }
 
             // we needed to fork object in order to access .0
@@ -849,9 +849,7 @@ impl ElfBlock for SymTabSection {
 
         for (_, symbol) in block.exports.iter() {
             let section_index = symbol.section.section_index(data);
-            let mut symbol = symbol.clone();
-            symbol.kind = object::SymbolKind::Data;
-            data.statics.symbol_add(&symbol, section_index, w);
+            data.statics.symbol_add(symbol, section_index, w);
         }
 
         self.count = data.statics.symbol_count();
@@ -905,7 +903,7 @@ impl ElfBlock for SymTabSection {
         &self,
         data: &Data,
         _tracker: &SegmentTracker,
-        block: &ReadBlock,
+        _block: &ReadBlock,
         w: &mut Writer,
     ) {
         let symbols = data.statics.gen_symbols(data);
@@ -992,7 +990,7 @@ impl ElfBlock for DynSymSection {
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
 
-        data.dynamics.symbols_write(w);
+        data.dynamics.symbols_write(data, w);
     }
 
     fn write_section_header(
@@ -1002,8 +1000,6 @@ impl ElfBlock for DynSymSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        //let got = GotKind::GOT(true).unapplied_data(data);
-        //let plt = GotKind::GOTPLT.unapplied_data(data);
         let got = data.dynamics.relocations(GotKind::GOT(true));
         let plt = data.dynamics.relocations(GotKind::GOTPLT);
 
@@ -1231,15 +1227,6 @@ impl GotKind {
             Self::GOTPLT => 3,
         }
     }
-
-    /*
-    pub fn unapplied_data(&self, data: &Data) -> Vec<(bool, String, i64)> {
-        match self {
-            GotKind::GOT(_) => data.dynamics.r_got.iter().cloned().collect(),
-            GotKind::GOTPLT => data.dynamics.r_gotplt.iter().cloned().collect(),
-        }
-    }
-    */
 }
 
 pub struct GotSection {
@@ -1308,7 +1295,7 @@ impl ElfBlock for GotSection {
         );
 
         // add got pointers to the pointers table, so we can do relocations
-        for (index, (relative, name, _)) in unapplied.iter().enumerate() {
+        for (index, (relative, name)) in unapplied.iter().enumerate() {
             let addr = self.offsets.address as usize
                 + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
             //eprintln!("adding: {}, {:#0x}", &name, addr as u64);
@@ -1320,6 +1307,8 @@ impl ElfBlock for GotSection {
                 GotKind::GOTPLT => {
                     data.pointers
                         .insert(name.clone(), ResolvePointer::GotPlt(index));
+                    data.pointers_plt
+                        .insert(name.clone(), ResolvePointer::Plt(index));
                 }
             }
         }
@@ -1340,8 +1329,7 @@ impl ElfBlock for GotSection {
         let aligned_pos = size_align(pos, align);
         w.pad_until(aligned_pos);
 
-        //let unapplied = self.kind.unapplied_data(data);
-        let unapplied = data.dynamics.relocations(self.kind); //self.kind.unapplied_data(data);
+        let unapplied = data.dynamics.relocations(self.kind);
 
         match self.kind {
             GotKind::GOT(_) => {

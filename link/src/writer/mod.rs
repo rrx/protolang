@@ -145,6 +145,7 @@ pub enum ResolvePointer {
     SectionIndex(SectionIndex, u64),
     Got(usize),
     GotPlt(usize),
+    Plt(usize),
 }
 
 impl fmt::Display for ResolvePointer {
@@ -205,6 +206,17 @@ impl ResolvePointer {
             }
 
             Self::GotPlt(index) => {
+                if let Some(base) = data.addr_get_by_name(".got.plt") {
+                    // each entry in small model is 0x10 in size
+                    let size = 0x10;
+                    // skip stub + 1
+                    Some(base + (*index as u64 + 1) * size)
+                } else {
+                    None
+                }
+            }
+
+            Self::Plt(index) => {
                 if let Some(base) = data.addr_get_by_name(".plt") {
                     // each entry in small model is 0x10 in size
                     let size = 0x10;
@@ -236,6 +248,7 @@ pub struct Data {
 
     pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
+    pub pointers_plt: HashMap<String, ResolvePointer>,
 
     pub section_index: HashMap<String, SectionIndex>,
     size_dynstr: usize,
@@ -292,6 +305,7 @@ impl Data {
             size_relaplt: 0,
             addr_hash: 0,
             pointers: HashMap::new(),
+            pointers_plt: HashMap::new(),
 
             add_section_headers: true,
             add_symbols: true,

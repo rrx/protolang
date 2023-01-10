@@ -177,7 +177,6 @@ pub struct ReadSymbol {
     pub(crate) source: SymbolSource,
     pub(crate) kind: SymbolKind,
     pub(crate) bind: SymbolBind,
-    //address: u64,
     pub(crate) pointer: ResolvePointer,
     pub(crate) size: u64,
     lookup: SymbolLookupTable,
@@ -193,7 +192,6 @@ impl ReadSymbol {
             source: SymbolSource::Static,
             kind: SymbolKind::Unknown,
             bind: SymbolBind::Local,
-            //address: 0,
             pointer,
             size: 0,
             lookup: SymbolLookupTable::None,
@@ -204,8 +202,13 @@ impl ReadSymbol {
         self.pointer = self.pointer.clone().relocate(base);
     }
 
-    pub fn get_symbol(&self, data: &Data) -> object::write::elf::Sym {
-        let section = self.section.section_index(data);
+    pub fn get_dynamic_symbol(&self, data: &Data) -> object::write::elf::Sym {
+        let name = Some(data.dynamics.string_get(&self.name));
+        self._get_symbol(data, name, 0, 0, None)
+    }
+
+    pub fn get_static_symbol(&self, data: &Data) -> object::write::elf::Sym {
+        let name = Some(data.statics.string_get(&self.name));
         let st_value = {
             if let Some(addr) = self.pointer.resolve(data) {
                 addr
@@ -213,10 +216,11 @@ impl ReadSymbol {
                 0
             }
         };
+        let section = self.section.section_index(data);
+        self._get_symbol(data, name, st_value, self.size, section)
+    }
 
-        let st_size = self.size;
-        let name = Some(data.statics.string_get(&self.name));
-
+    pub fn _get_symbol(&self, data: &Data, string_id: Option<StringId>, st_value: u64, st_size: u64, section: Option<SectionIndex>) -> object::write::elf::Sym {
         use object::elf;
 
         let stt = match self.kind {
@@ -231,7 +235,7 @@ impl ReadSymbol {
         let st_other = elf::STV_DEFAULT;
 
         object::write::elf::Sym {
-            name,
+            name: string_id,
             section,
             st_info,
             st_other,
@@ -333,33 +337,28 @@ impl ReadBlock {
         for r in iter {
             if let Some(s) = self.lookup(&r.name) {
                 // we don't know the section yet, we just know which kind
-                let mut p = ProgSymbol::new_object(&r.name, Some(SectionIndex(0)));
                 let def = match s.bind {
                     SymbolBind::Local => CodeSymbolDefinition::Local,
                     SymbolBind::Global => CodeSymbolDefinition::Defined,
                     SymbolBind::Weak => CodeSymbolDefinition::Defined,
                 };
-                p.s.def = def;
 
                 if s.source == SymbolSource::Dynamic {
-                    //eprintln!("p {:?}", &s);
-                    p.name_id = r.name_id;
-
                     eprintln!("reloc {}", &r);
                     if got.contains(&r.name) {
                         data.dynamics
-                            .relocation_add(&r.name, GotKind::GOT(false), 0, w);
+                            .relocation_add(&s, GotKind::GOT(false), w);
                     } else if gotplt.contains(&r.name) {
-                        data.dynamics.relocation_add(&r.name, GotKind::GOTPLT, 0, w);
+                        data.dynamics.relocation_add(&s, GotKind::GOTPLT, w);
                     }
-                } else if p.s.def != CodeSymbolDefinition::Local {
+                } else if def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
-                    p.name_id = Some(data.statics.string_add(&r.name, w));
-                    data.lookup.insert(r.name.clone(), p.clone());
                     if got.contains(&r.name) {
                         data.dynamics
-                            .relocation_add(&r.name, GotKind::GOT(true), 2, w);
+                            .relocation_add(&s, GotKind::GOT(true), w);
                     } else if gotplt.contains(&r.name) {
+                        data.dynamics
+                            .relocation_add(&s, GotKind::GOTPLT, w);
                         //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), w);
                     }
                 } else {

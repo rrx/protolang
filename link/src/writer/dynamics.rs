@@ -1,6 +1,6 @@
 use super::*;
 use object::write::elf::Sym;
-use object::write::elf::{SectionIndex, SymbolIndex, Writer};
+use object::write::elf::{SymbolIndex, Writer};
 use object::write::StringId;
 use std::collections::HashMap;
 
@@ -18,6 +18,7 @@ struct TrackSymbolIndex {
     index: usize,
     string_id: StringId,
     symbol_index: SymbolIndex,
+    symbol: ReadSymbol,
     st_type: u8,
     got_index: GotIndex,
     pointer: ResolvePointer,
@@ -33,8 +34,8 @@ pub struct Dynamics {
     symbols: Vec<String>,
     symbol_hash: HashMap<String, TrackSymbolIndex>,
 
-    r_got: Vec<(bool, String, i64)>,
-    r_gotplt: Vec<(bool, String, i64)>,
+    r_got: Vec<(bool, String)>,
+    r_gotplt: Vec<(bool, String)>,
 
     got_index: usize,
     gotplt_index: usize,
@@ -54,11 +55,18 @@ impl Dynamics {
         }
     }
 
-    pub fn relocations(&self, kind: GotKind) -> Vec<(bool, String, i64)> {
+    pub fn relocations(&self, kind: GotKind) -> Vec<(bool, String)> {
         match kind {
             GotKind::GOT(_) => self.r_got.iter().cloned().collect(),
             GotKind::GOTPLT => self.r_gotplt.iter().cloned().collect(),
         }
+    }
+
+    pub fn string_get(&self, name: &str) -> StringId {
+        self.string_hash
+            .get(name)
+            .expect(&format!("String not found: {}", name))
+            .string_id
     }
 
     pub fn string_add(&mut self, name: &str, w: &mut Writer) -> StringId {
@@ -86,16 +94,18 @@ impl Dynamics {
 
     pub fn relocation_add(
         &mut self,
-        name: &str,
+        symbol: &ReadSymbol,
         kind: GotKind,
-        addend: i64,
         w: &mut Writer,
     ) -> SymbolIndex {
+        let name = &symbol.name;
         if let Some(index) = self.symbol_hash.get(name) {
             index.symbol_index
         } else {
+            let symbol = symbol.clone();
             let string_id = self.string_add(name, w);
             let symbol_index = SymbolIndex(w.reserve_dynamic_symbol_index().0);
+            eprintln!("sym: {:?}", symbol);
 
             let st_type = match kind {
                 GotKind::GOT(_) => elf::STT_OBJECT,
@@ -121,8 +131,8 @@ impl Dynamics {
             };
 
             match kind {
-                GotKind::GOT(relative) => self.r_got.push((relative, name.to_string(), addend)),
-                GotKind::GOTPLT => self.r_gotplt.push((false, name.to_string(), addend)),
+                GotKind::GOT(relative) => self.r_got.push((relative, name.to_string())),
+                GotKind::GOTPLT => self.r_gotplt.push((false, name.to_string())),
             }
 
             let index = self.symbols.len();
@@ -135,6 +145,7 @@ impl Dynamics {
                 st_type,
                 got_index,
                 pointer,
+                symbol,
             };
 
             self.symbol_hash.insert(name.to_string(), track);
@@ -143,13 +154,17 @@ impl Dynamics {
         }
     }
 
-    pub fn symbol_get(&self, name: &str) -> Option<(SymbolIndex, Sym)> {
+    pub fn symbol_get(&self, name: &str, data: &Data) -> Option<(SymbolIndex, Sym)> {
         self.symbol_hash.get(name).map(|track| {
-            let stb = elf::STB_GLOBAL;
-            let st_info = (stb << 4) + (track.st_type & 0x0f);
-            let st_other = elf::STV_DEFAULT;
+            let mut sym = track.symbol.get_dynamic_symbol(data);
+            //let stb = elf::STB_GLOBAL;
+            //let st_info = (stb << 4) + (track.st_type & 0x0f);
+            //let st_other = elf::STV_DEFAULT;
             (
                 track.symbol_index,
+                sym
+                )
+                /*
                 Sym {
                     name: Some(track.string_id),
                     section: None,
@@ -160,13 +175,14 @@ impl Dynamics {
                     st_size: 0,
                 },
             )
+            */
         })
     }
 
-    pub fn symbols_write(&self, w: &mut Writer) {
+    pub fn symbols_write(&self, data: &Data, w: &mut Writer) {
         w.write_null_dynamic_symbol();
         for name in self.symbols.iter() {
-            let (_symbol_index, sym) = self.symbol_get(name).unwrap();
+            let (_symbol_index, sym) = self.symbol_get(name, data).unwrap();
             w.write_dynamic_symbol(&sym);
         }
     }
