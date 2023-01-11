@@ -234,6 +234,7 @@ impl ResolvePointer {
 pub enum AddressKey {
     SectionIndex(SectionIndex),
     Section(String),
+    PltGot(String),
 }
 
 pub struct Data {

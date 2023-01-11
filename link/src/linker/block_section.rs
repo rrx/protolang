@@ -3,7 +3,7 @@ use crate::*;
 use object::read::elf;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
-use object::{ObjectSection, RelocationKind};
+use object::ObjectSection;
 use std::error::Error;
 
 #[derive(Debug, Clone, Default)]
@@ -103,9 +103,10 @@ impl GeneralSection {
         eprintln!("p: {:?}", data.pointers_plt);
         for r in self.relocations.iter() {
             eprintln!("R: {}", r);
-            let maybe_p = if r.r.kind() == RelocationKind::PltRelative {
+            let maybe_p = if r.r.kind() == object::RelocationKind::PltRelative {
                 data.pointers_plt.get(&r.name)
             } else {
+                //let maybe_p = data.pointers.get(&r.name);
                 data.pointers.get(&r.name)
             };
 
@@ -139,16 +140,14 @@ impl GeneralSection {
     }
 
     pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        //let align = self.align();
         let align = self.offsets.align as usize;
         let pos = w.reserved_len();
         let align_pos = size_align(pos, align);
         w.reserve_until(align_pos);
         let file_offset = w.reserved_len();
 
-        w.reserve(self.bytes.len(), 1); //align);
+        w.reserve(self.bytes.len(), 1);
         let after = w.reserved_len();
-        //let delta = after - pos;
 
         log::debug!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
         tracker.add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
@@ -182,16 +181,6 @@ impl GeneralSection {
         self.apply_relocations(data);
 
         w.write(self.bytes.as_slice());
-        /*
-        for r in self.relocations.iter() {
-            eprintln!("r: {}", r);
-            let p = data.pointers.get(&r.name).unwrap();
-            eprintln!("s: {:#0x}", p.resolve(data).unwrap());
-            //if let Some(p) = data.pointers.get(&r.name) {
-            //eprintln!("s: {:?}", p.resolve(data));
-            //}
-        }
-        */
     }
 
     pub fn block_write_section_header(&self, w: &mut Writer) {
@@ -200,12 +189,12 @@ impl GeneralSection {
                 name: Some(name_id),
                 sh_type: object::elf::SHT_PROGBITS,
                 sh_flags: self.alloc.section_header_flags() as u64,
-                sh_addr: self.offsets.address, //addr as u64,
+                sh_addr: self.offsets.address,
                 sh_offset: self.offsets.file_offset,
                 sh_info: 0,
                 sh_link: 0,
                 sh_entsize: 0,
-                sh_addralign: self.offsets.align, //alloc.align() as u64,
+                sh_addralign: self.offsets.align,
                 sh_size: self.size as u64,
             });
         }

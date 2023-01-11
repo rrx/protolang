@@ -500,7 +500,7 @@ impl ElfBlock for RelaDynSection {
                 //r_addend = 1;
             } else {
                 r_sym = symbol_index.0; //sym.symbol_index.0 as u32;
-                r_addend = 0;//*addend;
+                r_addend = 0; //*addend;
             }
 
             // we needed to fork object in order to access .0
@@ -1307,8 +1307,6 @@ impl ElfBlock for GotSection {
                 GotKind::GOTPLT => {
                     data.pointers
                         .insert(name.clone(), ResolvePointer::GotPlt(index));
-                    data.pointers_plt
-                        .insert(name.clone(), ResolvePointer::Plt(index));
                 }
             }
         }
@@ -1539,6 +1537,147 @@ impl ElfBlock for PltSection {
 
         // write stub
         w.write(stub.as_slice());
+    }
+
+    fn write_section_header(
+        &self,
+        _data: &Data,
+        _tracker: &SegmentTracker,
+        _block: &ReadBlock,
+        w: &mut Writer,
+    ) {
+        let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
+        let sh_addralign = self.offsets.align;
+        w.write_section_header(&object::write::elf::SectionHeader {
+            name: self.name_id,
+            sh_type: elf::SHT_PROGBITS,
+            sh_flags,
+            sh_addr: self.offsets.address,
+            sh_offset: self.offsets.file_offset,
+            sh_info: 0,
+            sh_link: 0,
+            sh_entsize: 0,
+            sh_addralign,
+            sh_size: self.offsets.size,
+        });
+    }
+}
+
+pub struct PltGotSection {
+    name_id: Option<StringId>,
+    index: Option<SectionIndex>,
+    offsets: SectionOffset,
+}
+
+impl PltGotSection {
+    pub fn new() -> Self {
+        Self {
+            name_id: None,
+            index: None,
+            offsets: SectionOffset::new(0x10),
+        }
+    }
+}
+
+impl PltGotSection {
+    pub fn get_name() -> &'static str {
+        ".plt.got"
+    }
+}
+
+impl ElfBlock for PltGotSection {
+    fn name(&self) -> String {
+        return "plt.got".to_string();
+    }
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RX)
+    }
+
+    fn reserve_section_index(&mut self, data: &mut Data, _block: &mut ReadBlock, w: &mut Writer) {
+        let name = Self::get_name();
+        self.name_id = Some(w.add_section_name(name.as_bytes()));
+        let index = w.reserve_section_index();
+        data.section_index.insert(name.to_string(), index);
+        self.index = Some(index);
+    }
+
+    fn reserve(
+        &mut self,
+        data: &mut Data,
+        tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
+        let pltgot = data.dynamics.plt_objects();
+
+        let size = (pltgot.len()) * 0x8;
+        let align = self.offsets.align as usize;
+
+        let pos = w.reserved_len();
+        let align_pos = size_align(pos, align);
+        w.reserve_until(align_pos);
+        let file_offset = w.reserved_len();
+        w.reserve(size, align);
+        let after = w.reserved_len();
+        assert_eq!(size, after - file_offset);
+        tracker.add_offsets(
+            self.alloc().unwrap(),
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
+
+        // update section pointers
+        data.addr.insert(
+            AddressKey::Section(Self::get_name().to_string()),
+            self.offsets.address,
+        );
+        data.addr.insert(
+            AddressKey::SectionIndex(self.index.unwrap()),
+            self.offsets.address,
+        );
+
+        let pltgot = data.dynamics.plt_objects();
+        for (name, p, p2) in pltgot.into_iter() {
+            data.pointers_plt.insert(name.to_string(), p2.clone());
+        }
+    }
+
+    fn write(
+        &self,
+        data: &Data,
+        _tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
+        let align = self.offsets.align as usize;
+        let pos = w.len();
+        let aligned_pos = size_align(pos, align);
+        w.pad_until(aligned_pos);
+
+        let vbase = self.offsets.address as isize;
+
+        let pltgot = data.dynamics.plt_objects();
+        eprintln!("x: {:?}", pltgot);
+
+        for (i, (name, p, p2)) in pltgot.iter().enumerate() {
+            let mut slot: Vec<u8> = vec![0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x66, 0x90];
+            let slot_size = slot.len();
+            assert_eq!(slot_size, 8);
+
+            //1050:       ff 25 82 2f 00 00       jmp    *0x2f82(%rip)        # 3fd8 <fprintf@GLIBC_2.2.5>
+            //1056:       66 90                   xchg   %ax,%ax
+
+            let gotplt_addr = p.resolve(data).unwrap();
+            unsafe {
+                let offset = (i as isize) * slot_size as isize;
+                let patch = (slot.as_mut_ptr().offset(offset + 2)) as *mut i32;
+                let rip = vbase + offset + 6;
+                let addr = gotplt_addr as isize - rip;
+                *patch = addr as i32;
+            }
+            w.write(slot.as_slice());
+        }
     }
 
     fn write_section_header(

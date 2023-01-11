@@ -220,7 +220,14 @@ impl ReadSymbol {
         self._get_symbol(data, name, st_value, self.size, section)
     }
 
-    pub fn _get_symbol(&self, data: &Data, string_id: Option<StringId>, st_value: u64, st_size: u64, section: Option<SectionIndex>) -> object::write::elf::Sym {
+    pub fn _get_symbol(
+        &self,
+        data: &Data,
+        string_id: Option<StringId>,
+        st_value: u64,
+        st_size: u64,
+        section: Option<SectionIndex>,
+    ) -> object::write::elf::Sym {
         use object::elf;
 
         let stt = match self.kind {
@@ -330,10 +337,6 @@ impl ReadBlock {
             }
         }
 
-        //for s in self.locals.iter() {
-        //eprintln!("local: {:?}", s);
-        //}
-
         for r in iter {
             if let Some(s) = self.lookup(&r.name) {
                 // we don't know the section yet, we just know which kind
@@ -345,21 +348,18 @@ impl ReadBlock {
 
                 if s.source == SymbolSource::Dynamic {
                     eprintln!("reloc {}", &r);
+                    data.statics.symbol_add(&s, None, w);
                     if got.contains(&r.name) {
-                        data.dynamics
-                            .relocation_add(&s, GotKind::GOT(false), w);
+                        data.dynamics.symbol_add(&s, GotKind::GOT(false), r, w);
                     } else if gotplt.contains(&r.name) {
-                        data.dynamics.relocation_add(&s, GotKind::GOTPLT, w);
+                        data.dynamics.symbol_add(&s, GotKind::GOTPLT, r, w);
                     }
                 } else if def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
                     if got.contains(&r.name) {
-                        data.dynamics
-                            .relocation_add(&s, GotKind::GOT(true), w);
+                        data.dynamics.symbol_add(&s, GotKind::GOT(true), r, w);
                     } else if gotplt.contains(&r.name) {
-                        data.dynamics
-                            .relocation_add(&s, GotKind::GOTPLT, w);
-                        //let symbol_index = data.dyn_relocation(&r.name, GotKind::GOT(true), w);
+                        data.dynamics.symbol_add(&s, GotKind::GOTPLT, r, w);
                     }
                 } else {
                     eprintln!("reloc3 {}", &r);
@@ -393,30 +393,9 @@ impl ReadBlock {
             let _string_id = data.statics.string_add(name, w);
             data.pointers
                 .insert(name.to_string(), symbol.pointer.clone());
+            //data.statics.symbol_add(symbol, None, w);
         }
     }
-
-    /*
-    pub fn base(&self, section: ReadSectionKind) -> usize {
-        match section {
-            ReadSectionKind::RX => self.rx.base,
-            ReadSectionKind::RW => self.rw.base,
-            ReadSectionKind::RO => self.ro.base,
-            ReadSectionKind::Bss => self.bss.section.base,
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn file_offset(&self, section: ReadSectionKind) -> usize {
-        match section {
-            ReadSectionKind::RX => self.rx.file_offset,
-            ReadSectionKind::RW => self.rw.file_offset,
-            ReadSectionKind::RO => self.ro.file_offset,
-            ReadSectionKind::Bss => self.bss.file_offset,
-            _ => unreachable!(),
-        }
-    }
-    */
 
     pub fn write<Elf: object::read::elf::FileHeader<Endian = object::Endianness>>(
         self,
@@ -454,8 +433,6 @@ impl ReadBlock {
             _ => 0,
         };
         s.relocate(base);
-        //s.address = s.address + base;
-        //eprintln!("X: {:?}", (&self.name, &s.name, s.section, base, s.address));
         s
     }
 
@@ -569,33 +546,6 @@ impl ReadBlock {
         }
     }
 
-    /*
-        pub fn complete(&self, _data: &Data) {
-            //eprintln!("Block: {}", &self.name);
-
-            //let mut dsymbols = HashMap::new();
-            /*
-            let mut rx_symbols = vec![];
-            let mut rw_symbols = vec![];
-            let mut ro_symbols = vec![];
-            let mut bss_symbols = vec![];
-            let mut other_symbols = vec![];
-
-            for (_name, s) in self.locals.iter().chain(self.exports.iter()) {
-                //dsymbols.insert(name, Symbol::new(0, s.address, &s.name));
-                let sym = Symbol::new(0, s.address, &s.name);
-                match s.section {
-                    ReadSectionKind::RX => rx_symbols.push(sym),
-                    ReadSectionKind::RW => rw_symbols.push(sym),
-                    ReadSectionKind::ROData => ro_symbols.push(sym),
-                    ReadSectionKind::Bss => bss_symbols.push(sym),
-                    _ => other_symbols.push(sym),
-                }
-            }
-            */
-        }
-    */
-
     pub fn dump(&self) {
         eprintln!("Block: {}", &self.name);
 
@@ -687,8 +637,6 @@ impl ReadBlock {
                 eprintln!(" {}", s);
             }
         }
-
-        //assert!(notfound.len() == 0);
     }
 }
 
@@ -758,14 +706,11 @@ impl Reader {
         &mut self,
         b: &elf::ElfFile<'a, A, B>,
     ) -> Result<(), Box<dyn Error>> {
-        //if let Some(dr) = b.dynamic_relocations() {
-        //for (_offset, r) in dr {
-        //eprintln!("dr: {:#08x}, {:?}", offset, r);
-        //}
-        //}
         for symbol in b.dynamic_symbols() {
             let mut s = read_symbol(&b, &symbol)?;
+            s.pointer = ResolvePointer::Resolved(0);
             s.source = SymbolSource::Dynamic;
+            s.size = 0;
             //eprintln!("s: {:#08x}, {:?}", 0, &s);
             if s.kind != SymbolKind::Unknown {
                 self.block.insert_dynamic(s);
@@ -947,7 +892,6 @@ fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         section: section_kind,
         kind: symbol.kind(),
         bind,
-        //address,
         pointer,
         size,
         source: SymbolSource::Static,

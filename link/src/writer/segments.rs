@@ -40,6 +40,7 @@ impl BlocksBuilder {
         blocks.push(ReadSectionKind::ROData.block());
         blocks.push(ReadSectionKind::RX.block());
         blocks.push(Box::new(PltSection::new()));
+        blocks.push(Box::new(PltGotSection::new()));
         blocks.push(ReadSectionKind::RW.block());
 
         if data.is_dynamic() {
@@ -85,32 +86,14 @@ impl Blocks {
         }
 
         // RESERVE SYMBOLS
-        /*
-        for local in data.locals.iter() {
-            let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
-            data.statics
-                .symbol_add(&symbol, w);//&symbol.name, symbol.section.section_index(data), w);
-        }
-
-        for (_, symbol) in block.exports.iter() {
-            data.statics
-                .symbol_add(symbol, w);//(&symbol.name, symbol.section.section_index(data), w);
-        }
-        */
-
         for b in self.blocks.iter_mut() {
             b.reserve_symbols(data, block, w);
         }
-
-        //block.reserve_symbols(data, w);
 
         // RESERVE
 
         // finalize the layout
         self.reserve(&mut tracker, data, block, w);
-
-        // once we have the layout, we can assign the symbols
-        //block.complete(&data);
 
         if data.add_section_headers {
             w.reserve_section_headers();
