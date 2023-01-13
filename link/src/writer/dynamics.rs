@@ -72,10 +72,10 @@ impl Dynamics {
         }
     }
 
-    pub fn relocations(&self, kind: GotKind) -> Vec<(bool, String, ResolvePointer)> {
+    pub fn relocations(&self, kind: GotSectionKind) -> Vec<(bool, String, ResolvePointer)> {
         match kind {
-            GotKind::GOT => self.r_got.iter().cloned().collect(),
-            GotKind::GOTPLT => self.r_gotplt.iter().cloned().collect(),
+            GotSectionKind::GOT => self.r_got.iter().cloned().collect(),
+            GotSectionKind::GOTPLT => self.r_gotplt.iter().cloned().collect(),
         }
     }
 

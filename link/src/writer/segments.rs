@@ -33,8 +33,8 @@ impl BlocksBuilder {
             if w.dynstr_needed() {
                 blocks.push(Box::new(DynStrSection::default()));
             }
-            blocks.push(Box::new(RelaDynSection::new(GotKind::GOT)));
-            blocks.push(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
+            blocks.push(Box::new(RelaDynSection::new(GotSectionKind::GOT)));
+            blocks.push(Box::new(RelaDynSection::new(GotSectionKind::GOTPLT)));
         }
 
         blocks.push(ReadSectionKind::ROData.block());
@@ -45,8 +45,8 @@ impl BlocksBuilder {
 
         if data.is_dynamic() {
             blocks.push(Box::new(DynamicSection::default()));
-            blocks.push(Box::new(GotSection::new(GotKind::GOT)));
-            blocks.push(Box::new(GotSection::new(GotKind::GOTPLT)));
+            blocks.push(Box::new(GotSection::new(GotSectionKind::GOT)));
+            blocks.push(Box::new(GotSection::new(GotSectionKind::GOTPLT)));
         }
 
         // bss is the last alloc block

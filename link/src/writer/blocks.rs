@@ -394,16 +394,17 @@ impl ElfBlock for DynamicSection {
 }
 
 pub struct RelaDynSection {
-    kind: GotKind,
+    kind: GotSectionKind,
     index: SectionIndex,
     name_id: Option<StringId>,
     count: usize,
     relocation_names: HashMap<String, StringId>,
     offsets: SectionOffset,
+    is_rela: bool,
 }
 
 impl RelaDynSection {
-    pub fn new(kind: GotKind) -> Self {
+    pub fn new(kind: GotSectionKind) -> Self {
         Self {
             kind,
             index: SectionIndex::default(),
@@ -411,6 +412,7 @@ impl RelaDynSection {
             count: 0,
             relocation_names: HashMap::default(),
             offsets: SectionOffset::new(0x08),
+            is_rela: true,
         }
     }
 }
@@ -436,14 +438,14 @@ impl ElfBlock for RelaDynSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        let unapplied = data.dynamics.relocations(self.kind);
+        let relocations = data.dynamics.relocations(self.kind);
 
-        self.count = unapplied.len();
+        self.count = relocations.len();
         let before = w.reserved_len();
         let file_offset = size_align(before, self.offsets.align as usize);
         w.reserve_until(file_offset);
 
-        w.reserve_relocations(unapplied.len(), true);
+        w.reserve_relocations(self.count, self.is_rela);
 
         let after = w.reserved_len();
 
@@ -454,13 +456,13 @@ impl ElfBlock for RelaDynSection {
             w,
         );
         match self.kind {
-            GotKind::GOT => {
+            GotSectionKind::GOT => {
                 data.addr_set(".rela.dyn", self.offsets.address);
-                data.size_reladyn = w.rel_size(true) * unapplied.len();
+                data.size_reladyn = w.rel_size(self.is_rela) * relocations.len();
             }
-            GotKind::GOTPLT => {
+            GotSectionKind::GOTPLT => {
                 data.addr_set(".rela.plt", self.offsets.address);
-                data.size_relaplt = w.rel_size(true) * unapplied.len();
+                data.size_relaplt = w.rel_size(self.is_rela) * relocations.len();
             }
         }
     }
@@ -472,15 +474,15 @@ impl ElfBlock for RelaDynSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        let unapplied = data.dynamics.relocations(self.kind);
+        let relocations = data.dynamics.relocations(self.kind);
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
-        assert_eq!(self.count, unapplied.len());
+        assert_eq!(self.count, relocations.len());
         assert_eq!(aligned_pos, self.offsets.file_offset as usize);
         w.pad_until(aligned_pos);
 
         // we are writing a relocation for the GOT entries
-        for (index, (relative, name, pointer)) in unapplied.iter().enumerate() {
+        for (index, (relative, name, _pointer)) in relocations.iter().enumerate() {
             eprintln!("unapplied: {}, {}", name, relative);
             let (symbol_index, _sym) = data.dynamics.symbol_get(name, data).unwrap();
 
@@ -502,22 +504,22 @@ impl ElfBlock for RelaDynSection {
             }
 
             let r_type = match self.kind {
-                GotKind::GOT => {
+                GotSectionKind::GOT => {
                     if *relative {
                         elf::R_X86_64_RELATIVE
                     } else {
                         elf::R_X86_64_GLOB_DAT
                     }
                 }
-                GotKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
+                GotSectionKind::GOTPLT => elf::R_X86_64_JUMP_SLOT,
             };
 
             let r_offset = match self.kind {
-                GotKind::GOT => {
+                GotSectionKind::GOT => {
                     let got_addr = data.addr_get(".got");
                     got_addr as usize + index * std::mem::size_of::<usize>()
                 }
-                GotKind::GOTPLT => {
+                GotSectionKind::GOTPLT => {
                     let start = 3;
                     let plt_addr = data.addr_get(".got.plt");
                     plt_addr as usize + (index + start) * std::mem::size_of::<usize>()
@@ -543,16 +545,22 @@ impl ElfBlock for RelaDynSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        let unapplied = data.dynamics.relocations(self.kind);
+        let relocations = data.dynamics.relocations(self.kind);
 
         let sh_addralign = self.offsets.align;
         let sh_info = SectionIndex::default().0;
         let sh_link = data.section_index.get(&".dynsym".to_string()).unwrap().0;
-        let sh_entsize = w.rel_size(true) as u64;
+        let sh_entsize = w.rel_size(self.is_rela) as u64;
+
+        let sh_type = if self.is_rela {
+            elf::SHT_RELA
+        } else {
+            elf::SHT_REL
+        };
 
         w.write_section_header(&object::write::elf::SectionHeader {
             name: self.name_id,
-            sh_type: elf::SHT_RELA,
+            sh_type,
             sh_flags: elf::SHF_INFO_LINK.into(),
             sh_addr: self.offsets.address,
             sh_offset: self.offsets.file_offset,
@@ -560,7 +568,7 @@ impl ElfBlock for RelaDynSection {
             sh_link,
             sh_entsize,
             sh_addralign,
-            sh_size: sh_entsize * unapplied.len() as u64,
+            sh_size: sh_entsize * relocations.len() as u64,
         });
     }
 }
@@ -997,8 +1005,8 @@ impl ElfBlock for DynSymSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        let got = data.dynamics.relocations(GotKind::GOT);
-        let plt = data.dynamics.relocations(GotKind::GOTPLT);
+        let got = data.dynamics.relocations(GotSectionKind::GOT);
+        let plt = data.dynamics.relocations(GotSectionKind::GOTPLT);
 
         let len = got.len() + plt.len() + data.dynamic.len();
         w.write_dynsym_section_header(data.addr_dynsym, len as u32 + 1);
@@ -1198,12 +1206,12 @@ impl ElfBlock for HashSection {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum GotKind {
+pub enum GotSectionKind {
     GOT,
     GOTPLT,
 }
 
-impl GotKind {
+impl GotSectionKind {
     pub fn section_name(&self) -> &'static str {
         match self {
             Self::GOT => ".got",
@@ -1224,17 +1232,46 @@ impl GotKind {
             Self::GOTPLT => 3,
         }
     }
+
+    fn write_entries(&self, data: &Data, w: &mut Writer) {
+        let unapplied = data.dynamics.relocations(*self);
+
+        match self {
+            GotSectionKind::GOT => {
+                // just empty
+                let mut bytes: Vec<u8> = vec![];
+                let len = unapplied.len() + self.start_index();
+                let size = len * std::mem::size_of::<usize>();
+                bytes.resize(size, 0);
+                w.write(bytes.as_slice());
+            }
+            GotSectionKind::GOTPLT => {
+                // populate with predefined values
+                let mut values: Vec<u64> = vec![data.addr_get(".dynamic"), 0, 0];
+                let len = unapplied.len();
+                let plt_addr = data.addr_get(".plt") + 0x16;
+                for i in 0..len {
+                    values.push(plt_addr + i as u64 * 0x10);
+                }
+                let mut bytes: Vec<u8> = vec![];
+                for v in values {
+                    bytes.extend(v.to_le_bytes().as_slice());
+                }
+                w.write(bytes.as_slice());
+            }
+        }
+    }
 }
 
 pub struct GotSection {
-    kind: GotKind,
+    kind: GotSectionKind,
     name_id: Option<StringId>,
     index: Option<SectionIndex>,
     bytes: Vec<u8>,
     offsets: SectionOffset,
 }
 impl GotSection {
-    pub fn new(kind: GotKind) -> Self {
+    pub fn new(kind: GotSectionKind) -> Self {
         Self {
             kind,
             name_id: None,
@@ -1291,25 +1328,6 @@ impl ElfBlock for GotSection {
             w,
         );
 
-        /*
-        // add got pointers to the pointers table, so we can do relocations
-        for (index, (relative, name, pointer)) in unapplied.iter().enumerate() {
-            let addr = self.offsets.address as usize
-                + (index + self.kind.start_index()) * std::mem::size_of::<usize>();
-            //eprintln!("adding: {}, {:#0x}", &name, addr as u64);
-            match self.kind {
-                GotKind::GOT(_) => {
-                    data.pointers
-                        .insert(name.clone(), ResolvePointer::Got(index));
-                }
-                GotKind::GOTPLT => {
-                    data.pointers
-                        .insert(name.clone(), ResolvePointer::GotPlt(index));
-                }
-            }
-        }
-        */
-
         // update section pointers
         data.addr_set(name, self.offsets.address);
     }
@@ -1326,31 +1344,7 @@ impl ElfBlock for GotSection {
         let aligned_pos = size_align(pos, align);
         w.pad_until(aligned_pos);
 
-        let unapplied = data.dynamics.relocations(self.kind);
-        eprintln!("{}: {:?}", self.name(), unapplied);
-
-        match self.kind {
-            GotKind::GOT => {
-                // just empty
-                let mut bytes: Vec<u8> = vec![];
-                bytes.resize(self.offsets.size as usize, 0);
-                w.write(bytes.as_slice());
-            }
-            GotKind::GOTPLT => {
-                // populate with predefined values
-                let mut values: Vec<u64> = vec![data.addr_get(".dynamic"), 0, 0];
-                let len = unapplied.len();
-                let plt_addr = data.addr_get(".plt") + 0x16;
-                for i in 0..len {
-                    values.push(plt_addr + i as u64 * 0x10);
-                }
-                let mut bytes: Vec<u8> = vec![];
-                for v in values {
-                    bytes.extend(v.to_le_bytes().as_slice());
-                }
-                w.write(bytes.as_slice());
-            }
-        }
+        self.kind.write_entries(data, w);
     }
 
     fn write_section_header(
@@ -1424,12 +1418,10 @@ impl ElfBlock for PltSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
-        //let unapplied = GotKind::GOTPLT.unapplied_data(data);
-        //let unapplied = data.dynamics.relocations(GotKind::GOTPLT);
-        let plt = data.dynamics.plt_objects();
+        let plt_entries_count = data.dynamics.plt_objects().len();
 
         // length + 1, to account for the stub.  Each entry is 0x10 in size
-        let size = (1 + plt.len()) * 0x10;
+        let size = (1 + plt_entries_count) * 0x10;
         self.bytes.resize(size, 0);
         let align = self.offsets.align as usize;
 
@@ -1494,12 +1486,10 @@ impl ElfBlock for PltSection {
             *patch = got2 as i32;
         }
 
-        //let unapplied = GotKind::GOTPLT.unapplied_data(data);
-        //let unapplied = data.dynamics.relocations(GotKind::GOTPLT);
-        let plt = data.dynamics.plt_objects();
-        eprintln!("plt: {:?}", plt);
+        let plt_entries_count = data.dynamics.plt_objects().len();
+        //eprintln!("plt: {:?}", plt);
 
-        for (i, _) in plt.iter().enumerate() {
+        for slot_index in 0..plt_entries_count {
             let slot: Vec<u8> = vec![
                 // # 404018 <puts@GLIBC_2.2.5>, .got.plot 4th entry, GOT[3], jump there
                 // # got.plt[3] = 0x401036, initial value,
@@ -1520,14 +1510,14 @@ impl ElfBlock for PltSection {
             stub.extend(slot);
 
             unsafe {
-                let offset = (i as isize + 1) * 0x10;
+                let offset = (slot_index as isize + 1) * 0x10;
                 let patch = (stub.as_mut_ptr().offset(offset + 2)) as *mut i32;
                 let rip = vbase + offset + 6;
-                let addr = got_addr + (3 + i as isize) * 0x08 - rip;
+                let addr = got_addr + (3 + slot_index as isize) * 0x08 - rip;
                 *patch = addr as i32;
 
                 let patch = (stub.as_mut_ptr().offset(offset + 7)) as *mut i32;
-                *patch = i as i32;
+                *patch = slot_index as i32;
 
                 // next instruction
                 let rip = vbase + offset + 0x10;
@@ -1660,7 +1650,7 @@ impl ElfBlock for PltGotSection {
         let pltgot = data.dynamics.pltgot_objects();
         eprintln!("pltgot: {:?}", pltgot);
 
-        for (i, (name, p)) in pltgot.iter().enumerate() {
+        for (slot_index, (name, _p)) in pltgot.iter().enumerate() {
             let p = data.dynamics.symbol_lookup(name).unwrap();
             let mut slot: Vec<u8> = vec![0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x66, 0x90];
             let slot_size = slot.len();
@@ -1671,7 +1661,7 @@ impl ElfBlock for PltGotSection {
 
             let gotplt_addr = p.resolve(data).unwrap();
             unsafe {
-                let offset = (i as isize) * slot_size as isize;
+                let offset = (slot_index as isize) * slot_size as isize;
                 let patch = (slot.as_mut_ptr().offset(offset + 2)) as *mut i32;
                 let rip = vbase + offset + 6;
                 let addr = gotplt_addr as isize - rip;
