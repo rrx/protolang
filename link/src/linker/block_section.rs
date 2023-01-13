@@ -74,6 +74,24 @@ pub struct GeneralSection {
     pub(crate) offsets: SectionOffset,
 }
 
+fn resolve_r(data: &Data, r: &CodeRelocation) -> Option<u64> {
+    eprintln!("resolve: {}, kind: {:?}", &r.name, r.r.kind());
+
+    // check if it's in the plt or got, and look it up in dynamics
+    if r.is_plt() || r.is_got() {
+        if let Some(resolve_addr) = data.dynamics.lookup(r) {
+            return resolve_addr.resolve(data);
+        }
+    }
+
+    // otherwise, just look up the symbol
+    if let Some(resolve_addr) = data.pointers.get(&r.name) {
+        resolve_addr.resolve(data)
+    } else {
+        None
+    }
+}
+
 impl GeneralSection {
     pub fn new(alloc: AllocSegment, name: &'static str) -> Self {
         Self {
@@ -102,28 +120,16 @@ impl GeneralSection {
         let patch_base = self.bytes.as_ptr();
         eprintln!("p: {:?}", data.pointers_plt);
         for r in self.relocations.iter() {
-            eprintln!("R: {}", r);
-            let maybe_p = if r.r.kind() == object::RelocationKind::PltRelative {
-                data.pointers_plt.get(&r.name)
-            } else {
-                //let maybe_p = data.pointers.get(&r.name);
-                data.pointers.get(&r.name)
-            };
-
-            if let Some(resolve_addr) = maybe_p {
-                if let Some(addr) = resolve_addr.resolve(data) {
-                    eprintln!(
-                        "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                        self.alloc, self.offsets.address, addr as usize, &r.name
-                    );
-                    r.patch(
-                        patch_base as *mut u8,
-                        self.offsets.address as *mut u8,
-                        addr as *const u8,
-                    );
-                } else {
-                    unreachable!("Unable to resolve symbol: {}, {:?}", &r.name, &resolve_addr);
-                }
+            if let Some(addr) = resolve_r(data, r) {
+                eprintln!(
+                    "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
+                    self.alloc, self.offsets.address, addr as usize, &r.name
+                );
+                r.patch(
+                    patch_base as *mut u8,
+                    self.offsets.address as *mut u8,
+                    addr as *const u8,
+                );
             } else {
                 unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
             }

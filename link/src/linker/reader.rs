@@ -5,7 +5,8 @@ use object::read::elf::ProgramHeader;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::{
-    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationTarget, SectionKind, SymbolKind,
+    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationKind, RelocationTarget, SectionKind,
+    SymbolKind,
 };
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -328,10 +329,10 @@ impl ReadBlock {
         for r in iter.clone() {
             match r.effect() {
                 PatchEffect::AddToGot => {
-                    got.insert(&r.name);
+                    got.insert(r.name.clone());
                 }
                 PatchEffect::AddToPlt => {
-                    gotplt.insert(&r.name);
+                    gotplt.insert(r.name.clone());
                 }
                 _ => (),
             }
@@ -346,21 +347,31 @@ impl ReadBlock {
                     SymbolBind::Weak => CodeSymbolDefinition::Defined,
                 };
 
+                let assign = match s.kind {
+                    SymbolKind::Text => {
+                        if got.contains(&r.name) {
+                            if r.is_plt() {
+                                GotPltAssign::GOT_PLTGOT
+                            } else {
+                                GotPltAssign::GOT
+                            }
+                        } else if gotplt.contains(&r.name) {
+                            GotPltAssign::GOTPLT_PLT
+                        } else {
+                            GotPltAssign::None
+                        }
+                    }
+                    SymbolKind::Data => GotPltAssign::GOT,
+                    _ => GotPltAssign::None,
+                };
+
                 if s.source == SymbolSource::Dynamic {
                     eprintln!("reloc {}", &r);
                     data.statics.symbol_add(&s, None, w);
-                    if got.contains(&r.name) {
-                        data.dynamics.symbol_add(&s, GotKind::GOT(false), r, w);
-                    } else if gotplt.contains(&r.name) {
-                        data.dynamics.symbol_add(&s, GotKind::GOTPLT, r, w);
-                    }
+                    data.dynamics.symbol_add(&s, false, assign, r, w);
                 } else if def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
-                    if got.contains(&r.name) {
-                        data.dynamics.symbol_add(&s, GotKind::GOT(true), r, w);
-                    } else if gotplt.contains(&r.name) {
-                        data.dynamics.symbol_add(&s, GotKind::GOTPLT, r, w);
-                    }
+                    data.dynamics.symbol_add(&s, true, assign, r, w);
                 } else {
                     eprintln!("reloc3 {}", &r);
                 }
@@ -393,7 +404,6 @@ impl ReadBlock {
             let _string_id = data.statics.string_add(name, w);
             data.pointers
                 .insert(name.to_string(), symbol.pointer.clone());
-            //data.statics.symbol_add(symbol, None, w);
         }
     }
 

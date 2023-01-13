@@ -287,7 +287,7 @@ impl GeneralSection {
                 if next_reloc_addr <= addr {
                     let r = r_heap.pop().unwrap();
                     let p0 = data.pointers.get(&r.name).unwrap();
-                    let p = data.pointer_get(&r.name);
+                    let p = p0.resolve(data).unwrap(); //data.pointer_get(&r.name);
                     eprintln!("    {}", r);
                     eprintln!(
                         "    Base: {:#0x}, addr: {:#0x}, offset: {:#0x}, p: {:#0x}, p0: {}",

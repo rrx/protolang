@@ -146,6 +146,7 @@ pub enum ResolvePointer {
     Got(usize),
     GotPlt(usize),
     Plt(usize),
+    PltGot(usize),
 }
 
 impl fmt::Display for ResolvePointer {
@@ -207,10 +208,8 @@ impl ResolvePointer {
 
             Self::GotPlt(index) => {
                 if let Some(base) = data.addr_get_by_name(".got.plt") {
-                    // each entry in small model is 0x10 in size
-                    let size = 0x10;
-                    // skip stub + 1
-                    Some(base + (*index as u64 + 1) * size)
+                    let size = std::mem::size_of::<usize>() as u64;
+                    Some(base + (*index as u64 + 3) * size)
                 } else {
                     None
                 }
@@ -220,8 +219,17 @@ impl ResolvePointer {
                 if let Some(base) = data.addr_get_by_name(".plt") {
                     // each entry in small model is 0x10 in size
                     let size = 0x10;
-                    // skip stub + 1
                     Some(base + (*index as u64 + 1) * size)
+                } else {
+                    None
+                }
+            }
+
+            Self::PltGot(index) => {
+                if let Some(base) = data.addr_get_by_name(".plt.got") {
+                    // each entry in small model is 0x8 in size
+                    let size = 0x08;
+                    Some(base + (*index as u64 * size))
                 } else {
                     None
                 }

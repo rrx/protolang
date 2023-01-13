@@ -109,7 +109,7 @@ impl Blocks {
             //eprintln!("write: {}", b.name());
             b.write(&data, &mut tracker, block, w);
             let after = w.len();
-            eprintln!(
+            log::debug!(
                 "write: {}, {:?}, pos: {:#0x}, after: {:#0x}, base: {:#0x}",
                 b.name(),
                 b.alloc(),
@@ -172,7 +172,7 @@ impl Blocks {
             let pos = w.reserved_len();
             b.reserve(data, tracker, block, w);
             let after = w.reserved_len();
-            eprintln!(
+            log::debug!(
                 "reserve: {}, {:#0x}, {:#0x},  {:?}",
                 b.name(),
                 pos,

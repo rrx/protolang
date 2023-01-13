@@ -126,6 +126,21 @@ impl CodeRelocation {
         self.r.effect()
     }
 
+    pub fn is_plt(&self) -> bool {
+        match self.r.kind() {
+            RelocationKind::PltRelative => true,
+            //RelocationKind::Elf(R_X86_64_REX_GOTP) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_got(&self) -> bool {
+        match self.r.kind() {
+            RelocationKind::Elf(R_X86_64_REX_GOTP) => true,
+            _ => false,
+        }
+    }
+
     pub fn patch(
         &self,
         // pointer to the base of the relocation slice
