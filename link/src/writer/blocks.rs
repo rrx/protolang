@@ -454,7 +454,7 @@ impl ElfBlock for RelaDynSection {
             w,
         );
         match self.kind {
-            GotKind::GOT(_) => {
+            GotKind::GOT => {
                 data.addr_set(".rela.dyn", self.offsets.address);
                 data.size_reladyn = w.rel_size(true) * unapplied.len();
             }
@@ -486,6 +486,8 @@ impl ElfBlock for RelaDynSection {
 
             let mut r_addend = 0;
             let r_sym;
+
+            // if relative, look up the pointer in statics
             if *relative {
                 r_sym = 0;
                 if let Some(p) = data.statics.symbol_get(name) {
@@ -500,7 +502,7 @@ impl ElfBlock for RelaDynSection {
             }
 
             let r_type = match self.kind {
-                GotKind::GOT(_) => {
+                GotKind::GOT => {
                     if *relative {
                         elf::R_X86_64_RELATIVE
                     } else {
@@ -511,7 +513,7 @@ impl ElfBlock for RelaDynSection {
             };
 
             let r_offset = match self.kind {
-                GotKind::GOT(_) => {
+                GotKind::GOT => {
                     let got_addr = data.addr_get(".got");
                     got_addr as usize + index * std::mem::size_of::<usize>()
                 }
@@ -995,7 +997,7 @@ impl ElfBlock for DynSymSection {
         _block: &ReadBlock,
         w: &mut Writer,
     ) {
-        let got = data.dynamics.relocations(GotKind::GOT(true));
+        let got = data.dynamics.relocations(GotKind::GOT);
         let plt = data.dynamics.relocations(GotKind::GOTPLT);
 
         let len = got.len() + plt.len() + data.dynamic.len();
@@ -1197,28 +1199,28 @@ impl ElfBlock for HashSection {
 
 #[derive(Debug, Clone, Copy)]
 pub enum GotKind {
-    GOT(bool),
+    GOT,
     GOTPLT,
 }
 
 impl GotKind {
     pub fn section_name(&self) -> &'static str {
         match self {
-            Self::GOT(_) => ".got",
+            Self::GOT => ".got",
             Self::GOTPLT => ".got.plt",
         }
     }
 
     pub fn rel_section_name(&self) -> &'static str {
         match self {
-            Self::GOT(_) => ".rela.dyn",
+            Self::GOT => ".rela.dyn",
             Self::GOTPLT => ".rela.plt",
         }
     }
 
     pub fn start_index(&self) -> usize {
         match self {
-            Self::GOT(_) => 0,
+            Self::GOT => 0,
             Self::GOTPLT => 3,
         }
     }
@@ -1328,7 +1330,7 @@ impl ElfBlock for GotSection {
         eprintln!("{}: {:?}", self.name(), unapplied);
 
         match self.kind {
-            GotKind::GOT(_) => {
+            GotKind::GOT => {
                 // just empty
                 let mut bytes: Vec<u8> = vec![];
                 bytes.resize(self.offsets.size as usize, 0);

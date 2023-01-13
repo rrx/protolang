@@ -5,8 +5,7 @@ use object::read::elf::ProgramHeader;
 use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::{
-    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationKind, RelocationTarget, SectionKind,
-    SymbolKind,
+    Object, ObjectKind, ObjectSection, ObjectSymbol, RelocationTarget, SectionKind, SymbolKind,
 };
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -476,7 +475,7 @@ impl ReadBlock {
         }
 
         // exports
-        for (name, s) in block.exports.into_iter() {
+        for (_name, s) in block.exports.into_iter() {
             let s = self.relocate_symbol(s);
             //eprintln!("E: {:?}", (&block.name, name, &s));
             self.insert_export(s);
@@ -570,8 +569,6 @@ impl ReadBlock {
         let mut other_symbols = vec![];
 
         for (_name, sym) in self.locals.iter().chain(self.exports.iter()) {
-            //dsymbols.insert(name, Symbol::new(0, s.address, &s.name));
-            //let sym = Symbol::new(0, s.address, &s.name);
             match sym.section {
                 ReadSectionKind::RX => rx_symbols.push(sym),
                 ReadSectionKind::RW => rw_symbols.push(sym),
@@ -592,7 +589,7 @@ impl ReadBlock {
         let symbols = rx_symbols
             .into_iter()
             .map(|s| {
-                if let ResolvePointer::Section(name, address) = &s.pointer {
+                if let ResolvePointer::Section(_name, address) = &s.pointer {
                     Symbol::new(0, *address, &s.name)
                 } else {
                     unreachable!()
@@ -785,30 +782,6 @@ impl Reader {
             self.block.add_block(b);
         }
 
-        /*
-        for section in [
-            ReadSectionKind::RX,
-            ReadSectionKind::ROData,
-            ReadSectionKind::RW,
-        ] {
-            //let name = section.section_name().to_string();
-            let name = "asdf".to_string();
-            self.block.insert_export(ReadSymbol {
-                name: name.clone(),
-                name_id: None,
-                dyn_name_id: None,
-                section,
-                kind: SymbolKind::Section,
-                bind: SymbolBind::Global,
-                address: 0,
-                pointer: ResolvePointer::Section(name.clone(), 0),
-                size: 0,
-                source: SymbolSource::Static,
-                lookup: SymbolLookupTable::None,
-            });
-        }
-        */
-
         // make sure everything resolves
         let iter = self
             .block
@@ -821,7 +794,7 @@ impl Reader {
             .chain(self.block.bss.relocations.iter());
 
         for r in iter {
-            if let Some(symbol) = self.block.lookup(&r.name) {
+            if let Some(_symbol) = self.block.lookup(&r.name) {
                 //eprintln!(" R: {:?}", (r, symbol));
             } else {
                 self.block.unresolved.insert(r.name.clone());

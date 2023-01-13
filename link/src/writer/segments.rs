@@ -33,7 +33,7 @@ impl BlocksBuilder {
             if w.dynstr_needed() {
                 blocks.push(Box::new(DynStrSection::default()));
             }
-            blocks.push(Box::new(RelaDynSection::new(GotKind::GOT(false))));
+            blocks.push(Box::new(RelaDynSection::new(GotKind::GOT)));
             blocks.push(Box::new(RelaDynSection::new(GotKind::GOTPLT)));
         }
 
@@ -45,7 +45,7 @@ impl BlocksBuilder {
 
         if data.is_dynamic() {
             blocks.push(Box::new(DynamicSection::default()));
-            blocks.push(Box::new(GotSection::new(GotKind::GOT(false))));
+            blocks.push(Box::new(GotSection::new(GotKind::GOT)));
             blocks.push(Box::new(GotSection::new(GotKind::GOTPLT)));
         }
 

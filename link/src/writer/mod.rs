@@ -142,7 +142,6 @@ pub struct DynamicSymbol {
 pub enum ResolvePointer {
     Resolved(u64),
     Section(String, u64),
-    SectionIndex(SectionIndex, u64),
     Got(usize),
     GotPlt(usize),
     Plt(usize),
@@ -154,7 +153,6 @@ impl fmt::Display for ResolvePointer {
         match self {
             Self::Resolved(p) => write!(f, "Abs({:#0x})", p),
             Self::Section(name, p) => write!(f, "Section({},{:#0x})", name, p),
-            Self::SectionIndex(inx, p) => write!(f, "SectionIndex({:?},{:#0x})", inx, p),
             _ => write!(f, "{:?}", self),
         }
     }
@@ -183,18 +181,6 @@ impl ResolvePointer {
                 } else {
                     None
                 }
-            }
-
-            Self::SectionIndex(section_index, offset) => {
-                unimplemented!()
-                /*
-                data.section_index.get(
-                if let Some(base) = data.addr.get(section_name) {
-                    Some(base + offset)
-                } else {
-                    None
-                }
-                */
             }
 
             Self::Got(index) => {

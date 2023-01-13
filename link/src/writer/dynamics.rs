@@ -2,7 +2,6 @@ use super::*;
 use object::write::elf::Sym;
 use object::write::elf::{SymbolIndex, Writer};
 use object::write::StringId;
-use object::RelocationKind;
 use std::collections::HashMap;
 
 struct TrackStringIndex {
@@ -75,7 +74,7 @@ impl Dynamics {
 
     pub fn relocations(&self, kind: GotKind) -> Vec<(bool, String, ResolvePointer)> {
         match kind {
-            GotKind::GOT(_) => self.r_got.iter().cloned().collect(),
+            GotKind::GOT => self.r_got.iter().cloned().collect(),
             GotKind::GOTPLT => self.r_gotplt.iter().cloned().collect(),
         }
     }
