@@ -205,7 +205,7 @@ impl ReadSymbol {
 
     pub fn get_dynamic_symbol(&self, data: &Data) -> object::write::elf::Sym {
         let name = Some(data.dynamics.string_get(&self.name));
-        self._get_symbol(data, name, 0, 0, None)
+        self._get_symbol(name, 0, 0, None)
     }
 
     pub fn get_static_symbol(&self, data: &Data) -> object::write::elf::Sym {
@@ -218,12 +218,11 @@ impl ReadSymbol {
             }
         };
         let section = self.section.section_index(data);
-        self._get_symbol(data, name, st_value, self.size, section)
+        self._get_symbol(name, st_value, self.size, section)
     }
 
     pub fn _get_symbol(
         &self,
-        data: &Data,
         string_id: Option<StringId>,
         st_value: u64,
         st_size: u64,
@@ -351,27 +350,27 @@ impl ReadBlock {
                     SymbolKind::Text => {
                         if got.contains(&r.name) {
                             if r.is_plt() {
-                                GotPltAssign::GOT_PLTGOT
+                                GotPltAssign::GotWithPltGot
                             } else {
-                                GotPltAssign::GOT
+                                GotPltAssign::Got
                             }
                         } else if gotplt.contains(&r.name) {
-                            GotPltAssign::GOTPLT_PLT
+                            GotPltAssign::GotPltWithPlt
                         } else {
                             GotPltAssign::None
                         }
                     }
-                    SymbolKind::Data => GotPltAssign::GOT,
+                    SymbolKind::Data => GotPltAssign::Got,
                     _ => GotPltAssign::None,
                 };
 
                 if s.source == SymbolSource::Dynamic {
                     eprintln!("reloc {}", &r);
                     data.statics.symbol_add(&s, None, w);
-                    data.dynamics.symbol_add(&s, false, assign, r, w);
+                    data.dynamics.relocation_add(&s, false, assign, r, w);
                 } else if def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
-                    data.dynamics.symbol_add(&s, true, assign, r, w);
+                    data.dynamics.relocation_add(&s, true, assign, r, w);
                 } else {
                     eprintln!("reloc3 {}", &r);
                 }
