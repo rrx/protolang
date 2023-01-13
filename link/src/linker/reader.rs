@@ -384,6 +384,9 @@ impl ReadBlock {
             data.pointers.insert(name, pointer);
         }
 
+        eprintln!("plt: {:?}", data.dynamics.plt_hash);
+        eprintln!("pltgot: {:?}", data.dynamics.pltgot_hash);
+
         for (name, symbol) in self.locals.iter() {
             match symbol.section {
                 ReadSectionKind::RX

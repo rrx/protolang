@@ -1639,12 +1639,6 @@ impl ElfBlock for PltGotSection {
             AddressKey::SectionIndex(self.index.unwrap()),
             self.offsets.address,
         );
-
-        //let pltgot = data.dynamics.plt_objects();
-        //for (name, p, p2) in pltgot.into_iter() {
-        //data.pointers_plt.insert(name.to_string(), p2.clone());
-        //eprintln!("p: {:?}", (name, p2));
-        //}
     }
 
     fn write(
@@ -1665,6 +1659,7 @@ impl ElfBlock for PltGotSection {
         eprintln!("pltgot: {:?}", pltgot);
 
         for (i, (name, p)) in pltgot.iter().enumerate() {
+            let p = data.dynamics.symbol_lookup(name).unwrap();
             let mut slot: Vec<u8> = vec![0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x66, 0x90];
             let slot_size = slot.len();
             assert_eq!(slot_size, self.entry_size);

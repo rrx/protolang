@@ -286,14 +286,28 @@ impl GeneralSection {
                 let next_reloc_addr = r_heap.peek().unwrap().offset;
                 if next_reloc_addr <= addr {
                     let r = r_heap.pop().unwrap();
-                    let p0 = data.pointers.get(&r.name).unwrap();
-                    let p = p0.resolve(data).unwrap(); //data.pointer_get(&r.name);
                     eprintln!("    {}", r);
+                    let p0 = if let Some(addr) = data.dynamics.lookup(&r) {
+                        addr
+                    } else {
+                        /*
+                        let p0 = if r.is_plt() {
+                            if let Some(addr) = data.dynamics.plt_hash.get(&r.name) {
+                                addr
+                            } else if let Some(addr) = data.dynamics.pltgot_hash.get(&r.name) {
+                                addr
+                            } else {
+                                data.pointers.get(&r.name).unwrap()
+                            }
+                        } else {
+                        */
+                        data.pointers.get(&r.name).unwrap().clone()
+                    };
+                    let p = p0.resolve(data).unwrap();
                     eprintln!(
                         "    Base: {:#0x}, addr: {:#0x}, offset: {:#0x}, p: {:#0x}, p0: {}",
                         self.offsets.address, addr, r.offset, p, p0
                     );
-                    //Relocation: {:#0x} {:?}", r.offset, r.r);
                 } else {
                     break;
                 }
@@ -301,7 +315,7 @@ impl GeneralSection {
 
             eprintln!(
                 "  {:#06x} {:#06x} {}\t\t{}",
-                instr.address() + self.offsets.address, //addr as u64,
+                instr.address() + self.offsets.address,
                 instr.address(),
                 instr.mnemonic().expect("no mnmemonic found"),
                 instr.op_str().expect("no op_str found")

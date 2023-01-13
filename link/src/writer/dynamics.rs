@@ -47,9 +47,9 @@ pub struct Dynamics {
 
     // plt entries
     plt: Vec<(String, ResolvePointer)>,
-    plt_hash: HashMap<String, ResolvePointer>,
+    pub plt_hash: HashMap<String, ResolvePointer>,
     pltgot: Vec<(String, ResolvePointer)>,
-    pltgot_hash: HashMap<String, ResolvePointer>,
+    pub pltgot_hash: HashMap<String, ResolvePointer>,
 
     got_index: usize,
     gotplt_index: usize,
@@ -87,16 +87,37 @@ impl Dynamics {
     }
 
     pub fn lookup(&self, r: &CodeRelocation) -> Option<ResolvePointer> {
-        eprintln!("lookup: {}, {:?}", &r.name, r.r.kind());
-        if r.is_plt() {
-            //.r.kind() == object::RelocationKind::PltRelative {
+        if r.is_got() {
+            if let Some(track) = self.symbol_hash.get(&r.name) {
+                Some(track.pointer.clone())
+            } else {
+                None
+            }
+        } else if r.is_plt() {
+            if let Some(addr) = self.plt_hash.get(&r.name) {
+                Some(addr.clone())
+            } else if let Some(addr) = self.pltgot_hash.get(&r.name) {
+                Some(addr.clone())
+            } else if let Some(track) = self.symbol_hash.get(&r.name) {
+                Some(track.pointer.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+        /*
+        //if r.is_plt() {
+        let out = if r.r.kind() == object::RelocationKind::PltRelative {
             self.pltgot_hash.get(&r.name).cloned()
         } else {
             self.symbol_hash
                 .get(&r.name)
                 .map(|track| track.pointer.clone())
-        }
-
+        };
+        eprintln!("lookup: {}, {:?}, out: {:?}", &r.name, r.r.kind(), out);
+        out
+        */
         /*
         match r.effect() {
             PatchEffect::AddToPlt => {
@@ -171,30 +192,17 @@ impl Dynamics {
             eprintln!("sym: {:?}", symbol);
             eprintln!("r: {:?}, {}", assign, r);
 
-            /*
-            let pointer = match assign {
-                GotPltAssign::GOT | GotPltAssign::GOT_PLTGOT => ResolvePointer::Got(self.got_index),
-                GotPltAssign::GOTPLT_PLT => ResolvePointer::GotPlt(self.gotplt_index),
-                _ => unreachable!()
-            };
-            */
-
             let pointer = match assign {
                 GotPltAssign::GOT => {
-                    let pointer = ResolvePointer::Got(self.got_index);
-                    //let index = GotIndex::GOT(self.got_index);
-
                     if r.is_plt() {
                         //.r.kind() == RelocationKind::PltRelative {
-                        self.pltgot.push((
-                            symbol.name.clone(),
-                            ResolvePointer::PltGot(self.pltgot_index),
-                        ));
+                        let pointer = ResolvePointer::PltGot(self.pltgot_index);
+                        self.pltgot.push((symbol.name.clone(), pointer.clone()));
+                        self.pltgot_hash.insert(name.to_string(), pointer);
                         self.pltgot_index += 1;
                     }
 
-                    //self.pltgot
-                    //.push((symbol.name.clone(), pointer.clone(), pointer.clone()));//ResolvePointer::Got(self.got_index)));
+                    let pointer = ResolvePointer::Got(self.got_index);
                     self.r_got
                         .push((relative, name.to_string(), pointer.clone()));
 
@@ -204,17 +212,17 @@ impl Dynamics {
                 }
 
                 GotPltAssign::GOT_PLTGOT => {
-                    let pointer = ResolvePointer::Got(self.got_index);
-                    //let index = GotIndex::GOT(self.got_index);
+                    //if r.is_plt() {
+                    //r.kind() == RelocationKind::PltRelative {
+                    let pointer = ResolvePointer::PltGot(self.pltgot_index);
+                    self.pltgot.push((symbol.name.clone(), pointer.clone()));
+                    self.pltgot_hash.insert(name.to_string(), pointer);
+                    self.pltgot_index += 1;
+                    //}
 
-                    if r.is_plt() {
-                        //r.kind() == RelocationKind::PltRelative {
-                        self.pltgot.push((
-                            symbol.name.clone(),
-                            ResolvePointer::PltGot(self.pltgot_index),
-                        ));
-                        self.pltgot_index += 1;
-                    }
+                    let pointer = ResolvePointer::Got(self.got_index);
+                    self.r_got
+                        .push((relative, name.to_string(), pointer.clone()));
 
                     self.got_index += 1;
                     pointer
@@ -288,6 +296,12 @@ impl Dynamics {
         }
         */
         track.symbol_index
+    }
+
+    pub fn symbol_lookup(&self, name: &str) -> Option<ResolvePointer> {
+        self.symbol_hash
+            .get(name)
+            .map(|track| track.pointer.clone())
     }
 
     pub fn symbol_get(&self, name: &str, data: &Data) -> Option<(SymbolIndex, Sym)> {

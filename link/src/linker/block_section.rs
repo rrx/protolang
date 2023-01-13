@@ -78,11 +78,11 @@ fn resolve_r(data: &Data, r: &CodeRelocation) -> Option<u64> {
     eprintln!("resolve: {}, kind: {:?}", &r.name, r.r.kind());
 
     // check if it's in the plt or got, and look it up in dynamics
-    if r.is_plt() || r.is_got() {
-        if let Some(resolve_addr) = data.dynamics.lookup(r) {
-            return resolve_addr.resolve(data);
-        }
+    //if r.is_plt() || r.is_got() {
+    if let Some(resolve_addr) = data.dynamics.lookup(r) {
+        return resolve_addr.resolve(data);
     }
+    //}
 
     // otherwise, just look up the symbol
     if let Some(resolve_addr) = data.pointers.get(&r.name) {
@@ -118,7 +118,9 @@ impl GeneralSection {
 
     pub fn apply_relocations(&self, data: &Data) {
         let patch_base = self.bytes.as_ptr();
-        eprintln!("p: {:?}", data.pointers_plt);
+        eprintln!("symbols: {:?}", data.dynamics.symbols());
+        eprintln!("plt: {:?}", data.dynamics.plt_hash);
+        eprintln!("pltgot: {:?}", data.dynamics.pltgot_hash);
         for r in self.relocations.iter() {
             if let Some(addr) = resolve_r(data, r) {
                 eprintln!(
