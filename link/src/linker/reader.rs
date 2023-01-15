@@ -515,6 +515,51 @@ impl ReadBlock {
         section: &elf::ElfSection<'a, 'b, A, B>,
     ) -> Result<(), Box<dyn Error>> {
         let kind = ReadSectionKind::new_section_kind(section.kind());
+        let base = match kind {
+            ReadSectionKind::Bss => {
+                self.bss.section.size
+            }
+            ReadSectionKind::RX => {
+                self.rx.section.size
+            }
+            ReadSectionKind::ROData => {
+                self.ro.section.size
+            }
+            ReadSectionKind::RW => {
+                self.rw.section.size
+            }
+            _ => unimplemented!(),
+        } as u64;
+
+        for symbol in b.symbols() {
+            // skip the null symbol
+            if symbol.kind() == object::SymbolKind::Null {
+                continue;
+            }
+            if symbol.kind() == object::SymbolKind::File {
+                continue;
+            }
+
+            if symbol.section_index() == Some(section.index()) {
+                let s = read_symbol(&b, base, &symbol)?;
+                eprintln!("Read: {:?}", &s);
+
+                if s.bind == SymbolBind::Local {
+                    // can't be local and unknown
+                    //if symbol.kind() == SymbolKind::Unknown {
+                    //unreachable!("{:?}", s);
+                    //}
+                    self.insert_local(s.clone());
+                } else if s.section == ReadSectionKind::Undefined {
+                    //block.insert_unknown(s);
+                } else {
+                    //let s = block.relocate_symbol(s);
+                    //self.merge_export(s.clone());
+                    self.insert_export(s.clone());
+                }
+            }
+        }
+
         match kind {
             ReadSectionKind::Bss => {
                 self.bss.from_section(b, section)?;
@@ -720,7 +765,7 @@ impl Reader {
         b: &elf::ElfFile<'a, A, B>,
     ) -> Result<(), Box<dyn Error>> {
         for symbol in b.dynamic_symbols() {
-            let mut s = read_symbol(&b, &symbol)?;
+            let mut s = read_symbol(&b, 0, &symbol)?;
             s.pointer = ResolvePointer::Resolved(0);
             s.source = SymbolSource::Dynamic;
             s.size = 0;
@@ -740,6 +785,7 @@ impl Reader {
         let mut block = ReadBlock::new(&name);
 
         eprintln!("relocatable: {}", &name);
+        /*
         for symbol in b.symbols() {
             // skip the null symbol
             if symbol.kind() == SymbolKind::Null {
@@ -766,6 +812,7 @@ impl Reader {
                 block.insert_export(s);
             }
         }
+        */
 
         for section in b.sections() {
             let kind = ReadSectionKind::new_section_kind(section.kind());
@@ -773,6 +820,38 @@ impl Reader {
             if kind == ReadSectionKind::Other {
                 continue;
             }
+            /*
+            let mut symbols = vec![];
+            for symbol in b.symbols() {
+                // skip the null symbol
+                if symbol.kind() == SymbolKind::Null {
+                    continue;
+                }
+                if symbol.kind() == SymbolKind::File {
+                    continue;
+                }
+
+                if symbol.section_index() == Some(section.index()) {
+                    let s = read_symbol(&b, &symbol)?;
+                    eprintln!("Read: {:?}", &s);
+
+                    if s.bind == SymbolBind::Local {
+                        // can't be local and unknown
+                        //if symbol.kind() == SymbolKind::Unknown {
+                        //unreachable!("{:?}", s);
+                        //}
+                        block.insert_local(s.clone());
+                    } else if s.section == ReadSectionKind::Undefined {
+                        //block.insert_unknown(s);
+                    } else {
+                        //let s = block.relocate_symbol(s);
+                        //self.merge_export(s.clone());
+                        block.insert_export(s.clone());
+                    }
+                    symbols.push(s);
+                }
+            }
+            */
 
             block.from_section(&b, &section)?;
         }
@@ -839,13 +918,14 @@ pub fn code_relocation<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
     })
 }
 
-fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
+pub fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
     b: &elf::ElfFile<'a, A, B>,
+    base: u64,
     symbol: &elf::ElfSymbol<'a, 'b, A, B>,
 ) -> Result<ReadSymbol, Box<dyn Error>> {
     let section_kind;
 
-    let address = symbol.address();
+    let address = base + symbol.address();
     let size = symbol.size();
 
     let name = if symbol.kind() == SymbolKind::Section {

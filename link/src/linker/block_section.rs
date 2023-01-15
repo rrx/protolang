@@ -5,6 +5,7 @@ use object::write::elf::{SectionIndex, Writer};
 use object::write::StringId;
 use object::ObjectSection;
 use std::error::Error;
+//use object::ObjectSymbol;
 
 #[derive(Debug, Clone, Default)]
 pub enum BlockSectionState {
@@ -36,7 +37,12 @@ impl BlockSection {
     ) -> Result<(), Box<dyn Error>> {
         let data = section.uncompressed_data()?;
         let base_offset = self.section.size;
+        eprintln!("name: {}", section.name()?);
+        eprintln!("before: {:#0x}", self.section.bytes.len());
         self.section.extend_bytes(&data);
+
+
+        eprintln!("after: {:#0x}", self.section.bytes.len());
         for (offset, r) in section.relocations() {
             let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
             self.section.relocations.push(r);
