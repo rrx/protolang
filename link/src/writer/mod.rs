@@ -264,14 +264,13 @@ pub struct Data {
     dynamic: Vec<LocalSymbol>,
     pub relocations_got: Vec<(bool, String, i64)>,
     pub relocations_gotplt: Vec<(bool, String, i64)>,
-
     // store strings for which we have extended their lifetime
     //pub strings: HashMap<String, (String, StringId)>,
     //pub dyn_strings: HashMap<String, (String, StringId)>,
 
     // index of symbols in got/gotplt
-    pub got_index: HashMap<String, usize>,
-    pub gotplt_index: HashMap<String, usize>,
+    //pub got_index: HashMap<String, usize>,
+    //pub gotplt_index: HashMap<String, usize>,
 }
 
 impl Data {
@@ -287,6 +286,7 @@ impl Data {
             arch: Architecture::X86_64,
             is_64: true,
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
+            //interp: "/usr/lib/ld-musl-x86_64.so.1".to_string(),
             block: None,
             libs,
             base: 0x80000,
@@ -318,9 +318,14 @@ impl Data {
             relocations_gotplt: vec![],
             //strings: HashMap::new(),
             //dyn_strings: HashMap::new(),
-            got_index: HashMap::new(),
-            gotplt_index: HashMap::new(),
+            //got_index: HashMap::new(),
+            //gotplt_index: HashMap::new(),
         }
+    }
+
+    pub fn interp(mut self, interp: String) -> Self {
+        self.interp = interp;
+        self
     }
 
     pub fn is_64(&self) -> bool {
@@ -336,6 +341,7 @@ impl Data {
         self.libs.len() > 0
     }
 
+    /*
     pub fn got_index(&mut self, name: &str) -> usize {
         if let Some(index) = self.got_index.get(name) {
             *index
@@ -345,7 +351,6 @@ impl Data {
             index
         }
     }
-
     pub fn gotplt_index(&mut self, name: &str) -> usize {
         if let Some(index) = self.gotplt_index.get(name) {
             *index
@@ -355,6 +360,7 @@ impl Data {
             index
         }
     }
+    */
 
     /*
     pub fn string_get(&self, name: &str) -> StringId {

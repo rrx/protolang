@@ -20,6 +20,7 @@ binary-heap-plus = "0.5.0"
 [dev-dependencies]
 env_logger = "0.9"
 test-log = { git = "https://github.com/rrx/test-log.git" }
+clap = { version = "^4.1", features = ["derive"] }
 
 [lib]
 name = "link"

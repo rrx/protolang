@@ -262,7 +262,7 @@ impl ReadSymbol {
 pub struct ReadBlock {
     name: String,
     // dynamic libraries referenced
-    libs: HashSet<String>,
+    pub libs: HashSet<String>,
     local_index: usize,
     pub(crate) locals: SymbolMap,
     pub(crate) exports: SymbolMap,
@@ -422,15 +422,17 @@ impl ReadBlock {
 
     pub fn write<Elf: object::read::elf::FileHeader<Endian = object::Endianness>>(
         self,
+        data: &mut Data,
         path: &Path,
     ) -> Result<(), Box<dyn Error>> {
         let mut out_data = Vec::new();
-        let mut data = crate::writer::Data::new(self.libs.iter().cloned().collect());
         let endian = object::Endianness::Little;
         let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
         data.block = Some(self);
-        write_file_main::<Elf>(&mut data, &mut writer)?;
+        write_file_main::<Elf>(data, &mut writer)?;
+        let size = out_data.len();
         std::fs::write(path, out_data)?;
+        eprintln!("Wrote {} bytes to {}", size, path.to_string_lossy());
         Ok(())
     }
 
