@@ -421,15 +421,15 @@ impl ReadBlock {
     }
 
     pub fn write<Elf: object::read::elf::FileHeader<Endian = object::Endianness>>(
-        self,
+        mut self,
         data: &mut Data,
         path: &Path,
     ) -> Result<(), Box<dyn Error>> {
         let mut out_data = Vec::new();
         let endian = object::Endianness::Little;
         let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
-        data.block = Some(self);
-        write_file_main::<Elf>(data, &mut writer)?;
+        //data.block = Some(self);
+        write_file_main::<Elf>(data, &mut self, &mut writer)?;
         let size = out_data.len();
         std::fs::write(path, out_data)?;
         eprintln!("Wrote {} bytes to {}", size, path.to_string_lossy());

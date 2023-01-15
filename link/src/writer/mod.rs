@@ -252,25 +252,9 @@ pub struct Data {
     size_reladyn: usize,
     size_relaplt: usize,
     addr_hash: u64,
-    pub block: Option<ReadBlock>,
     add_section_headers: bool,
     add_symbols: bool,
     debug: bool,
-
-    //pub dyn_symbols: HashMap<String, DynamicSymbol>,
-    //symbols: HashMap<String, ProgSymbol>,
-    pub lookup: HashMap<String, ProgSymbol>,
-    locals: Vec<LocalSymbol>,
-    dynamic: Vec<LocalSymbol>,
-    pub relocations_got: Vec<(bool, String, i64)>,
-    pub relocations_gotplt: Vec<(bool, String, i64)>,
-    // store strings for which we have extended their lifetime
-    //pub strings: HashMap<String, (String, StringId)>,
-    //pub dyn_strings: HashMap<String, (String, StringId)>,
-
-    // index of symbols in got/gotplt
-    //pub got_index: HashMap<String, usize>,
-    //pub gotplt_index: HashMap<String, usize>,
 }
 
 impl Data {
@@ -285,9 +269,8 @@ impl Data {
         Self {
             arch: Architecture::X86_64,
             is_64: true,
+            // default gnu loader
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
-            //interp: "/usr/lib/ld-musl-x86_64.so.1".to_string(),
-            block: None,
             libs,
             base: 0x80000,
             page_size: 0x1000,
@@ -309,17 +292,6 @@ impl Data {
             // Tables
             dynamics: Dynamics::new(),
             statics: Statics::new(),
-            //dyn_symbols: HashMap::new(),
-            //symbols: HashMap::new(),
-            lookup: HashMap::new(),
-            locals: vec![],
-            dynamic: vec![],
-            relocations_got: vec![],
-            relocations_gotplt: vec![],
-            //strings: HashMap::new(),
-            //dyn_strings: HashMap::new(),
-            //got_index: HashMap::new(),
-            //gotplt_index: HashMap::new(),
         }
     }
 
@@ -618,6 +590,7 @@ impl Data {
 
 pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
     data: &mut Data,
+    block: &mut ReadBlock,
     w: &mut Writer,
 ) -> std::result::Result<(), Box<dyn Error>> {
     // add libraries if they are configured
@@ -628,9 +601,9 @@ pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
         }
     }
 
-    let mut block = data.block.take().unwrap();
-    let mut blocks = BlocksBuilder::new().build(data, w, &mut block);
-    blocks.build(data, w, &mut block);
+    //let mut block = data.block.take().unwrap();
+    let mut blocks = BlocksBuilder::new().build(data, w, block);
+    blocks.build(data, w, block);
     Ok(())
 }
 

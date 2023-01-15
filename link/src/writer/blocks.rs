@@ -850,11 +850,13 @@ impl ElfBlock for SymTabSection {
             data.statics.symbol_add(&symbol, Some(section_index), w);
         }
 
+        /*
         for local in data.locals.iter() {
             let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
             let section_index = symbol.section.section_index(data);
             data.statics.symbol_add(&symbol, section_index, w);
         }
+        */
 
         for (_, symbol) in block.exports.iter() {
             let section_index = symbol.section.section_index(data);
@@ -1011,7 +1013,7 @@ impl ElfBlock for DynSymSection {
         let got = data.dynamics.relocations(GotSectionKind::GOT);
         let plt = data.dynamics.relocations(GotSectionKind::GOTPLT);
 
-        let len = got.len() + plt.len() + data.dynamic.len();
+        let len = got.len() + plt.len(); // + data.dynamic.len();
         w.write_dynsym_section_header(data.addr_dynsym, len as u32 + 1);
     }
 }
