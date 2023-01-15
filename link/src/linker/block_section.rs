@@ -26,9 +26,9 @@ impl BlockSection {
         }
     }
 
-    pub fn align(&self) -> usize {
-        self.section.alloc.align()
-    }
+    //pub fn align(&self) -> usize {
+    //self.section.alloc.align()
+    //}
 
     pub fn from_section<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         &mut self,

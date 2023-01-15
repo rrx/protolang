@@ -89,7 +89,6 @@ struct Dynamic {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AllocSegment {
-    Interp,
     RO,
     RW,
     RX,
@@ -98,22 +97,22 @@ pub enum AllocSegment {
 impl AllocSegment {
     pub fn section_header_flags(&self) -> u32 {
         match self {
-            AllocSegment::RO | AllocSegment::Interp => elf::SHF_ALLOC,
+            AllocSegment::RO => elf::SHF_ALLOC,
             AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
             AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
         }
     }
     pub fn program_header_flags(&self) -> u32 {
         match self {
-            AllocSegment::RO | AllocSegment::Interp => elf::PF_R,
+            AllocSegment::RO => elf::PF_R,
             AllocSegment::RW => elf::PF_R | elf::PF_W,
             AllocSegment::RX => elf::PF_R | elf::PF_X,
         }
     }
-    pub fn align(&self) -> usize {
+    /*
+    pub fn align2(&self) -> usize {
         match self {
             AllocSegment::RO => 0x04,
-            AllocSegment::Interp => 0x01,
             AllocSegment::RW => 0x08,
             AllocSegment::RX => 0x10,
         }
@@ -121,6 +120,7 @@ impl AllocSegment {
     pub fn page_align(&self) -> usize {
         0x1000
     }
+    */
 }
 
 pub enum SymbolPointer {
@@ -195,6 +195,7 @@ impl ResolvePointer {
             Self::GotPlt(index) => {
                 if let Some(base) = data.addr_get_by_name(".got.plt") {
                     let size = std::mem::size_of::<usize>() as u64;
+                    // first 3 entries in the got.plt are already used
                     Some(base + (*index as u64 + 3) * size)
                 } else {
                     None
@@ -205,6 +206,7 @@ impl ResolvePointer {
                 if let Some(base) = data.addr_get_by_name(".plt") {
                     // each entry in small model is 0x10 in size
                     let size = 0x10;
+                    // skip the stub (+1)
                     Some(base + (*index as u64 + 1) * size)
                 } else {
                     None
@@ -313,114 +315,6 @@ impl Data {
         self.libs.len() > 0
     }
 
-    /*
-    pub fn got_index(&mut self, name: &str) -> usize {
-        if let Some(index) = self.got_index.get(name) {
-            *index
-        } else {
-            let index = self.got_index.len();
-            self.got_index.insert(name.to_string(), index);
-            index
-        }
-    }
-    pub fn gotplt_index(&mut self, name: &str) -> usize {
-        if let Some(index) = self.gotplt_index.get(name) {
-            *index
-        } else {
-            let index = self.gotplt_index.len();
-            self.gotplt_index.insert(name.to_string(), index);
-            index
-        }
-    }
-    */
-
-    /*
-    pub fn string_get(&self, name: &str) -> StringId {
-        self.strings
-            .get(name)
-            .expect(&format!("String not found: {}", name))
-            .1
-    }
-
-    pub fn string(&mut self, name: &str, w: &mut Writer) -> StringId {
-        if let Some(s) = self.strings.get(name) {
-            s.1
-        } else {
-            let name = name.to_string();
-            unsafe {
-                let buf = extend_lifetime(name.as_bytes());
-                let string_id = w.add_string(buf);
-                //eprintln!("reserve str: {}, {:?}", &name, string_id);
-                self.strings.insert(name.clone(), (name, string_id));
-                string_id
-            }
-        }
-    }
-    */
-
-    /*
-    pub fn dyn_string(&mut self, name: &str, w: &mut Writer) -> StringId {
-        if let Some(s) = self.dyn_strings.get(name) {
-            s.1
-        } else {
-            let name = name.to_string();
-            unsafe {
-                let buf = extend_lifetime(name.as_bytes());
-                let string_id = w.add_dynamic_string(buf);
-                //eprintln!("reserve dyn str: {}, {:?}", &name, string_id);
-                self.dyn_strings.insert(name.clone(), (name, string_id));
-                string_id
-            }
-        }
-    }
-    */
-
-    //pub fn dyn_relocation_relative(&mut self, name: &str, kind: GotKind, w: &mut Writer) -> SymbolIndex {
-    //}
-
-    /*
-    pub fn dyn_relocation(&mut self, name: &str, kind: GotKind, addend: i64, w: &mut Writer) -> SymbolIndex {
-        if let Some(s) = self.dyn_symbols.get(name) {
-            s.symbol_index
-        } else {
-            let string_id = self.dyn_string(name, w);
-            let symbol_index = w.reserve_dynamic_symbol_index();
-
-            let stt = match kind {
-                GotKind::GOT(_) => elf::STT_OBJECT,
-                GotKind::GOTPLT => elf::STT_FUNC,
-            };
-
-            let stb = elf::STB_GLOBAL;
-
-            let st_info = (stb << 4) + (stt & 0x0f);
-            let st_other = elf::STV_DEFAULT;
-            let sym = Sym {
-                name: Some(string_id),
-                section: None,
-                st_info,
-                st_other,
-                st_shndx: 0,
-                st_value: 0,
-                st_size: 0,
-            };
-
-            match kind {
-                GotKind::GOT(relative) => self.relocations_got.push((relative, name.to_string(), addend)),
-                GotKind::GOTPLT => self.relocations_gotplt.push((false, name.to_string(), addend)),
-            }
-
-            //if let GotKind::GOT(true) = kind {
-            //} else {
-                self.dyn_symbols
-                    .insert(name.to_string(), DynamicSymbol { symbol_index, sym });
-            //}
-
-            symbol_index
-        }
-    }
-    */
-
     pub fn pointer_set(&mut self, name: String, p: u64) {
         self.pointers.insert(name, ResolvePointer::Resolved(p));
     }
@@ -432,18 +326,6 @@ impl Data {
             .resolve(self)
             .expect(&format!("Pointer unresolved: {}", name))
     }
-
-    /*
-    pub fn symbol_set(&mut self, name: String, s: ProgSymbol) {
-        self.symbols.insert(name, s);
-    }
-
-    pub fn symbol_get<'a>(&'a self, name: &str) -> &'a ProgSymbol {
-        self.symbols
-            .get(name)
-            .expect(&format!("Pointer not found: {}", name))
-    }
-    */
 
     pub fn addr_get_by_name(&self, name: &str) -> Option<u64> {
         self.addr
@@ -601,7 +483,6 @@ pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
         }
     }
 
-    //let mut block = data.block.take().unwrap();
     let mut blocks = BlocksBuilder::new().build(data, w, block);
     blocks.build(data, w, block);
     Ok(())
