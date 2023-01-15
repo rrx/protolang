@@ -41,7 +41,6 @@ impl BlockSection {
         eprintln!("before: {:#0x}", self.section.bytes.len());
         self.section.extend_bytes(&data);
 
-
         eprintln!("after: {:#0x}", self.section.bytes.len());
         for (offset, r) in section.relocations() {
             let r = code_relocation(b, r.into(), base_offset + offset as usize)?;

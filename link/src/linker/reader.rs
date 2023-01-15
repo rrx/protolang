@@ -161,12 +161,14 @@ impl SymbolBind {
     }
 }
 
+/*
 #[derive(Debug, Clone)]
 pub enum SymbolLookupTable {
     GOT,
     PLT,
     None,
 }
+*/
 
 #[derive(Debug, Clone)]
 pub struct ReadSymbol {
@@ -179,7 +181,7 @@ pub struct ReadSymbol {
     pub(crate) bind: SymbolBind,
     pub(crate) pointer: ResolvePointer,
     pub(crate) size: u64,
-    lookup: SymbolLookupTable,
+    //lookup: SymbolLookupTable,
 }
 
 impl ReadSymbol {
@@ -194,8 +196,12 @@ impl ReadSymbol {
             bind: SymbolBind::Local,
             pointer,
             size: 0,
-            lookup: SymbolLookupTable::None,
+            //lookup: SymbolLookupTable::None,
         }
+    }
+
+    pub fn is_static(&self) -> bool {
+        self.source == SymbolSource::Static
     }
 
     pub fn relocate(&mut self, base: u64) {
@@ -347,7 +353,9 @@ impl ReadBlock {
 
                 let assign = match s.kind {
                     SymbolKind::Text => {
-                        if got.contains(&r.name) {
+                        if s.is_static() {
+                            GotPltAssign::Got
+                        } else if got.contains(&r.name) {
                             if r.is_plt() {
                                 GotPltAssign::GotWithPltGot
                             } else {
@@ -367,12 +375,12 @@ impl ReadBlock {
                 if s.source == SymbolSource::Dynamic {
                     eprintln!("reloc {}", &r);
                     data.statics.symbol_add(&s, None, w);
-                    data.dynamics.relocation_add(&s, false, assign, r, w);
+                    data.dynamics.relocation_add(&s, assign, r, w);
                 } else if def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
                     if assign == GotPltAssign::None {
                     } else {
-                        data.dynamics.relocation_add(&s, true, assign, r, w);
+                        data.dynamics.relocation_add(&s, assign, r, w);
                     }
                 } else {
                     eprintln!("reloc3 {}", &r);
@@ -516,18 +524,10 @@ impl ReadBlock {
     ) -> Result<(), Box<dyn Error>> {
         let kind = ReadSectionKind::new_section_kind(section.kind());
         let base = match kind {
-            ReadSectionKind::Bss => {
-                self.bss.section.size
-            }
-            ReadSectionKind::RX => {
-                self.rx.section.size
-            }
-            ReadSectionKind::ROData => {
-                self.ro.section.size
-            }
-            ReadSectionKind::RW => {
-                self.rw.section.size
-            }
+            ReadSectionKind::Bss => self.bss.section.size,
+            ReadSectionKind::RX => self.rx.section.size,
+            ReadSectionKind::ROData => self.ro.section.size,
+            ReadSectionKind::RW => self.rw.section.size,
             _ => unimplemented!(),
         } as u64;
 
@@ -553,8 +553,6 @@ impl ReadBlock {
                 } else if s.section == ReadSectionKind::Undefined {
                     //block.insert_unknown(s);
                 } else {
-                    //let s = block.relocate_symbol(s);
-                    //self.merge_export(s.clone());
                     self.insert_export(s.clone());
                 }
             }
@@ -964,7 +962,7 @@ pub fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         pointer,
         size,
         source: SymbolSource::Static,
-        lookup: SymbolLookupTable::None,
+        //lookup: SymbolLookupTable::None,
     })
 }
 

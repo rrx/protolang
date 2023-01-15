@@ -23,7 +23,7 @@ struct TrackSymbolIndex {
     symbol_index: Option<SymbolIndex>,
     symbol: ReadSymbol,
     pointer: ResolvePointer,
-    relative: bool,
+    //relative: bool,
 }
 
 pub struct Dynamics {
@@ -36,8 +36,8 @@ pub struct Dynamics {
     symbols: Vec<String>,
     symbol_hash: HashMap<String, TrackSymbolIndex>,
 
-    r_got: Vec<(bool, ReadSymbol)>,
-    r_gotplt: Vec<(bool, ReadSymbol)>,
+    r_got: Vec<ReadSymbol>,
+    r_gotplt: Vec<ReadSymbol>,
 
     // plt entries
     plt: Vec<ReadSymbol>,
@@ -73,7 +73,7 @@ impl Dynamics {
         }
     }
 
-    pub fn relocations(&self, kind: GotSectionKind) -> Vec<(bool, ReadSymbol)> {
+    pub fn relocations(&self, kind: GotSectionKind) -> Vec<ReadSymbol> {
         match kind {
             GotSectionKind::GOT => self.r_got.iter().cloned().collect(),
             GotSectionKind::GOTPLT => self.r_gotplt.iter().cloned().collect(),
@@ -147,7 +147,7 @@ impl Dynamics {
         &mut self,
         symbol: &ReadSymbol,
         //kind: GotKind,
-        relative: bool,
+        //relative: bool,
         assign: GotPltAssign,
         r: &CodeRelocation,
         w: &mut Writer,
@@ -165,10 +165,10 @@ impl Dynamics {
                 GotPltAssign::Got => {
                     symbol.pointer = ResolvePointer::Got(self.got_index);
 
-                    self.r_got.push((relative, symbol.clone()));
+                    self.r_got.push(symbol.clone());
 
                     self.got_index += 1;
-                    self.symbol_add(symbol, relative, w);
+                    self.symbol_add(symbol, w);
                 }
 
                 GotPltAssign::GotWithPltGot => {
@@ -178,10 +178,10 @@ impl Dynamics {
                     self.pltgot_index += 1;
 
                     symbol.pointer = ResolvePointer::Got(self.got_index);
-                    self.r_got.push((relative, symbol.clone())); //name.to_string(), pointer.clone()));
+                    self.r_got.push(symbol.clone()); //name.to_string(), pointer.clone()));
 
                     self.got_index += 1;
-                    self.symbol_add(symbol, relative, w);
+                    self.symbol_add(symbol, w);
                 }
 
                 GotPltAssign::GotPltWithPlt => {
@@ -190,9 +190,9 @@ impl Dynamics {
                     self.plt_hash.insert(name.to_string(), symbol.clone());
                     self.plt_index += 1;
 
-                    self.r_gotplt.push((false, symbol.clone())); //name.to_string(), pointer.clone()));
+                    self.r_gotplt.push(symbol.clone()); //name.to_string(), pointer.clone()));
                     self.gotplt_index += 1;
-                    self.symbol_add(symbol, relative, w);
+                    self.symbol_add(symbol, w);
                 }
                 _ => unreachable!(),
             };
@@ -202,7 +202,7 @@ impl Dynamics {
     fn symbol_add(
         &mut self,
         symbol: ReadSymbol,
-        relative: bool,
+        //relative: bool,
         //pointer: ResolvePointer,
         w: &mut Writer,
     ) -> Option<SymbolIndex> {
@@ -211,7 +211,7 @@ impl Dynamics {
 
         let string_id;
         let symbol_index;
-        if relative {
+        if symbol.is_static() {
             string_id = None;
             symbol_index = None;
         } else {
@@ -226,7 +226,7 @@ impl Dynamics {
             symbol_index,
             pointer: symbol.pointer.clone(),
             symbol,
-            relative,
+            //relative,
         };
 
         self.symbol_hash.insert(name.clone(), track);

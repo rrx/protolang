@@ -482,14 +482,14 @@ impl ElfBlock for RelaDynSection {
         w.pad_until(aligned_pos);
 
         // we are writing a relocation for the GOT entries
-        for (index, (relative, symbol)) in relocations.iter().enumerate() {
-            eprintln!("unapplied: {}, {}", symbol.name, relative);
+        for (index, symbol) in relocations.iter().enumerate() {
+            eprintln!("unapplied: {:?}", &symbol);
 
             let mut r_addend = 0;
             let r_sym;
 
             // if relative, look up the pointer in statics
-            if *relative {
+            if symbol.is_static() {
                 r_sym = 0;
                 if let Some(p) = data.statics.symbol_get(&symbol.name) {
                     if let Some(addr) = p.resolve(data) {
@@ -508,7 +508,7 @@ impl ElfBlock for RelaDynSection {
 
             let r_type = match self.kind {
                 GotSectionKind::GOT => {
-                    if *relative {
+                    if symbol.is_static() {
                         elf::R_X86_64_RELATIVE
                     } else {
                         elf::R_X86_64_GLOB_DAT
