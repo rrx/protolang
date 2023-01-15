@@ -1135,16 +1135,28 @@ impl ElfBlock for ShStrTabSection {
 pub struct HashSection {
     index: Option<SectionIndex>,
     bucket_count: u32,
-    chain_count: u32,
+    //chain_count: u32,
     offsets: SectionOffset,
 }
+
+/*
+fn sysv_hash(s: u32) -> u32
+{
+	uint_fast32_t h = 0;
+	while (*s) {
+		h = 16*h + *s++;
+		h ^= h>>24 & 0xf0;
+	}
+	return h & 0xfffffff;
+}
+*/
 
 impl HashSection {
     pub fn new() -> Self {
         Self {
             index: None,
-            bucket_count: 0,
-            chain_count: 0,
+            bucket_count: 1,
+            //chain_count: 10,
             offsets: SectionOffset::new(0x08),
         }
     }
@@ -1169,12 +1181,14 @@ impl ElfBlock for HashSection {
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
+        let chain_count = data.dynamics.symbol_count() as u32;
         let pos = w.reserved_len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.reserve_until(aligned_pos);
+
         let file_offset = w.reserved_len();
 
-        w.reserve_hash(self.bucket_count, self.chain_count);
+        w.reserve_hash(self.bucket_count, chain_count);
 
         let after = w.reserved_len();
         tracker.add_offsets(
@@ -1188,15 +1202,16 @@ impl ElfBlock for HashSection {
 
     fn write(
         &self,
-        _data: &Data,
+        data: &Data,
         _tracker: &mut SegmentTracker,
         _block: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let pos = w.len();
+        let chain_count = data.dynamics.symbol_count() as u32;
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
-        w.write_hash(self.bucket_count, self.chain_count, |x| Some(x));
+        w.write_hash(self.bucket_count, chain_count, |x| Some(x));
     }
 
     fn write_section_header(
@@ -1207,6 +1222,86 @@ impl ElfBlock for HashSection {
         w: &mut Writer,
     ) {
         w.write_hash_section_header(self.offsets.address);
+    }
+}
+
+pub struct GnuHashSection {
+    index: Option<SectionIndex>,
+    bucket_count: u32,
+    chain_count: u32,
+    bloom_count: u32,
+    offsets: SectionOffset,
+}
+
+impl GnuHashSection {
+    pub fn new() -> Self {
+        Self {
+            index: None,
+            bucket_count: 10,
+            chain_count: 10,
+            bloom_count: 10,
+            offsets: SectionOffset::new(0x08),
+        }
+    }
+}
+
+impl ElfBlock for GnuHashSection {
+    fn name(&self) -> String {
+        return "gnuhash".to_string();
+    }
+    fn alloc(&self) -> Option<AllocSegment> {
+        Some(AllocSegment::RO)
+    }
+
+    fn reserve_section_index(&mut self, _data: &mut Data, _block: &mut ReadBlock, w: &mut Writer) {
+        self.index = Some(w.reserve_gnu_hash_section_index());
+    }
+
+    fn reserve(
+        &mut self,
+        data: &mut Data,
+        tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
+        let pos = w.reserved_len();
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        w.reserve_until(aligned_pos);
+        let file_offset = w.reserved_len();
+
+        w.reserve_gnu_hash(self.bloom_count, self.bucket_count, self.chain_count);
+
+        let after = w.reserved_len();
+        tracker.add_offsets(
+            self.alloc().unwrap(),
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
+        //data.addr_hash = self.offsets.address;
+    }
+
+    fn write(
+        &self,
+        _data: &Data,
+        _tracker: &mut SegmentTracker,
+        _block: &mut ReadBlock,
+        w: &mut Writer,
+    ) {
+        let pos = w.len();
+        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        w.pad_until(aligned_pos);
+        w.write_gnu_hash(0, 0, self.bloom_count, self.bucket_count, self.chain_count, |x| x);
+    }
+
+    fn write_section_header(
+        &self,
+        _data: &Data,
+        _tracker: &SegmentTracker,
+        _block: &ReadBlock,
+        w: &mut Writer,
+    ) {
+        w.write_gnu_hash_section_header(self.offsets.address);
     }
 }
 

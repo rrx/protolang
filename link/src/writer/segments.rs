@@ -27,6 +27,7 @@ impl BlocksBuilder {
         }
 
         blocks.push(Box::new(HashSection::new()));
+        //blocks.push(Box::new(GnuHashSection::new()));
 
         if data.is_dynamic() {
             blocks.push(Box::new(DynSymSection::default()));
