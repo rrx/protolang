@@ -360,6 +360,7 @@ impl ReadBlock {
                         }
                     }
                     SymbolKind::Data => GotPltAssign::Got,
+                    //_ => unimplemented!("{:?}, {}", s, r)
                     _ => GotPltAssign::None,
                 };
 
@@ -369,7 +370,10 @@ impl ReadBlock {
                     data.dynamics.relocation_add(&s, false, assign, r, w);
                 } else if def != CodeSymbolDefinition::Local {
                     eprintln!("reloc2 {}", &r);
-                    data.dynamics.relocation_add(&s, true, assign, r, w);
+                    if assign == GotPltAssign::None {
+                    } else {
+                        data.dynamics.relocation_add(&s, true, assign, r, w);
+                    }
                 } else {
                     eprintln!("reloc3 {}", &r);
                 }
@@ -750,9 +754,9 @@ impl Reader {
 
             if s.bind == SymbolBind::Local {
                 // can't be local and unknown
-                if symbol.kind() == SymbolKind::Unknown {
-                    unreachable!();
-                }
+                //if symbol.kind() == SymbolKind::Unknown {
+                //unreachable!("{:?}", s);
+                //}
                 block.insert_local(s);
             } else if s.section == ReadSectionKind::Undefined {
                 //block.insert_unknown(s);

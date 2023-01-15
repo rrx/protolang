@@ -9,7 +9,7 @@ struct TrackStringIndex {
     string_id: StringId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum GotPltAssign {
     Got,           // object
     GotWithPltGot, // function
@@ -19,10 +19,11 @@ pub enum GotPltAssign {
 
 struct TrackSymbolIndex {
     index: usize,
-    string_id: StringId,
-    symbol_index: SymbolIndex,
+    string_id: Option<StringId>,
+    symbol_index: Option<SymbolIndex>,
     symbol: ReadSymbol,
     pointer: ResolvePointer,
+    relative: bool,
 }
 
 pub struct Dynamics {
@@ -35,14 +36,14 @@ pub struct Dynamics {
     symbols: Vec<String>,
     symbol_hash: HashMap<String, TrackSymbolIndex>,
 
-    r_got: Vec<(bool, String, ResolvePointer)>,
-    r_gotplt: Vec<(bool, String, ResolvePointer)>,
+    r_got: Vec<(bool, ReadSymbol)>,
+    r_gotplt: Vec<(bool, ReadSymbol)>,
 
     // plt entries
-    plt: Vec<(String, ResolvePointer)>,
-    pub plt_hash: HashMap<String, ResolvePointer>,
-    pltgot: Vec<(String, ResolvePointer)>,
-    pub pltgot_hash: HashMap<String, ResolvePointer>,
+    plt: Vec<ReadSymbol>,
+    pub plt_hash: HashMap<String, ReadSymbol>,
+    pltgot: Vec<ReadSymbol>,
+    pub pltgot_hash: HashMap<String, ReadSymbol>,
 
     got_index: usize,
     gotplt_index: usize,
@@ -72,7 +73,7 @@ impl Dynamics {
         }
     }
 
-    pub fn relocations(&self, kind: GotSectionKind) -> Vec<(bool, String, ResolvePointer)> {
+    pub fn relocations(&self, kind: GotSectionKind) -> Vec<(bool, ReadSymbol)> {
         match kind {
             GotSectionKind::GOT => self.r_got.iter().cloned().collect(),
             GotSectionKind::GOTPLT => self.r_gotplt.iter().cloned().collect(),
@@ -87,10 +88,10 @@ impl Dynamics {
                 None
             }
         } else if r.is_plt() {
-            if let Some(addr) = self.plt_hash.get(&r.name) {
-                Some(addr.clone())
-            } else if let Some(addr) = self.pltgot_hash.get(&r.name) {
-                Some(addr.clone())
+            if let Some(symbol) = self.plt_hash.get(&r.name) {
+                Some(symbol.pointer.clone())
+            } else if let Some(symbol) = self.pltgot_hash.get(&r.name) {
+                Some(symbol.pointer.clone())
             } else if let Some(track) = self.symbol_hash.get(&r.name) {
                 Some(track.pointer.clone())
             } else {
@@ -101,11 +102,11 @@ impl Dynamics {
         }
     }
 
-    pub fn pltgot_objects(&self) -> Vec<(String, ResolvePointer)> {
+    pub fn pltgot_objects(&self) -> Vec<ReadSymbol> {
         self.pltgot.clone()
     }
 
-    pub fn plt_objects(&self) -> Vec<(String, ResolvePointer)> {
+    pub fn plt_objects(&self) -> Vec<ReadSymbol> {
         self.plt.clone()
     }
 
@@ -136,7 +137,10 @@ impl Dynamics {
     }
 
     pub fn symbol_count(&self) -> usize {
-        self.symbols.len()
+        self.symbol_hash
+            .iter()
+            .filter(|(_name, s)| s.string_id.is_some())
+            .count()
     }
 
     pub fn relocation_add(
@@ -147,87 +151,82 @@ impl Dynamics {
         assign: GotPltAssign,
         r: &CodeRelocation,
         w: &mut Writer,
-    ) -> SymbolIndex {
+    ) {
         let name = &symbol.name;
 
         if let Some(track) = self.symbol_hash.get(name) {
-            track.symbol_index
+            ()
         } else {
             eprintln!("sym: {:?}", symbol);
             eprintln!("r: {:?}, {}", assign, r);
+            let mut symbol = symbol.clone();
 
-            let pointer = match assign {
+            match assign {
                 GotPltAssign::Got => {
-                    /*
-                    if r.is_plt() {
-                        let pointer = ResolvePointer::PltGot(self.pltgot_index);
-                        self.pltgot.push((symbol.name.clone(), pointer.clone()));
-                        self.pltgot_hash.insert(name.to_string(), pointer);
-                        self.pltgot_index += 1;
-                    }
-                    */
+                    symbol.pointer = ResolvePointer::Got(self.got_index);
 
-                    let pointer = ResolvePointer::Got(self.got_index);
-                    self.r_got
-                        .push((relative, name.to_string(), pointer.clone()));
+                    self.r_got.push((relative, symbol.clone()));
 
                     self.got_index += 1;
-
-                    pointer
+                    self.symbol_add(symbol, relative, w);
                 }
 
                 GotPltAssign::GotWithPltGot => {
-                    let pointer = ResolvePointer::PltGot(self.pltgot_index);
-                    self.pltgot.push((symbol.name.clone(), pointer.clone()));
-                    self.pltgot_hash.insert(name.to_string(), pointer);
+                    symbol.pointer = ResolvePointer::PltGot(self.pltgot_index);
+                    self.pltgot.push(symbol.clone()); //(symbol.name.clone(), pointer.clone()));
+                    self.pltgot_hash.insert(name.to_string(), symbol.clone());
                     self.pltgot_index += 1;
 
-                    let pointer = ResolvePointer::Got(self.got_index);
-                    self.r_got
-                        .push((relative, name.to_string(), pointer.clone()));
+                    symbol.pointer = ResolvePointer::Got(self.got_index);
+                    self.r_got.push((relative, symbol.clone())); //name.to_string(), pointer.clone()));
 
                     self.got_index += 1;
-                    pointer
+                    self.symbol_add(symbol, relative, w);
                 }
 
                 GotPltAssign::GotPltWithPlt => {
-                    let pointer = ResolvePointer::Plt(self.plt_index);
-                    self.plt.push((symbol.name.clone(), pointer.clone()));
-                    self.plt_hash.insert(name.to_string(), pointer.clone());
+                    symbol.pointer = ResolvePointer::Plt(self.plt_index);
+                    self.plt.push(symbol.clone()); //(symbol.name.clone(), pointer.clone()));
+                    self.plt_hash.insert(name.to_string(), symbol.clone());
                     self.plt_index += 1;
 
-                    self.r_gotplt
-                        .push((false, name.to_string(), pointer.clone()));
+                    self.r_gotplt.push((false, symbol.clone())); //name.to_string(), pointer.clone()));
                     self.gotplt_index += 1;
-
-                    pointer
+                    self.symbol_add(symbol, relative, w);
                 }
                 _ => unreachable!(),
             };
-
-            self._symbol_add(symbol.clone(), pointer, w)
         }
     }
 
-    fn _symbol_add(
+    fn symbol_add(
         &mut self,
         symbol: ReadSymbol,
-        pointer: ResolvePointer,
+        relative: bool,
+        //pointer: ResolvePointer,
         w: &mut Writer,
-    ) -> SymbolIndex {
+    ) -> Option<SymbolIndex> {
         let index = self.symbols.len();
         self.symbols.push(symbol.name.clone());
 
-        let string_id = self.string_add(&symbol.name, w);
-        let symbol_index = SymbolIndex(w.reserve_dynamic_symbol_index().0);
+        let string_id;
+        let symbol_index;
+        if relative {
+            string_id = None;
+            symbol_index = None;
+        } else {
+            string_id = Some(self.string_add(&symbol.name, w));
+            symbol_index = Some(SymbolIndex(w.reserve_dynamic_symbol_index().0));
+        }
         let symbol = symbol.clone();
         let name = symbol.name.clone();
         let track = TrackSymbolIndex {
             index,
             string_id,
             symbol_index,
-            pointer,
+            pointer: symbol.pointer.clone(),
             symbol,
+            relative,
         };
 
         self.symbol_hash.insert(name.clone(), track);
@@ -241,17 +240,24 @@ impl Dynamics {
     }
 
     pub fn symbol_get(&self, name: &str, data: &Data) -> Option<(SymbolIndex, Sym)> {
-        self.symbol_hash.get(name).map(|track| {
-            let sym = track.symbol.get_dynamic_symbol(data);
-            (track.symbol_index, sym)
-        })
+        if let Some(track) = self.symbol_hash.get(name) {
+            if let Some(symbol_index) = track.symbol_index {
+                let sym = track.symbol.get_dynamic_symbol(data);
+                return Some((symbol_index, sym));
+            }
+        }
+        None
     }
 
     pub fn symbols_write(&self, data: &Data, w: &mut Writer) {
         w.write_null_dynamic_symbol();
         for name in self.symbols.iter() {
-            let (_symbol_index, sym) = self.symbol_get(name, data).unwrap();
-            w.write_dynamic_symbol(&sym);
+            let track = self.symbol_hash.get(name).unwrap();
+            if track.symbol_index.is_some() {
+                let sym = track.symbol.get_dynamic_symbol(data);
+                //let (_symbol_index, sym) = self.symbol_get(name, data).expect(&format!("not found {}", name));
+                w.write_dynamic_symbol(&sym);
+            }
         }
     }
 

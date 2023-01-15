@@ -482,9 +482,8 @@ impl ElfBlock for RelaDynSection {
         w.pad_until(aligned_pos);
 
         // we are writing a relocation for the GOT entries
-        for (index, (relative, name, _pointer)) in relocations.iter().enumerate() {
-            eprintln!("unapplied: {}, {}", name, relative);
-            let (symbol_index, _sym) = data.dynamics.symbol_get(name, data).unwrap();
+        for (index, (relative, symbol)) in relocations.iter().enumerate() {
+            eprintln!("unapplied: {}, {}", symbol.name, relative);
 
             let mut r_addend = 0;
             let r_sym;
@@ -492,13 +491,17 @@ impl ElfBlock for RelaDynSection {
             // if relative, look up the pointer in statics
             if *relative {
                 r_sym = 0;
-                if let Some(p) = data.statics.symbol_get(name) {
+                if let Some(p) = data.statics.symbol_get(&symbol.name) {
                     if let Some(addr) = p.resolve(data) {
                         r_addend = addr as i64;
                     }
                 }
             } else {
                 // we needed to fork object in order to access .0
+                let (symbol_index, _sym) = data
+                    .dynamics
+                    .symbol_get(&symbol.name, data)
+                    .expect(&format!("not found {}", &symbol.name));
                 r_sym = symbol_index.0;
                 r_addend = 0;
             }
@@ -1650,8 +1653,8 @@ impl ElfBlock for PltGotSection {
         let pltgot = data.dynamics.pltgot_objects();
         eprintln!("pltgot: {:?}", pltgot);
 
-        for (slot_index, (name, _p)) in pltgot.iter().enumerate() {
-            let p = data.dynamics.symbol_lookup(name).unwrap();
+        for (slot_index, symbol) in pltgot.iter().enumerate() {
+            let p = data.dynamics.symbol_lookup(&symbol.name).unwrap();
             let mut slot: Vec<u8> = vec![0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x66, 0x90];
             let slot_size = slot.len();
             assert_eq!(slot_size, self.entry_size);
