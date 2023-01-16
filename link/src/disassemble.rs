@@ -59,6 +59,19 @@ impl PatchBlock {
 }
 
 pub fn print_bytes(buf: &[u8], base: usize) {
+    use pretty_hex::*;
+    let cfg = HexConfig {
+        title: false,
+        ascii: true,
+        width: 16,
+        group: 2,
+        chunk: 4,
+        ..HexConfig::default()
+    };
+    eprintln!("{}", config_hex(&buf.to_vec(), cfg)); //.hex_conf(cfg));
+}
+
+pub fn print_bytes2(buf: &[u8], base: usize) {
     let N = 16;
     let chunks = buf.chunks(N).collect::<Vec<_>>();
     let mut offset = base;
@@ -237,7 +250,17 @@ pub fn disassemble_code_with_symbols(
 impl GeneralSection {
     pub fn disassemble(&self, data: &Data) {
         eprintln!("Disassemble: {}, {:#0x}", self.name, self.offsets.address);
+        match self.alloc {
+            AllocSegment::RX => self.disassemble_code(data),
+            AllocSegment::RW | AllocSegment::RO => self.disassemble_data(data),
+        }
+    }
 
+    fn disassemble_data(&self, data: &Data) {
+        print_bytes(self.bytes.as_slice(), self.offsets.address as usize);
+    }
+
+    fn disassemble_code(&self, data: &Data) {
         let mut symbols = vec![];
         for (name, p) in data.pointers.iter() {
             let addr = p.resolve(data).unwrap();

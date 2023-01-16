@@ -37,7 +37,7 @@ impl BlockSection {
     ) -> Result<(), Box<dyn Error>> {
         let data = section.uncompressed_data()?;
         let base_offset = self.section.size;
-        eprintln!("name: {}", section.name()?);
+        log::debug!("name: {}", section.name()?);
         //eprintln!("before: {:#0x}", self.section.bytes.len());
         self.section.extend_bytes(&data);
 
@@ -128,7 +128,8 @@ impl GeneralSection {
         //eprintln!("pltgot: {:?}", data.dynamics.pltgot_hash);
         for r in self.relocations.iter() {
             if let Some(addr) = resolve_r(data, r) {
-                eprintln!(
+                log::info!(
+                    target: "relocations",
                     "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
                     self.alloc, self.offsets.address, addr as usize, &r.name
                 );
@@ -141,7 +142,10 @@ impl GeneralSection {
                 unreachable!("Unable to locate symbol: {}, {}", &r.name, &r);
             }
         }
-        self.disassemble(data);
+
+        if data.debug_enabled(&DebugFlag::Disassemble) {
+            self.disassemble(data);
+        }
     }
 
     pub fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {

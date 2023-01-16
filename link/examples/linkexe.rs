@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let block = reader.build();
-    block.dump();
+    //block.dump();
 
     let mut data = link::Data::new(block.libs.iter().cloned().collect());
     if let Some(interp) = args.interp {

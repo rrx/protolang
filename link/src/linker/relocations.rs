@@ -110,14 +110,11 @@ pub struct CodeRelocation {
 
 impl fmt::Display for CodeRelocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Relocation[{}@{:#04x}, kind: {:?}, encoding: {:?}, size: {}, target: {:?}, addend: {}]",
-               self.name,
-               self.offset,
-               self.r.kind,
-               self.r.encoding,
-               self.r.size,
-               self.r.target,
-               self.r.addend)
+        write!(
+            f,
+            "Relocation[{}@{:#04x}, kind: {:?}, enc: {:?}, sz: {}, addend: {}]",
+            self.name, self.offset, self.r.kind, self.r.encoding, self.r.size, self.r.addend
+        )
     }
 }
 

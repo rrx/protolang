@@ -483,7 +483,7 @@ impl ElfBlock for RelaDynSection {
 
         // we are writing a relocation for the GOT entries
         for (index, symbol) in relocations.iter().enumerate() {
-            eprintln!("unapplied: {:?}", &symbol);
+            //eprintln!("unapplied: {:?}", &symbol);
 
             let mut r_addend = 0;
             let r_sym;
@@ -1223,7 +1223,7 @@ impl ElfBlock for HashSection {
         w.write_hash(self.bucket_count, chain_count, |i| {
             if let Some(name) = h.get(&SymbolIndex(i)) {
                 let hash = sysv_hash(name.as_bytes());
-                eprintln!("w: {}, i:{:#8x}, hash:{:#08x}", name, i, hash);
+                //eprintln!("w: {}, i:{:#8x}, hash:{:#08x}", name, i, hash);
                 Some(hash)
             } else {
                 None

@@ -5,7 +5,7 @@ use object::write::elf::Sym;
 use object::write::elf::{SectionIndex, SymbolIndex, Writer};
 use object::write::StringId;
 use object::{Architecture, Endianness};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::mem;
 
@@ -233,6 +233,13 @@ pub enum AddressKey {
     PltGot(String),
 }
 
+#[derive(Eq, Hash, PartialEq, Debug)]
+pub enum DebugFlag {
+    Relocations,
+    Symbols,
+    Disassemble,
+}
+
 pub struct Data {
     arch: Architecture,
     interp: String,
@@ -242,6 +249,7 @@ pub struct Data {
     base: usize,
     pub dynamics: Dynamics,
     pub statics: Statics,
+    debug: HashSet<DebugFlag>,
 
     pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
@@ -256,7 +264,6 @@ pub struct Data {
     addr_hash: u64,
     add_section_headers: bool,
     add_symbols: bool,
-    debug: bool,
 }
 
 impl Data {
@@ -289,12 +296,16 @@ impl Data {
 
             add_section_headers: true,
             add_symbols: true,
-            debug: true,
+            debug: HashSet::new(),
 
             // Tables
             dynamics: Dynamics::new(),
             statics: Statics::new(),
         }
+    }
+
+    pub fn debug_enabled(&self, f: &DebugFlag) -> bool {
+        self.debug.contains(f)
     }
 
     pub fn interp(mut self, interp: String) -> Self {

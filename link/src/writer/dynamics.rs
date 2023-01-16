@@ -151,11 +151,11 @@ impl Dynamics {
     ) {
         let name = &symbol.name;
 
-        if let Some(track) = self.symbol_hash.get(name) {
+        if let Some(_track) = self.symbol_hash.get(name) {
             ()
         } else {
             //eprintln!("sym: {:?}", symbol);
-            //eprintln!("r: {:?}, {}", assign, r);
+            log::debug!(target: "symbols", "r: {:?}, {}", assign, r);
             let mut symbol = symbol.clone();
 
             match assign {
@@ -208,7 +208,7 @@ impl Dynamics {
         } else {
             string_id = Some(self.string_add(&symbol.name, w));
             symbol_index = Some(SymbolIndex(w.reserve_dynamic_symbol_index().0));
-            eprintln!("ADD: {} => {:?}", &symbol.name, symbol_index);
+            log::debug!(target: "symbols", "ADD: {} => {:?}", &symbol.name, symbol_index);
         }
         let symbol = symbol.clone();
         let name = symbol.name.clone();

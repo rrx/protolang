@@ -384,17 +384,17 @@ impl ReadBlock {
                 };
 
                 if s.source == SymbolSource::Dynamic {
-                    eprintln!("reloc {}", &r);
+                    log::debug!("reloc {}", &r);
                     data.statics.symbol_add(&s, None, w);
                     data.dynamics.relocation_add(&s, assign, r, w);
                 } else if def != CodeSymbolDefinition::Local {
-                    eprintln!("reloc2 {}", &r);
+                    log::debug!("reloc2 {}", &r);
                     if assign == GotPltAssign::None {
                     } else {
                         data.dynamics.relocation_add(&s, assign, r, w);
                     }
                 } else {
-                    eprintln!("reloc3 {}", &r);
+                    log::debug!("reloc3 {}", &r);
                 }
             } else {
                 unreachable!("Unable to find symbol for relocation: {}", &r.name)
@@ -506,6 +506,12 @@ impl ReadBlock {
             self.insert_export(s);
         }
 
+        for (_name, s) in block.dynamic.into_iter() {
+            self.insert_dynamic(s);
+        }
+
+        self.libs.extend(block.libs.into_iter());
+
         // update BSS
         let base_offset = self.bss.section.size;
         self.bss.section.size += block.bss.section.size;
@@ -555,7 +561,7 @@ impl ReadBlock {
 
             if symbol.section_index() == Some(section.index()) {
                 let s = read_symbol(&b, base, &symbol)?;
-                eprintln!("Read: {:?}", &s);
+                log::debug!("Read: {:?}", &s);
 
                 if s.bind == SymbolBind::Local {
                     // can't be local and unknown
@@ -755,26 +761,30 @@ impl Reader {
     }
 
     fn elf_read(&mut self, name: &str, buf: &[u8]) -> Result<(), Box<dyn Error>> {
+        let block = self.read(name, buf)?;
+        self.block.add_block(block); //.insert(name, block);
+        Ok(())
+    }
+
+    pub fn read(&mut self, name: &str, buf: &[u8]) -> Result<ReadBlock, Box<dyn Error>> {
         let b: elf::ElfFile<'_, FileHeader64<object::Endianness>> =
             object::read::elf::ElfFile::parse(buf)?;
-        match b.kind() {
+        let block = match b.kind() {
             ObjectKind::Relocatable | ObjectKind::Executable => {
-                let block = self.relocatable(name.to_string(), &b)?;
-                self.blocks.push(block);
+                self.relocatable(name.to_string(), &b)?
             }
-            ObjectKind::Dynamic => {
-                self.dynamic(&b)?;
-                self.block.libs.insert(name.to_string());
-            }
+            ObjectKind::Dynamic => self.dynamic(&b, name)?,
             _ => unimplemented!("{:?}", b.kind()),
-        }
-        Ok(())
+        };
+        Ok(block)
     }
 
     fn dynamic<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         &mut self,
         b: &elf::ElfFile<'a, A, B>,
-    ) -> Result<(), Box<dyn Error>> {
+        name: &str,
+    ) -> Result<ReadBlock, Box<dyn Error>> {
+        let mut block = ReadBlock::new(name);
         for symbol in b.dynamic_symbols() {
             let mut s = read_symbol(&b, 0, &symbol)?;
             s.pointer = ResolvePointer::Resolved(0);
@@ -782,10 +792,11 @@ impl Reader {
             s.size = 0;
             //eprintln!("s: {:#08x}, {:?}", 0, &s);
             if s.kind != SymbolKind::Unknown {
-                self.block.insert_dynamic(s);
+                block.insert_dynamic(s);
             }
         }
-        Ok(())
+        block.libs.insert(name.to_string());
+        Ok(block)
     }
 
     fn relocatable<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
@@ -795,7 +806,7 @@ impl Reader {
     ) -> Result<ReadBlock, Box<dyn Error>> {
         let mut block = ReadBlock::new(&name);
 
-        eprintln!("relocatable: {}", &name);
+        log::debug!("relocatable: {}", &name);
 
         for section in b.sections() {
             let kind = ReadSectionKind::new_section_kind(section.kind());
