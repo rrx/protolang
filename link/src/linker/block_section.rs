@@ -38,10 +38,10 @@ impl BlockSection {
         let data = section.uncompressed_data()?;
         let base_offset = self.section.size;
         eprintln!("name: {}", section.name()?);
-        eprintln!("before: {:#0x}", self.section.bytes.len());
+        //eprintln!("before: {:#0x}", self.section.bytes.len());
         self.section.extend_bytes(&data);
 
-        eprintln!("after: {:#0x}", self.section.bytes.len());
+        //eprintln!("after: {:#0x}", self.section.bytes.len());
         for (offset, r) in section.relocations() {
             let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
             self.section.relocations.push(r);
@@ -80,7 +80,7 @@ pub struct GeneralSection {
 }
 
 fn resolve_r(data: &Data, r: &CodeRelocation) -> Option<u64> {
-    eprintln!("resolve: {}, kind: {:?}", &r.name, r.r.kind());
+    //eprintln!("resolve: {}, kind: {:?}", &r.name, r.r.kind());
 
     // check if it's in the plt or got, and look it up in dynamics
     //if r.is_plt() || r.is_got() {
@@ -123,9 +123,9 @@ impl GeneralSection {
 
     pub fn apply_relocations(&self, data: &Data) {
         let patch_base = self.bytes.as_ptr();
-        eprintln!("symbols: {:?}", data.dynamics.symbols());
-        eprintln!("plt: {:?}", data.dynamics.plt_hash);
-        eprintln!("pltgot: {:?}", data.dynamics.pltgot_hash);
+        //eprintln!("symbols: {:?}", data.dynamics.symbols());
+        //eprintln!("plt: {:?}", data.dynamics.plt_hash);
+        //eprintln!("pltgot: {:?}", data.dynamics.pltgot_hash);
         for r in self.relocations.iter() {
             if let Some(addr) = resolve_r(data, r) {
                 eprintln!(

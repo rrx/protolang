@@ -1139,23 +1139,24 @@ pub struct HashSection {
     offsets: SectionOffset,
 }
 
-/*
-fn sysv_hash(s: u32) -> u32
-{
-	uint_fast32_t h = 0;
-	while (*s) {
-		h = 16*h + *s++;
-		h ^= h>>24 & 0xf0;
-	}
-	return h & 0xfffffff;
+// ported from libbfd
+fn sysv_hash(s: &[u8]) -> u32 {
+    0xfffffff
+        & s.iter()
+            .map(|c| *c as u32)
+            .fold(0u32, |mut h: u32, c: u32| {
+                h = h.wrapping_mul(16) + c;
+                h ^= h >> 24 & 0xf0;
+                h
+            })
 }
-*/
 
+/// See: https://flapenguin.me/elf-dt-hash
 impl HashSection {
     pub fn new() -> Self {
         Self {
             index: None,
-            bucket_count: 1,
+            bucket_count: 2,
             //chain_count: 10,
             offsets: SectionOffset::new(0x08),
         }
@@ -1211,7 +1212,23 @@ impl ElfBlock for HashSection {
         let chain_count = data.dynamics.symbol_count() as u32;
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
-        w.write_hash(self.bucket_count, chain_count, |x| Some(x));
+
+        let mut h = HashMap::new();
+        for (name, symbol_index, _p) in data.dynamics.symbols() {
+            if let Some(index) = symbol_index {
+                h.insert(index, name);
+            }
+        }
+
+        w.write_hash(self.bucket_count, chain_count, |i| {
+            if let Some(name) = h.get(&SymbolIndex(i)) {
+                let hash = sysv_hash(name.as_bytes());
+                eprintln!("w: {}, i:{:#8x}, hash:{:#08x}", name, i, hash);
+                Some(hash)
+            } else {
+                None
+            }
+        });
     }
 
     fn write_section_header(
@@ -1225,6 +1242,7 @@ impl ElfBlock for HashSection {
     }
 }
 
+/// See: https://flapenguin.me/elf-dt-gnu-hash
 pub struct GnuHashSection {
     index: Option<SectionIndex>,
     bucket_count: u32,
@@ -1291,7 +1309,14 @@ impl ElfBlock for GnuHashSection {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
-        w.write_gnu_hash(0, 0, self.bloom_count, self.bucket_count, self.chain_count, |x| x);
+        w.write_gnu_hash(
+            0,
+            0,
+            self.bloom_count,
+            self.bucket_count,
+            self.chain_count,
+            |x| x,
+        );
     }
 
     fn write_section_header(
@@ -1748,7 +1773,7 @@ impl ElfBlock for PltGotSection {
         let vbase = self.offsets.address as isize;
 
         let pltgot = data.dynamics.pltgot_objects();
-        eprintln!("pltgot: {:?}", pltgot);
+        //eprintln!("pltgot: {:?}", pltgot);
 
         for (slot_index, symbol) in pltgot.iter().enumerate() {
             let p = data.dynamics.symbol_lookup(&symbol.name).unwrap();

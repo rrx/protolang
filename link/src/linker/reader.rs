@@ -331,6 +331,11 @@ impl ReadBlock {
         let mut got = HashSet::new();
         let mut gotplt = HashSet::new();
         for r in iter.clone() {
+            //if r.is_got() {
+            //got.insert(r.name.clone());
+            //} else if r.is_plt() {
+            //gotplt.insert(r.name.clone());
+            //} else {
             match r.effect() {
                 PatchEffect::AddToGot => {
                     got.insert(r.name.clone());
@@ -340,6 +345,8 @@ impl ReadBlock {
                 }
                 _ => (),
             }
+            //}
+            //*/
         }
 
         for r in iter {
@@ -354,7 +361,11 @@ impl ReadBlock {
                 let assign = match s.kind {
                     SymbolKind::Text => {
                         if s.is_static() {
-                            GotPltAssign::Got
+                            if r.is_plt() {
+                                GotPltAssign::GotPltWithPlt
+                            } else {
+                                GotPltAssign::Got
+                            }
                         } else if got.contains(&r.name) {
                             if r.is_plt() {
                                 GotPltAssign::GotWithPltGot
@@ -390,12 +401,12 @@ impl ReadBlock {
             }
         }
 
-        for (name, pointer) in data.dynamics.symbols() {
+        for (name, _, pointer) in data.dynamics.symbols() {
             data.pointers.insert(name, pointer);
         }
 
-        eprintln!("plt: {:?}", data.dynamics.plt_hash);
-        eprintln!("pltgot: {:?}", data.dynamics.pltgot_hash);
+        //eprintln!("plt: {:?}", data.dynamics.plt_hash);
+        //eprintln!("pltgot: {:?}", data.dynamics.pltgot_hash);
 
         for (name, symbol) in self.locals.iter() {
             match symbol.section {
@@ -747,7 +758,7 @@ impl Reader {
         let b: elf::ElfFile<'_, FileHeader64<object::Endianness>> =
             object::read::elf::ElfFile::parse(buf)?;
         match b.kind() {
-            ObjectKind::Relocatable => {
+            ObjectKind::Relocatable | ObjectKind::Executable => {
                 let block = self.relocatable(name.to_string(), &b)?;
                 self.blocks.push(block);
             }
@@ -785,73 +796,19 @@ impl Reader {
         let mut block = ReadBlock::new(&name);
 
         eprintln!("relocatable: {}", &name);
-        /*
-        for symbol in b.symbols() {
-            // skip the null symbol
-            if symbol.kind() == SymbolKind::Null {
-                continue;
-            }
-            if symbol.kind() == SymbolKind::File {
-                continue;
-            }
-
-            let s = read_symbol(&b, &symbol)?;
-            eprintln!("Read: {:?}", &s);
-
-            if s.bind == SymbolBind::Local {
-                // can't be local and unknown
-                //if symbol.kind() == SymbolKind::Unknown {
-                //unreachable!("{:?}", s);
-                //}
-                block.insert_local(s);
-            } else if s.section == ReadSectionKind::Undefined {
-                //block.insert_unknown(s);
-            } else {
-                //let s = block.relocate_symbol(s);
-                self.merge_export(s.clone());
-                block.insert_export(s);
-            }
-        }
-        */
 
         for section in b.sections() {
             let kind = ReadSectionKind::new_section_kind(section.kind());
+
+            if section.name()? == ".hash" {
+                let data = section.uncompressed_data()?;
+                dump_hash(&data);
+            }
+
             // skip other kinds
             if kind == ReadSectionKind::Other {
                 continue;
             }
-            /*
-            let mut symbols = vec![];
-            for symbol in b.symbols() {
-                // skip the null symbol
-                if symbol.kind() == SymbolKind::Null {
-                    continue;
-                }
-                if symbol.kind() == SymbolKind::File {
-                    continue;
-                }
-
-                if symbol.section_index() == Some(section.index()) {
-                    let s = read_symbol(&b, &symbol)?;
-                    eprintln!("Read: {:?}", &s);
-
-                    if s.bind == SymbolBind::Local {
-                        // can't be local and unknown
-                        //if symbol.kind() == SymbolKind::Unknown {
-                        //unreachable!("{:?}", s);
-                        //}
-                        block.insert_local(s.clone());
-                    } else if s.section == ReadSectionKind::Undefined {
-                        //block.insert_unknown(s);
-                    } else {
-                        //let s = block.relocate_symbol(s);
-                        //self.merge_export(s.clone());
-                        block.insert_export(s.clone());
-                    }
-                    symbols.push(s);
-                }
-            }
-            */
 
             block.from_section(&b, &section)?;
         }
@@ -885,6 +842,29 @@ impl Reader {
         }
 
         self.block
+    }
+}
+
+pub fn dump_hash(data: &[u8]) {
+    eprintln!("Hash");
+    let x: Vec<u32> = data
+        .chunks(4)
+        .map(|u| u32::from_le_bytes(u.try_into().unwrap()))
+        .collect();
+    let buckets = x[0];
+    let chains = x[1];
+    eprintln!("Buckets: {:#04x}", buckets);
+    eprintln!("Chains:  {:#04x}", chains);
+
+    let b = &x.as_slice()[2..(2 + buckets as usize)];
+    let c = &x.as_slice()[(2 + buckets as usize)..];
+
+    for (i, u) in b.iter().enumerate() {
+        eprintln!("B: {:#0x}: {:#0x}", i, u);
+    }
+
+    for (i, u) in c.iter().enumerate() {
+        eprintln!("C: {:#0x}: {:#0x}", i, u);
     }
 }
 

@@ -129,7 +129,6 @@ impl CodeRelocation {
     pub fn is_plt(&self) -> bool {
         match self.r.kind() {
             RelocationKind::PltRelative => true,
-            //RelocationKind::Elf(R_X86_64_REX_GOTP) => true,
             _ => false,
         }
     }

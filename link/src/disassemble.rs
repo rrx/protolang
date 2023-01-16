@@ -271,17 +271,6 @@ impl GeneralSection {
             let addr = instr.address();
             let abs_addr = instr.address() + self.offsets.address; // as u64;
 
-            while heap.len() > 0 {
-                let next_symbol_addr = heap.peek().unwrap().1;
-
-                if next_symbol_addr <= abs_addr {
-                    let symbol = heap.pop().unwrap();
-                    eprintln!(" {}: {:#0x}", symbol.0, symbol.1,);
-                } else {
-                    break;
-                }
-            }
-
             while r_heap.len() > 0 {
                 let next_reloc_addr = r_heap.peek().unwrap().offset;
                 if next_reloc_addr <= addr {
@@ -290,17 +279,6 @@ impl GeneralSection {
                     let p0 = if let Some(addr) = data.dynamics.lookup(&r) {
                         addr
                     } else {
-                        /*
-                        let p0 = if r.is_plt() {
-                            if let Some(addr) = data.dynamics.plt_hash.get(&r.name) {
-                                addr
-                            } else if let Some(addr) = data.dynamics.pltgot_hash.get(&r.name) {
-                                addr
-                            } else {
-                                data.pointers.get(&r.name).unwrap()
-                            }
-                        } else {
-                        */
                         data.pointers.get(&r.name).unwrap().clone()
                     };
                     let p = p0.resolve(data).unwrap();
@@ -308,6 +286,17 @@ impl GeneralSection {
                         "    Base: {:#0x}, addr: {:#0x}, offset: {:#0x}, p: {:#0x}, p0: {}",
                         self.offsets.address, addr, r.offset, p, p0
                     );
+                } else {
+                    break;
+                }
+            }
+
+            while heap.len() > 0 {
+                let next_symbol_addr = heap.peek().unwrap().1;
+
+                if next_symbol_addr <= abs_addr {
+                    let symbol = heap.pop().unwrap();
+                    eprintln!(" {}: {:#0x}", symbol.0, symbol.1,);
                 } else {
                     break;
                 }
