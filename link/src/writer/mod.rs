@@ -233,11 +233,12 @@ pub enum AddressKey {
     PltGot(String),
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub enum DebugFlag {
     Relocations,
     Symbols,
     Disassemble,
+    HashTables,
 }
 
 pub struct Data {

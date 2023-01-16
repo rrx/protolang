@@ -28,6 +28,7 @@ pub struct Reader {
 
     got: HashSet<String>,
     plt: HashSet<String>,
+    debug: HashSet<DebugFlag>,
 }
 
 impl Reader {
@@ -37,7 +38,12 @@ impl Reader {
             block: ReadBlock::new("exe"),
             got: HashSet::new(),
             plt: HashSet::new(),
+            debug: HashSet::new(),
         }
+    }
+
+    pub fn debug_add(&mut self, f: &DebugFlag) {
+        self.debug.insert(f.clone());
     }
 }
 
@@ -811,7 +817,7 @@ impl Reader {
         for section in b.sections() {
             let kind = ReadSectionKind::new_section_kind(section.kind());
 
-            if section.name()? == ".hash" {
+            if self.debug.contains(&DebugFlag::HashTables) && section.name()? == ".hash" {
                 let data = section.uncompressed_data()?;
                 dump_hash(&data);
             }
