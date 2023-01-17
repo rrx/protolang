@@ -11,6 +11,17 @@ impl<'a> WriterEx for Writer<'a> {
         let pos = self.reserved_len();
         let align_pos = size_align(pos, align);
         self.reserve_until(align_pos);
+
+        log::debug!(
+            "reserve: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, align: {:#0x}",
+            self.reserved_len(),
+            offsets.name,
+            offsets.alloc,
+            offsets.base,
+            offsets.address,
+            offsets.align,
+        );
+
         self.reserved_len()
     }
 
@@ -19,6 +30,14 @@ impl<'a> WriterEx for Writer<'a> {
         let aligned_pos = size_align(pos, offsets.align as usize);
         self.pad_until(aligned_pos);
         assert_eq!(self.len(), offsets.file_offset as usize);
+
+        log::debug!(
+            "write: {:#0x}, {}, {:?}",
+            self.len(),
+            offsets.name,
+            offsets.alloc,
+        );
+
         self.len()
     }
 }
@@ -227,7 +246,7 @@ impl ElfBlock for InterpSection {
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         w.reserve_start_section(&self.offsets);
         let size = self.as_slice().len();
-        w.reserve(size, 1);//self.offsets.align as usize);
+        w.reserve(size, 1); //self.offsets.align as usize);
         data.segments
             .add_offsets(self.alloc(), &mut self.offsets, size, w);
     }
@@ -615,7 +634,7 @@ impl StrTabSection {
     pub fn new() -> Self {
         Self {
             index: None,
-            offsets: SectionOffset::new("strtab".into(), AllocSegment::None, 1)
+            offsets: SectionOffset::new("strtab".into(), AllocSegment::None, 1),
         }
     }
 }
@@ -1438,10 +1457,10 @@ impl ElfBlock for BlockSectionX {
 
     fn write_section_header(&self, data: &Data, block: &ReadBlock, w: &mut Writer) {
         match self.kind {
-            ReadSectionKind::RX => block.rx.block_write_section_header(data, w),
-            ReadSectionKind::ROData => block.ro.block_write_section_header(data, w),
-            ReadSectionKind::RW => block.rw.block_write_section_header(data, w),
-            ReadSectionKind::Bss => block.bss.block_write_section_header(data, w),
+            ReadSectionKind::RX => block.rx.block_write_section_header(w),
+            ReadSectionKind::ROData => block.ro.block_write_section_header(w),
+            ReadSectionKind::RW => block.rw.block_write_section_header(w),
+            ReadSectionKind::Bss => block.bss.block_write_section_header(w),
             _ => unreachable!(),
         }
     }
