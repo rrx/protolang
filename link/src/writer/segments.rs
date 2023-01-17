@@ -364,7 +364,7 @@ impl SegmentTracker {
             // new segment
             let segment = Segment::new(alloc, base, file_offset as u64);
 
-            log::debug!(
+            eprintln!(
                 "new seg: {:?}, offset: {:#0x}, last_offset: {:#0x}, last_size: {:#0x}, size: {:#0x}, align: {:#0x}, base: {:#0x}",
                 alloc,
                 file_offset,
@@ -470,7 +470,7 @@ impl Segment {
             p_flags: self.alloc.program_header_flags(),
             p_offset: self.file_offset,
             p_vaddr: self.base + self.file_offset,
-            p_paddr: 0,
+            p_paddr: self.base + self.file_offset,
             p_filesz: size,
             p_memsz: size,
             p_align: self.align as u64,
