@@ -1,8 +1,27 @@
 use super::*;
-//use object::write::elf::Sym;
-pub trait WriterEx {}
 
-impl<'a> WriterEx for Writer<'a> {}
+pub trait WriterEx {
+    fn reserve_start_section(&mut self, offsets: &SectionOffset) -> usize;
+    fn write_start_section(&mut self, offsets: &SectionOffset) -> usize;
+}
+
+impl<'a> WriterEx for Writer<'a> {
+    fn reserve_start_section(&mut self, offsets: &SectionOffset) -> usize {
+        let align = offsets.align as usize;
+        let pos = self.reserved_len();
+        let align_pos = size_align(pos, align);
+        self.reserve_until(align_pos);
+        self.reserved_len()
+    }
+
+    fn write_start_section(&mut self, offsets: &SectionOffset) -> usize {
+        let pos = self.len();
+        let aligned_pos = size_align(pos, offsets.align as usize);
+        self.pad_until(aligned_pos);
+        assert_eq!(self.len(), offsets.file_offset as usize);
+        self.len()
+    }
+}
 
 pub trait ElfBlock {
     fn name(&self) -> String;
@@ -13,10 +32,7 @@ pub trait ElfBlock {
         vec![]
     }
     fn reserve_section_index(&mut self, _: &mut Data, _: &mut ReadBlock, _: &mut Writer) {}
-    //fn reserve_symbols(&self, _data: &mut Data, _: &ReadBlock, _w: &mut Writer) {}
     fn reserve(&mut self, _: &mut Data, _: &mut ReadBlock, _: &mut Writer) {}
-    //fn update_tracker(&mut self, _: &Data) {}
-    //fn update(&mut self, _: &mut Data) {}
     fn write(&self, _: &Data, _: &mut ReadBlock, _: &mut Writer) {}
     fn write_section_header(&self, _: &Data, _: &ReadBlock, _: &mut Writer) {}
 }
@@ -209,20 +225,15 @@ impl ElfBlock for InterpSection {
     }
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
-        let align = self.offsets.align as usize;
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, align);
-        w.reserve_until(align_pos);
+        w.reserve_start_section(&self.offsets);
         let size = self.as_slice().len();
-        w.reserve(size, align);
+        w.reserve(size, 1);//self.offsets.align as usize);
         data.segments
             .add_offsets(self.alloc(), &mut self.offsets, size, w);
     }
 
     fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.pad_until(aligned_pos);
+        w.write_start_section(&self.offsets);
         w.write(self.as_slice());
     }
 
@@ -288,9 +299,7 @@ impl ElfBlock for DynamicSection {
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
-        let before = w.reserved_len();
-        let file_offset = size_align(before, self.offsets.align as usize);
-        w.reserve_until(file_offset);
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
 
@@ -306,11 +315,8 @@ impl ElfBlock for DynamicSection {
 
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
-        w.pad_until(aligned_pos);
-        w.write_align_dynamic();
+        w.write_start_section(&self.offsets);
+        //w.write_align_dynamic();
 
         // write out dynamic symbols
         for d in dynamic.iter() {
@@ -329,7 +335,6 @@ impl ElfBlock for DynamicSection {
 
 pub struct RelaDynSection {
     kind: GotSectionKind,
-    //index: SectionIndex,
     name_id: Option<StringId>,
     count: usize,
     relocation_names: HashMap<String, StringId>,
@@ -342,7 +347,6 @@ impl RelaDynSection {
         let name = format!("reladyn:{:?}", kind);
         Self {
             kind,
-            //index: SectionIndex::default(),
             name_id: None,
             count: 0,
             relocation_names: HashMap::default(),
@@ -370,10 +374,7 @@ impl ElfBlock for RelaDynSection {
         let relocations = data.dynamics.relocations(self.kind);
 
         self.count = relocations.len();
-        let before = w.reserved_len();
-        let file_offset = size_align(before, self.offsets.align as usize);
-        w.reserve_until(file_offset);
-
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve_relocations(self.count, self.is_rela);
 
         let after = w.reserved_len();
@@ -394,11 +395,8 @@ impl ElfBlock for RelaDynSection {
 
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
         let relocations = data.dynamics.relocations(self.kind);
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        w.write_start_section(&self.offsets);
         assert_eq!(self.count, relocations.len());
-        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
-        w.pad_until(aligned_pos);
 
         // we are writing a relocation for the GOT entries
         for (index, symbol) in relocations.iter().enumerate() {
@@ -611,15 +609,13 @@ impl ElfBlock for RelocationSection {
 
 pub struct StrTabSection {
     index: Option<SectionIndex>,
-    file_offset: usize,
-    align: usize,
+    offsets: SectionOffset,
 }
 impl StrTabSection {
     pub fn new() -> Self {
         Self {
             index: None,
-            file_offset: 0,
-            align: 1,
+            offsets: SectionOffset::new("strtab".into(), AllocSegment::None, 1)
         }
     }
 }
@@ -634,21 +630,14 @@ impl ElfBlock for StrTabSection {
     }
 
     fn reserve(&mut self, _: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.align);
-        w.reserve_until(align_pos);
-        self.file_offset = w.reserved_len();
+        self.offsets.file_offset = w.reserve_start_section(&self.offsets) as u64;
         assert!(w.strtab_needed());
-
         w.reserve_strtab();
     }
 
     fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.align);
-        w.pad_until(aligned_pos);
+        w.write_start_section(&self.offsets);
         w.write_strtab();
-        assert_eq!(aligned_pos, self.file_offset);
     }
 
     fn write_section_header(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
@@ -694,10 +683,7 @@ impl ElfBlock for SymTabSection {
         assert_eq!(symbols.len() + 1, w.symbol_count() as usize);
 
         // reserve the symbols in the various sections
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.offsets.align as usize);
-        w.reserve_until(align_pos);
-        self.offsets.file_offset = w.reserved_len() as u64;
+        self.offsets.file_offset = w.reserve_start_section(&self.offsets) as u64;
 
         w.reserve_symtab();
 
@@ -707,11 +693,8 @@ impl ElfBlock for SymTabSection {
     }
 
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.pad_until(aligned_pos);
-        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
         assert_eq!(self.count + 1, w.symbol_count() as usize);
+        w.write_start_section(&self.offsets);
 
         data.statics.symbols_write(data, w);
 
@@ -773,15 +756,11 @@ impl ElfBlock for DynSymSection {
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         self.count = w.dynamic_symbol_count();
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.offsets.align as usize);
-        w.reserve_until(align_pos);
-
-        let start = w.reserved_len();
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve_dynsym();
         let after = w.reserved_len();
         data.segments
-            .add_offsets(self.alloc(), &mut self.offsets, after - start, w);
+            .add_offsets(self.alloc(), &mut self.offsets, after - file_offset, w);
         data.dynsym.addr = Some(self.offsets.address);
         data.dynsym.size = Some(self.offsets.size as usize);
     }
@@ -789,10 +768,7 @@ impl ElfBlock for DynSymSection {
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
         assert_eq!(self.count, w.dynamic_symbol_count());
         assert_eq!(self.count as usize, data.dynamics.symbol_count() + 1);
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.pad_until(aligned_pos);
-
+        w.write_start_section(&self.offsets);
         data.dynamics.symbols_write(data, w);
     }
 
@@ -800,7 +776,7 @@ impl ElfBlock for DynSymSection {
         let got = data.dynamics.relocations(GotSectionKind::GOT);
         let plt = data.dynamics.relocations(GotSectionKind::GOTPLT);
 
-        let len = got.len() + plt.len(); // + data.dynamic.len();
+        let len = got.len() + plt.len();
         w.write_dynsym_section_header(data.dynsym.addr.unwrap(), len as u32 + 1);
     }
 }
@@ -832,22 +808,17 @@ impl ElfBlock for DynStrSection {
     }
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, self.offsets.align as usize);
-        w.reserve_until(align_pos);
-        let start = w.reserved_len();
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve_dynstr();
         let after = w.reserved_len();
         data.segments
-            .add_offsets(self.alloc(), &mut self.offsets, after - start, w);
+            .add_offsets(self.alloc(), &mut self.offsets, after - file_offset, w);
         data.dynstr.addr = Some(self.offsets.address);
         data.dynstr.size = Some(self.offsets.size as usize);
     }
 
     fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.pad_until(aligned_pos);
+        w.write_start_section(&self.offsets);
         w.write_dynstr();
     }
 
@@ -927,12 +898,7 @@ impl ElfBlock for HashSection {
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         let chain_count = data.dynamics.symbol_count() as u32;
-        let pos = w.reserved_len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.reserve_until(aligned_pos);
-
-        let file_offset = w.reserved_len();
-
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve_hash(self.bucket_count, chain_count);
 
         let after = w.reserved_len();
@@ -942,11 +908,8 @@ impl ElfBlock for HashSection {
     }
 
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.len();
         let chain_count = data.dynamics.symbol_count() as u32;
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.pad_until(aligned_pos);
-
+        w.write_start_section(&self.offsets);
         let mut h = HashMap::new();
         for (name, symbol_index, _p) in data.dynamics.symbols() {
             if let Some(index) = symbol_index {
@@ -1004,11 +967,7 @@ impl ElfBlock for GnuHashSection {
     }
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.reserved_len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.reserve_until(aligned_pos);
-        let file_offset = w.reserved_len();
-
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve_gnu_hash(self.bloom_count, self.bucket_count, self.chain_count);
 
         let after = w.reserved_len();
@@ -1017,9 +976,7 @@ impl ElfBlock for GnuHashSection {
     }
 
     fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
-        w.pad_until(aligned_pos);
+        w.write_start_section(&self.offsets);
         w.write_gnu_hash(
             0,
             0,
@@ -1140,10 +1097,7 @@ impl ElfBlock for GotSection {
 
         let align = self.offsets.align as usize;
 
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, align);
-        w.reserve_until(align_pos);
-        let file_offset = w.reserved_len();
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
         data.segments
@@ -1153,11 +1107,7 @@ impl ElfBlock for GotSection {
     }
 
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let align = self.offsets.align as usize;
-        let pos = w.len();
-        let aligned_pos = size_align(pos, align);
-        w.pad_until(aligned_pos);
-
+        w.write_start_section(&self.offsets);
         self.kind.write_entries(data, w);
     }
 
@@ -1222,10 +1172,7 @@ impl ElfBlock for PltSection {
         self.bytes.resize(size, 0);
         let align = self.offsets.align as usize;
 
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, align);
-        w.reserve_until(align_pos);
-        let file_offset = w.reserved_len();
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
         assert_eq!(size, after - file_offset);
@@ -1242,10 +1189,7 @@ impl ElfBlock for PltSection {
     }
 
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let align = self.offsets.align as usize;
-        let pos = w.len();
-        let aligned_pos = size_align(pos, align);
-        w.pad_until(aligned_pos);
+        w.write_start_section(&self.offsets);
 
         let got_addr = data.addr_get_by_name(".got.plt").unwrap() as isize;
         let vbase = self.offsets.address as isize;
@@ -1373,15 +1317,9 @@ impl ElfBlock for PltGotSection {
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         let pltgot = data.dynamics.pltgot_objects();
-
+        let file_offset = w.reserve_start_section(&self.offsets);
         let size = (pltgot.len()) * self.entry_size;
-        let align = self.offsets.align as usize;
-
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, align);
-        w.reserve_until(align_pos);
-        let file_offset = w.reserved_len();
-        w.reserve(size, align);
+        w.reserve(size, 1);
         let after = w.reserved_len();
         assert_eq!(size, after - file_offset);
 
@@ -1398,16 +1336,10 @@ impl ElfBlock for PltGotSection {
     }
 
     fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
-        let align = self.offsets.align as usize;
-        let pos = w.len();
-        let aligned_pos = size_align(pos, align);
-        w.pad_until(aligned_pos);
+        w.write_start_section(&self.offsets);
 
         let vbase = self.offsets.address as isize;
-
         let pltgot = data.dynamics.pltgot_objects();
-        //eprintln!("pltgot: {:?}", pltgot);
-
         for (slot_index, symbol) in pltgot.iter().enumerate() {
             let p = data.dynamics.symbol_lookup(&symbol.name).unwrap();
             let mut slot: Vec<u8> = vec![0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x66, 0x90];

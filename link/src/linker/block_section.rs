@@ -155,16 +155,17 @@ impl GeneralSection {
     }
 
     pub fn block_reserve(&mut self, data: &mut Data, w: &mut Writer) {
-        let align = self.offsets.align as usize;
-        let pos = w.reserved_len();
-        let align_pos = size_align(pos, align);
-        w.reserve_until(align_pos);
-        let file_offset = w.reserved_len();
+        let file_offset = w.reserve_start_section(&self.offsets);
+        //let align = self.offsets.align as usize;
+        //let pos = w.reserved_len();
+        //let align_pos = size_align(pos, align);
+        //w.reserve_until(align_pos);
+        //let file_offset = w.reserved_len();
 
         w.reserve(self.bytes.len(), 1);
         let after = w.reserved_len();
 
-        log::debug!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
+        log::debug!("align: {:#0x}, fileoffset: {:#0x}", self.offsets.align, file_offset);
         data.segments.add_offsets(
             self.offsets.alloc,
             &mut self.offsets,
@@ -182,21 +183,22 @@ impl GeneralSection {
             self.offsets.base,
             self.offsets.address,
             self.offsets.size,
-            align,
+            self.offsets.align,
         );
     }
 
     pub fn block_write(&self, data: &Data, w: &mut Writer) {
-        let pos = w.len();
-        let aligned_pos = size_align(pos, self.offsets.align as usize);
+        w.write_start_section(&self.offsets);
+        //let pos = w.len();
+        //let aligned_pos = size_align(pos, self.offsets.align as usize);
         log::debug!(
             "AF: {:?}, {:#0x}, {:#0x}",
             self.offsets.alloc,
-            aligned_pos,
+            w.len(),
             self.offsets.file_offset
         );
-        assert_eq!(aligned_pos, self.offsets.file_offset as usize);
-        w.pad_until(aligned_pos);
+        //assert_eq!(aligned_pos, self.offsets.file_offset as usize);
+        //w.pad_until(aligned_pos);
 
         self.apply_relocations(data);
 
