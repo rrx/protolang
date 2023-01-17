@@ -1135,7 +1135,6 @@ impl ElfBlock for ShStrTabSection {
 pub struct HashSection {
     index: Option<SectionIndex>,
     bucket_count: u32,
-    //chain_count: u32,
     offsets: SectionOffset,
 }
 
@@ -1157,7 +1156,6 @@ impl HashSection {
         Self {
             index: None,
             bucket_count: 2,
-            //chain_count: 10,
             offsets: SectionOffset::new(0x08),
         }
     }
@@ -1178,8 +1176,8 @@ impl ElfBlock for HashSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let chain_count = data.dynamics.symbol_count() as u32;
@@ -1192,7 +1190,7 @@ impl ElfBlock for HashSection {
         w.reserve_hash(self.bucket_count, chain_count);
 
         let after = w.reserved_len();
-        tracker.add_offsets(
+        t.add_offsets(
             self.alloc().unwrap(),
             &mut self.offsets,
             after - file_offset,
@@ -1882,32 +1880,6 @@ impl ElfBlock for BlockSectionX {
             ReadSectionKind::RW => block.rw.block_write_section_header(data, w),
             ReadSectionKind::Bss => block.bss.block_write_section_header(data, w),
             _ => unreachable!(),
-        }
-    }
-}
-
-pub struct LocalSymbol {
-    pub(crate) section: String,
-    pub(crate) symbol: String,
-    pub(crate) pointer: ResolvePointer,
-    pub(crate) string_id: Option<StringId>,
-    pub(crate) dyn_string_id: Option<StringId>,
-}
-
-impl LocalSymbol {
-    pub fn new(
-        symbol: String,
-        section: String,
-        pointer: ResolvePointer,
-        string_id: Option<StringId>,
-        dyn_string_id: Option<StringId>,
-    ) -> Self {
-        Self {
-            section,
-            symbol,
-            pointer,
-            string_id,
-            dyn_string_id,
         }
     }
 }

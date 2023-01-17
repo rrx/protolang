@@ -68,9 +68,10 @@ pub fn print_bytes(buf: &[u8], base: usize) {
         chunk: 4,
         ..HexConfig::default()
     };
-    eprintln!("{}", config_hex(&buf.to_vec(), cfg)); //.hex_conf(cfg));
+    eprintln!("{}", config_hex(&buf.to_vec(), cfg));
 }
 
+/*
 pub fn print_bytes2(buf: &[u8], base: usize) {
     let N = 16;
     let chunks = buf.chunks(N).collect::<Vec<_>>();
@@ -96,6 +97,7 @@ pub fn print_bytes2(buf: &[u8], base: usize) {
         offset += N;
     }
 }
+*/
 
 pub fn eprint_bytes(buf: &[u8]) {
     let x = String::from_utf8(
@@ -256,7 +258,7 @@ impl GeneralSection {
         }
     }
 
-    fn disassemble_data(&self, data: &Data) {
+    fn disassemble_data(&self, _data: &Data) {
         print_bytes(self.bytes.as_slice(), self.offsets.address as usize);
     }
 

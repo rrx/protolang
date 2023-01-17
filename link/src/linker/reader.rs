@@ -305,18 +305,14 @@ impl ReadBlock {
 
     pub fn build_strings(&mut self, data: &mut Data, w: &mut Writer) {
         // These need to be declared
-        let locals = vec![LocalSymbol::new(
-            "_DYNAMIC".into(),
-            ".dynamic".into(),
-            ResolvePointer::Section(".dynamic".to_string(), 0),
-            Some(w.add_string("_DYNAMIC".as_bytes())),
-            None,
-        )];
+        let locals = vec![("_DYNAMIC", ".dynamic")];
 
-        for local in locals.iter() {
-            data.pointers
-                .insert(local.symbol.clone(), local.pointer.clone());
-            let symbol = ReadSymbol::from_pointer(local.symbol.clone(), local.pointer.clone());
+        for (symbol_name, section_name) in locals {
+            let symbol_name = symbol_name.to_string();
+            let section_name = section_name.to_string();
+            let pointer = ResolvePointer::Section(section_name, 0);
+            data.pointers.insert(symbol_name.clone(), pointer.clone());
+            let symbol = ReadSymbol::from_pointer("_DYNAMIC".to_string(), pointer);
             self.insert_local(symbol);
         }
 
@@ -632,7 +628,6 @@ impl ReadBlock {
     pub fn dump(&self) {
         eprintln!("Block: {}", &self.name);
 
-        //let mut dsymbols = HashMap::new();
         let mut rx_symbols = vec![];
         let mut rw_symbols = vec![];
         let mut ro_symbols = vec![];
@@ -650,6 +645,7 @@ impl ReadBlock {
                 _ => other_symbols.push(sym),
             }
         }
+
         eprintln!("RX, size: {:#0x}", self.rx.section.bytes.len());
         for local in rx_symbols.iter() {
             eprintln!(" S: {:?}", local);
@@ -728,6 +724,7 @@ impl Reader {
         Ok(())
     }
 
+    /*
     pub fn merge_export(&mut self, s: ReadSymbol) {
         // if we have two strong symbols, favor the first
         // if we have two weak symbols, favor the first
@@ -765,10 +762,11 @@ impl Reader {
             self.block.insert_export(s);
         }
     }
+    */
 
     fn elf_read(&mut self, name: &str, buf: &[u8]) -> Result<(), Box<dyn Error>> {
         let block = self.read(name, buf)?;
-        self.block.add_block(block); //.insert(name, block);
+        self.block.add_block(block);
         Ok(())
     }
 
@@ -839,6 +837,7 @@ impl Reader {
             self.block.add_block(b);
         }
 
+        /*
         // make sure everything resolves
         let iter = self
             .block
@@ -857,6 +856,7 @@ impl Reader {
                 self.block.unresolved.insert(r.name.clone());
             }
         }
+        */
 
         self.block
     }
