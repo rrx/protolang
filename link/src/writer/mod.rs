@@ -37,44 +37,6 @@ pub struct ProgramHeaderEntry {
     p_align: u64,
 }
 
-/*
-
-#[derive(Debug)]
-struct Section {
-    name: Option<object::write::StringId>,
-    sh_name: u32, // offset of name in the .shstrtab section
-    sh_type: u32, // section header type
-    sh_flags: usize,
-    sh_addr: usize,
-    sh_link: u32,
-    sh_info: u32,
-    sh_entsize: u32,
-    sh_offset: usize,
-    sh_addralign: usize,
-    data: Vec<u8>,
-}
-
-impl Section {
-    fn is_alloc(&self) -> bool {
-        self.sh_flags & elf::SHF_ALLOC as usize != 0
-    }
-}
-struct Symbol {
-    in_sym: usize,
-    name: Option<object::write::StringId>,
-    section: Option<object::write::elf::SectionIndex>,
-}
-
-struct DynamicSymbol {
-    in_sym: usize,
-    name: Option<object::write::StringId>,
-    section: Option<object::write::elf::SectionIndex>,
-    hash: Option<u32>,
-    gnu_hash: Option<u32>,
-}
-
-*/
-
 struct Library {
     name: String,
     string_id: Option<StringId>,
@@ -109,17 +71,20 @@ impl AllocSegment {
             AllocSegment::RX => elf::PF_R | elf::PF_X,
         }
     }
+}
+
+#[derive(Default)]
+pub struct TrackSection {
+    pub size: Option<usize>,
+    pub addr: Option<u64>,
+    pub section_index: Option<SectionIndex>,
+}
+
+impl TrackSection {
     /*
-    pub fn align2(&self) -> usize {
-        match self {
-            AllocSegment::RO => 0x04,
-            AllocSegment::RW => 0x08,
-            AllocSegment::RX => 0x10,
+        fn new() -> Self {
+            Self { size: 0, addr: 0, section_index: None }
         }
-    }
-    pub fn page_align(&self) -> usize {
-        0x1000
-    }
     */
 }
 
@@ -244,9 +209,8 @@ pub enum DebugFlag {
 pub struct Data {
     arch: Architecture,
     interp: String,
-    pub is_64: bool,
+    is_64: bool,
     libs: Vec<Library>,
-    page_size: u32,
     base: usize,
     pub dynamics: Dynamics,
     pub statics: Statics,
@@ -254,15 +218,13 @@ pub struct Data {
 
     pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
-    pub pointers_plt: HashMap<String, ResolvePointer>,
-
     pub section_index: HashMap<String, SectionIndex>,
-    size_dynstr: usize,
-    addr_dynsym: u64,
-    size_dynsym: usize,
-    size_reladyn: usize,
-    size_relaplt: usize,
-    addr_hash: u64,
+    dynstr: TrackSection,
+    dynsym: TrackSection,
+    reladyn: TrackSection,
+    relaplt: TrackSection,
+    hash: TrackSection,
+    symtab: TrackSection,
     add_section_headers: bool,
     add_symbols: bool,
 }
@@ -283,17 +245,15 @@ impl Data {
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             libs,
             base: 0x80000,
-            page_size: 0x1000,
             addr: HashMap::new(),
             section_index: HashMap::new(),
-            size_dynstr: 0,
-            addr_dynsym: 0,
-            size_dynsym: 0,
-            size_reladyn: 0,
-            size_relaplt: 0,
-            addr_hash: 0,
+            dynstr: TrackSection::default(),
+            dynsym: TrackSection::default(),
+            reladyn: TrackSection::default(),
+            relaplt: TrackSection::default(),
+            hash: TrackSection::default(),
+            symtab: TrackSection::default(),
             pointers: HashMap::new(),
-            pointers_plt: HashMap::new(),
 
             add_section_headers: true,
             add_symbols: true,
@@ -383,22 +343,22 @@ impl Data {
         }
         out.push(Dynamic {
             tag: elf::DT_HASH,
-            val: self.addr_hash,
+            val: self.hash.addr.unwrap(),
             string: None,
         });
         out.push(Dynamic {
             tag: elf::DT_STRTAB,
-            val: self.addr_get(".dynstr"),
+            val: self.dynstr.addr.unwrap(),
             string: None,
         });
         out.push(Dynamic {
             tag: elf::DT_SYMTAB,
-            val: self.addr_dynsym,
+            val: self.dynsym.addr.unwrap(),
             string: None,
         });
         out.push(Dynamic {
             tag: elf::DT_STRSZ,
-            val: self.size_dynstr as u64,
+            val: self.dynstr.size.unwrap() as u64,
             string: None,
         });
         out.push(Dynamic {
@@ -421,7 +381,7 @@ impl Data {
         });
         out.push(Dynamic {
             tag: elf::DT_PLTRELSZ,
-            val: self.size_relaplt as u64,
+            val: self.relaplt.size.unwrap() as u64,
             string: None,
         });
         out.push(Dynamic {
@@ -441,7 +401,7 @@ impl Data {
         });
         out.push(Dynamic {
             tag: elf::DT_RELASZ,
-            val: self.size_reladyn as u64,
+            val: self.reladyn.size.unwrap() as u64,
             string: None,
         });
         out.push(Dynamic {
