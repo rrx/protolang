@@ -37,9 +37,9 @@ pub struct ProgramHeaderEntry {
     p_align: u64,
 }
 
-struct Library {
-    name: String,
-    string_id: Option<StringId>,
+pub(crate) struct Library {
+    pub(crate) name: String,
+    pub(crate) string_id: Option<StringId>,
 }
 
 struct Dynamic {
@@ -210,11 +210,12 @@ pub struct Data {
     arch: Architecture,
     interp: String,
     is_64: bool,
-    libs: Vec<Library>,
+    pub(crate) libs: Vec<Library>,
     base: usize,
     pub dynamics: Dynamics,
     pub statics: Statics,
     debug: HashSet<DebugFlag>,
+    pub ph: Vec<ProgramHeaderEntry>,
 
     pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
@@ -249,6 +250,7 @@ impl Data {
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             libs,
             base,
+            ph: vec![],
             addr: HashMap::new(),
             section_index: HashMap::new(),
             segments: SegmentTracker::new(base as u64),
@@ -453,15 +455,8 @@ pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
     block: &mut ReadBlock,
     w: &mut Writer,
 ) -> std::result::Result<(), Box<dyn Error>> {
-    // add libraries if they are configured
-    for mut lib in data.libs.iter_mut() {
-        unsafe {
-            let buf = extend_lifetime(lib.name.as_bytes());
-            lib.string_id = Some(w.add_dynamic_string(buf));
-        }
-    }
-
-    let mut blocks = BlocksBuilder::new().build(data, w, block);
+    block.build_strings(data, w);
+    let mut blocks = Blocks::new(data, w);
     blocks.build(data, w, block);
     Ok(())
 }

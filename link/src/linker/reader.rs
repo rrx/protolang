@@ -50,7 +50,7 @@ impl Reader {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ReadSectionKind {
     RX,
-    ROStrings,
+    //ROStrings,
     ROData,
     RW,
     Bss,
@@ -67,7 +67,7 @@ impl ReadSectionKind {
         match self {
             ReadSectionKind::RX => Some(AllocSegment::RX),
             ReadSectionKind::RW => Some(AllocSegment::RW),
-            ReadSectionKind::ROStrings => Some(AllocSegment::RO),
+            //ReadSectionKind::ROStrings => Some(AllocSegment::RO),
             ReadSectionKind::ROData => Some(AllocSegment::RO),
             ReadSectionKind::Bss => Some(AllocSegment::RW),
             _ => None,
@@ -77,9 +77,7 @@ impl ReadSectionKind {
     pub fn section_index(&self, data: &Data) -> Option<SectionIndex> {
         use ReadSectionKind::*;
         match self {
-            RX | RW | ROStrings | ROData | Bss => {
-                data.section_index.get(self.section_name()).cloned()
-            }
+            RX | RW | ROData | Bss => data.section_index.get(self.section_name()).cloned(),
             _ => None,
         }
     }
@@ -108,7 +106,7 @@ impl ReadSectionKind {
         match self {
             Self::RX => ".text",
             Self::ROData => ".rodata",
-            Self::ROStrings => ".strtab",
+            //Self::ROStrings => ".strtab",
             Self::RW => ".data",
             Self::Bss => ".bss",
             _ => unreachable!("Unhandled section: {:?}", self),
@@ -117,7 +115,7 @@ impl ReadSectionKind {
 
     pub fn pointer(&self, address: u64) -> ResolvePointer {
         match self {
-            Self::RX | Self::ROStrings | Self::ROData | Self::RW | Self::Bss => {
+            Self::RX | Self::ROData | Self::RW | Self::Bss => {
                 ResolvePointer::Section(self.section_name().to_string(), address)
             }
             _ => ResolvePointer::Resolved(address),
@@ -304,6 +302,14 @@ impl ReadBlock {
     }
 
     pub fn build_strings(&mut self, data: &mut Data, w: &mut Writer) {
+        // add libraries if they are configured
+        for mut lib in data.libs.iter_mut() {
+            unsafe {
+                let buf = extend_lifetime(lib.name.as_bytes());
+                lib.string_id = Some(w.add_dynamic_string(buf));
+            }
+        }
+
         // These need to be declared
         let locals = vec![("_DYNAMIC", ".dynamic")];
 
@@ -413,7 +419,7 @@ impl ReadBlock {
         for (name, symbol) in self.locals.iter() {
             match symbol.section {
                 ReadSectionKind::RX
-                | ReadSectionKind::ROStrings
+                //| ReadSectionKind::ROStrings
                 | ReadSectionKind::ROData
                 | ReadSectionKind::RW
                 | ReadSectionKind::Bss => {
@@ -630,7 +636,7 @@ impl ReadBlock {
         let mut rx_symbols = vec![];
         let mut rw_symbols = vec![];
         let mut ro_symbols = vec![];
-        let mut strings_symbols = vec![];
+        //let mut strings_symbols = vec![];
         let mut bss_symbols = vec![];
         let mut other_symbols = vec![];
 
@@ -639,7 +645,7 @@ impl ReadBlock {
                 ReadSectionKind::RX => rx_symbols.push(sym),
                 ReadSectionKind::RW => rw_symbols.push(sym),
                 ReadSectionKind::ROData => ro_symbols.push(sym),
-                ReadSectionKind::ROStrings => strings_symbols.push(sym),
+                //ReadSectionKind::ROStrings => strings_symbols.push(sym),
                 ReadSectionKind::Bss => bss_symbols.push(sym),
                 _ => other_symbols.push(sym),
             }
@@ -695,10 +701,10 @@ impl ReadBlock {
             eprintln!(" R: {}, {:?}", r, self.lookup(&r.name));
         }
 
-        eprintln!("Strings");
-        for local in strings_symbols.iter() {
-            eprintln!(" S: {:?}", local);
-        }
+        //eprintln!("Strings");
+        //for local in strings_symbols.iter() {
+        //eprintln!(" S: {:?}", local);
+        //}
 
         if other_symbols.len() > 0 {
             eprintln!("Other");
