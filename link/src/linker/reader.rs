@@ -783,11 +783,12 @@ impl Reader {
         Ok(())
     }
 
-    pub fn read(&mut self, name: &str, buf: &[u8]) -> Result<ReadBlock, Box<dyn Error>> {
-        let b: elf::ElfFile<'_, FileHeader64<object::Endianness>> =
+    pub fn read<'a>(&mut self, name: &str, buf: &'a [u8]) -> Result<ReadBlock, Box<dyn Error>> {
+        let b: elf::ElfFile<'a, FileHeader64<object::Endianness>> =
             object::read::elf::ElfFile::parse(buf)?;
         let block = match b.kind() {
             ObjectKind::Relocatable | ObjectKind::Executable => {
+                dump_header(&b)?;
                 self.relocatable(name.to_string(), &b)?
             }
             ObjectKind::Dynamic => self.dynamic(&b, name)?,
@@ -977,11 +978,12 @@ pub fn read_symbol<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
         //lookup: SymbolLookupTable::None,
     })
 }
+//pub fn write<Elf: object::read::elf::FileHeader<Endian = object::Endianness>>(
 
-pub fn elf_read2(buf: &[u8]) -> Result<(), Box<dyn Error>> {
-    let b: elf::ElfFile<'_, FileHeader64<object::Endianness>> =
-        object::read::elf::ElfFile::parse(buf)?;
-
+pub fn dump_header<'a>(
+    b: &elf::ElfFile<'a, FileHeader64<object::Endianness>>,
+    //b: &elf::ElfFile<'a, A, B>,
+) -> Result<(), Box<dyn Error>> {
     let endian = b.endian();
 
     let h = b.raw_header();
@@ -999,9 +1001,19 @@ pub fn elf_read2(buf: &[u8]) -> Result<(), Box<dyn Error>> {
         eprintln!("  p_filesz: {:#0x}", seg.p_filesz(endian));
         eprintln!("  p_memsz:  {:#0x}", seg.p_memsz(endian));
         eprintln!("  p_align {:#0x}", seg.p_align(endian));
-        let _offset = seg.p_offset(endian) as usize;
-        let _size = seg.p_filesz(endian) as usize;
+        //let _offset = seg.p_offset(endian) as usize;
+        //let _size = seg.p_filesz(endian) as usize;
     }
+    Ok(())
+}
+
+/*
+pub fn from_section<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
+    &mut self,
+    b: &elf::ElfFile<'a, A, B>,
+    section: &elf::ElfSection<'a, 'b, A, B>,
+    ) -> Result<(), Box<dyn Error>> {
+pub fn elf_read2(buf: &[u8]) -> Result<(), Box<dyn Error>> {
 
     for section in b.sections() {
         let name = section.name()?;
@@ -1070,3 +1082,4 @@ pub fn elf_read2(buf: &[u8]) -> Result<(), Box<dyn Error>> {
     //let mut internal = im::HashMap::new();
     Ok(())
 }
+*/
