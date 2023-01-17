@@ -1,5 +1,8 @@
 use super::*;
-use object::write::elf::Sym;
+//use object::write::elf::Sym;
+pub trait WriterEx {}
+
+impl<'a> WriterEx for Writer<'a> {}
 
 pub trait ElfBlock {
     fn name(&self) -> String;
