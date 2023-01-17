@@ -13,10 +13,6 @@ pub enum BlockSectionState {
     Located,
 }
 
-//#[derive(Debug)]
-//pub struct BlockSection {
-//pub(crate) section: GeneralSection,
-//}
 pub trait BlockSection {
     fn size(&self) -> usize;
     fn bytes(&self) -> &[u8];
@@ -24,59 +20,17 @@ pub trait BlockSection {
     fn relocation_add(&mut self, r: CodeRelocation);
     fn extend_size(&mut self, s: usize);
     fn extend_bytes(&mut self, bytes: &[u8]);
-    fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer);
-    fn block_reserve(&mut self, data: &mut Data, w: &mut Writer);
-    fn block_write(&self, data: &Data, w: &mut Writer);
-    fn block_write_section_header(&self, w: &mut Writer);
+    //fn reserve_section_index(&mut self, data: &mut Data, w: &mut Writer);
+    //fn reserve(&mut self, data: &mut Data, w: &mut Writer);
+    //fn write(&self, data: &Data, w: &mut Writer);
+    //fn write_section_header(&self, w: &mut Writer);
 }
-
-/*
-impl BlockSection {
-    pub fn new(alloc: AllocSegment, name: &'static str) -> Self {
-        Self {
-            section: GeneralSection::new(alloc, name),
-        }
-    }
-
-    pub fn from_section<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
-        &mut self,
-        b: &elf::ElfFile<'a, A, B>,
-        section: &elf::ElfSection<'a, 'b, A, B>,
-    ) -> Result<(), Box<dyn Error>> {
-        let data = section.uncompressed_data()?;
-        let base_offset = self.section.size;
-        log::debug!("name: {}", section.name()?);
-        self.section.extend_bytes(&data);
-        for (offset, r) in section.relocations() {
-            let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
-            self.section.relocations.push(r);
-        }
-        Ok(())
-    }
-
-    pub fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        self.section.block_reserve_section_index(data, w);
-    }
-
-    pub fn block_reserve(&mut self, data: &mut Data, w: &mut Writer) {
-        self.section.block_reserve(data, w);
-    }
-
-    pub fn block_write(&self, data: &Data, w: &mut Writer) {
-        self.section.block_write(data, w);
-    }
-
-    pub fn block_write_section_header(&self, _data: &Data, w: &mut Writer) {
-        self.section.block_write_section_header(w);
-    }
-}
-*/
 
 #[derive(Debug)]
 pub struct GeneralSection {
     state: BlockSectionState,
     pub(crate) name: &'static str,
-    name_id: Option<StringId>,
+    pub(crate) name_id: Option<StringId>,
     pub(crate) section_index: Option<SectionIndex>,
     pub(crate) size: usize,
     pub(crate) bytes: Vec<u8>,
@@ -125,11 +79,19 @@ impl BlockSection for GeneralSection {
 
     fn extend_bytes(&mut self, bytes: &[u8]) {
         self.bytes.extend(bytes.iter());
-        //self.size = bytes.len();
-        //self.size += bytes.len();
+    }
+}
+
+impl ElfBlock for GeneralSection {
+    fn name(&self) -> String {
+        self.name.into()
     }
 
-    fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
+    fn alloc(&self) -> AllocSegment {
+        self.offsets.alloc
+    }
+
+    fn reserve_section_index(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         self.name_id = Some(w.add_section_name(self.name.as_bytes()));
         let index = w.reserve_section_index();
         self.section_index = Some(index);
@@ -137,7 +99,7 @@ impl BlockSection for GeneralSection {
         data.section_index_set(&self.name, index);
     }
 
-    fn block_reserve(&mut self, data: &mut Data, w: &mut Writer) {
+    fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve(self.bytes.len(), 1);
         let after = w.reserved_len();
@@ -152,14 +114,14 @@ impl BlockSection for GeneralSection {
         self.state = BlockSectionState::Located;
     }
 
-    fn block_write(&self, data: &Data, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
         self.apply_relocations(data);
 
         w.write(self.bytes.as_slice());
     }
 
-    fn block_write_section_header(&self, w: &mut Writer) {
+    fn write_section_header(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
         if let Some(name_id) = self.name_id {
             w.write_section_header(&object::write::elf::SectionHeader {
                 name: Some(name_id),
@@ -178,7 +140,7 @@ impl BlockSection for GeneralSection {
 }
 
 impl GeneralSection {
-    pub fn new(alloc: AllocSegment, name: &'static str) -> Self {
+    pub fn new(alloc: AllocSegment, name: &'static str, align: u64) -> Self {
         Self {
             state: BlockSectionState::default(),
             name,
@@ -187,7 +149,7 @@ impl GeneralSection {
             size: 0,
             bytes: vec![],
             relocations: vec![],
-            offsets: SectionOffset::new(name.into(), alloc, 0x10),
+            offsets: SectionOffset::new(name.into(), alloc, align),
         }
     }
 
@@ -230,83 +192,8 @@ impl GeneralSection {
             }
         }
 
-        if data.debug_enabled(&DebugFlag::Disassemble) {
+        //if data.debug_enabled(&DebugFlag::Disassemble) {
             self.disassemble(data);
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct BssSection {
-    //pub(crate) relocations: Vec<CodeRelocation>,
-    pub(crate) section: GeneralSection,
-    empty: Vec<u8>,
-}
-
-impl BlockSection for BssSection {
-    fn size(&self) -> usize {
-        self.section.size
-    }
-
-    fn bytes(&self) -> &[u8] {
-        self.empty.as_slice()
-        //unreachable!()
-    }
-
-    fn relocations(&self) -> &Vec<CodeRelocation> {
-        &self.section.relocations
-    }
-
-    fn relocation_add(&mut self, r: CodeRelocation) {
-        self.section.relocations.push(r);
-    }
-
-    fn extend_size(&mut self, s: usize) {
-        self.section.extend_size(s);
-    }
-
-    fn extend_bytes(&mut self, bytes: &[u8]) {
-        //unreachable!();
-    }
-
-    fn block_reserve_section_index(&mut self, data: &mut Data, w: &mut Writer) {
-        self.section.block_reserve_section_index(data, w);
-    }
-
-    fn block_reserve(&mut self, data: &mut Data, w: &mut Writer) {
-        self.section.block_reserve(data, w);
-    }
-
-    fn block_write(&self, data: &Data, w: &mut Writer) {
-        self.section.block_write(data, w);
-    }
-
-    fn block_write_section_header(&self, w: &mut Writer) {
-        self.section.block_write_section_header(w);
-    }
-}
-
-impl BssSection {
-    pub fn new(alloc: AllocSegment, name: &'static str) -> Self {
-        Self {
-            section: GeneralSection::new(alloc, name),
-            empty: vec![],
-            //relocations: vec![],
-        }
-    }
-
-    pub fn from_section<'a, 'b, A: elf::FileHeader, B: object::ReadRef<'a>>(
-        &mut self,
-        b: &elf::ElfFile<'a, A, B>,
-        section: &elf::ElfSection<'a, 'b, A, B>,
-    ) -> Result<(), Box<dyn Error>> {
-        let data = section.uncompressed_data()?;
-        let base_offset = self.section.size;
-        self.section.extend_bytes(&data);
-        for (offset, r) in section.relocations() {
-            let r = code_relocation(b, r.into(), base_offset + offset as usize)?;
-            self.section.relocations.push(r);
-        }
-        Ok(())
+        //}
     }
 }

@@ -277,7 +277,7 @@ pub struct ReadBlock {
     pub rx: GeneralSection,
     pub got: GeneralSection,
     pub gotplt: GeneralSection,
-    pub bss: BssSection,
+    pub bss: GeneralSection,
     pub unresolved: HashSet<String>,
 }
 
@@ -285,12 +285,12 @@ impl ReadBlock {
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
-            ro: GeneralSection::new(AllocSegment::RO, ".rodata"),
-            rw: GeneralSection::new(AllocSegment::RW, ".data"),
-            rx: GeneralSection::new(AllocSegment::RX, ".text"),
-            got: GeneralSection::new(AllocSegment::RW, ".got"),
-            gotplt: GeneralSection::new(AllocSegment::RW, ".got.plt"),
-            bss: BssSection::new(AllocSegment::RW, ".bss"),
+            ro: GeneralSection::new(AllocSegment::RO, ".rodata", 0x10),
+            rw: GeneralSection::new(AllocSegment::RW, ".data", 0x10),
+            rx: GeneralSection::new(AllocSegment::RX, ".text", 0x10),
+            got: GeneralSection::new(AllocSegment::RW, ".got", 0x10),
+            gotplt: GeneralSection::new(AllocSegment::RW, ".got.plt", 0x10),
+            bss: GeneralSection::new(AllocSegment::RW, ".bss", 0x10),
             libs: HashSet::new(),
             local_index: 0,
             exports: SymbolMap::new(),
@@ -538,7 +538,7 @@ impl ReadBlock {
 
         // update Bss
         Self::merge(&renames, &block.bss, &mut self.bss);
-        assert_eq!(block.bss.size(), 0);
+        assert_eq!(block.bss.bytes().len(), 0);
 
         // update RX
         Self::merge(&renames, &block.rx, &mut self.rx);
@@ -701,7 +701,7 @@ impl ReadBlock {
         }
         print_bytes(self.rw.bytes(), 0);
 
-        eprintln!("Bss, size: {:#0x}", self.bss.section.size);
+        eprintln!("Bss, size: {:#0x}", self.bss.size());
         for local in bss_symbols.iter() {
             eprintln!(" S: {:?}", local);
         }

@@ -52,7 +52,7 @@ pub trait ElfBlock {
     }
     fn reserve_section_index(&mut self, _: &mut Data, _: &mut ReadBlock, _: &mut Writer) {}
     fn reserve(&mut self, _: &mut Data, _: &mut ReadBlock, _: &mut Writer) {}
-    fn write(&self, _: &Data, _: &mut ReadBlock, _: &mut Writer) {}
+    fn write(&self, _: &Data, _: &ReadBlock, _: &mut Writer) {}
     fn write_section_header(&self, _: &Data, _: &ReadBlock, _: &mut Writer) {}
 }
 
@@ -96,7 +96,7 @@ impl ElfBlock for FileHeader {
             .add_offsets(alloc, &mut self.offsets, self.size, w);
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         //let mut e_entry = 0;
         let start = data.pointer_get("_start");
         let e_entry = start;
@@ -172,7 +172,7 @@ impl ElfBlock for ProgramHeader {
             .add_offsets(alloc, &mut self.offsets, self.size, w);
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_align_program_headers();
 
         for ph in data.ph.iter() {
@@ -251,7 +251,7 @@ impl ElfBlock for InterpSection {
             .add_offsets(self.alloc(), &mut self.offsets, size, w);
     }
 
-    fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
         w.write(self.as_slice());
     }
@@ -332,7 +332,7 @@ impl ElfBlock for DynamicSection {
         data.addr_set(".dynamic", self.offsets.address);
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
         w.write_start_section(&self.offsets);
         //w.write_align_dynamic();
@@ -412,7 +412,7 @@ impl ElfBlock for RelaDynSection {
         }
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         let relocations = data.dynamics.relocations(self.kind);
         w.write_start_section(&self.offsets);
         assert_eq!(self.count, relocations.len());
@@ -654,7 +654,7 @@ impl ElfBlock for StrTabSection {
         w.reserve_strtab();
     }
 
-    fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
         w.write_strtab();
     }
@@ -711,7 +711,7 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         assert_eq!(self.count + 1, w.symbol_count() as usize);
         w.write_start_section(&self.offsets);
 
@@ -784,7 +784,7 @@ impl ElfBlock for DynSymSection {
         data.dynsym.size = Some(self.offsets.size as usize);
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         assert_eq!(self.count, w.dynamic_symbol_count());
         assert_eq!(self.count as usize, data.dynamics.symbol_count() + 1);
         w.write_start_section(&self.offsets);
@@ -836,7 +836,7 @@ impl ElfBlock for DynStrSection {
         data.dynstr.size = Some(self.offsets.size as usize);
     }
 
-    fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
         w.write_dynstr();
     }
@@ -864,7 +864,7 @@ impl ElfBlock for ShStrTabSection {
         w.reserve_shstrtab();
     }
 
-    fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
         assert_eq!(w.len(), self.file_offset);
         w.write_shstrtab();
     }
@@ -926,7 +926,7 @@ impl ElfBlock for HashSection {
         data.hash.addr = Some(self.offsets.address);
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         let chain_count = data.dynamics.symbol_count() as u32;
         w.write_start_section(&self.offsets);
         let mut h = HashMap::new();
@@ -994,7 +994,7 @@ impl ElfBlock for GnuHashSection {
             .add_offsets(self.alloc(), &mut self.offsets, after - file_offset, w);
     }
 
-    fn write(&self, _: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
         w.write_gnu_hash(
             0,
@@ -1125,7 +1125,7 @@ impl ElfBlock for GotSection {
         data.addr_set(name, self.offsets.address);
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
         self.kind.write_entries(data, w);
     }
@@ -1207,7 +1207,7 @@ impl ElfBlock for PltSection {
         );
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
 
         let got_addr = data.addr_get_by_name(".got.plt").unwrap() as isize;
@@ -1298,7 +1298,8 @@ impl ElfBlock for PltSection {
     }
 }
 
-pub struct PltGotSection {
+/*
+pub struct PltGotSection2 {
     name: &'static str,
     name_id: Option<StringId>,
     index: Option<SectionIndex>,
@@ -1306,7 +1307,7 @@ pub struct PltGotSection {
     entry_size: usize,
 }
 
-impl PltGotSection {
+impl PltGotSection2 {
     pub fn new(name: &'static str) -> Self {
         Self {
             name,
@@ -1318,7 +1319,7 @@ impl PltGotSection {
     }
 }
 
-impl ElfBlock for PltGotSection {
+impl ElfBlock for PltGotSection2 {
     fn name(&self) -> String {
         self.offsets.name.clone()
     }
@@ -1327,17 +1328,18 @@ impl ElfBlock for PltGotSection {
         self.offsets.alloc
     }
 
-    fn reserve_section_index(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
         self.name_id = Some(w.add_section_name(self.name.as_bytes()));
         let index = w.reserve_section_index();
-        data.section_index.insert(self.name.to_string(), index);
+        //data.section_index.insert(self.name.to_string(), index);
+        data.section_index_set(&self.name, index);
         self.index = Some(index);
     }
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
         let pltgot = data.dynamics.pltgot_objects();
-        let file_offset = w.reserve_start_section(&self.offsets);
         let size = (pltgot.len()) * self.entry_size;
+        let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve(size, 1);
         let after = w.reserved_len();
         assert_eq!(size, after - file_offset);
@@ -1346,15 +1348,16 @@ impl ElfBlock for PltGotSection {
             .add_offsets(self.alloc(), &mut self.offsets, after - file_offset, w);
 
         // update section pointers
+        let address = self.offsets.address;
         data.addr
-            .insert(AddressKey::Section(self.name()), self.offsets.address);
+            .insert(AddressKey::Section(self.name()), address);
         data.addr.insert(
             AddressKey::SectionIndex(self.index.unwrap()),
-            self.offsets.address,
+            address,
         );
     }
 
-    fn write(&self, data: &Data, _: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
         w.write_start_section(&self.offsets);
 
         let vbase = self.offsets.address as isize;
@@ -1376,11 +1379,13 @@ impl ElfBlock for PltGotSection {
                 let addr = gotplt_addr as isize - rip;
                 *patch = addr as i32;
             }
+            //self.section.disassemble_code(data, slot.as_slice());
+            disassemble_code_with_symbols(slot.as_slice(), &vec![], &vec![]);
             w.write(slot.as_slice());
         }
     }
 
-    fn write_section_header(&self, _: &Data, _: &ReadBlock, w: &mut Writer) {
+    fn write_section_header(&self, data: &Data, block: &ReadBlock, w: &mut Writer) {
         let sh_flags = self.alloc().section_header_flags() as u64;
         let sh_addralign = self.offsets.align;
         w.write_section_header(&object::write::elf::SectionHeader {
@@ -1395,6 +1400,89 @@ impl ElfBlock for PltGotSection {
             sh_addralign,
             sh_size: self.offsets.size,
         });
+    }
+}
+*/
+
+pub struct PltGotSection {
+    section: GeneralSection,
+    entry_size: usize,
+}
+
+impl PltGotSection {
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            section: GeneralSection::new(AllocSegment::RX, name, 0x10),
+            entry_size: 0x08,
+        }
+    }
+}
+
+impl ElfBlock for PltGotSection {
+    fn name(&self) -> String {
+        self.section.name()
+    }
+
+    fn alloc(&self) -> AllocSegment {
+        self.section.alloc()
+    }
+
+    fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
+        self.section.reserve_section_index(data, block, w);
+    }
+
+    fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
+        let pltgot = data.dynamics.pltgot_objects();
+        let size = (pltgot.len()) * self.entry_size;
+        self.section.size = size;
+        let file_offset = w.reserve_start_section(&self.section.offsets);
+        w.reserve(size, 1);
+        let after = w.reserved_len();
+        assert_eq!(size, after - file_offset);
+
+        data.segments
+            .add_offsets(self.alloc(), &mut self.section.offsets, after - file_offset, w);
+
+        // update section pointers
+        let address = self.section.offsets.address;
+        data.addr
+            .insert(AddressKey::Section(self.name()), address);
+        data.addr.insert(
+            AddressKey::SectionIndex(self.section.section_index.unwrap()),
+            address,
+        );
+    }
+
+    fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
+        w.write_start_section(&self.section.offsets);
+
+        let vbase = self.section.offsets.address as isize;
+        let pltgot = data.dynamics.pltgot_objects();
+        eprintln!("Dis");
+        for (slot_index, symbol) in pltgot.iter().enumerate() {
+            let p = data.dynamics.symbol_lookup(&symbol.name).unwrap();
+            let mut slot: Vec<u8> = vec![0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x66, 0x90];
+            let slot_size = slot.len();
+            assert_eq!(slot_size, self.entry_size);
+
+            //1050:       ff 25 82 2f 00 00       jmp    *0x2f82(%rip)        # 3fd8 <fprintf@GLIBC_2.2.5>
+            //1056:       66 90                   xchg   %ax,%ax
+
+            let gotplt_addr = p.resolve(data).unwrap();
+            unsafe {
+                let offset = (slot_index as isize) * slot_size as isize;
+                let patch = (slot.as_mut_ptr().offset(offset + 2)) as *mut i32;
+                let rip = vbase + offset + 6;
+                let addr = gotplt_addr as isize - rip;
+                *patch = addr as i32;
+            }
+            self.section.disassemble_code(data, slot.as_slice());
+            w.write(slot.as_slice());
+        }
+    }
+
+    fn write_section_header(&self, data: &Data, block: &ReadBlock, w: &mut Writer) {
+        self.section.write_section_header(data, block, w);
     }
 }
 
@@ -1414,10 +1502,14 @@ impl<'a> ElfBlock for BlockSectionP<'a> {
 
 pub struct BlockSectionX {
     pub kind: ReadSectionKind,
+    dummy: ReadBlock,
 }
 impl BlockSectionX {
     pub fn new(kind: ReadSectionKind) -> Self {
-        Self { kind }
+        Self {
+            kind,
+            dummy: ReadBlock::new(""),
+        }
     }
 }
 impl ElfBlock for BlockSectionX {
@@ -1427,40 +1519,40 @@ impl ElfBlock for BlockSectionX {
 
     fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
         match self.kind {
-            ReadSectionKind::RX => block.rx.block_reserve_section_index(data, w),
-            ReadSectionKind::ROData => block.ro.block_reserve_section_index(data, w),
-            ReadSectionKind::RW => block.rw.block_reserve_section_index(data, w),
-            ReadSectionKind::Bss => block.bss.block_reserve_section_index(data, w),
+            ReadSectionKind::RX => block.rx.reserve_section_index(data, &mut self.dummy, w),
+            ReadSectionKind::ROData => block.ro.reserve_section_index(data, &mut self.dummy, w),
+            ReadSectionKind::RW => block.rw.reserve_section_index(data, &mut self.dummy, w),
+            ReadSectionKind::Bss => block.bss.reserve_section_index(data, &mut self.dummy, w),
             _ => unreachable!(),
         }
     }
 
     fn reserve(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
         match self.kind {
-            ReadSectionKind::RX => block.rx.block_reserve(data, w),
-            ReadSectionKind::ROData => block.ro.block_reserve(data, w),
-            ReadSectionKind::RW => block.rw.block_reserve(data, w),
-            ReadSectionKind::Bss => block.bss.block_reserve(data, w),
+            ReadSectionKind::RX => block.rx.reserve(data, &mut self.dummy, w),
+            ReadSectionKind::ROData => block.ro.reserve(data, &mut self.dummy, w),
+            ReadSectionKind::RW => block.rw.reserve(data, &mut self.dummy, w),
+            ReadSectionKind::Bss => block.bss.reserve(data, &mut self.dummy, w),
             _ => unreachable!(),
         }
     }
 
-    fn write(&self, data: &Data, block: &mut ReadBlock, w: &mut Writer) {
+    fn write(&self, data: &Data, block: &ReadBlock, w: &mut Writer) {
         match self.kind {
-            ReadSectionKind::RX => block.rx.block_write(data, w),
-            ReadSectionKind::ROData => block.ro.block_write(data, w),
-            ReadSectionKind::RW => block.rw.block_write(data, w),
-            ReadSectionKind::Bss => block.bss.block_write(data, w),
+            ReadSectionKind::RX => block.rx.write(data, block, w),
+            ReadSectionKind::ROData => block.ro.write(data, block, w),
+            ReadSectionKind::RW => block.rw.write(data, block, w),
+            ReadSectionKind::Bss => block.bss.write(data, block, w),
             _ => unreachable!(),
         }
     }
 
     fn write_section_header(&self, data: &Data, block: &ReadBlock, w: &mut Writer) {
         match self.kind {
-            ReadSectionKind::RX => block.rx.block_write_section_header(w),
-            ReadSectionKind::ROData => block.ro.block_write_section_header(w),
-            ReadSectionKind::RW => block.rw.block_write_section_header(w),
-            ReadSectionKind::Bss => block.bss.block_write_section_header(w),
+            ReadSectionKind::RX => block.rx.write_section_header(data, block, w),
+            ReadSectionKind::ROData => block.ro.write_section_header(data, block, w),
+            ReadSectionKind::RW => block.rw.write_section_header(data, block, w),
+            ReadSectionKind::Bss => block.bss.write_section_header(data, block, w),
             _ => unreachable!(),
         }
     }

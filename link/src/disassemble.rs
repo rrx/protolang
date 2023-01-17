@@ -251,9 +251,9 @@ pub fn disassemble_code_with_symbols(
 
 impl GeneralSection {
     pub fn disassemble(&self, data: &Data) {
-        eprintln!("Disassemble: {}, {:#0x}", self.name, self.offsets.address);
+        eprintln!("Disassemble: {}, {:#0x}, size: {:#0x}", self.name, self.offsets.address, self.size());
         match self.offsets.alloc {
-            AllocSegment::RX => self.disassemble_code(data),
+            AllocSegment::RX => self.disassemble_code(data, &self.bytes),
             _ => self.disassemble_data(data),
         }
     }
@@ -262,7 +262,7 @@ impl GeneralSection {
         print_bytes(self.bytes.as_slice(), self.offsets.address as usize);
     }
 
-    fn disassemble_code(&self, data: &Data) {
+    pub fn disassemble_code(&self, data: &Data, buf: &[u8]) {
         let mut symbols = vec![];
         for (name, p) in data.pointers.iter() {
             let addr = p.resolve(data).unwrap();
@@ -290,7 +290,7 @@ impl GeneralSection {
             .detail(true)
             .build()
             .unwrap();
-        let insts = cs.disasm_all(&self.bytes, 0).expect("disassemble");
+        let insts = cs.disasm_all(buf, 0).expect("disassemble");
 
         for instr in insts.as_ref() {
             let addr = instr.address();
