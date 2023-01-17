@@ -53,8 +53,8 @@ impl BlockSection {
         self.section.block_reserve_section_index(data, w);
     }
 
-    pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        self.section.block_reserve(data, tracker, w);
+    pub fn block_reserve(&mut self, data: &mut Data, w: &mut Writer) {
+        self.section.block_reserve(data, w);
     }
 
     pub fn block_write(&self, data: &Data, w: &mut Writer) {
@@ -156,7 +156,7 @@ impl GeneralSection {
         data.section_index_set(&self.name, index);
     }
 
-    pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
+    pub fn block_reserve(&mut self, data: &mut Data, w: &mut Writer) {
         let align = self.offsets.align as usize;
         let pos = w.reserved_len();
         let align_pos = size_align(pos, align);
@@ -167,7 +167,8 @@ impl GeneralSection {
         let after = w.reserved_len();
 
         log::debug!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
-        tracker.add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
+        data.segments
+            .add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
         data.addr_set(&self.name, self.offsets.address);
         self.state = BlockSectionState::Located;
 
@@ -251,8 +252,8 @@ impl BssSection {
         self.section.block_reserve_section_index(data, w);
     }
 
-    pub fn block_reserve(&mut self, data: &mut Data, tracker: &mut SegmentTracker, w: &mut Writer) {
-        self.section.block_reserve(data, tracker, w);
+    pub fn block_reserve(&mut self, data: &mut Data, w: &mut Writer) {
+        self.section.block_reserve(data, w);
     }
 
     pub fn block_write(&self, data: &Data, w: &mut Writer) {

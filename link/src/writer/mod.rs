@@ -219,6 +219,7 @@ pub struct Data {
     pub addr: HashMap<AddressKey, u64>,
     pub pointers: HashMap<String, ResolvePointer>,
     pub section_index: HashMap<String, SectionIndex>,
+    pub(crate) segments: SegmentTracker,
     dynstr: TrackSection,
     dynsym: TrackSection,
     reladyn: TrackSection,
@@ -240,15 +241,17 @@ impl Data {
                 string_id: None,
             })
             .collect();
+        let base = 0x80000;
         Self {
             arch: Architecture::X86_64,
             is_64: true,
             // default gnu loader
             interp: "/lib64/ld-linux-x86-64.so.2".to_string(),
             libs,
-            base: 0x80000,
+            base,
             addr: HashMap::new(),
             section_index: HashMap::new(),
+            segments: SegmentTracker::new(base as u64),
             dynstr: TrackSection::default(),
             dynsym: TrackSection::default(),
             reladyn: TrackSection::default(),
