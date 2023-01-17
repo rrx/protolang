@@ -696,13 +696,7 @@ impl ElfBlock for StrTabSection {
         data.section_index.insert(".strtab".to_string(), index);
     }
 
-    fn reserve(
-        &mut self,
-        _data: &mut Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn reserve(&mut self, _: &mut Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let pos = w.reserved_len();
         let align_pos = size_align(pos, self.align);
         w.reserve_until(align_pos);
@@ -712,13 +706,7 @@ impl ElfBlock for StrTabSection {
         w.reserve_strtab();
     }
 
-    fn write(
-        &self,
-        _data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, _: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.align);
         w.pad_until(aligned_pos);
@@ -726,13 +714,7 @@ impl ElfBlock for StrTabSection {
         assert_eq!(aligned_pos, self.file_offset);
     }
 
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         w.write_strtab_section_header();
     }
 }
@@ -828,8 +810,8 @@ impl ElfBlock for SymTabSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        _: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let symbols = data.statics.gen_symbols(data);
@@ -849,13 +831,7 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn write(
-        &self,
-        data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, data: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
@@ -869,13 +845,7 @@ impl ElfBlock for SymTabSection {
         }
     }
 
-    fn write_section_header(
-        &self,
-        data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, data: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         let symbols = data.statics.gen_symbols(data);
         assert_eq!(symbols.len(), self.count);
 
@@ -929,8 +899,8 @@ impl ElfBlock for DynSymSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         self.count = w.dynamic_symbol_count();
@@ -941,7 +911,7 @@ impl ElfBlock for DynSymSection {
         let start = w.reserved_len();
         w.reserve_dynsym();
         let after = w.reserved_len();
-        tracker.add_offsets(self.alloc().unwrap(), &mut self.offsets, after - start, w);
+        t.add_offsets(self.alloc().unwrap(), &mut self.offsets, after - start, w);
         data.dynsym.addr = Some(self.offsets.address);
         data.dynsym.size = Some(self.offsets.size as usize);
     }
@@ -994,8 +964,8 @@ impl ElfBlock for DynStrSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let pos = w.reserved_len();
@@ -1004,18 +974,12 @@ impl ElfBlock for DynStrSection {
         let start = w.reserved_len();
         w.reserve_dynstr();
         let after = w.reserved_len();
-        tracker.add_offsets(self.alloc().unwrap(), &mut self.offsets, after - start, w);
+        t.add_offsets(self.alloc().unwrap(), &mut self.offsets, after - start, w);
         data.dynstr.addr = Some(self.offsets.address);
         data.dynstr.size = Some(self.offsets.size as usize);
     }
 
-    fn write(
-        &self,
-        _data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, _: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
@@ -1046,35 +1010,17 @@ impl ElfBlock for ShStrTabSection {
         let _shstrtab_index = w.reserve_shstrtab_section_index();
     }
 
-    fn reserve(
-        &mut self,
-        _data: &mut Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn reserve(&mut self, _: &mut Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         self.file_offset = w.reserved_len();
         w.reserve_shstrtab();
     }
 
-    fn write(
-        &self,
-        _data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, _: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         assert_eq!(w.len(), self.file_offset);
         w.write_shstrtab();
     }
 
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         w.write_shstrtab_section_header();
     }
 }
@@ -1225,13 +1171,7 @@ impl ElfBlock for GnuHashSection {
         );
     }
 
-    fn write(
-        &self,
-        _data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, _: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         w.pad_until(aligned_pos);
@@ -1245,13 +1185,7 @@ impl ElfBlock for GnuHashSection {
         );
     }
 
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         w.write_gnu_hash_section_header(self.offsets.address);
     }
 }
@@ -1352,8 +1286,8 @@ impl ElfBlock for GotSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         // each entry in unapplied will be a GOT entry
@@ -1372,7 +1306,7 @@ impl ElfBlock for GotSection {
         let file_offset = w.reserved_len();
         w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
-        tracker.add_offsets(
+        t.add_offsets(
             self.alloc().unwrap(),
             &mut self.offsets,
             after - file_offset,
@@ -1383,13 +1317,7 @@ impl ElfBlock for GotSection {
         data.addr_set(name, self.offsets.address);
     }
 
-    fn write(
-        &self,
-        data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, data: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let align = self.offsets.align as usize;
         let pos = w.len();
         let aligned_pos = size_align(pos, align);
@@ -1398,13 +1326,7 @@ impl ElfBlock for GotSection {
         self.kind.write_entries(data, w);
     }
 
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
         let sh_addralign = self.offsets.align;
         w.write_section_header(&object::write::elf::SectionHeader {
@@ -1465,8 +1387,8 @@ impl ElfBlock for PltSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let plt_entries_count = data.dynamics.plt_objects().len();
@@ -1483,7 +1405,7 @@ impl ElfBlock for PltSection {
         w.reserve(self.bytes.len(), align);
         let after = w.reserved_len();
         assert_eq!(size, after - file_offset);
-        tracker.add_offsets(
+        t.add_offsets(
             self.alloc().unwrap(),
             &mut self.offsets,
             after - file_offset,
@@ -1501,13 +1423,7 @@ impl ElfBlock for PltSection {
         );
     }
 
-    fn write(
-        &self,
-        data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, data: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let align = self.offsets.align as usize;
         let pos = w.len();
         let aligned_pos = size_align(pos, align);
@@ -1583,13 +1499,7 @@ impl ElfBlock for PltSection {
         w.write(stub.as_slice());
     }
 
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
         let sh_addralign = self.offsets.align;
         w.write_section_header(&object::write::elf::SectionHeader {
@@ -1650,8 +1560,8 @@ impl ElfBlock for PltGotSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let pltgot = data.dynamics.pltgot_objects();
@@ -1666,7 +1576,7 @@ impl ElfBlock for PltGotSection {
         w.reserve(size, align);
         let after = w.reserved_len();
         assert_eq!(size, after - file_offset);
-        tracker.add_offsets(
+        t.add_offsets(
             self.alloc().unwrap(),
             &mut self.offsets,
             after - file_offset,
@@ -1684,13 +1594,7 @@ impl ElfBlock for PltGotSection {
         );
     }
 
-    fn write(
-        &self,
-        data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, data: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let align = self.offsets.align as usize;
         let pos = w.len();
         let aligned_pos = size_align(pos, align);
@@ -1722,13 +1626,7 @@ impl ElfBlock for PltGotSection {
         }
     }
 
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         let sh_flags = self.alloc().unwrap().section_header_flags() as u64;
         let sh_addralign = self.offsets.align;
         w.write_section_header(&object::write::elf::SectionHeader {
