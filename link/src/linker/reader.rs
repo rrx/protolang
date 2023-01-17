@@ -312,7 +312,7 @@ impl ReadBlock {
             let section_name = section_name.to_string();
             let pointer = ResolvePointer::Section(section_name, 0);
             data.pointers.insert(symbol_name.clone(), pointer.clone());
-            let symbol = ReadSymbol::from_pointer("_DYNAMIC".to_string(), pointer);
+            let symbol = ReadSymbol::from_pointer(symbol_name, pointer);
             self.insert_local(symbol);
         }
 

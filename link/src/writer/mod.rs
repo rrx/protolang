@@ -225,6 +225,8 @@ pub struct Data {
     relaplt: TrackSection,
     hash: TrackSection,
     symtab: TrackSection,
+    section_dynamic: TrackSection,
+
     add_section_headers: bool,
     add_symbols: bool,
 }
@@ -253,6 +255,7 @@ impl Data {
             relaplt: TrackSection::default(),
             hash: TrackSection::default(),
             symtab: TrackSection::default(),
+            section_dynamic: TrackSection::default(),
             pointers: HashMap::new(),
 
             add_section_headers: true,

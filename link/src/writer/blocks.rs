@@ -324,15 +324,16 @@ impl ElfBlock for DynamicSection {
 
     fn reserve_section_index(&mut self, data: &mut Data, _block: &mut ReadBlock, w: &mut Writer) {
         let index = w.reserve_dynamic_section_index();
-        data.section_index.insert(".dynamic".to_string(), index);
+        data.section_dynamic.section_index = Some(index); //section_index.insert(".dynamic".to_string(), index);
+        data.section_index_set(".dynamic", index);
         self.index = Some(index);
     }
 
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let dynamic = data.gen_dynamic();
@@ -342,29 +343,21 @@ impl ElfBlock for DynamicSection {
         w.reserve_dynamic(dynamic.len());
         let after = w.reserved_len();
 
-        tracker.add_offsets(
+        t.add_offsets(
             self.alloc().unwrap(),
             &mut self.offsets,
             after - file_offset,
             w,
         );
-        data.addr.insert(
-            AddressKey::Section(".dynamic".to_string()),
-            self.offsets.address,
+        data.section_dynamic.addr = Some(self.offsets.address);
+        data.pointers.insert(
+            ".dynamic".to_string(),
+            ResolvePointer::Resolved(self.offsets.address),
         );
-        data.addr.insert(
-            AddressKey::SectionIndex(self.index.unwrap()),
-            self.offsets.address,
-        );
+        data.addr_set(".dynamic", self.offsets.address);
     }
 
-    fn write(
-        &self,
-        data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, data: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let dynamic = data.gen_dynamic();
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
@@ -382,13 +375,7 @@ impl ElfBlock for DynamicSection {
         }
     }
 
-    fn write_section_header(
-        &self,
-        _data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, _: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         w.write_dynamic_section_header(self.offsets.address);
     }
 }
@@ -434,8 +421,8 @@ impl ElfBlock for RelaDynSection {
     fn reserve(
         &mut self,
         data: &mut Data,
-        tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
+        t: &mut SegmentTracker,
+        _: &mut ReadBlock,
         w: &mut Writer,
     ) {
         let relocations = data.dynamics.relocations(self.kind);
@@ -449,7 +436,7 @@ impl ElfBlock for RelaDynSection {
 
         let after = w.reserved_len();
 
-        tracker.add_offsets(
+        t.add_offsets(
             self.alloc().unwrap(),
             &mut self.offsets,
             after - file_offset,
@@ -467,13 +454,7 @@ impl ElfBlock for RelaDynSection {
         }
     }
 
-    fn write(
-        &self,
-        data: &Data,
-        _tracker: &mut SegmentTracker,
-        _block: &mut ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write(&self, data: &Data, _: &mut SegmentTracker, _: &mut ReadBlock, w: &mut Writer) {
         let relocations = data.dynamics.relocations(self.kind);
         let pos = w.len();
         let aligned_pos = size_align(pos, self.offsets.align as usize);
@@ -541,13 +522,7 @@ impl ElfBlock for RelaDynSection {
         }
     }
 
-    fn write_section_header(
-        &self,
-        data: &Data,
-        _tracker: &SegmentTracker,
-        _block: &ReadBlock,
-        w: &mut Writer,
-    ) {
+    fn write_section_header(&self, data: &Data, _: &SegmentTracker, _: &ReadBlock, w: &mut Writer) {
         let relocations = data.dynamics.relocations(self.kind);
 
         let sh_addralign = self.offsets.align;
@@ -794,59 +769,51 @@ impl ElfBlock for SymTabSection {
     }
 
     fn reserve_symbols(&mut self, data: &mut Data, block: &ReadBlock, w: &mut Writer) {
-        {
-            let name = "data_start";
-            let pointer = ResolvePointer::Section(".data".to_string(), 0);
-            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
-            symbol.bind = SymbolBind::Weak;
-            let section_index = data.section_index_get(".data");
-            data.statics.symbol_add(&symbol, Some(section_index), w);
-        }
+        let syms = vec![
+            (
+                "data_start",
+                ".data",
+                SymbolBind::Weak,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "__data_start",
+                ".data",
+                SymbolBind::Global,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "__bss_start",
+                ".bss",
+                SymbolBind::Global,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "__rodata_start",
+                ".rodata",
+                SymbolBind::Global,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "_GLOBAL_OFFSET_TABLE_",
+                ".got.plt",
+                SymbolBind::Local,
+                object::SymbolKind::Data,
+            ),
+            (
+                "_DYNAMIC",
+                ".dynamic",
+                SymbolBind::Local,
+                object::SymbolKind::Data,
+            ),
+        ];
 
-        {
-            let name = "__data_start";
-            let pointer = ResolvePointer::Section(".data".to_string(), 0);
+        for (name, section_name, bind, kind) in syms {
+            let pointer = ResolvePointer::Section(section_name.to_string(), 0);
             let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
-            symbol.bind = SymbolBind::Global;
-            let section_index = data.section_index_get(".data");
-            data.statics.symbol_add(&symbol, Some(section_index), w);
-        }
-
-        {
-            let name = "__bss_start";
-            let pointer = ResolvePointer::Section(".bss".to_string(), 0);
-            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
-            symbol.bind = SymbolBind::Global;
-            let section_index = data.section_index_get(".bss");
-            data.statics.symbol_add(&symbol, Some(section_index), w);
-        }
-
-        {
-            let name = "__rodata_start";
-            let pointer = ResolvePointer::Section(".rodata".to_string(), 0);
-            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
-            symbol.bind = SymbolBind::Global;
-            let section_index = data.section_index_get(".rodata");
-            data.statics.symbol_add(&symbol, Some(section_index), w);
-        }
-
-        {
-            let name = "_GLOBAL_OFFSET_TABLE_";
-            let pointer = ResolvePointer::Section(".got.plt".to_string(), 0);
-            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
-            symbol.bind = SymbolBind::Local;
-            symbol.kind = object::SymbolKind::Data;
-            let section_index = data.section_index_get(".got.plt");
-            data.statics.symbol_add(&symbol, Some(section_index), w);
-        }
-
-        {
-            let name = "_DYNAMIC";
-            let pointer = ResolvePointer::Section(".dynamic".to_string(), 0);
-            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
-            symbol.bind = SymbolBind::Local;
-            symbol.kind = object::SymbolKind::Data;
-            let section_index = data.section_index_get(".dynamic");
+            symbol.bind = bind;
+            symbol.kind = kind;
+            let section_index = data.section_index_get(section_name);
             data.statics.symbol_add(&symbol, Some(section_index), w);
         }
 
