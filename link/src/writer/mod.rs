@@ -49,11 +49,13 @@ struct Dynamic {
     string: Option<object::write::StringId>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub enum AllocSegment {
     RO,
     RW,
     RX,
+    #[default]
+    None,
 }
 
 impl AllocSegment {
@@ -62,6 +64,7 @@ impl AllocSegment {
             AllocSegment::RO => elf::SHF_ALLOC,
             AllocSegment::RW => elf::SHF_ALLOC | elf::SHF_WRITE,
             AllocSegment::RX => elf::SHF_ALLOC | elf::SHF_EXECINSTR,
+            AllocSegment::None => 0,
         }
     }
     pub fn program_header_flags(&self) -> u32 {
@@ -69,6 +72,7 @@ impl AllocSegment {
             AllocSegment::RO => elf::PF_R,
             AllocSegment::RW => elf::PF_R | elf::PF_W,
             AllocSegment::RX => elf::PF_R | elf::PF_X,
+            AllocSegment::None => 0,
         }
     }
 }

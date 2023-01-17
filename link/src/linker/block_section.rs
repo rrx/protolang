@@ -68,7 +68,6 @@ impl BlockSection {
 
 #[derive(Debug)]
 pub struct GeneralSection {
-    pub(crate) alloc: AllocSegment,
     state: BlockSectionState,
     pub(crate) name: &'static str,
     name_id: Option<StringId>,
@@ -101,14 +100,13 @@ impl GeneralSection {
     pub fn new(alloc: AllocSegment, name: &'static str) -> Self {
         Self {
             state: BlockSectionState::default(),
-            alloc,
             name,
             name_id: None,
             section_index: None,
             size: 0,
             bytes: vec![],
             relocations: vec![],
-            offsets: SectionOffset::new(0x10),
+            offsets: SectionOffset::new(alloc, 0x10),
         }
     }
 
@@ -131,7 +129,7 @@ impl GeneralSection {
                 log::info!(
                     target: "relocations",
                     "R-{:?}: vbase: {:#0x}, addr: {:#0x}, {}",
-                    self.alloc, self.offsets.address, addr as usize, &r.name
+                    self.offsets.alloc, self.offsets.address, addr as usize, &r.name
                 );
                 r.patch(
                     patch_base as *mut u8,
@@ -167,8 +165,12 @@ impl GeneralSection {
         let after = w.reserved_len();
 
         log::debug!("align: {:#0x}, fileoffset: {:#0x}", align, file_offset);
-        data.segments
-            .add_offsets(self.alloc, &mut self.offsets, after - file_offset, w);
+        data.segments.add_offsets(
+            self.offsets.alloc,
+            &mut self.offsets,
+            after - file_offset,
+            w,
+        );
         data.addr_set(&self.name, self.offsets.address);
         self.state = BlockSectionState::Located;
 
@@ -176,7 +178,7 @@ impl GeneralSection {
             "FO: {:#0x}, {}, {:?}, base: {:#0x}, addr: {:#0x}, size: {:#0x}, align: {:#0x}",
             self.offsets.file_offset,
             self.name,
-            self.alloc,
+            self.offsets.alloc,
             self.offsets.base,
             self.offsets.address,
             self.offsets.size,
@@ -189,7 +191,7 @@ impl GeneralSection {
         let aligned_pos = size_align(pos, self.offsets.align as usize);
         log::debug!(
             "AF: {:?}, {:#0x}, {:#0x}",
-            self.alloc,
+            self.offsets.alloc,
             aligned_pos,
             self.offsets.file_offset
         );
@@ -206,7 +208,7 @@ impl GeneralSection {
             w.write_section_header(&object::write::elf::SectionHeader {
                 name: Some(name_id),
                 sh_type: object::elf::SHT_PROGBITS,
-                sh_flags: self.alloc.section_header_flags() as u64,
+                sh_flags: self.offsets.alloc.section_header_flags() as u64,
                 sh_addr: self.offsets.address,
                 sh_offset: self.offsets.file_offset,
                 sh_info: 0,

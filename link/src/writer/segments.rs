@@ -74,9 +74,10 @@ impl Blocks {
         }
 
         // RESERVE SYMBOLS
-        for b in self.blocks.iter_mut() {
-            b.reserve_symbols(data, block, w);
-        }
+        //for b in self.blocks.iter_mut() {
+        //b.reserve_symbols(data, block, w);
+        //}
+        Self::reserve_symbols(data, block, w);
 
         // RESERVE
 
@@ -120,9 +121,9 @@ impl Blocks {
             b.reserve_section_index(&mut data, block, &mut w);
         }
 
-        for b in self.blocks.iter_mut() {
-            b.reserve_symbols(&mut data, block, &mut w);
-        }
+        //for b in self.blocks.iter_mut() {
+        Self::reserve_symbols(&mut data, block, &mut w);
+        //}
 
         for b in self.blocks.iter_mut() {
             //eprintln!("reserve: {}", b.name());
@@ -215,10 +216,66 @@ impl Blocks {
     //let ph = self.program_headers(data, block);
     //data.ph = ph;
     //}
+    //
+    fn reserve_symbols(data: &mut Data, block: &ReadBlock, w: &mut Writer) {
+        let syms = vec![
+            (
+                "data_start",
+                ".data",
+                SymbolBind::Weak,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "__data_start",
+                ".data",
+                SymbolBind::Global,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "__bss_start",
+                ".bss",
+                SymbolBind::Global,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "__rodata_start",
+                ".rodata",
+                SymbolBind::Global,
+                object::SymbolKind::Unknown,
+            ),
+            (
+                "_GLOBAL_OFFSET_TABLE_",
+                ".got.plt",
+                SymbolBind::Local,
+                object::SymbolKind::Data,
+            ),
+            (
+                "_DYNAMIC",
+                ".dynamic",
+                SymbolBind::Local,
+                object::SymbolKind::Data,
+            ),
+        ];
+
+        for (name, section_name, bind, kind) in syms {
+            let pointer = ResolvePointer::Section(section_name.to_string(), 0);
+            let mut symbol = ReadSymbol::from_pointer(name.to_string(), pointer);
+            symbol.bind = bind;
+            symbol.kind = kind;
+            let section_index = data.section_index_get(section_name);
+            data.statics.symbol_add(&symbol, Some(section_index), w);
+        }
+
+        for (_, symbol) in block.exports.iter() {
+            let section_index = symbol.section.section_index(data);
+            data.statics.symbol_add(symbol, section_index, w);
+        }
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct SectionOffset {
+    pub alloc: AllocSegment,
     pub base: u64,
     pub address: u64,
     pub file_offset: u64,
@@ -228,8 +285,9 @@ pub struct SectionOffset {
 }
 
 impl SectionOffset {
-    pub fn new(align: u64) -> Self {
+    pub fn new(alloc: AllocSegment, align: u64) -> Self {
         Self {
+            alloc,
             align,
             ..Default::default()
         }

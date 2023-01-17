@@ -252,9 +252,9 @@ pub fn disassemble_code_with_symbols(
 impl GeneralSection {
     pub fn disassemble(&self, data: &Data) {
         eprintln!("Disassemble: {}, {:#0x}", self.name, self.offsets.address);
-        match self.alloc {
+        match self.offsets.alloc {
             AllocSegment::RX => self.disassemble_code(data),
-            AllocSegment::RW | AllocSegment::RO => self.disassemble_data(data),
+            _ => self.disassemble_data(data),
         }
     }
 
