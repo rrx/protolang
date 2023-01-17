@@ -106,7 +106,7 @@ impl GeneralSection {
             size: 0,
             bytes: vec![],
             relocations: vec![],
-            offsets: SectionOffset::new(alloc, 0x10),
+            offsets: SectionOffset::new(name.into(), alloc, 0x10),
         }
     }
 

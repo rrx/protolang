@@ -33,8 +33,8 @@ impl Blocks {
         //blocks.push(Box::new(BlockSectionP::new(block)));
         blocks.push(ReadSectionKind::ROData.block());
         blocks.push(ReadSectionKind::RX.block());
-        blocks.push(Box::new(PltSection::new()));
-        blocks.push(Box::new(PltGotSection::new()));
+        blocks.push(Box::new(PltSection::new(".plt")));
+        blocks.push(Box::new(PltGotSection::new(".plt.got")));
         blocks.push(ReadSectionKind::RW.block());
 
         if data.is_dynamic() {
@@ -275,6 +275,7 @@ impl Blocks {
 
 #[derive(Debug, Default)]
 pub struct SectionOffset {
+    pub name: String,
     pub alloc: AllocSegment,
     pub base: u64,
     pub address: u64,
@@ -285,8 +286,9 @@ pub struct SectionOffset {
 }
 
 impl SectionOffset {
-    pub fn new(alloc: AllocSegment, align: u64) -> Self {
+    pub fn new(name: String, alloc: AllocSegment, align: u64) -> Self {
         Self {
+            name,
             alloc,
             align,
             ..Default::default()
