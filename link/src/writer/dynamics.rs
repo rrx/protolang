@@ -241,6 +241,19 @@ impl Dynamics {
         None
     }
 
+    pub fn symbols_local_count(&self) -> usize {
+        let mut locals = 1;
+        for name in self.symbols.iter() {
+            let track = self.symbol_hash.get(name).unwrap();
+            if track.symbol_index.is_some() {
+                if track.symbol.bind == SymbolBind::Local {
+                    locals += 1;
+                }
+            }
+        }
+        locals
+    }
+
     pub fn symbols_write(&self, data: &Data, w: &mut Writer) {
         w.write_null_dynamic_symbol();
         for name in self.symbols.iter() {

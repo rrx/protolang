@@ -747,14 +747,14 @@ impl ElfBlock for SymTabSection {
 pub struct DynSymSection {
     index: Option<SectionIndex>,
     offsets: SectionOffset,
-    count: u32,
+    symbol_count: u32,
 }
 impl Default for DynSymSection {
     fn default() -> Self {
         Self {
             index: None,
             offsets: SectionOffset::new("dynsym".into(), AllocSegment::RO, 0x08),
-            count: 0,
+            symbol_count: 0,
         }
     }
 }
@@ -774,7 +774,7 @@ impl ElfBlock for DynSymSection {
     }
 
     fn reserve(&mut self, data: &mut Data, _: &mut ReadBlock, w: &mut Writer) {
-        self.count = w.dynamic_symbol_count();
+        self.symbol_count = w.dynamic_symbol_count();
         let file_offset = w.reserve_start_section(&self.offsets);
         w.reserve_dynsym();
         let after = w.reserved_len();
@@ -785,18 +785,22 @@ impl ElfBlock for DynSymSection {
     }
 
     fn write(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
-        assert_eq!(self.count, w.dynamic_symbol_count());
-        assert_eq!(self.count as usize, data.dynamics.symbol_count() + 1);
+        assert_eq!(self.symbol_count, w.dynamic_symbol_count());
+        assert_eq!(self.symbol_count as usize, data.dynamics.symbol_count() + 1);
         w.write_start_section(&self.offsets);
         data.dynamics.symbols_write(data, w);
     }
 
     fn write_section_header(&self, data: &Data, _: &ReadBlock, w: &mut Writer) {
-        let got = data.dynamics.relocations(GotSectionKind::GOT);
-        let plt = data.dynamics.relocations(GotSectionKind::GOTPLT);
-
-        let len = got.len() + plt.len();
-        w.write_dynsym_section_header(data.dynsym.addr.unwrap(), len as u32 + 1);
+        // find the number of local symbols, probably 1 (the null symbol)?
+        let num_locals = data.dynamics.symbols_local_count();
+        /*
+         * http://www.skyfree.org/linux/references/ELF_Format.pdf
+         * SHT_DYNSYM
+         * sh_link: The section header index of the associated string table.
+         * sh_info: One greater than the symbol table index of the last local symbol (binding STB_LOCAL).
+         */
+        w.write_dynsym_section_header(data.dynsym.addr.unwrap(), num_locals as u32);
     }
 }
 
