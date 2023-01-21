@@ -1377,15 +1377,53 @@ impl ElfBlock for PltGotSection {
 
 pub struct BlockSectionP<'a> {
     block: &'a mut ReadBlock,
+    kind: ReadSectionKind,
 }
+
 impl<'a> BlockSectionP<'a> {
-    pub fn new(block: &'a mut ReadBlock) -> Self {
-        Self { block }
+    pub fn new(kind: ReadSectionKind, block: &'a mut ReadBlock) -> Self {
+        Self { kind, block }
+    }
+
+    pub fn section(&self) -> &GeneralSection {
+        match self.kind {
+            ReadSectionKind::RX => &self.block.rx,
+            ReadSectionKind::ROData => &self.block.ro,
+            ReadSectionKind::RW => &self.block.rw,
+            ReadSectionKind::Bss => &self.block.bss,
+            _ => unreachable!(),
+        }
+    }
+    pub fn section_mut(&mut self) -> &mut GeneralSection {
+        match self.kind {
+            ReadSectionKind::RX => &mut self.block.rx,
+            ReadSectionKind::ROData => &mut self.block.ro,
+            ReadSectionKind::RW => &mut self.block.rw,
+            ReadSectionKind::Bss => &mut self.block.bss,
+            _ => unreachable!(),
+        }
     }
 }
+
 impl<'a> ElfBlock for BlockSectionP<'a> {
     fn name(&self) -> String {
-        return "asdf".to_string();
+        self.section().name()
+    }
+    fn alloc(&self) -> AllocSegment {
+        self.section().alloc()
+    }
+    fn reserve_section_index(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
+        self.section_mut().reserve_section_index(data, block, w);
+    }
+    fn reserve(&mut self, data: &mut Data, block: &mut ReadBlock, w: &mut Writer) {
+        self.section_mut().reserve(data, block, w);
+    }
+    fn write(&self, data: &Data, block: &ReadBlock, w: &mut Writer) {
+        self.section().write(data, block, w);
+    }
+
+    fn write_section_header(&self, data: &Data, block: &ReadBlock, w: &mut Writer) {
+        self.section().write_section_header(data, block, w);
     }
 }
 
@@ -1401,6 +1439,7 @@ impl BlockSectionX {
         }
     }
 }
+
 impl ElfBlock for BlockSectionX {
     fn name(&self) -> String {
         return format!("blockx:{:?}", self.kind);

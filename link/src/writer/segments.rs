@@ -5,7 +5,7 @@ pub struct Blocks {
 }
 
 impl Blocks {
-    pub fn new(data: &Data, w: &mut Writer) -> Self {
+    pub fn new(data: &Data, block: &mut ReadBlock, w: &mut Writer) -> Self {
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
 
         blocks.push(Box::new(FileHeader::default()));
@@ -30,7 +30,7 @@ impl Blocks {
             blocks.push(Box::new(RelaDynSection::new(GotSectionKind::GOTPLT)));
         }
 
-        //blocks.push(Box::new(BlockSectionP::new(block)));
+        //blocks.push(Box::new(BlockSectionP::new(ReadSectionKind::ROData, block)));
         blocks.push(ReadSectionKind::ROData.block());
         blocks.push(ReadSectionKind::RX.block());
         blocks.push(Box::new(PltSection::new(".plt")));

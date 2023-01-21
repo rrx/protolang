@@ -3,11 +3,16 @@ Helpful links for building linkers:
 
 - https://wiki.osdev.org/ELF
 - https://web.archive.org/web/20140130143820/http://www.robinhoksbergen.com/papers/howto_elf.html
+- http://www.skyfree.org/linux/references/ELF_Format.pdf
+- https://gitlab.com/x86-psABIs/x86-64-ABI
 
 # Similar Work
 
 - https://github.com/aep/elfkit
-
+- https://github.com/m4b/dryad
+- https://github.com/m4b/goblin
+- https://github.com/bloff/runtime-static-linking-with-libbfd/blob/master/main.c
+- https://github.com/m4b/faerie/blob/master/examples/prototype.rs
 
 # Notes
 
@@ -91,4 +96,3 @@ for (i, symbol) in relocations:
   - write the plt slot, which references the index of the relocation and the pointer to the stub
   - the stub is at the start of the plt.
   - the initial jump in the plt slot gets it's address from GOTPLT[i]
-
