@@ -1,0 +1,23 @@
+[package]
+name = "lang3"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+thiserror = "*"
+rpds = "0.11"
+log = "0.4"
+im = "15"
+env_logger = "0.9"
+codegen_ir = { path = "../codegen_ir" }
+codegen_llvm = { path = "../codegen_llvm" }
+logic = { path = "../logic" }
+itertools = "0.10"
+ron = "0.8"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+criterion = "0.3"
+test-log = "0.2"

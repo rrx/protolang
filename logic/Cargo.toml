@@ -1,0 +1,18 @@
+[package]
+name = "logic"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rpds = "*"
+log = "*"
+env_logger = "0.9"
+ena = "*"
+
+[dev-dependencies]
+criterion = "0.3"
+test-log = "0.2"
+
+

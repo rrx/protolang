@@ -1,1 +1,7 @@
 /target
+dead
+tmp
+.devenv*
+devenv.local.nix
+.direnv
+zig-*
