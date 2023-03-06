@@ -245,8 +245,7 @@ fn test_lib_print(version: LinkVersion) {
 
         // call strlen
         let cstr = std::ffi::CString::new("asdf").unwrap();
-        let ret: i64 = version
-            .invoke("strlen", cstr.as_ptr(),).unwrap();
+        let ret: i64 = version.invoke("strlen", cstr.as_ptr()).unwrap();
         assert_eq!(4, ret);
 
         let ret: i64 = version.invoke("fputc", (0x30u32, works)).unwrap();

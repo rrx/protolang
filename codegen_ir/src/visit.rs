@@ -109,7 +109,11 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
         }
 
         Ast::Lambda(lambda) => {
-            let Lambda { args: _, body, typ: _ } = lambda;
+            let Lambda {
+                args: _,
+                body,
+                typ: _,
+            } = lambda;
             f.enter_lambda(lambda, n)?;
             visit(body, f, n)?;
             f.exit_lambda(lambda, n)?;
