@@ -231,10 +231,10 @@ mod tests {
     #[test]
     fn linker_segfault() {
         let mut b = DynamicLink::new();
-        b.add_library("test", Path::new("libsigsegv.so"));
+        b.add_library("test", Path::new("libsigsegv.so")).unwrap();
         b.add_obj_file("test", Path::new("../tmp/segfault.o"))
             .unwrap();
-        let version = b.link().unwrap();
+        let _version = b.link().unwrap();
         // XXX: This isn't working yet
         //let ret: i64 = version.invoke("handlers_init", ()).unwrap();
         //let ret: i64 = version.invoke("segfault_me", ()).unwrap();

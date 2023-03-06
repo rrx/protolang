@@ -608,7 +608,7 @@ mod tests {
         let module = generate(&context, "test", &ast, &mut defmap).unwrap();
 
         let mut exec = Executor::create(OptimizationLevel::None, 0).unwrap();
-        exec.add(&module);
+        exec.add(&module).unwrap();
         let ret = exec.run::<i64>().unwrap();
         println!("ret: {:?}", ret);
         assert_eq!(ret, 55);
@@ -622,7 +622,7 @@ mod tests {
 
         let context = Context::create();
         let mut defmap = DefinitionMap::default();
-        let module = generate(&context, "test", &ast, &mut defmap).unwrap();
+        let _module = generate(&context, "test", &ast, &mut defmap).unwrap();
     }
 
     #[test]

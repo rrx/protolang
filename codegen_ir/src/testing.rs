@@ -127,7 +127,7 @@ pub fn gen_main_simple(defs: &mut Definitions) -> Ast {
     // 0-arity
     let typ = FunctionType::export(vec![Type::i64()]);
     // main function
-    let f_main = Lambda::new(vec![], hir::i64(10).into(), typ.clone());
+    //let _f_main = Lambda::new(vec![], hir::i64(10).into(), typ.clone());
     let add = hir::add(hir::i64(4), call_x1);
     let df_main = defs.new_definition("main", add.into());
     let v = df_main.to_variable();

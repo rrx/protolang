@@ -1,4 +1,3 @@
-//use lang3::*;
 use crate::syntax::{ast, lexer, AstModule};
 use lang3 as L;
 use lang3::Lower;
@@ -12,7 +11,7 @@ type Builder = L::AstBuilder;
 impl AstModule {
     pub fn lower(&self, builder: &mut Builder) -> LResult {
         let ast = self.statement.lower(builder)?;
-        let (ast, env, subst) = builder.resolve_ast_with_base(&ast)?;
+        let (ast, _env, _subst) = builder.resolve_ast_with_base(&ast)?;
         Ok(ast)
     }
 }
@@ -137,7 +136,7 @@ impl<A: ast::AstPayload> Lower for ast::AstArgumentP<A> {
 }
 
 impl Lower for ast::AstLiteral {
-    fn lower(&self, b: &mut Builder) -> LResult {
+    fn lower(&self, _b: &mut Builder) -> LResult {
         match self {
             Self::Int(int) => match &int.node {
                 lexer::TokenInt::I32(i) => Ok(L::Ast::int(*i as i64)),
@@ -171,11 +170,11 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
             },
             //ArrayIndirection(Box<(AstExprP<P>, AstExprP<P>)>),
             //Slice(
-            Identifier(s, p) => {
+            Identifier(s, _p) => {
                 let ty = b.type_unknown();
                 Ok(b.var_named(&s.node, ty).into())
             }
-            Lambda(params, body, p) => {
+            Lambda(_params, _body, _p) => {
                 unimplemented!("{:?}", &self)
             }
             Literal(x) => x.lower(b),

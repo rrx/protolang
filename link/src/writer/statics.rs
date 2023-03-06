@@ -97,7 +97,7 @@ impl Statics {
         section_index: Option<SectionIndex>,
         w: &mut Writer,
     ) {
-        if let Some(track) = self.symbol_hash.get(&symbol.name) {
+        if let Some(_track) = self.symbol_hash.get(&symbol.name) {
         } else {
             let string_id = self.string_add(&symbol.name, w);
             let symbol_index = Some(w.reserve_symbol_index(section_index));

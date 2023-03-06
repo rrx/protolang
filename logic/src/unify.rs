@@ -67,7 +67,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Expr<K, T, 
                 (UnifyResult::NoSolution, s)
             }
             OneOfValues(value, possibilities) => {
-                let mut s = subst.clone();
+                let mut s = subst;
                 let mut result = UnifyResult::NoSolution;
                 for p in possibilities {
                     match Unify::unify_value(value.clone(), p.clone(), s.clone()) {
@@ -97,7 +97,7 @@ pub struct Unify<K, T, V> {
 
 impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Unify<K, T, V> {
     fn subs_type(ty: &T, subst: SymbolTable<K, V>) -> T {
-        let mut ty = ty.clone();
+        let ty = ty.clone();
         if let Some(type_id) = ty.try_unknown() {
             if subst.contains_key(&type_id) {
                 let v = subst.get(&type_id).unwrap().clone();
@@ -161,7 +161,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Unify<K, T,
             } else if children1.len() == children2.len() {
                 // if there are no children, this is just a simple type and we can compare
                 // directory.  Otherwise, unify on the children
-                if children1.len() == 0 {
+                if children1.is_empty() {
                     if ty1 == ty2 {
                         (UnifyResult::Ok, subst)
                     } else {
@@ -210,7 +210,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Unify<K, T,
         // ensure we have the same shape
         let (res, subst) = if sig1.len() != sig2.len() {
             (UnifyResult::MismatchShape, subst)
-        } else if sig1.len() == 0 {
+        } else if sig1.is_empty() {
             (UnifyResult::MismatchShape, subst)
         } else if sig1 == sig2 {
             (UnifyResult::Ok, subst)
@@ -285,7 +285,7 @@ impl<K: UnifyKey, T: UnifyType<K>, V: UnifyValue<Key = K, Type = T>> Unify<K, T,
 
         loop {
             // Are we out of equations?
-            if equations.len() == 0 {
+            if equations.is_empty() {
                 break;
             }
 
@@ -457,7 +457,7 @@ mod test {
     #[test]
     fn logic_solution() {
         let x = var(8);
-        let y = var(13);
+        let _y = var(13);
         let eqs = vec![
             Eq(x, var(7)),
             Eq(var(0), Type::Int),

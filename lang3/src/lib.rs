@@ -16,10 +16,7 @@ pub use types::*;
 use visitor::*;
 
 pub use logic::{UnifyResult, UnifyValue};
-use serde::{
-    ser::{SerializeStruct, Serializer},
-    Serialize,
-};
+use serde::Serialize;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct DefinitionId(pub usize);

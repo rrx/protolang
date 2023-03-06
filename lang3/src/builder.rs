@@ -288,14 +288,14 @@ impl AstBuilder {
 
                 // add an equation if condition is unknown
                 let ty = condition.get_type();
-                if let Some(ty_id) = ty.try_unknown() {
+                if let Some(_ty_id) = ty.try_unknown() {
                     self.equations.push(logic::Expr::Eq(ty, Type::Bool));
                 }
 
                 let (istrue, env) = self.name_resolve(istrue, env);
                 let (isfalse, env) = if let Some(v) = isfalse {
                     let ty = v.get_type();
-                    if let Some(ty_id) = ty.try_unknown() {
+                    if let Some(_ty_id) = ty.try_unknown() {
                         self.equations.push(logic::Expr::Eq(ty, istrue.get_type()));
                     }
                     (
@@ -594,7 +594,7 @@ mod tests {
         let block = b.block(vec![decl1, decl2]);
         let ast = b.declare("c", block.clone());
 
-        let (ast, env, _) = b.resolve(&ast, env.clone()).unwrap();
+        let (_ast, env, _) = b.resolve(&ast, env.clone()).unwrap();
 
         println!("a = {:?}", env.resolve(&"a".into()));
         println!("b = {:?}", env.resolve(&"b".into()));
@@ -725,7 +725,7 @@ mod tests {
     #[test]
     fn call_with_param() {
         let mut b: AstBuilder = AstBuilder::default();
-        let env = b.base_env();
+        let _env = b.base_env();
 
         // f(x) => x
         let p = b.var_unnamed(Type::Int);
@@ -741,7 +741,7 @@ mod tests {
 
         let ast = b.block(vec![df, dmain]);
 
-        let (ast, env, subst) = b.resolve_ast_with_base(&ast).unwrap();
+        let (ast, _env, _subst) = b.resolve_ast_with_base(&ast).unwrap();
 
         println!("AST: {}", &ast.to_ron().unwrap());
         println!("AST: {}", &ast);

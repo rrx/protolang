@@ -74,7 +74,7 @@ fn test_empty_main() {
     log::debug!("init_ptr: {:#08x}", init_ptr as usize);
     let init_ptr = 0;
 
-    let (base, size) = b.get_mem_ptr();
+    let (base, _size) = b.get_mem_ptr();
     let ret: i64 = version
         .invoke("initialize", (base, main_ptr, init_ptr))
         .unwrap();
@@ -88,7 +88,7 @@ fn test_segfault() {
     b.add_library("t2", &temp_path("libsigsegv.so")).unwrap();
     b.add_obj_file("t3", &temp_path("segfault.o")).unwrap();
     let version = b.link().unwrap();
-    let ret: i64 = version.invoke("handlers_init", ()).unwrap();
+    let _ret: i64 = version.invoke("handlers_init", ()).unwrap();
 }
 
 #[test]
@@ -235,21 +235,18 @@ fn test_lib_print(version: LinkVersion) {
         //);
         let p1 = *stdout_ptr as *const usize;
         //log::debug!("p1: *stdout: {:#08x}", p1 as usize);
-        let p2 = *p1 as *const usize;
+        let _p2 = *p1 as *const usize;
         //log::debug!("p2: **stdout: {:#08x}", p2 as usize);
         //let p3 = *p2 as *const usize;
         //log::debug!("p3: ***stdout: {:#08x}", p3 as usize);
-        let s = std::slice::from_raw_parts(p1, 0x20);
+        let _s = std::slice::from_raw_parts(p1, 0x20);
         //log::debug!("***stdout: {:#08x?}", s);
         let works = p1;
 
         // call strlen
+        let cstr = std::ffi::CString::new("asdf").unwrap();
         let ret: i64 = version
-            .invoke(
-                "strlen",
-                (std::ffi::CString::new("asdf").unwrap().as_ptr(),),
-            )
-            .unwrap();
+            .invoke("strlen", cstr.as_ptr(),).unwrap();
         assert_eq!(4, ret);
 
         let ret: i64 = version.invoke("fputc", (0x30u32, works)).unwrap();

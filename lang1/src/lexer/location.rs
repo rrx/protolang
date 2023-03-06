@@ -1,5 +1,5 @@
 use crate::results::{LangError, LangErrorKind};
-use crate::tokens::{FileId, Span, Tok, Tokens, TokensList};
+use crate::tokens::{FileId, Span, Tokens, TokensList};
 use std::fmt;
 
 #[derive(PartialEq, Clone)]

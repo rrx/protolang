@@ -255,7 +255,7 @@ fn test_lexer_operators() {
 fn test_lexer_error_messages() {
     // What are the common errors people make.
     // Do they have good error messages and span locations.
-    fn f(program: &str, msg: &str) {
+    fn f(program: &str, _msg: &str) {
         assert::parse_fail(program);
     }
 

@@ -58,7 +58,7 @@ impl PatchBlock {
     }
 }
 
-pub fn print_bytes(buf: &[u8], base: usize) {
+pub fn print_bytes(buf: &[u8], _base: usize) {
     use pretty_hex::*;
     let cfg = HexConfig {
         title: false,

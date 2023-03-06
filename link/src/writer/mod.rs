@@ -460,7 +460,7 @@ pub fn write_file_main<Elf: object::read::elf::FileHeader<Endian = Endianness>>(
     w: &mut Writer,
 ) -> std::result::Result<(), Box<dyn Error>> {
     block.build_strings(data, w);
-    let mut blocks = Blocks::new(data, block, w);
+    let mut blocks = Blocks::new(data, w);
     blocks.build(data, w, block);
     Ok(())
 }

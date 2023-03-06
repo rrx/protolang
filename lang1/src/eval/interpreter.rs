@@ -1,10 +1,8 @@
 use super::*;
 use super::{ExprRef, ExprRefWithEnv};
 use crate::ast::*;
-//use crate::parser::Unparse;
 use crate::results::{LangError, LangErrorKind};
 use crate::tokens::Tok;
-use log::debug;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -604,7 +602,7 @@ mod tests {
         let env = Environment::default();
         let mut program = Program::new();
         let r = program.eval("assert(1)", env);
-        if let Err(LangError { kind: _, loc }) = r {
+        if let Err(LangError { kind: _, loc: _ }) = r {
             //assert!(context.has_location());
         } else {
             unreachable!();
@@ -612,7 +610,7 @@ mod tests {
 
         let env = Environment::default();
         let r = program.eval("a", env);
-        if let Err(LangError { kind: _, loc }) = r {
+        if let Err(LangError { kind: _, loc: _ }) = r {
             //assert!(context.has_location());
         } else {
             unreachable!();

@@ -106,7 +106,7 @@ impl UnlinkedCodeSegmentInner {
         Ok(segments)
     }
 
-    pub fn create_segments_elf(link_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
+    pub fn create_segments_elf(_link_name: &str, buf: &[u8]) -> Result<Vec<Self>, Box<dyn Error>> {
         use object::elf::FileHeader64;
         use object::read::elf;
         let b: elf::ElfFile<'_, FileHeader64<object::Endianness>> =
@@ -116,7 +116,7 @@ impl UnlinkedCodeSegmentInner {
         //let mut symbols = vec![];
         let mut relocations = vec![];
         for section in b.sections() {
-            let section_name = section.name()?.to_string();
+            let _section_name = section.name()?.to_string();
             match section.kind() {
                 SectionKind::Text => {}
                 _ => unimplemented!(),
@@ -170,12 +170,12 @@ impl UnlinkedCodeSegmentInner {
                 log::debug!("  {}", r);
             }
 
-            let name = format!("{}{}", link_name, section_name);
+            //let name = format!("{}{}", link_name, section_name);
             let data = section.uncompressed_data()?;
 
             // for bss, we have empty data, so we pass in a zero initialized buffer
             // to be consistent
-            let bytes = if section.size() as usize > data.len() {
+            let _bytes = if section.size() as usize > data.len() {
                 let mut data = Vec::new();
                 data.resize(section.size() as usize, 0);
                 data
@@ -371,7 +371,7 @@ impl UnlinkedCodeSegmentInner {
             for section in obj_file.sections() {
                 let section_name = section.name()?.to_string();
                 let section_index = section.index().0;
-                let mut out_symbols = vec![];
+                //let out_symbols = vec![];
 
                 if section_name.starts_with(".eh_frame") {
                     continue;
@@ -490,7 +490,7 @@ impl UnlinkedCodeSegmentInner {
                     externs: externs.clone(),
                     defined,
                     internal: internal.clone(),
-                    symbols: out_symbols,
+                    symbols: vec![],
                     relocations,
                 });
             }

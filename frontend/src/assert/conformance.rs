@@ -26,9 +26,6 @@
 use gazebo::prelude::*;
 use itertools::Itertools;
 
-use crate::assert::assert::Assert;
-use crate::errors::Diagnostic;
-
 /// Describe a conformance test
 struct ConformanceTest {
     /// The code of the test

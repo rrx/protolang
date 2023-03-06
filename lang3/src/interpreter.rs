@@ -38,7 +38,7 @@ impl Interpreter {
     pub fn run(&mut self, ast: &Ast) -> Result<Ast, Box<dyn Error>> {
         let env = Environment::default();
         let env = base_env(env, &mut self.builder);
-        let (ast, env, subst) = self.builder.resolve(ast, env.clone())?;
+        let (ast, env, _subst) = self.builder.resolve(ast, env.clone())?;
 
         //let (_res, ast, _env, subst) = self.builder.resolve(ast, env.clone());
         //let ast = ast.resolve(&subst);
@@ -68,11 +68,11 @@ fn lookup_builtin_by_name(name: &str, env: Environment) -> Option<Builtin> {
     let v = env.resolve(&name.to_string());
     log::debug!("resolve {:?}", (&v));
     match v {
-        Some(Ast::Declare(var, func)) => match **func {
+        Some(Ast::Declare(_var, func)) => match **func {
             Ast::Function {
-                ref params,
+                params: _,
                 ref body,
-                ref ty,
+                ty: _,
             } => match **body {
                 Ast::Internal(ref b) => {
                     return Some(b.clone());
@@ -113,7 +113,7 @@ fn eval(
         }
 
         Ast::Block(exprs) => {
-            let mut original_env = env.clone();
+            let original_env = env.clone();
             let mut out = vec![];
             for e in exprs {
                 let (e, new_env) = eval(i, e, env.clone())?;
@@ -136,8 +136,8 @@ mod tests {
     #[test]
     fn interpreter() {
         let mut b: AstBuilder = AstBuilder::default();
-        let env = Environment::default();
-        let env = base_env(env, &mut b);
+        //let env = Environment::default();
+        //let env = base_env(env, &mut b);
 
         let one = b.int(1);
         let two = b.int(2);

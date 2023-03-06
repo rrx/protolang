@@ -4,7 +4,6 @@ use crate::{
     results::LangError,
     tokens::Tok,
 };
-use std::fmt;
 
 pub fn builtins(mut builtins: CallTable) -> CallTable {
     builtins

@@ -5,7 +5,6 @@ type DefinitionMap = std::collections::HashMap<DefinitionId, Ast>;
 type DefinitionNames = std::collections::HashMap<String, DefinitionId>;
 type Environment = EnvLayers<DefinitionId, Ast>;
 
-use codegen_ir::util::fmap;
 use std::error::Error;
 use std::fmt;
 
@@ -37,10 +36,10 @@ fn lookup_var<'a>(var: &Variable, defmap: &DefinitionMap) -> EResult {
 impl Interp {
     fn scan(&mut self, ast: &Ast, defmap: &mut DefinitionMap) {
         for def in codegen_ir::scan::scan_definitions(ast) {
-            let name = def.get_name();
+            //let _name = def.get_name();
 
             match &*def.expr {
-                Ast::Lambda(lambda) => {
+                Ast::Lambda(_lambda) => {
                     defmap.insert(def.variable, ast.clone());
                 }
                 _ => unimplemented!(),
@@ -57,7 +56,7 @@ impl Interp {
         result
     }
 
-    fn eval_lambda(&mut self, lambda: &Lambda, defmap: &mut DefinitionMap) -> EResult {
+    fn eval_lambda(&mut self, lambda: &Lambda, _defmap: &mut DefinitionMap) -> EResult {
         Ok(lambda.clone().into())
     }
 
@@ -76,7 +75,7 @@ impl Interp {
         let FunctionCall {
             function,
             args,
-            function_type,
+            function_type: _,
         } = call;
         match **function {
             Ast::Variable(ref var) => {
@@ -85,7 +84,7 @@ impl Interp {
                     Ast::Lambda(lambda) => {
                         //println!("call({}, {:?}): {:?}", var.get_name(), args, lambda.args);
                         assert_eq!(lambda.args.len(), args.len());
-                        let mut original_env = self.env.clone();
+                        let original_env = self.env.clone();
                         //self.env.push();
 
                         //println!("env({:?})", self.env);
@@ -150,7 +149,7 @@ impl Interp {
         }
     }
 
-    fn eval_return(&mut self, ret: &Return, defmap: &mut DefinitionMap) -> EResult {
+    fn eval_return(&mut self, ret: &Return, _defmap: &mut DefinitionMap) -> EResult {
         Ok(ret.clone().into())
         //self.eval(&ret.expression, defmap)
     }
@@ -234,7 +233,7 @@ mod tests {
 
         let mut defmap = DefinitionMap::default();
         let mut i = Interp::default();
-        let ret = i.eval(&ast, &mut defmap).unwrap();
+        let _ret = i.eval(&ast, &mut defmap).unwrap();
         let ret = i.call_name("main", vec![], &mut defmap).unwrap();
         println!("ret: {:?}", ret);
         assert_eq!(ret.try_i64(), Some(55));

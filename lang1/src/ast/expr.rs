@@ -1,7 +1,7 @@
 use super::function::{Callable, Lambda};
 use super::node::{Context, FromContext, MaybeNodeContext};
 use super::{visit_expr, ExprVisitor, VResult};
-use super::{Operator, OperatorNode};
+use super::OperatorNode;
 use crate::ast::CallWithType;
 use crate::eval::TypeSig;
 use crate::lexer::Location;

@@ -5,7 +5,7 @@ use log::debug;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-pub fn cli(args: Vec<String>) -> anyhow::Result<()> {
+pub fn cli(_args: Vec<String>) -> anyhow::Result<()> {
     let mut program = Program::new();
     let mut env = Environment::default();
     for filename in std::env::args().skip(1) {

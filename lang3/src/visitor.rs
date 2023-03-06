@@ -46,7 +46,7 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
                 visit(e, f, n)?;
             }
         }
-        Ast::Function { params, body, ty } => {
+        Ast::Function { params: _, body, ty: _ } => {
             visit(body, f, n)?;
             //for p in params {
             //visit(p.clone(), f, n)?;

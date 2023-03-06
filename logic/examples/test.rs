@@ -1,5 +1,4 @@
 use ena::unify::*;
-use std::cmp;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 struct IntKey(u32);

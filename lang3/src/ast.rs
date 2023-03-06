@@ -223,14 +223,14 @@ impl Ast {
     }
 
     pub fn resolve(&self, subst: &SymbolTable) -> Result<Self, Box<dyn Error>> {
-        let before = self.clone();
+        //let before = self.clone();
         let after = match &self {
             Self::Literal(_) => self.clone(),
             Self::Variable(_) => self.replace_variable(subst),
             Self::Parameter(_) => self.clone(),
             Self::Extern(types) => Self::Extern(Type::resolve_list(&types, subst)),
             Self::Builtin(types) => Self::Builtin(Type::resolve_list(&types, subst)),
-            Self::Internal(v) => self.clone(),
+            Self::Internal(_v) => self.clone(),
             Self::Declare(var, expr) => {
                 Self::Declare(var.resolve_type(subst), expr.resolve(subst)?.into())
             }
@@ -316,7 +316,7 @@ impl logic::UnifyValue for Ast {
             Self::Return(expr) => expr.get_type(),
 
             // get the type of istrue, we check to make sure these match elsewhere
-            Self::Condition(_, istrue, isfalse) => istrue.get_type(),
+            Self::Condition(_, istrue, _isfalse) => istrue.get_type(),
         }
     }
 

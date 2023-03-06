@@ -126,7 +126,7 @@ fn parse_stmt_end(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 fn parse_invalid_token(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, pos) = position(i)?;
+    let (i, _pos) = position(i)?;
     let (i, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
     match &token.tok {
@@ -366,7 +366,7 @@ pub fn _parse_empty_stmt(i: Tokens) -> PResult<Tokens, Tokens> {
 }
 
 pub(crate) fn parse_declaration(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, pos_start) = position(i)?;
+    let (i, _pos_start) = position(i)?;
     let (i, tlet) = tag_token(Tok::Let)(i)?;
 
     let token = &i.tok[0].tok;
@@ -418,7 +418,7 @@ pub(crate) fn parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 
 fn _parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
     log::debug!("{:?}", (&i, &i.input_len()));
-    let (i, pos) = position(i)?;
+    let (i, _pos) = position(i)?;
     let (i, t) = take_one_any(i)?;
     let token = &t.tok[0];
     match &token.tok {
@@ -433,7 +433,7 @@ fn _parse_ident_expr(i: Tokens) -> PResult<Tokens, ExprNode> {
 }
 
 pub(crate) fn parse_literal(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, pos) = position(i)?;
+    let (i, _pos) = position(i)?;
     let (i1, t1) = take_one_any(i)?;
     let token = &t1.tok[0];
     let tok = &token.tok;
@@ -452,7 +452,7 @@ fn parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
     context("lambda-expr", _parse_lambda)(i)
 }
 fn _parse_lambda(i: Tokens) -> PResult<Tokens, ExprNode> {
-    let (i, pos) = position(i)?;
+    let (i, _pos) = position(i)?;
     let (i, (slash, idents, arrow)) = tuple((
         tag_token(Tok::Backslash),
         many0(parse_ident_expr),
@@ -496,7 +496,6 @@ pub fn parse_str(s: &str) -> anyhow::Result<ExprNode> {
 mod tests {
     use super::error::print_result;
     use super::*;
-    use crate::lexer::*;
     use crate::program::Program;
     use crate::sexpr::SExpr;
     use log::debug;
@@ -899,7 +898,7 @@ mod tests {
         //let mut interp = crate::eval::Interpreter::default();
         let mut program = Program::new();
         let r = program.eval("assert(1 == 1 == 1 == 1)", env).unwrap();
-        let r = program
+        let _r = program
             .eval(
                 "
             let a = 1
@@ -918,7 +917,7 @@ mod tests {
         //let env = crate::ir::base_env();
         let env = crate::eval::Environment::default();
         let mut program = Program::new();
-        let r = program.eval("assert(1 == 1)", env).unwrap();
+        let _r = program.eval("assert(1 == 1)", env).unwrap();
         program.print();
     }
 }

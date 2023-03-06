@@ -193,7 +193,7 @@ impl GeneralSection {
         }
 
         //if data.debug_enabled(&DebugFlag::Disassemble) {
-            self.disassemble(data);
+        self.disassemble(data);
         //}
     }
 }

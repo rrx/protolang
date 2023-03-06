@@ -2,7 +2,6 @@ use codegen_ir::hir::*;
 use codegen_ir::testing::*;
 use codegen_llvm::*;
 use criterion::{criterion_group, criterion_main, Criterion};
-use std::error::Error;
 use watch::*;
 
 fn link(c: &mut Criterion) {

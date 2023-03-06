@@ -1,5 +1,4 @@
-use crate::tokens::{FileId, Tok};
-use miette::SourceSpan;
+use crate::tokens::Tok;
 use std::fmt;
 
 #[derive(PartialEq, Clone)]

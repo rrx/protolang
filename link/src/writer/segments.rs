@@ -5,7 +5,7 @@ pub struct Blocks {
 }
 
 impl Blocks {
-    pub fn new(data: &Data, block: &mut ReadBlock, w: &mut Writer) -> Self {
+    pub fn new(data: &Data, w: &mut Writer) -> Self {
         let mut blocks: Vec<Box<dyn ElfBlock>> = vec![];
 
         blocks.push(Box::new(FileHeader::default()));

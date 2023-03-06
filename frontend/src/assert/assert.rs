@@ -22,14 +22,9 @@
 // We want to carefully control the panic message.
 #![allow(clippy::if_then_panic)]
 
-use std::collections::HashMap;
-
 use gazebo::prelude::*;
-use once_cell::sync::Lazy;
 
-use crate as starlark;
 use crate::codemap::CodeMap;
-use crate::codemap::FileSpanRef;
 use crate::codemap::Pos;
 use crate::codemap::Span;
 use crate::errors::Diagnostic;

@@ -1,4 +1,4 @@
-use crate::hir::{self, *};
+use crate::hir;
 use crate::*;
 
 #[derive(Debug)]
@@ -109,7 +109,7 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
         }
 
         Ast::Lambda(lambda) => {
-            let Lambda { args, body, typ } = lambda;
+            let Lambda { args: _, body, typ: _ } = lambda;
             f.enter_lambda(lambda, n)?;
             visit(body, f, n)?;
             f.exit_lambda(lambda, n)?;
@@ -118,9 +118,9 @@ fn visit_children<N>(e: &Ast, f: &mut impl Visitor<N>, n: &mut N) -> VResult {
         Ast::FunctionCall(call) => {
             f.enter_call(call, n)?;
             let FunctionCall {
-                function,
+                function: _,
                 args,
-                function_type,
+                function_type: _,
             } = call;
             for arg in args {
                 visit(arg, f, n)?;

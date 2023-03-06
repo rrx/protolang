@@ -232,10 +232,10 @@ impl CodeRelocation {
                     let patch = match self.r.size {
                         32 => {
                             // patch as 32 bit
-                            let adjusted = addr.offset(self.r.addend as isize) as u64;
-                            *(patch as *mut i32) = adjusted as i32;
+                            //let adjusted = addr.offset(self.r.addend as isize) as u64;
+                            //*(patch as *mut i32) = adjusted as i32;
                             unimplemented!("32 bit absolute relocation does not work");
-                            patch as u64
+                            //patch as u64
                         }
                         64 => {
                             // patch as 64 bit
