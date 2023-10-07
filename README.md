@@ -2,6 +2,8 @@
 
 This is a personal repo for learning about programming languages.  Nothing usable yet.
 
+`protolang` means "Language Prototyping"
+
 # Why
 
 Rust has a lot of potential for building programming languages, and I want to explore that here.  There are a few projects here with different experiements, which include:
@@ -41,3 +43,5 @@ cargo install cargo-modules cargo-depgraph
 # References
 
 - https://mlir.llvm.org/
+- https://github.com/facebookexperimental/starlark-rust
+
