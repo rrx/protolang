@@ -1,18 +1,51 @@
-use crate::syntax::{ast, lexer, AstModule};
+use starlark_syntax::syntax;
+use starlark_syntax::syntax::{Dialect};
+use starlark_syntax::lexer;
+use starlark_syntax::syntax::module::AstModuleFields;
+use std::path::{Path, PathBuf};
+
 use lang3 as L;
 use lang3::Lower;
 use lang3::UnifyValue;
 use std::error::Error;
 
 pub type LResult = Result<lang3::Ast, Box<dyn Error>>;
-type Builder = L::AstBuilder;
+pub type Builder = L::AstBuilder;
 //use L::AstBuilder::lower_list_ast as lower_list;
+
+pub struct AstModule(pub syntax::AstModule);
+struct AstStatement(pub syntax::ast::AstStmt);
 
 impl AstModule {
     pub fn lower(&self, builder: &mut Builder) -> LResult {
-        let ast = self.statement.lower(builder)?;
+        let ast = lower_statement(self.0.statement(), builder)?;
         let (ast, _env, _subst) = builder.resolve_ast_with_base(&ast)?;
         Ok(ast)
+    }
+    // eventually we want to be able to handle multiple input types
+    // for now we only handle input from frontend, lowering to hir
+    pub fn parse<'a>(path: &Path) -> LResult {
+        let dialect = syntax::Dialect::Extended;
+        let module = AstModule(syntax::AstModule::parse_file(&path, &dialect)?);
+        let mut builder = L::AstBuilder::default();
+        module.lower(&mut builder)
+    }
+}
+
+fn lower_statement(stmt: &syntax::ast::AstStmt, b: &mut Builder) -> LResult {
+    match stmt {
+       // self.0.node.lower(b)
+        _ => unimplemented!()
+    }
+}
+
+impl Lower for AstStatement {
+    fn lower(&self, b: &mut Builder) -> LResult {
+        match self.0 {
+           // self.0.node.lower(b)
+
+            _ => unimplemented!()
+        }
     }
 }
 
@@ -31,10 +64,13 @@ impl AstModule {
 //}
 //}
 
-impl<A: ast::AstPayload> ast::AstParameterP<A> {
+/*
+struct AstPayload {}
+
+impl<A: syntax::ask::AstPayload> syntax::ast::AstParameterP<A> {
     fn to_variable(&self, b: &mut Builder) -> L::Variable {
         match &self.node {
-            ast::ParameterP::Normal(ident, _) => {
+            syntax::ast::ParameterP::Normal(ident, _) => {
                 let ty = b.type_unknown();
                 let name = ident.0.to_string();
                 b.var_named(&name, ty)
@@ -204,3 +240,5 @@ impl<A: ast::AstPayload> ast::AstExprP<A> {
         }
     }
 }
+*/
+

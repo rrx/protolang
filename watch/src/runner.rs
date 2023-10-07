@@ -1,7 +1,6 @@
 use codegen_ir::hir;
 use codegen_llvm::{Context, Executor, FileType, OptimizationLevel};
-use frontend::syntax::AstModule;
-use frontend::syntax::Dialect;
+use frontend::AstModule;
 use lang3::{AstBuilder, Environment};
 use link::*;
 use std::error::Error;
@@ -92,13 +91,17 @@ impl<'a> Runner<'a> {
     }
 }
 
+pub fn lower(module: &AstModule, builder: &mut AstBuilder) -> frontend::LResult {
+    let ast = module.lower(builder)?;//statement.lower(builder)?;
+    let (ast, _env, _subst) = builder.resolve_ast_with_base(&ast)?;
+    Ok(ast)
+}
+
 // eventually we want to be able to handle multiple input types
 // for now we only handle input from frontend, lowering to hir
 pub fn parse_lang3<'a>(path: &Path) -> Result<hir::Ast, Box<dyn Error>> {
-    let dialect = Dialect::Extended;
-    let module = AstModule::parse_file(&path, &dialect)?;
+    let ast = AstModule::parse(&path)?;
     let mut builder = AstBuilder::default();
-    let ast = module.lower(&mut builder)?;
     let env = Environment::default();
     let (ast, _env, _subst) = builder.resolve(&ast, env).unwrap();
     let hir = builder.lower(&ast).unwrap();
