@@ -1,11 +1,11 @@
 [workspace]
+resolver = "2"
 members = [
   "lang1",
   "frontend",
   "lang3",
   "logic",
   "watch",
-  "link",
   #"codegen",
   "codegen_ir",
   "codegen_llvm",

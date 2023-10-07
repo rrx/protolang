@@ -8,4 +8,8 @@ edition = "2021"
 [dependencies]
 starlark_syntax = { git = "https://github.com/facebookexperimental/starlark-rust.git", branch = "main" }
 lang3 = { path = "../lang3" }
+env_logger = "0.9"
+log = "0.4"
+
+[dev-dependences]
 

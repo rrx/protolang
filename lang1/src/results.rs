@@ -203,7 +203,7 @@ impl Compiler {
     }
 
     pub fn parse_file(&mut self, filename: &str) -> anyhow::Result<ExprNode> {
-        let contents = std::fs::read_to_string(filename.clone())?.to_string();
+        let contents = std::fs::read_to_string(filename)?.to_string();
         let file_id = self.add_source(filename.into(), contents.clone());
         self.parse(&contents, file_id)
     }

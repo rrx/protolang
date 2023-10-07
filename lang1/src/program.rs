@@ -97,13 +97,13 @@ impl Program {
     }
 
     pub fn parse_file(&mut self, filename: &str) -> anyhow::Result<ExprNode> {
-        let contents = std::fs::read_to_string(filename.clone())?.to_string();
+        let contents = std::fs::read_to_string(filename)?.to_string();
         let file_id = self.checker.add_source(filename.into(), contents.clone());
         self.parse(&contents, file_id)
     }
 
     pub fn analyze_file(&mut self, filename: &str, env: Environment) -> Environment {
-        let contents = std::fs::read_to_string(filename.clone())
+        let contents = std::fs::read_to_string(filename)
             .unwrap()
             .to_string();
         self._analyze(filename, &contents, env)
@@ -148,7 +148,7 @@ impl Program {
         filename: &str,
         env: Environment,
     ) -> Result<ExprRefWithEnv, LangError> {
-        let contents = std::fs::read_to_string(filename.clone())
+        let contents = std::fs::read_to_string(filename)
             .unwrap()
             .to_string();
         self._eval_file(filename, &contents, env)

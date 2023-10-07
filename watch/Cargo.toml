@@ -6,14 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+env_logger = "*"
+log = "*"
 notify = { version = "5.0.0", features = ["serde"] }
+link = { git = "https://github.com/rrx/rust-linker.git", branch = "main" }
 codegen_llvm = { path = "../codegen_llvm" }
 codegen_ir = { path = "../codegen_ir" }
 frontend = { path = "../frontend" }
 lang3 = { path = "../lang3" }
-link = { path = "../link" }
-env_logger = "*"
-log = "*"
 
 [dev-dependencies]
 criterion = "0.3"
