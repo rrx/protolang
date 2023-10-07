@@ -232,7 +232,7 @@ mod tests {
     fn linker_segfault() {
         let mut b = DynamicLink::new();
         b.add_library("test", Path::new("libsigsegv.so")).unwrap();
-        b.add_obj_file("test", Path::new("../tmp/segfault.o"))
+        b.add_obj_file("test", Path::new("build/clang-glibc/segfault.o"))
             .unwrap();
         let _version = b.link().unwrap();
         // XXX: This isn't working yet
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn linker_global_long() {
         let mut b = DynamicLink::new();
-        b.add_obj_file("test", Path::new("../tmp/live.o")).unwrap();
+        b.add_obj_file("test", Path::new("build/clang-glibc/live.o")).unwrap();
         let collection = b.link().unwrap();
 
         let ret: i64 = collection.invoke("call_live", (3,)).unwrap();
@@ -264,8 +264,8 @@ mod tests {
     #[test]
     fn linker_shared() {
         let mut b = DynamicLink::new();
-        b.add_library("gz", Path::new("../tmp/libz.so")).unwrap();
-        b.add_obj_file("test", Path::new("../tmp/link_shared.o"))
+        b.add_library("gz", Path::new("build/testlibs/libz.so")).unwrap();
+        b.add_obj_file("test", Path::new("build/clang-glibc/link_shared.o"))
             .unwrap();
         let collection = b.link().unwrap();
         let ret: *const () = collection.invoke("call_z", ()).unwrap();

@@ -1,12 +1,38 @@
-Helpful links for building linkers:
+# TLDR
 
+A personal proof-of-concept linker that works only on Linux x86_64, with hot-reload potential
+
+# Why
+
+This project is a proof-of-concept linker built in Rust.  The purpose of this project was to learn more about how linkers and loaders work.  It's one of those things you don't think about until you need to, and if you're like me, you're a little surprised at the complexity that hides behind such a simple interface.  But if it was just a linker, that's not very interesting, so I'm also working on adding some hot-reloading functionality that will swap out code at runtime.  I wrote a wild blog post about this called [Hot-Reloading like it's 1972](https://rrx.github.io/posts/2023-02-13-hotreloading/).  It turns out that hot-reloading is a bit of a difficult problem, which is why you don't see it much any more as the focus has moved from developer productivity towards production stability.  I still think the developer experience aspect is important though, so I'd like to explore it's potential further as part of my language research.
+
+# Limitations
+
+- Only compiles for Linux on x86_64
+- No linker options, only the simplest were used for implementation
+- Hot-reloading is very primitive and not yet usable
+
+# Developing
+
+You will need a few libraries to build the test functions.  On ubuntu you will need:
+
+```
+sudo apt install libsigsegv-dev libsdl2-dev libuv1-dev
+make functions
+```
+
+See the Makefile for examples of usage.
+
+# Helpful links
+
+Some helpful links for building linkers:
 
 - https://wiki.osdev.org/ELF
 - https://web.archive.org/web/20140130143820/http://www.robinhoksbergen.com/papers/howto_elf.html
 - http://www.skyfree.org/linux/references/ELF_Format.pdf
 - https://gitlab.com/x86-psABIs/x86-64-ABI
 
-# Similar Work
+# Similar Work in Rust
 
 - https://github.com/aep/elfkit
 - https://github.com/m4b/dryad
@@ -14,85 +40,3 @@ Helpful links for building linkers:
 - https://github.com/bloff/runtime-static-linking-with-libbfd/blob/master/main.c
 - https://github.com/m4b/faerie/blob/master/examples/prototype.rs
 
-# Notes
-
-.got.plt
-- first 3 entries are reserved
-1. _DYNAMIC
-2. set by dynamic linker: gets pushed onto the stack
-3. set by dynamic linker: stub jumps here to resolve symbols, the address of the dynamic linker
-4. Start of entries
-- points to the second instruction in the PLT (push)
-
-Contents of section .got:
- #got entries for __libc_start_main and __gmon_start
- #these will be relocated by the dynamic linker at runtime
- #to point to their actual value
- 403ff0 00000000 00000000 00000000 00000000  ................
-Contents of section .got.plt:
- # GOTPLT[0] = _DYNAMIC (0x403e10)
- # GOTPLT[1] = set at runtime
- # GOTPLT[2] = set at runtime
- 404000 103e4000 00000000 00000000 00000000  .>@.............
- 404010 00000000 00000000 36104000 00000000  ........6.@.....
- 404020 46104000 00000000                    F.@.....
-
-.plt
-# Stub
-0000000000401020 <puts@plt-0x10>:
-  # push the GOT[1] onto the stack
-  401020:       ff 35 e2 2f 00 00       push   0x2fe2(%rip)        # 404008 <_GLOBAL_OFFSET_TABLE_+0x8>
-  # jump to GOT[2]
-  401026:       ff 25 e4 2f 00 00       jmp    *0x2fe4(%rip)        # 404010 <_GLOBAL_OFFSET_TABLE_+0x10>
-  40102c:       0f 1f 40 00             nopl   0x0(%rax)
-
-Entry[0] puts, 0x10 aligned
-0000000000401030 <puts@plt>:
-  # 404018 <puts@GLIBC_2.2.5>, .got.plot 4th entry, GOT[3], jump there
-  # got.plt[3] = 0x401036, initial value, which points to the second instruction (push) in this plt entry
-  # the dynamic linker will update GOT[3] with the actual address, so this lookup only happens once
-  401030:       ff 25 e2 2f 00 00       jmp    *0x2fe2(%rip)        # 404018 <puts@GLIBC_2.2.5>
-  # push plt index onto the stack
-  # this is a reference to the entry in the relocation table defined by DT_JMPREL (.rela.plt)
-  # that reloc will have type R_X86_64_JUMP_SLOT
-  # the reloc will have an offset that points to GOT[3], 0x404018 = BASE + 3*0x08
-  401036:       68 00 00 00 00          push   $0x0
-  # jump to stub
-  40103b:       e9 e0 ff ff ff          jmp    401020 <_init+0x20>,
-
-#Entry[1] printf, 0x10 aligned
-0000000000401040 <printf@plt>:
-  # jump to 5th entry in .got.plt = 0x401046, which is the second instruction in this plt entry
-  401040:       ff 25 da 2f 00 00       jmp    *0x2fda(%rip)        # 404020 <printf@GLIBC_2.2.5>
-  # push plt index onto the stack (1)
-  401046:       68 01 00 00 00          push   $0x1
-  # jump to stub
-  40103b:       e9 d0 ff ff ff          jmp    401020 <_init+0x20>, jump to stub
-
-Relocation section '.rela.dyn' at offset 0x4c8 contains 2 entries:
-    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend
-0000000000403ff0  0000000100000006 R_X86_64_GLOB_DAT      0000000000000000 __libc_start_main@GLIBC_2.34 + 0
-0000000000403ff8  0000000400000006 R_X86_64_GLOB_DAT      0000000000000000 __gmon_start__ + 0
-
-Relocation section '.rela.plt' at offset 0x4f8 contains 2 entries:
-    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend
-0000000000404018  0000000200000007 R_X86_64_JUMP_SLOT     0000000000000000 puts@GLIBC_2.2.5 + 0
-0000000000404020  0000000300000007 R_X86_64_JUMP_SLOT     0000000000000000 printf@GLIBC_2.2.5 + 0
-
-for .got, we take the list of data relocations, and associate a got entry with each of them
-size of .got will be N*0x08
-size of .rela.dyn will be N*sizeof(rela)
-
-for .plt, we have a list of symbols to relocate of size N
-size of .got.plt will be (N+3)*0x08, the first 3 entries are reserved
-we set GOTPLT[0] to _DYNAMIC, which is known at compile time
-each entry in the PLT has size 0x10
-it has a size of (N+1)*0x10, the first part is the stub, which we need to refer to
-We know the _GLOBAL_OFFSET_TABLE_, refers to the .got.plt section
-write the stub, and update the offset for the gotplt to 3
-for (i, symbol) in relocations:
-  - gotplt[i] = plt+0x06  # gotplt points to the next instruction in the plt slot
-  - increment the gotplt offset
-  - write the plt slot, which references the index of the relocation and the pointer to the stub
-  - the stub is at the start of the plt.
-  - the initial jump in the plt slot gets it's address from GOTPLT[i]

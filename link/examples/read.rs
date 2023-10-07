@@ -10,12 +10,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         let block = reader.read(&path, &buf)?;
         block.dump();
     }
-    //let mut block = reader.build();
-    //let mut data = link::Data::new(block.libs.iter().cloned().collect());
-    //let mut out_data = Vec::new();
-    //let endian = object::Endianness::Little;
-    //let mut writer = object::write::elf::Writer::new(endian, data.is_64, &mut out_data);
-    //block.build_strings(&mut data, &mut writer);
-    //block.dump();
     Ok(())
 }
