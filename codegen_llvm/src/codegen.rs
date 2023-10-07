@@ -5,7 +5,7 @@ use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum, PointerType};
 use inkwell::values::{
-    BasicValue, BasicValueEnum, CallableValue, FunctionValue, InstructionOpcode, IntValue,
+    BasicValue, BasicValueEnum, CallableValue, FunctionValue, InstructionOpcode, IntValue
 };
 use inkwell::{AddressSpace, IntPredicate};
 
@@ -31,7 +31,7 @@ pub fn convert_function_type<'g>(context: &'g Context, f: &hir::FunctionType) ->
     let parameters = fmap(&f.parameters, |param| convert_type(context, param).into());
     let ret = convert_type(context, &f.return_type);
     ret.fn_type(&parameters, false)
-        .ptr_type(AddressSpace::Generic)
+        .ptr_type(AddressSpace::default())
 }
 
 pub fn convert_type<'g>(context: &'g Context, typ: &hir::Type) -> BasicTypeEnum<'g> {
@@ -45,7 +45,7 @@ pub fn convert_type<'g>(context: &'g Context, typ: &hir::Type) -> BasicTypeEnum<
             PrimitiveType::Char => context.i8_type().into(),
             PrimitiveType::Boolean => context.bool_type().into(),
             PrimitiveType::Unit => context.bool_type().into(),
-            PrimitiveType::Pointer => context.i8_type().ptr_type(AddressSpace::Generic).into(),
+            PrimitiveType::Pointer => context.i8_type().ptr_type(AddressSpace::default()).into(),
         },
         hir::Type::Function(f) => convert_function_type(context, f).into(),
         hir::Type::Tuple(tuple) => {
@@ -208,19 +208,19 @@ impl<'a> ModuleGenerator<'a> {
 
     fn add_int(&mut self, a: IntValue<'a>, b: IntValue<'a>) -> BasicValueEnum<'a> {
         self.builder
-            .build_int_add(a, b, "add")
+            .build_int_add(a, b, "add").unwrap()
             .as_basic_value_enum()
     }
 
     fn sub_int(&mut self, a: IntValue<'a>, b: IntValue<'a>) -> BasicValueEnum<'a> {
         self.builder
-            .build_int_sub(a, b, "sub")
+            .build_int_sub(a, b, "sub").unwrap()
             .as_basic_value_enum()
     }
 
     fn eq_int(&mut self, a: IntValue<'a>, b: IntValue<'a>) -> BasicValueEnum<'a> {
         self.builder
-            .build_int_compare(IntPredicate::EQ, a, b, "eq")
+            .build_int_compare(IntPredicate::EQ, a, b, "eq").unwrap()
             .as_basic_value_enum()
     }
 
@@ -292,11 +292,11 @@ impl<'a> ModuleGenerator<'a> {
 
         let value = global.as_pointer_value();
 
-        let cstring_type = self.context.i8_type().ptr_type(AddressSpace::Generic);
+        let cstring_type = self.context.i8_type().ptr_type(AddressSpace::default());
 
         let cast = self
             .builder
-            .build_pointer_cast(value, cstring_type, "string_cast");
+            .build_pointer_cast(value, cstring_type, "string_cast").unwrap();
 
         cast.as_basic_value_enum()
     }
@@ -332,7 +332,7 @@ fn codegen_if<'a>(
         // determine which we should add to the phi or if we should even create a phi at all.
         match (then_option, else_option) {
             (Some((then_value, then_branch)), Some((else_value, else_branch))) => {
-                let phi = gen.builder.build_phi(then_value.get_type(), "if_result");
+                let phi = gen.builder.build_phi(then_value.get_type(), "if_result").unwrap();
                 phi.add_incoming(&[(&then_value, then_branch), (&else_value, else_branch)]);
                 phi.as_basic_value()
             }
@@ -431,7 +431,7 @@ fn codegen_call<'a>(
 
     let function = CallableValue::try_from(function).unwrap();
     gen.builder
-        .build_call(function, &args, "")
+        .build_call(function, &args, "").unwrap()
         .try_as_basic_value()
         .left()
         .unwrap()
@@ -503,7 +503,7 @@ fn codegen_branch<'a>(
         (branch_value.get_type(), None)
     } else {
         let branch_block = gen.current_block();
-        gen.builder.build_unconditional_branch(end_block);
+        gen.builder.build_unconditional_branch(end_block).unwrap();
         (branch_value.get_type(), Some((branch_value, branch_block)))
     }
 }
@@ -537,7 +537,7 @@ fn codegen_lambda<'a>(
 
     let return_value = codegen(gen, &lambda.body, defmap);
 
-    gen.builder.build_return(Some(&return_value));
+    gen.builder.build_return(Some(&return_value)).unwrap();
     //generator.builder.position_at_end(caller_block);
     //
     let function_pointer = fn_val.as_global_value().as_pointer_value().into();
